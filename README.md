@@ -392,26 +392,6 @@ Run DCF valuation with custom scenarios.
 
 ---
 
-## 🤝 Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-**Quick contribution workflow:**
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/your-feature`
-3. Make changes and add tests
-4. Run tests: `npm run test`
-5. Run linter: `npm run lint`
-6. Commit: `git commit -m "feat: add your feature"`
-7. Push and open a Pull Request
-
-**Code Style:**
-- Follow existing patterns in [AGENTS.md](AGENTS.md)
-- Add tests for new functionality
-- Update comments for non-obvious logic (see [COMMENTS.md](COMMENTS.md))
-
----
-
 ## 📄 License
 
 This project is licensed under the **GNU Affero General Public License v3.0** (AGPL-3.0).
