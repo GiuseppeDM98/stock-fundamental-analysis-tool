@@ -5,6 +5,14 @@ type PriceSummaryProps = {
   quote: QuoteResponse;
 };
 
+/**
+ * Displays current market snapshot for a given ticker.
+ *
+ * Shows company name, ticker symbol, exchange, current price, and market capitalization
+ * with currency-aware formatting.
+ *
+ * @param quote - Market data including price, market cap, and exchange info
+ */
 export function PriceSummary({ quote }: PriceSummaryProps) {
   return (
     <div className="card">

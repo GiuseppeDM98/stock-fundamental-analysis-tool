@@ -51,7 +51,17 @@ export function validateScenarioInput(scenario: ScenarioInput): void {
 /**
  * Compute a scenario fair value using a simplified but explicit DCF model.
  *
- * Side effects: none.
+ * Algorithm:
+ * 1. Project 10 years of free cash flows with two-phase revenue growth
+ * 2. Calculate terminal value using Gordon Growth model
+ * 3. Discount all cash flows to present value at WACC
+ * 4. Convert enterprise value to equity value by subtracting net debt
+ * 5. Divide by shares outstanding for per-share fair value
+ * 6. Apply margin of safety adjustment
+ *
+ * @param input - Current financials, scenario assumptions, and margin of safety
+ * @returns Valuation results including fair value and upside percentage
+ * @throws Error if inputs are invalid or scenario constraints violated
  */
 export function runDcf(input: DcfInput): ScenarioResult {
   validateScenarioInput(input.scenario);
@@ -69,6 +79,7 @@ export function runDcf(input: DcfInput): ScenarioResult {
     throw new Error("Revenue, shares outstanding, and current price must be positive.");
   }
 
+  // Step 1: Project 10 years of explicit free cash flows
   let revenue = currentRevenue;
   let discountedFcfSum = 0;
 
@@ -79,13 +90,15 @@ export function runDcf(input: DcfInput): ScenarioResult {
     const ebit = revenue * scenario.operatingMarginTarget;
     const nopat = ebit * (1 - scenario.taxRate);
 
-    // We subtract reinvestment from NOPAT so growth is not "free" in the model.
+    // Subtract reinvestment from NOPAT so growth is not "free" in the model
     const fcf = nopat * (1 - scenario.reinvestmentRate);
 
     const discountFactor = (1 + scenario.wacc) ** year;
     discountedFcfSum += fcf / discountFactor;
   }
 
+  // Step 2: Calculate terminal value using Gordon Growth formula
+  // Terminal value = FCF(year 11) / (WACC - g)
   const terminalYearEbit = revenue * scenario.operatingMarginTarget;
   const terminalYearNopat = terminalYearEbit * (1 - scenario.taxRate);
   const terminalYearFcf = terminalYearNopat * (1 - scenario.reinvestmentRate);
@@ -94,9 +107,14 @@ export function runDcf(input: DcfInput): ScenarioResult {
   const terminalValue = terminalFcf / (scenario.wacc - scenario.terminalGrowth);
   const discountedTerminal = terminalValue / (1 + scenario.wacc) ** 10;
 
+  // Step 3: Sum present values to get enterprise value
   const enterpriseValue = discountedFcfSum + discountedTerminal;
+
+  // Step 4: Convert to equity value and per-share fair value
   const equityValue = enterpriseValue - netDebt;
   const fairValuePerShare = equityValue / sharesOutstanding;
+
+  // Step 5: Apply margin of safety adjustment
   const fairValueAfterMos = fairValuePerShare * (1 - mosPercent / 100);
   const upsideVsPricePercent = ((fairValueAfterMos - currentPrice) / currentPrice) * 100;
 

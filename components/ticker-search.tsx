@@ -6,6 +6,16 @@ type TickerSearchProps = {
   loading: boolean;
 };
 
+/**
+ * Ticker input form with submit button.
+ *
+ * Normalizes ticker input by trimming whitespace and converting to uppercase
+ * to ensure consistent API requests regardless of user input formatting.
+ *
+ * @param initialTicker - Default value for the input field
+ * @param onSearch - Callback invoked with normalized ticker on submit
+ * @param loading - Disables submit button and shows loading state
+ */
 export function TickerSearch({ initialTicker, onSearch, loading }: TickerSearchProps) {
   return (
     <form
@@ -13,6 +23,7 @@ export function TickerSearch({ initialTicker, onSearch, loading }: TickerSearchP
       onSubmit={(event) => {
         event.preventDefault();
         const formData = new FormData(event.currentTarget);
+        // Normalize ticker to uppercase for consistent API requests (Yahoo Finance is case-insensitive but uppercase is convention)
         const ticker = String(formData.get("ticker") ?? "").trim().toUpperCase();
 
         if (ticker) {

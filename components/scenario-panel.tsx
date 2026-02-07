@@ -13,6 +13,7 @@ type ScenarioPanelProps = {
   loading?: boolean;
 };
 
+// User-friendly labels for DCF input parameters
 const labels: Record<string, string> = {
   revenueGrowthYears1to5: "Revenue growth Y1-5",
   revenueGrowthYears6to10: "Revenue growth Y6-10",
@@ -23,6 +24,21 @@ const labels: Record<string, string> = {
   terminalGrowth: "Terminal growth"
 };
 
+/**
+ * Interactive control panel for DCF scenario inputs and margin of safety.
+ *
+ * Displays three scenario columns (bull, base, bear) with independent input controls
+ * for seven DCF parameters each. Includes global margin of safety slider and action
+ * buttons for resetting defaults and recalculating valuation.
+ *
+ * @param scenarios - Current values for all three scenarios
+ * @param mosPercent - Margin of safety percentage (0-80%)
+ * @param onMosChange - Callback when margin of safety slider changes
+ * @param onScenarioChange - Callback when any scenario input changes
+ * @param onReset - Callback to reset all scenarios to default presets
+ * @param onRecalculate - Callback to trigger new valuation API call
+ * @param loading - Disables recalculate button during API request
+ */
 export function ScenarioPanel({
   scenarios,
   mosPercent,

@@ -1,3 +1,8 @@
+/**
+ * Renders a warning banner informing users that the tool is for educational purposes only.
+ *
+ * Emphasizes that fair value estimates are model-driven and not financial advice.
+ */
 export function DisclaimerBanner() {
   return (
     <div className="card border-warning/40 bg-warning/10 text-sm text-amber-100">

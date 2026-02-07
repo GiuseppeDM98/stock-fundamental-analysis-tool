@@ -3,6 +3,7 @@ import YahooFinance from "yahoo-finance2";
 import { FundamentalsResponse } from "@/types/fundamentals";
 import { QuoteResponse, Region } from "@/types/market";
 
+// Suppress Yahoo Finance survey notices to keep logs clean
 const yahooFinance = new YahooFinance({
   suppressNotices: ["yahooSurvey"]
 });
@@ -11,7 +12,10 @@ const yahooFinance = new YahooFinance({
  * Extract a plain numeric value from Yahoo's mixed schema.
  *
  * Yahoo responses can expose values as numbers or as objects with
- * a `raw` numeric payload.
+ * a `raw` numeric payload (e.g., { raw: 123.45, fmt: "123.45" }).
+ *
+ * @param value - Yahoo API field value (number, object with raw, or other)
+ * @returns Extracted number or null if not found/invalid
  */
 export function extractRawNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -28,6 +32,15 @@ export function extractRawNumber(value: unknown): number | null {
   return null;
 }
 
+/**
+ * Detect geographic region based on exchange code.
+ *
+ * Used to categorize tickers by region for UI grouping and
+ * potential future region-specific logic (e.g., trading hours, tax rates).
+ *
+ * @param exchange - Exchange code from Yahoo Finance (e.g., "NASDAQ", "LSE")
+ * @returns Region category: "US", "EU", or "OTHER"
+ */
 function detectRegion(exchange: string): Region {
   const upper = exchange.toUpperCase();
 
@@ -42,6 +55,20 @@ function detectRegion(exchange: string): Region {
   return "OTHER";
 }
 
+/**
+ * Retry a Yahoo Finance API call with exponential backoff.
+ *
+ * Yahoo Finance can intermittently fail due to rate limits or transient network issues.
+ * This utility retries up to 3 times total (1 initial + 2 retries) with increasing delays:
+ * - Attempt 1: immediate
+ * - Attempt 2: 250ms delay
+ * - Attempt 3: 500ms delay
+ *
+ * @param task - Async function to execute
+ * @param retries - Number of retry attempts after initial failure
+ * @returns Task result on success
+ * @throws Last error encountered if all attempts fail
+ */
 async function withRetry<T>(task: () => Promise<T>, retries = 2): Promise<T> {
   let lastError: unknown;
 
@@ -51,6 +78,7 @@ async function withRetry<T>(task: () => Promise<T>, retries = 2): Promise<T> {
     } catch (error) {
       lastError = error;
 
+      // Exponential backoff: 250ms, 500ms, ...
       if (attempt < retries) {
         await new Promise((resolve) => {
           setTimeout(resolve, 250 * (attempt + 1));
@@ -62,14 +90,25 @@ async function withRetry<T>(task: () => Promise<T>, retries = 2): Promise<T> {
   throw lastError instanceof Error ? lastError : new Error("Unknown Yahoo Finance error.");
 }
 
+/**
+ * Normalize Yahoo Finance errors into user-friendly messages.
+ *
+ * Yahoo errors can be verbose or technical. This function detects common
+ * failure patterns and returns actionable messages for the UI.
+ *
+ * @param error - Raw error from yahoo-finance2
+ * @returns Normalized Error with user-friendly message
+ */
 function normalizeYahooError(error: unknown): Error {
   if (error instanceof Error) {
     const message = error.message.toLowerCase();
 
+    // Rate limit detection (HTTP 429 or "too many requests" message)
     if (message.includes("too many requests") || message.includes("429")) {
       return new Error("Yahoo Finance rate limit reached. Retry in 30-60 seconds.");
     }
 
+    // Ticker not found or unavailable
     if (message.includes("not found") || message.includes("no data") || message.includes("symbol")) {
       return new Error("Ticker not found or unavailable on Yahoo Finance.");
     }
@@ -81,7 +120,15 @@ function normalizeYahooError(error: unknown): Error {
 }
 
 /**
- * Fetch quote-level data for a ticker using yahoo-finance2.
+ * Fetch real-time quote data for a ticker.
+ *
+ * Retrieves current price, market cap, shares outstanding, and exchange info.
+ * Automatically retries on transient failures and normalizes field names
+ * for consistent app usage.
+ *
+ * @param ticker - Stock ticker symbol (e.g., "AAPL", "ASML.AS")
+ * @returns Quote data with normalized fields
+ * @throws User-friendly error if ticker not found or rate limit hit
  */
 export async function getQuote(ticker: string): Promise<QuoteResponse> {
   try {
@@ -157,7 +204,14 @@ export function mapFundamentalsFromSummary(ticker: string, summary: any): Fundam
 }
 
 /**
- * Fetch fundamental statements and key ratios for a ticker.
+ * Fetch historical financial statements and valuation ratios.
+ *
+ * Retrieves up to 5 years of income statements and cash flow data,
+ * plus current valuation multiples (P/E, P/B, P/S, EV/EBITDA).
+ *
+ * @param ticker - Stock ticker symbol
+ * @returns Fundamental data with normalized annual statements and ratios
+ * @throws User-friendly error if ticker not found or rate limit hit
  */
 export async function getFundamentals(ticker: string): Promise<FundamentalsResponse> {
   try {
@@ -180,7 +234,14 @@ export async function getFundamentals(ticker: string): Promise<FundamentalsRespo
 }
 
 /**
- * Fetch a lightweight net debt estimate used by DCF.
+ * Fetch net debt for enterprise value calculation in DCF.
+ *
+ * Net debt = Total debt - Total cash. Used to convert enterprise value
+ * to equity value (which is then divided by shares outstanding for per-share value).
+ *
+ * @param ticker - Stock ticker symbol
+ * @returns Net debt (positive = debt exceeds cash, negative = net cash position)
+ * @throws User-friendly error if ticker not found or rate limit hit
  */
 export async function getNetDebtEstimate(ticker: string): Promise<number> {
   try {

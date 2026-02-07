@@ -28,6 +28,7 @@ import { ScenariosInput, ValuationResponse } from "@/types/valuation";
 type LoadState = "idle" | "loading" | "success" | "error";
 type UiPreferences = { compactCharts: boolean };
 
+// Zod schemas for runtime validation of localStorage data
 const scenarioSchema = z.object({
   revenueGrowthYears1to5: z.number(),
   revenueGrowthYears6to10: z.number(),
@@ -44,6 +45,18 @@ const scenarioOverridesSchema = z.object({
   bear: scenarioSchema
 });
 
+/**
+ * Safely retrieves and parses a value from localStorage.
+ *
+ * Returns fallback if localStorage is unavailable (SSR), key doesn't exist,
+ * or parsing fails. This prevents hydration mismatches and runtime errors
+ * from corrupted localStorage data.
+ *
+ * @param key - localStorage key to read
+ * @param parser - Function to parse and validate the JSON value (e.g., Zod schema)
+ * @param fallback - Default value returned on SSR or parse failure
+ * @returns Parsed value or fallback
+ */
 function getStorageItem<T>(key: string, parser: (value: unknown) => T, fallback: T): T {
   if (typeof window === "undefined") {
     return fallback;
@@ -61,6 +74,18 @@ function getStorageItem<T>(key: string, parser: (value: unknown) => T, fallback:
   }
 }
 
+/**
+ * Main dashboard component orchestrating stock analysis workflow.
+ *
+ * Manages:
+ * - Ticker search and data fetching (quote, fundamentals, valuation)
+ * - DCF scenario inputs with localStorage persistence
+ * - Margin of safety slider
+ * - UI preferences (compact charts toggle)
+ *
+ * Uses SSR-safe hydration pattern to prevent client/server mismatch errors
+ * when reading from localStorage.
+ */
 export function DashboardClient() {
   const [ticker, setTicker] = useState("AAPL");
   const [loadState, setLoadState] = useState<LoadState>("idle");
@@ -73,11 +98,17 @@ export function DashboardClient() {
   const [mosPercent, setMosPercent] = useState(25);
   const [scenarios, setScenarios] = useState<ScenariosInput>(getDefaultScenarios());
   const [uiPreferences, setUiPreferences] = useState<UiPreferences>({ compactCharts: false });
+  // Tracks whether client-side hydration has completed to prevent localStorage reads during SSR
   const [isHydrated, setIsHydrated] = useState(false);
 
+  // Refs store latest scenario values for use in async callbacks (fetchDashboardData)
+  // Without refs, fetchDashboardData would close over stale state from its creation time
   const mosRef = useRef(mosPercent);
   const scenariosRef = useRef(scenarios);
 
+  // SSR Hydration: Load persisted state from localStorage on client mount only
+  // This useEffect runs once after the initial server-side render completes,
+  // ensuring window.localStorage is available and preventing hydration mismatches
   useEffect(() => {
     const storedTicker = getStorageItem("sfa:lastTicker", (value) => String(value), "AAPL");
     const storedMos = getStorageItem("sfa:mosPercent", (value) => Number(value), 25);
@@ -99,6 +130,7 @@ export function DashboardClient() {
     setIsHydrated(true);
   }, []);
 
+  // Persist ticker to localStorage whenever it changes (but only after hydration)
   useEffect(() => {
     if (!isHydrated) {
       return;
@@ -106,6 +138,7 @@ export function DashboardClient() {
     window.localStorage.setItem("sfa:lastTicker", ticker);
   }, [ticker, isHydrated]);
 
+  // Persist margin of safety and sync ref for async callbacks
   useEffect(() => {
     mosRef.current = mosPercent;
     if (!isHydrated) {
@@ -114,6 +147,7 @@ export function DashboardClient() {
     window.localStorage.setItem("sfa:mosPercent", String(mosPercent));
   }, [mosPercent, isHydrated]);
 
+  // Persist scenario inputs and sync ref for async callbacks
   useEffect(() => {
     scenariosRef.current = scenarios;
     if (!isHydrated) {
@@ -122,6 +156,7 @@ export function DashboardClient() {
     window.localStorage.setItem("sfa:scenarioOverrides", JSON.stringify(scenarios));
   }, [scenarios, isHydrated]);
 
+  // Persist UI preferences
   useEffect(() => {
     if (!isHydrated) {
       return;
@@ -129,12 +164,21 @@ export function DashboardClient() {
     window.localStorage.setItem("sfa:uiPreferences", JSON.stringify(uiPreferences));
   }, [uiPreferences, isHydrated]);
 
+  /**
+   * Fetches quote, fundamentals, and valuation data for a given ticker.
+   *
+   * Runs three API calls in parallel for performance. Uses refs to access
+   * latest scenario values instead of closing over stale state from component render.
+   *
+   * @param nextTicker - Stock ticker symbol to analyze
+   */
   const fetchDashboardData = useCallback(
     async (nextTicker: string) => {
       setLoadState("loading");
       setErrorMessage("");
 
       try {
+        // Parallel fetch: quote, fundamentals, and DCF valuation
         const [quoteRes, fundamentalsRes, valuationRes] = await Promise.all([
           fetch(`/api/quote/${encodeURIComponent(nextTicker)}`),
           fetch(`/api/fundamentals/${encodeURIComponent(nextTicker)}`),
@@ -144,6 +188,7 @@ export function DashboardClient() {
               "Content-Type": "application/json"
             },
             body: JSON.stringify({
+              // Use refs to get latest values, not stale state from closure
               mosPercent: mosRef.current,
               scenarios: scenariosRef.current
             })
@@ -154,6 +199,7 @@ export function DashboardClient() {
         const fundamentalsData = await fundamentalsRes.json();
         const valuationData = await valuationRes.json();
 
+        // Check each response and throw on first error
         if (!quoteRes.ok) {
           throw new Error(quoteData.error || "Unable to load quote.");
         }
@@ -192,6 +238,7 @@ export function DashboardClient() {
 
   return (
     <main className="mx-auto max-w-7xl p-4 pb-10 sm:p-6 lg:p-8">
+      {/* Page header */}
       <motion.header initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} className="mb-5">
         <h1 className="font-display text-3xl font-bold sm:text-4xl">Stock Fundamental Analysis Tool</h1>
         <p className="mt-2 max-w-3xl text-sm text-muted">
@@ -200,6 +247,7 @@ export function DashboardClient() {
       </motion.header>
 
       <div className="space-y-4">
+        {/* Warning banner and search form */}
         <DisclaimerBanner />
         <TickerSearch
           initialTicker={ticker}
@@ -211,6 +259,7 @@ export function DashboardClient() {
           }}
         />
 
+        {/* DCF scenario input controls */}
         <ScenarioPanel
           scenarios={scenarios}
           mosPercent={mosPercent}
@@ -231,6 +280,7 @@ export function DashboardClient() {
           }}
         />
 
+        {/* UI preferences toggle */}
         <div className="card flex items-center justify-between">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted">UI preferences</p>
           <button
@@ -246,8 +296,10 @@ export function DashboardClient() {
           </button>
         </div>
 
+        {/* Loading state */}
         {loadState === "loading" && <div className="card text-sm text-muted">Loading market and valuation data...</div>}
 
+        {/* Error state */}
         {loadState === "error" && (
           <div className="card border-danger/50 bg-danger/10 text-sm text-red-100">
             <p className="font-semibold">Unable to complete analysis</p>
@@ -255,6 +307,7 @@ export function DashboardClient() {
           </div>
         )}
 
+        {/* Success state: render all dashboard sections */}
         {loadState === "success" && quote && fundamentals && valuation && (
           <motion.div
             initial={{ opacity: 0, y: 16 }}

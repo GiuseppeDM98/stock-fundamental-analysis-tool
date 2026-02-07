@@ -20,7 +20,19 @@ type FundamentalsChartsProps = {
   compact?: boolean;
 };
 
+/**
+ * Renders historical fundamental data charts for revenue, FCF, and margins.
+ *
+ * Displays two side-by-side charts:
+ * - Line chart: Revenue and Free Cash Flow trends over time
+ * - Bar chart: Operating and net margin percentages
+ *
+ * @param fundamentals - Historical annual financial data
+ * @param compact - If true, reduces chart height for denser layouts (default: false)
+ */
 export function FundamentalsCharts({ fundamentals, compact = false }: FundamentalsChartsProps) {
+  // Sort by year ascending to ensure chronological display on X-axis
+  // Convert margin decimals (0.15) to percentages (15) for readability
   const chartData = [...fundamentals.annual]
     .sort((a, b) => a.year - b.year)
     .map((point) => ({

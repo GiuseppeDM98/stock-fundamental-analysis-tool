@@ -6,6 +6,15 @@ export const metadata: Metadata = {
   description: "Fair value analysis with multi-scenario DCF and margin of safety"
 };
 
+/**
+ * Root layout component that wraps all pages in the application.
+ *
+ * Provides:
+ * - SEO metadata (title, description)
+ * - Global styles from globals.css
+ * - Dark theme background (bg-bg) and text color
+ * - Font antialiasing for better readability
+ */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
