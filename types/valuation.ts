@@ -50,6 +50,37 @@ export type ScenarioResult = {
 };
 
 /**
+ * Analyst consensus estimates and current financial metrics from Yahoo Finance.
+ *
+ * Used to compute company-specific scenario defaults instead of generic presets.
+ * All growth rates and margins are decimals (0.12 = 12%).
+ * Fields are nullable because analyst coverage varies by ticker and region.
+ */
+export type AnalystEstimates = {
+  revenueGrowthNextYear: number | null;  // Analyst consensus revenue growth for next fiscal year
+  revenueGrowth5Year: number | null;     // Analyst consensus annualized revenue growth over 5 years
+  earningsGrowthNextYear: number | null; // Analyst consensus earnings growth for next fiscal year
+  targetMeanPrice: number | null;        // Mean analyst price target
+  numberOfAnalysts: number | null;       // Number of analysts providing estimates
+  operatingMargins: number | null;       // Current operating margin from financialData
+  revenueGrowthTTM: number | null;       // Trailing 12-month revenue growth
+  freeCashflow: number | null;           // Current free cash flow from financialData (more reliable than historical)
+  totalRevenue: number | null;           // Current total revenue from financialData
+};
+
+/**
+ * Response from the analyst-estimates API endpoint.
+ *
+ * Bundles raw analyst data with pre-computed company-specific scenarios
+ * so the dashboard can auto-populate scenario inputs on ticker search.
+ */
+export type AnalystEstimatesResponse = {
+  ticker: string;
+  analystEstimates: AnalystEstimates;
+  smartScenarios: ScenariosInput;
+};
+
+/**
  * Complete valuation response with results for all three scenarios.
  *
  * Includes summary assessment based on base scenario upside percentage.

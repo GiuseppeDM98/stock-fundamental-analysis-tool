@@ -2,7 +2,7 @@
 
 A Next.js web application for stock valuation using Discounted Cash Flow (DCF) analysis with scenario modeling. Fetch real-time financial data from Yahoo Finance and run bull/base/bear scenario valuations with interactive charts.
 
-![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![Version](https://img.shields.io/badge/version-0.2.0-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-green)
 ![Next.js](https://img.shields.io/badge/Next.js-15.1.6-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7.3-blue)
@@ -14,6 +14,7 @@ A Next.js web application for stock valuation using Discounted Cash Flow (DCF) a
 This tool helps investors and analysts perform fundamental stock valuation through:
 
 - **10-year DCF projections** with Gordon Growth terminal value
+- **Smart scenario defaults** auto-populated from analyst estimates and historical data
 - **Three scenario modeling** (Bull/Base/Bear) with independent parameters
 - **Real-time market data** from Yahoo Finance (quotes, financials, ratios)
 - **Interactive visualizations** comparing fair value vs. current price
@@ -40,8 +41,9 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 ## ✨ Key Features
 
 - 🎯 **Multi-Scenario DCF**: Bull/Base/Bear scenarios with 7 configurable inputs each
+- 🧠 **Smart Defaults**: Scenarios auto-populated from Yahoo Finance analyst estimates and historical data
 - ⚡ **Real-Time Data**: Yahoo Finance integration for quotes and 5-year fundamentals
-- 📊 **Interactive Charts**: Fair value comparison and historical financial metrics
+- 📊 **Interactive Charts**: Fair value comparison and historical financial metrics with formatted axes
 - 🔒 **Input Validation**: Hard constraints prevent mathematically invalid scenarios (e.g., WACC must exceed terminal growth)
 - 💾 **State Persistence**: LocalStorage saves ticker history and scenario overrides
 - 🧪 **Fully Tested**: Vitest + Testing Library coverage for calculations and UI
@@ -196,7 +198,8 @@ stock-fundamental-analysis-tool/
 │   ├── api/               # API route handlers
 │   │   ├── quote/[ticker]/route.ts
 │   │   ├── fundamentals/[ticker]/route.ts
-│   │   └── valuation/[ticker]/route.ts
+│   │   ├── valuation/[ticker]/route.ts
+│   │   └── analyst-estimates/[ticker]/route.ts
 │   ├── page.tsx           # Main page (delegates to DashboardClient)
 │   └── layout.tsx         # Root layout
 ├── components/            # React components (all client-side)
@@ -217,6 +220,7 @@ stock-fundamental-analysis-tool/
 │   └── fundamentals.ts
 ├── __tests__/             # Test files
 │   ├── dcf.test.ts
+│   ├── scenario-presets.test.ts
 │   ├── yahoo-client.test.ts
 │   └── scenario-panel.test.tsx
 ├── CLAUDE.md              # Project state for AI agents
@@ -291,20 +295,44 @@ Fetch current market quote.
 
 ### GET /api/fundamentals/[ticker]
 
-Fetch 5-year historical fundamentals.
+Fetch 5-year historical fundamentals (via `fundamentalsTimeSeries`).
 
 **Response:**
 ```json
 {
   "annual": [
     {
-      "date": "2023-12-31",
-      "revenue": 383285000000,
-      "operatingIncome": 114301000000,
-      "freeCashFlow": 99584000000,
-      "operatingMargin": 0.2982
+      "year": 2024,
+      "revenue": 391035000000,
+      "ebit": 123216000000,
+      "netIncome": 93736000000,
+      "fcf": 108807000000,
+      "operatingMargin": 0.3151,
+      "netMargin": 0.2397
     }
   ]
+}
+```
+
+### GET /api/analyst-estimates/[ticker]
+
+Fetch analyst estimates and smart scenario defaults.
+
+**Response:**
+```json
+{
+  "analystEstimates": {
+    "revenueGrowthNextYear": 0.08,
+    "revenueGrowth5Year": 0.12,
+    "operatingMargins": 0.30,
+    "targetMeanPrice": 245,
+    "numberOfAnalysts": 30
+  },
+  "smartScenarios": {
+    "bull": { "revenueGrowthYears1to5": 0.15, ... },
+    "base": { "revenueGrowthYears1to5": 0.12, ... },
+    "bear": { "revenueGrowthYears1to5": 0.06, ... }
+  }
 }
 ```
 
@@ -358,12 +386,6 @@ Run DCF valuation with custom scenarios.
 **Workaround**: Use `sharesOutstandingOverride` parameter in valuation request
 
 **Future**: Add UI field for manual shares input
-
-### Incomplete Fundamental Data
-
-**Issue**: Not all tickers have 5 years of historical data
-
-**Behavior**: DCF runs with most recent year only (partial charts)
 
 ---
 

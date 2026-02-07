@@ -23,10 +23,10 @@ import { TickerSearch } from "@/components/ticker-search";
 import { getDefaultScenarios } from "@/lib/valuation/scenario-presets";
 import { FundamentalsResponse } from "@/types/fundamentals";
 import { QuoteResponse } from "@/types/market";
-import { ScenariosInput, ValuationResponse } from "@/types/valuation";
+import { AnalystEstimates, AnalystEstimatesResponse, ScenariosInput, ValuationResponse } from "@/types/valuation";
 
 type LoadState = "idle" | "loading" | "success" | "error";
-type UiPreferences = { compactCharts: boolean };
+type ScenarioSource = "smart" | "generic" | "custom";
 
 // Zod schemas for runtime validation of localStorage data
 const scenarioSchema = z.object({
@@ -78,10 +78,15 @@ function getStorageItem<T>(key: string, parser: (value: unknown) => T, fallback:
  * Main dashboard component orchestrating stock analysis workflow.
  *
  * Manages:
- * - Ticker search and data fetching (quote, fundamentals, valuation)
+ * - Ticker search and data fetching (quote, fundamentals, valuation, analyst estimates)
+ * - Company-specific smart scenario defaults auto-populated on ticker search
  * - DCF scenario inputs with localStorage persistence
  * - Margin of safety slider
  * - UI preferences (compact charts toggle)
+ *
+ * On ticker search, the dashboard fetches analyst estimates and fundamentals to
+ * compute company-specific scenarios (smart defaults). These replace generic presets
+ * so the DCF valuation reflects the actual company's margins, growth, and reinvestment.
  *
  * Uses SSR-safe hydration pattern to prevent client/server mismatch errors
  * when reading from localStorage.
@@ -94,10 +99,15 @@ export function DashboardClient() {
   const [quote, setQuote] = useState<QuoteResponse | null>(null);
   const [fundamentals, setFundamentals] = useState<FundamentalsResponse | null>(null);
   const [valuation, setValuation] = useState<ValuationResponse | null>(null);
+  const [analystEstimates, setAnalystEstimates] = useState<AnalystEstimates | null>(null);
+
+  // Smart scenarios computed from company data — used as the "reset smart" target
+  const [smartScenarios, setSmartScenarios] = useState<ScenariosInput | null>(null);
 
   const [mosPercent, setMosPercent] = useState(25);
   const [scenarios, setScenarios] = useState<ScenariosInput>(getDefaultScenarios());
-  const [uiPreferences, setUiPreferences] = useState<UiPreferences>({ compactCharts: false });
+  // Tracks the origin of the current scenario values for the UI indicator
+  const [scenarioSource, setScenarioSource] = useState<ScenarioSource>("generic");
   // Tracks whether client-side hydration has completed to prevent localStorage reads during SSR
   const [isHydrated, setIsHydrated] = useState(false);
 
@@ -117,16 +127,9 @@ export function DashboardClient() {
       (value) => scenarioOverridesSchema.parse(value),
       getDefaultScenarios()
     );
-    const storedUiPreferences = getStorageItem(
-      "sfa:uiPreferences",
-      (value) => z.object({ compactCharts: z.boolean() }).parse(value),
-      { compactCharts: false }
-    );
-
     setTicker(storedTicker);
     setMosPercent(Number.isFinite(storedMos) ? storedMos : 25);
     setScenarios(storedScenarios);
-    setUiPreferences(storedUiPreferences);
     setIsHydrated(true);
   }, []);
 
@@ -156,28 +159,56 @@ export function DashboardClient() {
     window.localStorage.setItem("sfa:scenarioOverrides", JSON.stringify(scenarios));
   }, [scenarios, isHydrated]);
 
-  // Persist UI preferences
-  useEffect(() => {
-    if (!isHydrated) {
-      return;
+  /**
+   * Fetch smart scenario defaults for a ticker from analyst estimates API.
+   *
+   * Called before the main data fetch so scenarios are populated with company-specific
+   * values before the DCF valuation runs. If this call fails (e.g., no analyst coverage),
+   * we silently keep the current scenarios — the valuation will still run with whatever
+   * scenarios are active.
+   */
+  const fetchSmartScenarios = useCallback(async (nextTicker: string): Promise<ScenariosInput | null> => {
+    try {
+      const res = await fetch(`/api/analyst-estimates/${encodeURIComponent(nextTicker)}`);
+      if (!res.ok) return null;
+
+      const data: AnalystEstimatesResponse = await res.json();
+      setAnalystEstimates(data.analystEstimates);
+      setSmartScenarios(data.smartScenarios);
+      return data.smartScenarios;
+    } catch {
+      return null;
     }
-    window.localStorage.setItem("sfa:uiPreferences", JSON.stringify(uiPreferences));
-  }, [uiPreferences, isHydrated]);
+  }, []);
 
   /**
    * Fetches quote, fundamentals, and valuation data for a given ticker.
    *
-   * Runs three API calls in parallel for performance. Uses refs to access
-   * latest scenario values instead of closing over stale state from component render.
+   * First fetches smart scenarios from analyst estimates, then runs the main
+   * data fetch with the updated scenarios. Uses refs to access latest scenario
+   * values instead of closing over stale state from component render.
    *
    * @param nextTicker - Stock ticker symbol to analyze
+   * @param useSmartDefaults - Whether to auto-populate scenarios from company data
    */
   const fetchDashboardData = useCallback(
-    async (nextTicker: string) => {
+    async (nextTicker: string, useSmartDefaults = true) => {
       setLoadState("loading");
       setErrorMessage("");
 
       try {
+        // Fetch smart scenarios first so they're used in the valuation request
+        let activeScenarios = scenariosRef.current;
+        if (useSmartDefaults) {
+          const smart = await fetchSmartScenarios(nextTicker);
+          if (smart) {
+            activeScenarios = smart;
+            setScenarios(smart);
+            setScenarioSource("smart");
+            scenariosRef.current = smart;
+          }
+        }
+
         // Parallel fetch: quote, fundamentals, and DCF valuation
         const [quoteRes, fundamentalsRes, valuationRes] = await Promise.all([
           fetch(`/api/quote/${encodeURIComponent(nextTicker)}`),
@@ -188,9 +219,8 @@ export function DashboardClient() {
               "Content-Type": "application/json"
             },
             body: JSON.stringify({
-              // Use refs to get latest values, not stale state from closure
               mosPercent: mosRef.current,
-              scenarios: scenariosRef.current
+              scenarios: activeScenarios
             })
           })
         ]);
@@ -221,7 +251,7 @@ export function DashboardClient() {
         setErrorMessage(error instanceof Error ? error.message : "Unexpected error.");
       }
     },
-    []
+    [fetchSmartScenarios]
   );
 
   const valuationChartData = useMemo(() => {
@@ -255,7 +285,8 @@ export function DashboardClient() {
           onSearch={(nextTicker) => {
             const normalizedTicker = nextTicker.toUpperCase();
             setTicker(normalizedTicker);
-            void fetchDashboardData(normalizedTicker);
+            // New ticker search: fetch smart defaults and use them for valuation
+            void fetchDashboardData(normalizedTicker, true);
           }}
         />
 
@@ -263,11 +294,23 @@ export function DashboardClient() {
         <ScenarioPanel
           scenarios={scenarios}
           mosPercent={mosPercent}
+          analystEstimates={analystEstimates}
+          scenarioSource={scenarioSource}
           loading={loadState === "loading"}
           onMosChange={setMosPercent}
-          onReset={() => setScenarios(getDefaultScenarios())}
+          onResetSmart={() => {
+            if (smartScenarios) {
+              setScenarios(smartScenarios);
+              setScenarioSource("smart");
+            }
+          }}
+          onResetGeneric={() => {
+            setScenarios(getDefaultScenarios());
+            setScenarioSource("generic");
+          }}
           onRecalculate={() => {
-            void fetchDashboardData(ticker);
+            // Recalculate with current (possibly manually edited) scenarios
+            void fetchDashboardData(ticker, false);
           }}
           onScenarioChange={(scenario, key, value) => {
             setScenarios((current) => ({
@@ -277,24 +320,9 @@ export function DashboardClient() {
                 [key]: value
               }
             }));
+            setScenarioSource("custom");
           }}
         />
-
-        {/* UI preferences toggle */}
-        <div className="card flex items-center justify-between">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted">UI preferences</p>
-          <button
-            onClick={() =>
-              setUiPreferences((current) => ({
-                ...current,
-                compactCharts: !current.compactCharts
-              }))
-            }
-            className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-800"
-          >
-            {uiPreferences.compactCharts ? "Disable compact charts" : "Enable compact charts"}
-          </button>
-        </div>
 
         {/* Loading state */}
         {loadState === "loading" && <div className="card text-sm text-muted">Loading market and valuation data...</div>}
@@ -343,7 +371,7 @@ export function DashboardClient() {
               </p>
             </div>
 
-            <FundamentalsCharts fundamentals={fundamentals} compact={uiPreferences.compactCharts} />
+            <FundamentalsCharts fundamentals={fundamentals} />
           </motion.div>
         )}
       </div>

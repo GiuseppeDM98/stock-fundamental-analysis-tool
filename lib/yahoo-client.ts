@@ -2,6 +2,7 @@ import YahooFinance from "yahoo-finance2";
 
 import { FundamentalsResponse } from "@/types/fundamentals";
 import { QuoteResponse, Region } from "@/types/market";
+import { AnalystEstimates } from "@/types/valuation";
 
 // Suppress Yahoo Finance survey notices to keep logs clean
 const yahooFinance = new YahooFinance({
@@ -153,61 +154,53 @@ export async function getQuote(ticker: string): Promise<QuoteResponse> {
 }
 
 /**
- * Normalize yahoo-finance2 quoteSummary output to app fundamentals payload.
+ * Map fundamentalsTimeSeries entries into app-level annual data points.
  *
- * Why this adapter exists:
- * quoteSummary fields vary by ticker/region and some statements can be missing.
- * We keep UI resilient by mapping partial data with safe fallbacks.
+ * fundamentalsTimeSeries returns one object per fiscal year with flat field names
+ * (e.g. totalRevenue, EBIT, freeCashFlow). Some entries may have undefined fields
+ * if Yahoo doesn't have data for that year — we skip entries missing revenue.
  */
-export function mapFundamentalsFromSummary(ticker: string, summary: any): FundamentalsResponse {
-  const income = summary?.incomeStatementHistory?.incomeStatementHistory ?? [];
-  const cashflow = summary?.cashflowStatementHistory?.cashflowStatements ?? [];
-  const summaryDetail = summary?.summaryDetail ?? {};
-  const defaultKeyStatistics = summary?.defaultKeyStatistics ?? {};
-  const price = summary?.price ?? {};
+export function mapFundamentalsFromTimeSeries(
+  ticker: string,
+  entries: any[],
+  ratios: { pe: number | null; pb: number | null; ps: number | null; evEbitda?: number | null },
+  currency: string
+): FundamentalsResponse {
+  const annual = entries
+    .filter((e: any) => e.totalRevenue != null && e.date instanceof Date)
+    .slice(-5) // keep at most 5 years, most recent last
+    .map((entry: any) => {
+      const revenue = Number(entry.totalRevenue) || 0;
+      const ebit = Number(entry.EBIT ?? entry.operatingIncome) || 0;
+      const netIncome = Number(entry.netIncome) || 0;
+      const fcfDirect = entry.freeCashFlow != null ? Number(entry.freeCashFlow) : null;
+      const operatingCash = Number(entry.operatingCashFlow) || 0;
+      const capex = Number(entry.capitalExpenditure) || 0; // negative in Yahoo data
+      const fcf = fcfDirect ?? operatingCash + capex;
 
-  const annual = income.slice(0, 5).map((statement: any, index: number) => {
-    const correspondingCash = cashflow[index] ?? {};
+      return {
+        year: entry.date.getUTCFullYear(),
+        revenue,
+        ebit,
+        netIncome,
+        fcf,
+        operatingMargin: revenue > 0 ? ebit / revenue : 0,
+        netMargin: revenue > 0 ? netIncome / revenue : 0,
+      };
+    })
+    // Sort descending (most recent first) to match existing conventions
+    .sort((a: { year: number }, b: { year: number }) => b.year - a.year);
 
-    const revenue = extractRawNumber(statement?.totalRevenue) ?? 0;
-    const ebit = extractRawNumber(statement?.ebit) ?? 0;
-    const netIncome = extractRawNumber(statement?.netIncome) ?? 0;
-    const fcfCandidate = extractRawNumber(correspondingCash?.freeCashFlow);
-    const operatingCash = extractRawNumber(correspondingCash?.totalCashFromOperatingActivities) ?? 0;
-    const capex = extractRawNumber(correspondingCash?.capitalExpenditures) ?? 0;
-
-    // If free cash flow is missing, approximate using operating cash flow minus capex.
-    const fcf = fcfCandidate ?? operatingCash + capex;
-
-    return {
-      year: new Date(Number((statement?.endDate?.raw ?? 0) * 1000)).getUTCFullYear() || new Date().getUTCFullYear(),
-      revenue,
-      ebit,
-      netIncome,
-      fcf,
-      operatingMargin: revenue > 0 ? ebit / revenue : 0,
-      netMargin: revenue > 0 ? netIncome / revenue : 0
-    };
-  });
-
-  return {
-    ticker: ticker.toUpperCase(),
-    currency: String(price?.currency || "USD"),
-    annual,
-    ratios: {
-      pe: extractRawNumber(summaryDetail?.trailingPE),
-      pb: extractRawNumber(defaultKeyStatistics?.priceToBook),
-      ps: extractRawNumber(summaryDetail?.priceToSalesTrailing12Months),
-      evEbitda: extractRawNumber(defaultKeyStatistics?.enterpriseToEbitda)
-    }
-  };
+  return { ticker: ticker.toUpperCase(), currency, annual, ratios };
 }
 
 /**
  * Fetch historical financial statements and valuation ratios.
  *
- * Retrieves up to 5 years of income statements and cash flow data,
- * plus current valuation multiples (P/E, P/B, P/S, EV/EBITDA).
+ * Uses fundamentalsTimeSeries (the modern Yahoo API) for income/cashflow data,
+ * and quoteSummary for valuation ratios (P/E, P/B, etc.) which still work.
+ * The old incomeStatementHistory/cashflowStatementHistory modules have been
+ * deprecated by Yahoo since Nov 2024 and return mostly empty data.
  *
  * @param ticker - Stock ticker symbol
  * @returns Fundamental data with normalized annual statements and ratios
@@ -215,19 +208,35 @@ export function mapFundamentalsFromSummary(ticker: string, summary: any): Fundam
  */
 export async function getFundamentals(ticker: string): Promise<FundamentalsResponse> {
   try {
-    const summary = await withRetry(() =>
-      yahooFinance.quoteSummary(ticker, {
-        modules: [
-          "incomeStatementHistory",
-          "cashflowStatementHistory",
-          "summaryDetail",
-          "defaultKeyStatistics",
-          "price"
-        ]
-      })
-    );
+    // Fetch time series (income + cashflow) and ratios in parallel
+    const [timeSeries, summary] = await Promise.all([
+      withRetry(() =>
+        yahooFinance.fundamentalsTimeSeries(ticker, {
+          period1: new Date(new Date().getFullYear() - 6, 0, 1).toISOString().slice(0, 10),
+          period2: new Date().toISOString().slice(0, 10),
+          type: "annual",
+          module: "all",
+        })
+      ),
+      withRetry(() =>
+        yahooFinance.quoteSummary(ticker, {
+          modules: ["summaryDetail", "defaultKeyStatistics", "price"],
+        })
+      ),
+    ]);
 
-    return mapFundamentalsFromSummary(ticker, summary);
+    const summaryDetail: any = summary?.summaryDetail ?? {};
+    const defaultKeyStatistics: any = summary?.defaultKeyStatistics ?? {};
+    const currency = String(summary?.price?.currency || "USD");
+
+    const ratios = {
+      pe: extractRawNumber(summaryDetail?.trailingPE),
+      pb: extractRawNumber(defaultKeyStatistics?.priceToBook),
+      ps: extractRawNumber(summaryDetail?.priceToSalesTrailing12Months),
+      evEbitda: extractRawNumber(defaultKeyStatistics?.enterpriseToEbitda),
+    };
+
+    return mapFundamentalsFromTimeSeries(ticker, timeSeries, ratios, currency);
   } catch (error) {
     throw normalizeYahooError(error);
   }
@@ -255,6 +264,67 @@ export async function getNetDebtEstimate(ticker: string): Promise<number> {
     const totalCash = extractRawNumber(summary?.financialData?.totalCash) ?? 0;
 
     return totalDebt - totalCash;
+  } catch (error) {
+    throw normalizeYahooError(error);
+  }
+}
+
+/**
+ * Map Yahoo Finance earningsTrend and financialData into AnalystEstimates.
+ *
+ * earningsTrend.trend is an array of objects keyed by period:
+ *   "0q" = current quarter, "+1q" = next quarter,
+ *   "0y" = current year, "+1y" = next year, "+5y" = next 5 years.
+ * Each entry contains revenueEstimate.growth and earningsEstimate.growth as decimals.
+ *
+ * financialData provides trailing (TTM) growth rates and current margins.
+ */
+export function mapAnalystEstimates(summary: any): AnalystEstimates {
+  const trend = summary?.earningsTrend?.trend ?? [];
+  const fd = summary?.financialData ?? {};
+
+  // Helper: find a specific period entry in the earningsTrend array
+  const findPeriod = (period: string) =>
+    trend.find((t: any) => t.period === period);
+
+  const nextYear = findPeriod("+1y");
+  const fiveYear = findPeriod("+5y");
+
+  return {
+    revenueGrowthNextYear: extractRawNumber(nextYear?.revenueEstimate?.growth) ?? null,
+    revenueGrowth5Year: extractRawNumber(fiveYear?.revenueEstimate?.growth) ?? null,
+    earningsGrowthNextYear: extractRawNumber(nextYear?.earningsEstimate?.growth) ?? null,
+    targetMeanPrice: extractRawNumber(fd?.targetMeanPrice) ?? null,
+    numberOfAnalysts: extractRawNumber(fd?.numberOfAnalystOpinions) ?? null,
+    operatingMargins: extractRawNumber(fd?.operatingMargins) ?? null,
+    revenueGrowthTTM: extractRawNumber(fd?.revenueGrowth) ?? null,
+    // financialData provides current FCF and revenue (more reliable than deprecated
+    // cashflowStatementHistory which can return incomplete data for some tickers)
+    freeCashflow: extractRawNumber(fd?.freeCashflow) ?? null,
+    totalRevenue: extractRawNumber(fd?.totalRevenue) ?? null,
+  };
+}
+
+/**
+ * Fetch analyst consensus estimates and current financial metrics.
+ *
+ * Combines earningsTrend (forward growth estimates from sell-side analysts)
+ * with financialData (trailing metrics and analyst price targets) in a single
+ * Yahoo Finance call to minimize API usage.
+ *
+ * @param ticker - Stock ticker symbol
+ * @returns Analyst estimates with growth projections and price targets
+ * @throws User-friendly error if ticker not found or rate limit hit
+ */
+export async function getAnalystEstimates(ticker: string): Promise<AnalystEstimates> {
+  try {
+    const summary = await withRetry(() =>
+      yahooFinance.quoteSummary(ticker, {
+        modules: ["earningsTrend", "financialData"]
+      })
+    );
+
+    return mapAnalystEstimates(summary);
   } catch (error) {
     throw normalizeYahooError(error);
   }

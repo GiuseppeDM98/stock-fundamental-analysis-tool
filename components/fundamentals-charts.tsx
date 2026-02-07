@@ -14,10 +14,10 @@ import {
 } from "recharts";
 
 import { FundamentalsResponse } from "@/types/fundamentals";
+import { formatCompactNumber } from "@/lib/format";
 
 type FundamentalsChartsProps = {
   fundamentals: FundamentalsResponse;
-  compact?: boolean;
 };
 
 /**
@@ -28,9 +28,8 @@ type FundamentalsChartsProps = {
  * - Bar chart: Operating and net margin percentages
  *
  * @param fundamentals - Historical annual financial data
- * @param compact - If true, reduces chart height for denser layouts (default: false)
  */
-export function FundamentalsCharts({ fundamentals, compact = false }: FundamentalsChartsProps) {
+export function FundamentalsCharts({ fundamentals }: FundamentalsChartsProps) {
   // Sort by year ascending to ensure chronological display on X-axis
   // Convert margin decimals (0.15) to percentages (15) for readability
   const chartData = [...fundamentals.annual]
@@ -45,28 +44,28 @@ export function FundamentalsCharts({ fundamentals, compact = false }: Fundamenta
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      <div className={`card ${compact ? "h-[250px]" : "h-[320px]"}`}>
+      <div className="card h-[320px]">
         <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">Revenue & FCF trend</p>
         <ResponsiveContainer width="100%" height="90%">
           <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#23314f" />
             <XAxis dataKey="year" stroke="#7b8ba9" />
-            <YAxis stroke="#7b8ba9" />
-            <Tooltip />
+            <YAxis stroke="#7b8ba9" tickFormatter={(v: number) => formatCompactNumber(v)} />
+            <Tooltip formatter={(value: number) => formatCompactNumber(value)} />
             <Legend />
             <Line type="monotone" dataKey="revenue" stroke="#38bdf8" strokeWidth={2} dot={false} />
             <Line type="monotone" dataKey="fcf" stroke="#10b981" strokeWidth={2} dot={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>
-      <div className={`card ${compact ? "h-[250px]" : "h-[320px]"}`}>
+      <div className="card h-[320px]">
         <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">Margins (%)</p>
         <ResponsiveContainer width="100%" height="90%">
           <BarChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#23314f" />
             <XAxis dataKey="year" stroke="#7b8ba9" />
-            <YAxis stroke="#7b8ba9" />
-            <Tooltip />
+            <YAxis stroke="#7b8ba9" tickFormatter={(v: number) => `${v}%`} />
+            <Tooltip formatter={(value: number) => `${value}%`} />
             <Legend />
             <Bar dataKey="operatingMargin" fill="#38bdf8" radius={4} />
             <Bar dataKey="netMargin" fill="#10b981" radius={4} />
