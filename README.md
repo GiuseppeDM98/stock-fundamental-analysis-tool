@@ -346,18 +346,23 @@ Run DCF valuation with custom scenarios.
 ### Yahoo Finance Rate Limits
 
 **Issue**: 429 errors during high traffic or rapid searches
+
 **Workaround**: Retry logic with exponential backoff (2 retries)
+
 **User Message**: "Rate limit reached. Retry in 30-60 seconds."
 
 ### Missing Shares Outstanding
 
 **Issue**: Some non-US tickers don't expose shares outstanding
+
 **Workaround**: Use `sharesOutstandingOverride` parameter in valuation request
+
 **Future**: Add UI field for manual shares input
 
 ### Incomplete Fundamental Data
 
 **Issue**: Not all tickers have 5 years of historical data
+
 **Behavior**: DCF runs with most recent year only (partial charts)
 
 ---
