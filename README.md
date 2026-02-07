@@ -346,18 +346,23 @@ Run DCF valuation with custom scenarios.
 ### Yahoo Finance Rate Limits
 
 **Issue**: 429 errors during high traffic or rapid searches
+
 **Workaround**: Retry logic with exponential backoff (2 retries)
+
 **User Message**: "Rate limit reached. Retry in 30-60 seconds."
 
 ### Missing Shares Outstanding
 
 **Issue**: Some non-US tickers don't expose shares outstanding
+
 **Workaround**: Use `sharesOutstandingOverride` parameter in valuation request
+
 **Future**: Add UI field for manual shares input
 
 ### Incomplete Fundamental Data
 
 **Issue**: Not all tickers have 5 years of historical data
+
 **Behavior**: DCF runs with most recent year only (partial charts)
 
 ---
@@ -370,7 +375,6 @@ Run DCF valuation with custom scenarios.
 - [ ] Enhanced error messages with "Try Again" button
 
 ### Phase 2: Data & Calculations
-- [ ] In-memory cache (15-min TTL) to reduce API calls
 - [ ] 2-stage DCF model option
 - [ ] P/E-based valuation comparison
 - [ ] Sensitivity analysis matrix (WACC vs growth)
@@ -384,26 +388,6 @@ Run DCF valuation with custom scenarios.
 - [ ] Custom scenario presets with sharing
 - [ ] Monte Carlo simulation for probabilistic fair values
 - [ ] Community preset library
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-**Quick contribution workflow:**
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/your-feature`
-3. Make changes and add tests
-4. Run tests: `npm run test`
-5. Run linter: `npm run lint`
-6. Commit: `git commit -m "feat: add your feature"`
-7. Push and open a Pull Request
-
-**Code Style:**
-- Follow existing patterns in [AGENTS.md](AGENTS.md)
-- Add tests for new functionality
-- Update comments for non-obvious logic (see [COMMENTS.md](COMMENTS.md))
 
 ---
 
