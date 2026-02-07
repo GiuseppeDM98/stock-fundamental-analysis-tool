@@ -375,7 +375,6 @@ Run DCF valuation with custom scenarios.
 - [ ] Enhanced error messages with "Try Again" button
 
 ### Phase 2: Data & Calculations
-- [ ] In-memory cache (15-min TTL) to reduce API calls
 - [ ] 2-stage DCF model option
 - [ ] P/E-based valuation comparison
 - [ ] Sensitivity analysis matrix (WACC vs growth)
