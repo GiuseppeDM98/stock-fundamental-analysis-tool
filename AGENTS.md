@@ -42,7 +42,7 @@ __tests__/         # Vitest tests (mirrors source structure)
 - Literal unions: `ScenarioName = "bull" | "base" | "bear"`
 
 ### Functions
-- Data fetchers: `getQuote()`, `getFundamentals()`, `getAnalystEstimates()`
+- Data fetchers: `getQuote()`, `getFundamentals()`, `getAnalystEstimates()`, `getRiskFreeRate()`
 - Data mappers: `mapFundamentalsFromTimeSeries()`, `mapAnalystEstimates()`
 - Factories: `getDefaultScenarios()`, `getCompanyScenarios()`
 - Utilities: `extractRawNumber()`, `formatCurrency()`, `clamp()`
@@ -64,7 +64,7 @@ export async function POST(request: Request, context: RouteContext) {
 }
 ```
 
-**Endpoints:** `/api/quote`, `/api/fundamentals`, `/api/valuation` (POST), `/api/analyst-estimates`
+**Endpoints:** `/api/quote`, `/api/fundamentals`, `/api/valuation` (POST), `/api/analyst-estimates`, `/api/macro/risk-free-rate`
 
 ---
 
@@ -122,6 +122,7 @@ yahooFinance.quoteSummary(ticker, {
 - **Oldest entry may be empty**: Filter entries where `totalRevenue != null && date instanceof Date`
 - **EBIT field name**: Uppercase `EBIT` in fundamentalsTimeSeries, fallback to `operatingIncome`
 - **FCF from financialData**: More reliable than historical — use for `deriveReinvestmentRate()`
+- **^TNX yield encoding**: `regularMarketPrice` contains the yield in percentage points (e.g., 4.12 = 4.12%), not a decimal — divide by 100 before using as a rate
 
 ### Fallback Chains (scenario-presets.ts)
 - Revenue growth: analyst 5yr → analyst 1yr → historical CAGR → TTM growth → 5%

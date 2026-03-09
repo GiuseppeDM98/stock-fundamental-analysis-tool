@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { AnalystEstimates, ScenariosInput, ScenarioName } from "@/types/valuation";
 
 type ScenarioSource = "smart" | "generic" | "custom";
@@ -87,6 +87,20 @@ export function ScenarioPanel({
   onRecalculate,
   loading = false
 }: ScenarioPanelProps) {
+  // Risk-free rate (US 10Y Treasury yield) fetched once on mount.
+  // Informational only — does not affect DCF calculations. Helps users
+  // set a sensible WACC (should exceed Rf by the equity risk premium).
+  const [riskFreeRate, setRiskFreeRate] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch("/api/macro/risk-free-rate")
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (data?.rate != null) setRiskFreeRate(data.rate);
+      })
+      .catch(() => {/* non-critical, silently ignore */});
+  }, []);
+
   return (
     <div className="card">
       <div className="flex items-center justify-between">
@@ -166,7 +180,16 @@ export function ScenarioPanel({
 
                 return (
                   <label key={key} className="block text-xs text-slate-200">
-                    {labels[key]}
+                    <span className="flex items-center gap-1.5">
+                      {labels[key]}
+                      {/* Show current US 10Y Treasury yield next to WACC as a reference.
+                          WACC should exceed Rf by the equity risk premium (~4-6%). */}
+                      {key === "wacc" && riskFreeRate !== null && (
+                        <span className="rounded-full border border-sky-800 bg-sky-950 px-1.5 py-0.5 text-[10px] font-semibold text-sky-400">
+                          US 10Y: {(riskFreeRate * 100).toFixed(2)}%
+                        </span>
+                      )}
+                    </span>
                     <input
                       type="number"
                       step={bounds.step}

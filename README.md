@@ -6,6 +6,7 @@ A Next.js web application for stock valuation using Discounted Cash Flow (DCF) a
 ![License](https://img.shields.io/badge/license-AGPL--3.0-green)
 ![Next.js](https://img.shields.io/badge/Next.js-15.1.6-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7.3-blue)
+![Vitest](https://img.shields.io/badge/Vitest-3.2.4-yellow)
 
 ---
 
@@ -45,6 +46,7 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - ⚡ **Real-Time Data**: Yahoo Finance integration for quotes and 5-year fundamentals
 - 📊 **Interactive Charts**: Fair value comparison and historical financial metrics with formatted axes
 - 🔒 **Input Validation**: Hard constraints prevent mathematically invalid scenarios (e.g., WACC must exceed terminal growth)
+- 📈 **Live Risk-Free Rate**: US 10Y Treasury yield displayed next to WACC as a real-time reference
 - 💾 **State Persistence**: LocalStorage saves ticker history and scenario overrides
 - 🧪 **Fully Tested**: Vitest + Testing Library coverage for calculations and UI
 
@@ -199,7 +201,8 @@ stock-fundamental-analysis-tool/
 │   │   ├── quote/[ticker]/route.ts
 │   │   ├── fundamentals/[ticker]/route.ts
 │   │   ├── valuation/[ticker]/route.ts
-│   │   └── analyst-estimates/[ticker]/route.ts
+│   │   ├── analyst-estimates/[ticker]/route.ts
+│   │   └── macro/risk-free-rate/route.ts
 │   ├── page.tsx           # Main page (delegates to DashboardClient)
 │   └── layout.tsx         # Root layout
 ├── components/            # React components (all client-side)

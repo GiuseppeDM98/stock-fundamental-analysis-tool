@@ -8,7 +8,7 @@ Current project state and context for AI assistants.
 
 **Version**: `0.2.0`
 **Status**: Active Development
-**Last Updated**: February 7, 2026
+**Last Updated**: March 9, 2026
 
 ---
 
@@ -17,7 +17,7 @@ Current project state and context for AI assistants.
 - **Next.js** `15.1.6` (App Router) + **React** `19.0.0` + **TypeScript** `5.7.3`
 - **yahoo-finance2** `3.13.0` + **Zod** `3.24.1`
 - **Tailwind CSS** `3.4.17` + **Framer Motion** `11.18.2` + **Recharts** `2.15.1`
-- **Vitest** `2.1.8` + **Testing Library** `16.2.0`
+- **Vitest** `3.2.4` + **Testing Library** `16.2.0`
 
 ---
 
@@ -26,7 +26,7 @@ Current project state and context for AI assistants.
 **Pattern**: Next.js App Router with client-side interactivity and server-side API routes.
 
 - **Frontend**: Single-page dashboard fetching from internal API routes, localStorage persistence
-- **API Layer**: Four endpoints — `/api/quote`, `/api/fundamentals`, `/api/valuation`, `/api/analyst-estimates`
+- **API Layer**: Five endpoints — `/api/quote`, `/api/fundamentals`, `/api/valuation`, `/api/analyst-estimates`, `/api/macro/risk-free-rate`
 - **Business Logic**: Pure TypeScript in `lib/` (DCF engine, scenario presets, Yahoo adapter, formatters)
 - **Types**: Centralized in `types/` (fundamentals, market, valuation)
 
@@ -52,6 +52,7 @@ Current project state and context for AI assistants.
 - Analyst estimates reference banner (growth, margins, target price, # analysts)
 - Historical charts with compact number formatting (391B) and % axes
 - LocalStorage persistence for ticker, scenarios, margin of safety
+- **US 10Y Treasury yield badge** next to WACC field — live Rf reference from `^TNX` via Yahoo Finance (fetched on mount, informational only)
 
 ---
 
@@ -76,13 +77,14 @@ types/                 # fundamentals.ts, market.ts, valuation.ts
 lib/
   valuation/dcf.ts     # DCF engine
   valuation/scenario-presets.ts  # Default + company-specific scenarios
-  yahoo-client.ts      # Yahoo adapter (fundamentalsTimeSeries + quoteSummary)
+  yahoo-client.ts      # Yahoo adapter (fundamentalsTimeSeries + quoteSummary + getRiskFreeRate)
   format.ts            # Currency/number/percent formatting
 app/api/
   quote/[ticker]/route.ts
   fundamentals/[ticker]/route.ts
   valuation/[ticker]/route.ts
   analyst-estimates/[ticker]/route.ts
+  macro/risk-free-rate/route.ts  # US 10Y Treasury yield via ^TNX
 components/            # dashboard-client, scenario-panel, fair-value-card,
                        # ticker-search, fundamentals-charts, price-summary, disclaimer-banner
 __tests__/             # dcf, scenario-presets, yahoo-client, scenario-panel (15 tests)

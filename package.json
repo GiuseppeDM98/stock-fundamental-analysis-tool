@@ -11,6 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@vitest/coverage-v8": "^3.2.4",
     "framer-motion": "^11.18.2",
     "next": "^15.1.6",
     "react": "^19.0.0",
@@ -30,6 +31,6 @@
     "postcss": "^8.5.1",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "vitest": "^3.2.4"
   }
 }

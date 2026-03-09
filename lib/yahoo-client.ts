@@ -306,6 +306,39 @@ export function mapAnalystEstimates(summary: any): AnalystEstimates {
 }
 
 /**
+ * Fetch the current US 10-Year Treasury yield as a risk-free rate proxy.
+ *
+ * We use ^TNX (CBOE Interest Rate 10 Year T-Note) because:
+ * - It's the market-standard proxy for the risk-free rate in CAPM/WACC calculations
+ * - It's available via Yahoo Finance, our existing data provider (no extra API key needed)
+ * - It updates in real-time during US market hours
+ *
+ * Note: ^TNX reports the yield in percentage points (e.g., 4.52 means 4.52%),
+ * not as a decimal — we divide by 100 before returning.
+ *
+ * This data is informational only; it does not affect DCF calculations directly.
+ * Users can use it as a reference when manually adjusting WACC in the scenario panel.
+ *
+ * @returns Rate as a decimal (e.g., 0.0452 for 4.52%) with ISO timestamp, or null on failure
+ */
+export async function getRiskFreeRate(): Promise<{ rate: number; asOf: string } | null> {
+  try {
+    const quote = await withRetry(() => yahooFinance.quote("^TNX"));
+
+    const price = extractRawNumber(quote?.regularMarketPrice);
+    if (price === null) return null;
+
+    return {
+      rate: price / 100,
+      asOf: new Date().toISOString(),
+    };
+  } catch {
+    // Non-critical: return null so callers can degrade gracefully
+    return null;
+  }
+}
+
+/**
  * Fetch analyst consensus estimates and current financial metrics.
  *
  * Combines earningsTrend (forward growth estimates from sell-side analysts)
