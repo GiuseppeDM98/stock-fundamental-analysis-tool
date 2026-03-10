@@ -53,6 +53,28 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 /**
+ * Estimate WACC using CAPM for the cost of equity.
+ *
+ * Formula: Ke = Rf + β × ERP
+ * where ERP (Equity Risk Premium) defaults to 5.5% — Damodaran's 2024
+ * implied ERP estimate for the US market, widely used as a benchmark.
+ *
+ * Limitations:
+ * - This is equity cost only (no debt weighting), which is an approximation.
+ * - A full WACC requires debt cost and D/E ratio from the balance sheet.
+ * - For most equity investors using enterprise DCF, Ke ≈ WACC is a
+ *   reasonable simplification when leverage is moderate.
+ *
+ * Beta fallback: uses 1.0 (market beta) if no beta data is available.
+ * Result clamped to [6%, 18%] to keep DCF stable.
+ */
+function computeWacc(beta: number | null, riskFreeRate: number, erp = 0.055): number {
+  const b = beta ?? 1.0;
+  const ke = riskFreeRate + b * erp;
+  return clamp(ke, 0.06, 0.18);
+}
+
+/**
  * Compute the Compound Annual Growth Rate from an array of annual revenue figures.
  *
  * CAGR = (endValue / startValue)^(1/years) - 1
@@ -137,11 +159,13 @@ function deriveReinvestmentRate(
  *
  * @param fundamentals - Historical financial statements
  * @param estimates - Analyst consensus estimates (nullable fields)
+ * @param riskFreeRate - Current risk-free rate (e.g. US 10Y Treasury yield). Defaults to 4.5% if not provided.
  * @returns Company-specific scenarios; falls back to generic defaults if data is insufficient
  */
 export function getCompanyScenarios(
   fundamentals: FundamentalsResponse,
-  estimates: AnalystEstimates
+  estimates: AnalystEstimates,
+  riskFreeRate?: number
 ): ScenariosInput {
   const { annual } = fundamentals;
 
@@ -156,19 +180,27 @@ export function getCompanyScenarios(
   // Years 6-10 growth fades towards terminal rate (60% of early growth)
   const baseGrowthY6to10 = baseGrowthY1to5 * 0.6;
 
-  // Operating margin: prefer analyst current margin, then latest historical, then average
+  // Operating margin: prefer multi-year historical average over TTM.
+  // TTM can be distorted by one-time charges or commodity price cycles
+  // (e.g. oil majors in a low-price year). A 5-year average is more
+  // representative of normalized profitability.
   const latestMargin = annual[0]?.operatingMargin ?? null;
   const avgMargin3yr = annual.length >= 3
     ? annual.slice(0, 3).reduce((sum, p) => sum + p.operatingMargin, 0) / 3
     : null;
-  const baseMargin = estimates.operatingMargins ?? latestMargin ?? avgMargin3yr ?? 0.18;
+  const avgMargin5yr = annual.length >= 5
+    ? annual.slice(0, 5).reduce((sum, p) => sum + p.operatingMargin, 0) / 5
+    : null;
+  const baseMargin = avgMargin5yr ?? avgMargin3yr ?? estimates.operatingMargins ?? latestMargin ?? 0.18;
 
   const baseTaxRate = deriveEffectiveTaxRate(annual) ?? 0.22;
   const baseReinvestmentRate = deriveReinvestmentRate(annual, estimates) ?? 0.30;
 
-  // WACC and terminal growth use sensible defaults (proper WACC calculation
-  // requires beta, risk-free rate, and equity risk premium which we don't fetch)
-  const baseWacc = 0.095;
+  // Compute WACC using CAPM: Ke = Rf + β × ERP.
+  // This is far more accurate than a hardcoded 9.5% because it accounts
+  // for company-specific risk (beta) and the current interest rate environment (Rf).
+  const rf = riskFreeRate ?? 0.045; // default to 4.5% if risk-free rate not provided
+  const baseWacc = computeWacc(estimates.beta, rf);
   const baseTerminalGrowth = 0.025;
 
   // Build base scenario with validation bounds applied

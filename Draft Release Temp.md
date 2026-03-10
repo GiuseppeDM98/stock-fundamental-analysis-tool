@@ -1,3 +1,11 @@
+## 🔧 Improvements (v0.3.1)
+
+- WACC is now computed from the company's actual beta and the live US 10-Year Treasury yield using CAPM (`Ke = Rf + β × ERP`), instead of a fixed 9.5% for all companies — discount rates now reflect each company's real risk profile
+- Smart scenario defaults now use a 5-year historical average for operating margin instead of the trailing 12-month figure — significantly improves accuracy for cyclical companies (e.g. oil & gas, materials) where a single year can be anomalous
+- Historical financial data now fetches up to 10 years (previously 5) — more historical context for trend analysis and more stable scenario defaults
+
+---
+
 ## ✨ New Features
 
 - Added company-specific smart scenario defaults — DCF scenarios are now auto-populated with real data from Yahoo Finance analyst estimates and historical financials instead of generic presets

@@ -10,7 +10,7 @@
  */
 import { NextResponse } from "next/server";
 
-import { getAnalystEstimates, getFundamentals } from "@/lib/yahoo-client";
+import { getAnalystEstimates, getFundamentals, getRiskFreeRate } from "@/lib/yahoo-client";
 import { getCompanyScenarios } from "@/lib/valuation/scenario-presets";
 
 type RouteContext = { params: Promise<{ ticker: string }> };
@@ -27,13 +27,15 @@ export async function GET(_request: Request, context: RouteContext) {
   try {
     const params = await context.params;
 
-    // Fetch analyst estimates and fundamentals in parallel
-    const [analystEstimates, fundamentals] = await Promise.all([
+    // Fetch analyst estimates, fundamentals, and risk-free rate in parallel.
+    // Risk-free rate feeds CAPM-based WACC calculation in getCompanyScenarios.
+    const [analystEstimates, fundamentals, riskFreeRateData] = await Promise.all([
       getAnalystEstimates(params.ticker),
       getFundamentals(params.ticker),
+      getRiskFreeRate(),
     ]);
 
-    const smartScenarios = getCompanyScenarios(fundamentals, analystEstimates);
+    const smartScenarios = getCompanyScenarios(fundamentals, analystEstimates, riskFreeRateData?.rate);
 
     return NextResponse.json({
       ticker: params.ticker.toUpperCase(),

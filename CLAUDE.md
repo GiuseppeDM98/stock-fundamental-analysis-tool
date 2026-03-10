@@ -8,7 +8,7 @@ Current project state and context for AI assistants.
 
 **Version**: `0.3.0`
 **Status**: Active Development
-**Last Updated**: March 10, 2026
+**Last Updated**: March 10, 2026 (DCF improvements: CAPM WACC, 10yr data, 5yr margin avg)
 
 ---
 
@@ -41,13 +41,14 @@ Current project state and context for AI assistants.
 
 ### Stock Data & Valuation
 - Real-time quotes from Yahoo Finance with retry logic
-- Historical fundamentals via `fundamentalsTimeSeries` (5 years income + cashflow)
+- Historical fundamentals via `fundamentalsTimeSeries` (up to 10 years income + cashflow)
 - 10-year DCF with Gordon Growth terminal value, three scenarios (bull/base/bear)
 - Margin of safety adjustment (0-80%)
 
 ### Smart Scenario Defaults
 - Company-specific scenarios auto-populated from analyst estimates + historical data
-- Fallback chains: analyst 5yr growth → CAGR → TTM → 5%, margins from analyst → historical → 18%
+- Fallback chains: analyst 5yr growth → CAGR → TTM → 5%, margins from 5yr avg → 3yr avg → TTM → 18%
+- WACC computed via CAPM: `Ke = Rf + β × ERP` (beta from Yahoo, Rf from ^TNX, ERP = 5.5%)
 - Reinvestment rate derived from real FCF/NOPAT
 - Source indicator badge: "Smart defaults (Yahoo)" / "Generic defaults" / "Custom"
 
@@ -113,7 +114,7 @@ components/            # dashboard-client, scenario-panel, fair-value-card,
                        # nav-bar, login-form, register-form, session-provider
 prisma/                # schema.prisma + migrations
 generated/prisma/      # Prisma 7 generated client (gitignored)
-__tests__/             # 15 tests across 4 files
+__tests__/             # 17 tests across 4 files
 ```
 
 ---
@@ -150,11 +151,11 @@ See `.env.example` for full template.
 
 ## Next Priorities
 
-1. Manual shares outstanding override UI
-2. Loading states with skeleton loaders
-3. Caching layer for Yahoo API calls
-4. Sensitivity analysis table (WACC vs growth matrix)
-5. Multi-ticker comparison
+1. FMP integration as alternative data source (30yr history, reliable API) — see `.claude/plans/replicated-nibbling-jellyfish.md`
+2. Sector-aware valuation (EV/EBITDA for cyclicals, P/B for banks, DDM for utilities)
+3. Manual shares outstanding override UI
+4. Caching layer for Yahoo API calls
+5. Sensitivity analysis table (WACC vs growth matrix)
 
 ---
 

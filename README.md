@@ -4,7 +4,7 @@ A Next.js web application for stock valuation using Discounted Cash Flow (DCF) a
 
 ![Version](https://img.shields.io/badge/version-0.3.0-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-green)
-![Next.js](https://img.shields.io/badge/Next.js-15.1.6-black)
+![Next.js](https://img.shields.io/badge/Next.js-15.5.12-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7.3-blue)
 ![Vitest](https://img.shields.io/badge/Vitest-3.2.4-yellow)
 
@@ -17,7 +17,7 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **10-year DCF projections** with Gordon Growth terminal value
 - **Smart scenario defaults** auto-populated from analyst estimates and historical data
 - **Three scenario modeling** (Bull/Base/Bear) with independent parameters
-- **Real-time market data** from Yahoo Finance (quotes, financials, ratios)
+- **Real-time market data** from Yahoo Finance (quotes, up to 10-year financials, ratios)
 - **Interactive visualizations** comparing fair value vs. current price
 - **Margin of safety** adjustment (0-80%) for conservative valuations
 - **Client-side persistence** with localStorage for scenario configurations
@@ -309,7 +309,7 @@ Fetch current market quote.
 
 ### GET /api/fundamentals/[ticker]
 
-Fetch 5-year historical fundamentals (via `fundamentalsTimeSeries`).
+Fetch up to 10-year historical fundamentals (via `fundamentalsTimeSeries`).
 
 **Response:**
 ```json

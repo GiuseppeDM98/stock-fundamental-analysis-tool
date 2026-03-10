@@ -167,6 +167,8 @@ yahooFinance.quoteSummary(ticker, { modules: ["summaryDetail", "defaultKeyStatis
 - **TYPE: UNKNOWN records**: Some tickers (e.g. Italian small-caps) return EPS/shares entries that fail schema validation — use `{ validateResult: false }` + filter by `totalRevenue != null`
 - **EBIT field name**: Uppercase `EBIT` in fundamentalsTimeSeries, fallback to `operatingIncome`
 - **^TNX yield encoding**: `regularMarketPrice` is in percentage points (4.12 = 4.12%) — divide by 100
+- **TTM margin vs historical**: `financialData.operatingMargins` is the trailing 12-month margin — very volatile for commodity/cyclical companies. Always prefer multi-year historical average for scenario defaults.
+- **fundamentalsTimeSeries history**: Yahoo only has 4-5 years of data for many non-US tickers despite requesting 10 years — this is a Yahoo limitation, not a bug.
 
 ---
 
@@ -187,6 +189,9 @@ yahooFinance.quoteSummary(ticker, { modules: ["summaryDetail", "defaultKeyStatis
 - **Critical constraint**: `wacc > terminalGrowth` (enforced by `validateScenarioInput()`)
 - **Validation bounds**: growth [-50%, +60%], margin [0%, 80%], WACC [3%, 30%], terminal [-2%, 6%]
 - **Scenario display**: Values shown as percentages in UI, stored as decimals internally
+- **WACC via CAPM**: `computeWacc(beta, riskFreeRate, erp=0.055)` in `scenario-presets.ts` — `Ke = Rf + β × ERP`. Beta from `defaultKeyStatistics`, Rf from `^TNX`, ERP hardcoded 5.5% (Damodaran). Falls back to β=1.0 if null. Clamped [6%, 18%].
+- **Operating margin**: `getCompanyScenarios` uses 5yr historical average as primary signal (not TTM). TTM from `financialData.operatingMargins` is volatile for cyclical companies (oil, materials) — single bad year distorts results.
+- **`getCompanyScenarios` signature**: accepts optional `riskFreeRate?: number` — pass from `getRiskFreeRate()` in the route handler. Defaults to 4.5% if absent.
 
 ---
 

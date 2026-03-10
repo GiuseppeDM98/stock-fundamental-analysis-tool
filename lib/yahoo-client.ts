@@ -168,7 +168,7 @@ export function mapFundamentalsFromTimeSeries(
 ): FundamentalsResponse {
   const annual = entries
     .filter((e: any) => e.totalRevenue != null && e.date instanceof Date)
-    .slice(-5) // keep at most 5 years, most recent last
+    .slice(-10) // keep at most 10 years, most recent last
     .map((entry: any) => {
       const revenue = Number(entry.totalRevenue) || 0;
       const ebit = Number(entry.EBIT ?? entry.operatingIncome) || 0;
@@ -214,7 +214,7 @@ export async function getFundamentals(ticker: string): Promise<FundamentalsRespo
         yahooFinance.fundamentalsTimeSeries(
           ticker,
           {
-            period1: new Date(new Date().getFullYear() - 6, 0, 1).toISOString().slice(0, 10),
+            period1: new Date(new Date().getFullYear() - 11, 0, 1).toISOString().slice(0, 10),
             period2: new Date().toISOString().slice(0, 10),
             type: "annual",
             module: "all",
@@ -290,6 +290,7 @@ export async function getNetDebtEstimate(ticker: string): Promise<number> {
 export function mapAnalystEstimates(summary: any): AnalystEstimates {
   const trend = summary?.earningsTrend?.trend ?? [];
   const fd = summary?.financialData ?? {};
+  const dks = summary?.defaultKeyStatistics ?? {};
 
   // Helper: find a specific period entry in the earningsTrend array
   const findPeriod = (period: string) =>
@@ -310,6 +311,9 @@ export function mapAnalystEstimates(summary: any): AnalystEstimates {
     // cashflowStatementHistory which can return incomplete data for some tickers)
     freeCashflow: extractRawNumber(fd?.freeCashflow) ?? null,
     totalRevenue: extractRawNumber(fd?.totalRevenue) ?? null,
+    // Beta from defaultKeyStatistics — used to compute company-specific WACC via CAPM.
+    // Null for tickers without analyst coverage or newly listed companies.
+    beta: extractRawNumber(dks?.beta) ?? null,
   };
 }
 
@@ -361,7 +365,8 @@ export async function getAnalystEstimates(ticker: string): Promise<AnalystEstima
   try {
     const summary = await withRetry(() =>
       yahooFinance.quoteSummary(ticker, {
-        modules: ["earningsTrend", "financialData"]
+        // defaultKeyStatistics provides beta for CAPM-based WACC calculation
+        modules: ["earningsTrend", "financialData", "defaultKeyStatistics"]
       })
     );
 

@@ -27,6 +27,7 @@ const appleAnalystEstimates: AnalystEstimates = {
   revenueGrowthTTM: 0.02,
   freeCashflow: 108807e6,   // Apple's actual FCF
   totalRevenue: 391035e6,   // Apple's actual revenue
+  beta: 1.2,
 };
 
 // No analyst coverage (small cap / non-US)
@@ -40,6 +41,7 @@ const noAnalystEstimates: AnalystEstimates = {
   revenueGrowthTTM: null,
   freeCashflow: null,
   totalRevenue: null,
+  beta: null,
 };
 
 // Minimal fundamentals (only 1 year of data)
@@ -78,8 +80,9 @@ describe("getCompanyScenarios", () => {
     // 4 data points spanning 3 years: CAGR = (391035/365817)^(1/3) - 1 ≈ 2.3%
     expect(scenarios.base.revenueGrowthYears1to5).toBeGreaterThan(0);
 
-    // Operating margin should still come from latest fundamentals
-    expect(scenarios.base.operatingMarginTarget).toBeCloseTo(0.315, 2);
+    // Operating margin should come from 3yr historical average (5yr not available with 4 data points)
+    // avg = (0.315 + 0.298 + 0.290) / 3 ≈ 0.301
+    expect(scenarios.base.operatingMarginTarget).toBeCloseTo(0.301, 2);
   });
 
   it("handles minimal data with graceful fallbacks", () => {
@@ -98,6 +101,23 @@ describe("getCompanyScenarios", () => {
     // Apple's FCF (~108B) exceeds NOPAT (~94B), so reinvestment should be near minimum (5%)
     // The old code was falling back to 30% which destroyed the valuation
     expect(scenarios.base.reinvestmentRate).toBeLessThan(0.15);
+  });
+
+  it("computes WACC from beta and risk-free rate via CAPM", () => {
+    // Rf = 4.5%, β = 1.2, ERP = 5.5% → Ke = 0.045 + 1.2 × 0.055 = 0.111
+    const scenarios = getCompanyScenarios(appleFundamentals, appleAnalystEstimates, 0.045);
+    expect(scenarios.base.wacc).toBeCloseTo(0.111, 2);
+
+    // Bull uses lower discount rate than base
+    expect(scenarios.bull.wacc).toBeLessThan(scenarios.base.wacc);
+    // Bear uses higher discount rate than base
+    expect(scenarios.bear.wacc).toBeGreaterThan(scenarios.base.wacc);
+  });
+
+  it("falls back to market beta (1.0) when beta is null", () => {
+    // Rf = 4.5%, β = 1.0 (fallback), ERP = 5.5% → Ke = 0.045 + 1.0 × 0.055 = 0.10
+    const scenarios = getCompanyScenarios(appleFundamentals, noAnalystEstimates, 0.045);
+    expect(scenarios.base.wacc).toBeCloseTo(0.10, 2);
   });
 
   it("ensures WACC > terminal growth for all scenarios", () => {

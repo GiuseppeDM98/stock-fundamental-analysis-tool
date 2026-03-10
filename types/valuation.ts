@@ -66,6 +66,7 @@ export type AnalystEstimates = {
   revenueGrowthTTM: number | null;       // Trailing 12-month revenue growth
   freeCashflow: number | null;           // Current free cash flow from financialData (more reliable than historical)
   totalRevenue: number | null;           // Current total revenue from financialData
+  beta: number | null;                   // Stock beta from defaultKeyStatistics (used for WACC via CAPM)
 };
 
 /**
