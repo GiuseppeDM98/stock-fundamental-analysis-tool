@@ -6,4 +6,9 @@ coverage
 .env*
 !.env.example
 
+# Local SQLite database (used only for prisma migrate dev — app uses Turso)
+*.db
+*.db-shm
+*.db-wal
+
 /generated/prisma
