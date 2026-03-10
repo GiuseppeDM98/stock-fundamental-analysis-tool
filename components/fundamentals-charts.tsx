@@ -38,6 +38,8 @@ export function FundamentalsCharts({ fundamentals }: FundamentalsChartsProps) {
       year: point.year,
       revenue: point.revenue,
       fcf: point.fcf,
+      // netIncome included alongside FCF to show how much of earnings converts to real cash
+      netIncome: point.netIncome,
       operatingMargin: Number((point.operatingMargin * 100).toFixed(2)),
       netMargin: Number((point.netMargin * 100).toFixed(2))
     }));
@@ -45,7 +47,7 @@ export function FundamentalsCharts({ fundamentals }: FundamentalsChartsProps) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <div className="card h-[320px]">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">Revenue & FCF trend</p>
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">Revenue, Net Income & FCF</p>
         <ResponsiveContainer width="100%" height="90%">
           <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#23314f" />
@@ -54,6 +56,8 @@ export function FundamentalsCharts({ fundamentals }: FundamentalsChartsProps) {
             <Tooltip formatter={(value: number) => formatCompactNumber(value)} />
             <Legend />
             <Line type="monotone" dataKey="revenue" stroke="#38bdf8" strokeWidth={2} dot={false} />
+            {/* netIncome alongside FCF shows how much accounting profit converts to real cash */}
+            <Line type="monotone" dataKey="netIncome" stroke="#f59e0b" strokeWidth={2} dot={false} />
             <Line type="monotone" dataKey="fcf" stroke="#10b981" strokeWidth={2} dot={false} />
           </LineChart>
         </ResponsiveContainer>

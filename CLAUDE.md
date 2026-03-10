@@ -8,7 +8,7 @@ Current project state and context for AI assistants.
 
 **Version**: `0.3.1`
 **Status**: Active Development
-**Last Updated**: March 10, 2026 (Valuation metrics cards: P/E, P/FCF, FCF Yield, Earnings Yield)
+**Last Updated**: March 10, 2026 (Valuation metrics cards + Net Income in chart)
 
 ---
 
@@ -159,8 +159,8 @@ See `.env.example` for full template.
 
 ## Next Priorities
 
-1. FMP integration as alternative data source (30yr history, reliable API) — see `.claude/plans/replicated-nibbling-jellyfish.md`
-2. Sector-aware valuation (EV/EBITDA for cyclicals, P/B for banks, DDM for utilities)
+1. **Sector Detection** — Yahoo `assetProfile` module (free) → `sector`/`industry` in `FundamentalsResponse`, sector badge in UI, disclaimer when DCF is not the right method — see `.claude/plans/replicated-nibbling-jellyfish.md`
+2. **Claude Deep Value** — new `/api/ai/deep-value` endpoint where Claude autonomously picks the valuation method (EV/EBITDA for energy, P/B for banks, DDM for utilities) and sources data via web search — see `.claude/plans/replicated-nibbling-jellyfish.md`
 3. Manual shares outstanding override UI
 4. Caching layer for Yahoo API calls
 5. Sensitivity analysis table (WACC vs growth matrix)
