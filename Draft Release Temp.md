@@ -48,3 +48,8 @@
 
 - Registration can be disabled via `DISABLE_REGISTRATION=true` environment variable — useful to lock down the app after initial setup
 - AI analysis price targets are always computed server-side and cannot be manipulated by the client
+
+## 🏗️ Technical (v0.3.0)
+
+- Migrated database from local SQLite to Turso (hosted libSQL) — saved analyses and user accounts now persist across Vercel deployments
+- Local SQLite (`dev.db`) is now used only for schema development via `prisma migrate dev` and is excluded from git
