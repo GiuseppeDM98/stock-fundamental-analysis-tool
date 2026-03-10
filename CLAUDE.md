@@ -6,9 +6,9 @@ Current project state and context for AI assistants.
 
 ## Version & Status
 
-**Version**: `0.3.0`
+**Version**: `0.3.1`
 **Status**: Active Development
-**Last Updated**: March 10, 2026 (DCF improvements: CAPM WACC, 10yr data, 5yr margin avg)
+**Last Updated**: March 10, 2026 (Valuation metrics cards: P/E, P/FCF, FCF Yield, Earnings Yield)
 
 ---
 
@@ -67,6 +67,12 @@ Current project state and context for AI assistants.
 - Save AI reports to personal account, view/delete at `/analyses`
 - JWT sessions (no DB session table)
 
+### Valuation Metrics Cards
+- 4 quick-glance cards above historical charts: **Anni di Utili** (P/E), **Anni di FCF** (P/FCF), **FCF Yield**, **Earnings Yield**
+- Trend badge per card: Migliorato / Peggiorato / Stabile (compares latest vs prior annual fundamental)
+- Each card has a `?` button opening an educational modal (via `ReactDOM.createPortal`) with "Cos'è?" and "Come si legge?" sections
+- Logic in `lib/valuation/valuation-metrics.ts`; component in `components/valuation-metrics-cards.tsx`
+
 ### Interactive UI
 - Scenario parameters displayed as percentages, stored as decimals
 - Analyst estimates reference banner
@@ -95,6 +101,7 @@ types/                 # fundamentals.ts, market.ts, valuation.ts, analysis.ts, 
 lib/
   valuation/dcf.ts     # DCF engine
   valuation/scenario-presets.ts
+  valuation/valuation-metrics.ts  # P/E, P/FCF, FCF Yield, Earnings Yield computation
   ai/prompts.ts        # Prompt builders for AI analysis
   yahoo-client.ts      # Yahoo adapter
   auth.ts              # Auth.js v5 config
@@ -111,7 +118,8 @@ app/login/ app/register/ app/analyses/ app/analyses/[id]/
 components/            # dashboard-client, scenario-panel, fair-value-card,
                        # ticker-search, fundamentals-charts, price-summary,
                        # disclaimer-banner, ai-analysis-panel, analyses-list,
-                       # nav-bar, login-form, register-form, session-provider
+                       # nav-bar, login-form, register-form, session-provider,
+                       # valuation-metrics-cards
 prisma/                # schema.prisma + migrations
 generated/prisma/      # Prisma 7 generated client (gitignored)
 __tests__/             # 17 tests across 4 files

@@ -211,6 +211,7 @@ yahooFinance.quoteSummary(ticker, { modules: ["summaryDetail", "defaultKeyStatis
 4. **Hydration mismatch**: Never access localStorage during render — use hydration guard
 5. **WACC vs terminal growth**: DCF blows up if `wacc <= terminalGrowth`
 6. **Capital-light companies**: FCF can exceed NOPAT → reinvestment rate near 0% (clamped to 5%)
+7. **CSS variable naming**: The project only defines `--bg`, `--card`, `--accent`, `--muted`, `--success`, `--warning`, `--danger`. There is no `--surface` — use `bg-[var(--card)]` for solid backgrounds (e.g. modals). The `.card` class has implicit `overflow: hidden` from its shadow — use `ReactDOM.createPortal(…, document.body)` for any overlay/popover/modal that must render outside a card.
 
 ---
 
@@ -228,6 +229,7 @@ import { SavedAnalysis } from "@/types/analysis";
 ```typescript
 import { runDcf, validateScenarioInput } from "@/lib/valuation/dcf";
 import { getDefaultScenarios, getCompanyScenarios } from "@/lib/valuation/scenario-presets";
+import { computeValuationMetrics } from "@/lib/valuation/valuation-metrics";
 import { getQuote, getFundamentals, getAnalystEstimates } from "@/lib/yahoo-client";
 import { formatCurrency, formatPercent, formatCompactNumber } from "@/lib/format";
 import { auth } from "@/lib/auth";

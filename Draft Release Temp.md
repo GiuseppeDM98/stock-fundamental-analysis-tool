@@ -1,5 +1,9 @@
 ## ✨ New Features
 
+- Added valuation metrics cards above the historical charts: **Years of Earnings** (P/E reframed), **Years of FCF** (P/FCF), **FCF Yield**, and **Earnings Yield** — instantly see how many years of profits it would take to buy back the company at its current price
+- Each valuation metric card shows a year-over-year trend badge (Improved / Worsened / Stable) reflecting whether the underlying fundamental (earnings or FCF) improved vs the prior year
+- Each card has a clickable **?** info button that opens an educational modal explaining what the metric measures and how to interpret its value, including comparison benchmarks (e.g. vs. Treasury yield)
+
 - Added AI-powered investment analysis — click "Generate AI Analysis" to get a full research report on any stock (Company Overview, MOAT analysis, Bull/Base/Bear price targets, Key Risks, Investment Summary)
 - AI reports use web search to include the latest news, earnings results, and competitive developments
 - Added language selector for AI reports (English, Italiano, Español, Français, Deutsch, Português, 中文, 日本語)

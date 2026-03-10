@@ -52,6 +52,7 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - 💾 **State Persistence**: LocalStorage saves ticker history and scenario overrides
 - 🤖 **AI Analysis**: Claude Sonnet 4.6 generates full investment reports with live web search
 - 👤 **User Accounts**: Save and revisit AI-generated reports with email/password auth
+- 🧮 **Valuation Metrics**: P/E, P/FCF, FCF Yield, Earnings Yield cards with YoY trend and educational tooltips
 - 🧪 **Fully Tested**: Vitest + Testing Library coverage for calculations and UI
 
 ---

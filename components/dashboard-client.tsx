@@ -21,6 +21,7 @@ import { PriceSummary } from "@/components/price-summary";
 import { ScenarioPanel } from "@/components/scenario-panel";
 import { TickerSearch } from "@/components/ticker-search";
 import AiAnalysisPanel from "@/components/ai-analysis-panel";
+import { ValuationMetricsCards } from "@/components/valuation-metrics-cards";
 import { getDefaultScenarios } from "@/lib/valuation/scenario-presets";
 import { FundamentalsResponse } from "@/types/fundamentals";
 import { QuoteResponse } from "@/types/market";
@@ -371,6 +372,8 @@ export function DashboardClient() {
                 Scenario note: each fair value includes the global margin of safety slider.
               </p>
             </div>
+
+            <ValuationMetricsCards quote={quote} fundamentals={fundamentals} />
 
             <FundamentalsCharts fundamentals={fundamentals} />
 
