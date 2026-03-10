@@ -16,7 +16,7 @@ Current project state and context for AI assistants.
 
 - **Next.js** `15.5.12` (App Router) + **React** `19.0.0` + **TypeScript** `5.7.3`
 - **yahoo-finance2** `3.13.2` + **Zod** `3.24.1`
-- **Prisma** `7.4.2` + **SQLite** via `@prisma/adapter-better-sqlite3`
+- **Prisma** `7.4.2` + **Turso** (libSQL) via `@prisma/adapter-libsql`
 - **Auth.js** `next-auth@5.0.0-beta.30` + **bcryptjs**
 - **Anthropic SDK** + **Claude Sonnet 4.6** (web search enabled)
 - **Tailwind CSS** `3.4.17` + **Framer Motion** `11.18.2` + **Recharts** `2.15.1` + **react-markdown**
@@ -135,9 +135,11 @@ npx prisma generate   # Regenerate client after schema changes
 ## Required ENV Vars
 
 ```bash
-DATABASE_URL="file:./dev.db"          # already in .env from Prisma init
+DATABASE_URL="file:./dev.db"          # Prisma CLI only (local migrations)
+TURSO_DATABASE_URL="libsql://..."      # app runtime — libsql://... (prod) or file:./dev.db (dev)
+TURSO_AUTH_TOKEN="..."                 # Turso auth token (not needed for local file:)
 NEXTAUTH_SECRET="..."                  # openssl rand -hex 32
-NEXTAUTH_URL="http://localhost:3000"
+NEXTAUTH_URL="http://localhost:3000"   # production: https://your-domain.vercel.app
 ANTHROPIC_API_KEY="sk-ant-..."
 DISABLE_REGISTRATION="false"
 ```

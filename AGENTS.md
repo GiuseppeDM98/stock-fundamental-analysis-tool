@@ -8,7 +8,7 @@ Project-specific patterns, conventions, and knowledge for AI agents working on t
 
 Next.js 15 stock fundamental analysis tool with DCF valuation, scenario modeling, Yahoo Finance integration, AI-generated investment analysis (Claude Sonnet 4.6 + web search), and user accounts with saved reports.
 
-**Tech Stack:** Next.js 15 (App Router), TypeScript (strict), React 19, yahoo-finance2, Prisma 7 + SQLite, Auth.js v5, Anthropic SDK, Vitest + Testing Library, Tailwind CSS, Framer Motion, Recharts
+**Tech Stack:** Next.js 15 (App Router), TypeScript (strict), React 19, yahoo-finance2, Prisma 7 + Turso (libSQL), Auth.js v5, Anthropic SDK, Vitest + Testing Library, Tailwind CSS, Framer Motion, Recharts
 
 ---
 
@@ -135,14 +135,15 @@ while (!done) {
 
 ---
 
-## Prisma 7 (Breaking Changes from v4/v5)
+## Prisma 7 + Turso
 
 - `generator client { provider = "prisma-client" }` — new provider name
 - **No `url` field** in `datasource db` — URL goes in `prisma.config.ts`
 - `PrismaClient` constructor **requires a driver adapter** — no built-in SQLite
-- Use `PrismaBetterSqlite3({ url: string })` from `@prisma/adapter-better-sqlite3`
+- Use `PrismaLibSql({ url, authToken })` from `@prisma/adapter-libsql` (Turso)
 - Import client from `../generated/prisma/client` (not `../generated/prisma`)
-- After schema changes: `npx prisma migrate dev --name <name>` then `npx prisma generate`
+- **Migration workflow**: develop locally with `npx prisma migrate dev` (uses `DATABASE_URL=file:./dev.db`), then apply to Turso with `turso db shell <db-name> < prisma/migrations/<name>/migration.sql`
+- `prisma.config.ts` uses `DATABASE_URL` (local SQLite) — the app runtime uses `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`
 
 ---
 

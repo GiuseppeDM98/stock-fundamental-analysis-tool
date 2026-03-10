@@ -1,16 +1,20 @@
 // Singleton Prisma client for Next.js.
 // In development, hot-reloads create new module instances on each reload.
 // Without this singleton pattern, each reload would create a new connection,
-// exhausting the SQLite connection pool quickly.
+// exhausting the connection pool.
 //
-// Prisma 7 requires a driver adapter for SQLite. PrismaBetterSqlite3 takes
-// a config object with a `url` field (the database file path).
+// We use @prisma/adapter-libsql (Turso) for both dev and prod:
+// - Dev:  TURSO_DATABASE_URL=file:./dev.db (local SQLite via libsql protocol)
+// - Prod: TURSO_DATABASE_URL=libsql://... + TURSO_AUTH_TOKEN (Turso hosted)
+// This gives a single code path regardless of environment.
 import { PrismaClient } from "../generated/prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaLibSql } from "@prisma/adapter-libsql";
 
-// DATABASE_URL format: "file:./dev.db" — strip the "file:" prefix.
-const dbUrl = process.env.DATABASE_URL?.replace("file:", "") ?? "./dev.db";
-const adapter = new PrismaBetterSqlite3({ url: dbUrl });
+// PrismaLibSql accepts the libsql Config object directly (url + optional authToken).
+const adapter = new PrismaLibSql({
+  url: process.env.TURSO_DATABASE_URL!,
+  authToken: process.env.TURSO_AUTH_TOKEN,
+});
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
