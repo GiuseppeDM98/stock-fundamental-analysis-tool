@@ -122,7 +122,7 @@ __tests__/             # 15 tests across 4 files
 
 ```bash
 npm run dev           # Dev server on :3000
-npm run build         # Type-check + production build
+npm run build         # prisma generate + next build (type-check + production build)
 npm run test          # Vitest once
 npx prisma migrate dev --name <name>  # DB schema changes
 npx prisma generate   # Regenerate client after schema changes

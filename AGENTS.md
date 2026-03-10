@@ -29,7 +29,7 @@ app/api/           # API route handlers
 app/login/         # Login page
 app/register/      # Register page
 app/analyses/      # Saved analyses list + detail pages
-generated/prisma/  # Prisma 7 generated client (gitignored, run `npx prisma generate`)
+generated/prisma/  # Prisma 7 generated client (gitignored — auto-generated on `npm run build` via prisma generate)
 prisma/            # Schema + migrations
 __tests__/         # Vitest tests (mirrors source structure)
 ```

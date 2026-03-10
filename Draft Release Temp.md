@@ -53,3 +53,4 @@
 
 - Migrated database from local SQLite to Turso (hosted libSQL) — saved analyses and user accounts now persist across Vercel deployments
 - Local SQLite (`dev.db`) is now used only for schema development via `prisma migrate dev` and is excluded from git
+- Fixed Vercel deployment build failure — `prisma generate` now runs automatically as part of the build step
