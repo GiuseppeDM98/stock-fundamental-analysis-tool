@@ -2,7 +2,7 @@
 
 A Next.js web application for stock valuation using Discounted Cash Flow (DCF) analysis with scenario modeling. Fetch real-time financial data from Yahoo Finance and run bull/base/bear scenario valuations with interactive charts.
 
-![Version](https://img.shields.io/badge/version-0.2.0-blue)
+![Version](https://img.shields.io/badge/version-0.3.0-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-green)
 ![Next.js](https://img.shields.io/badge/Next.js-15.1.6-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7.3-blue)
@@ -21,6 +21,8 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **Interactive visualizations** comparing fair value vs. current price
 - **Margin of safety** adjustment (0-80%) for conservative valuations
 - **Client-side persistence** with localStorage for scenario configurations
+- **AI investment analysis** — Claude Sonnet 4.6 generates full research reports with web search
+- **User accounts** with saved reports — revisit your analyses anytime
 
 ### What Problem Does It Solve?
 
@@ -48,6 +50,8 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - 🔒 **Input Validation**: Hard constraints prevent mathematically invalid scenarios (e.g., WACC must exceed terminal growth)
 - 📈 **Live Risk-Free Rate**: US 10Y Treasury yield displayed next to WACC as a real-time reference
 - 💾 **State Persistence**: LocalStorage saves ticker history and scenario overrides
+- 🤖 **AI Analysis**: Claude Sonnet 4.6 generates full investment reports with live web search
+- 👤 **User Accounts**: Save and revisit AI-generated reports with email/password auth
 - 🧪 **Fully Tested**: Vitest + Testing Library coverage for calculations and UI
 
 ---
@@ -61,6 +65,13 @@ cd stock-fundamental-analysis-tool
 
 # Install dependencies
 npm install
+
+# Copy env template and fill in your values
+cp .env.example .env.local
+# (edit .env.local: add NEXTAUTH_SECRET, ANTHROPIC_API_KEY)
+
+# Run database migrations
+npx prisma migrate dev
 
 # Start development server
 npm run dev

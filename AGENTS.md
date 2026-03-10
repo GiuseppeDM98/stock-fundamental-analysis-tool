@@ -6,30 +6,39 @@ Project-specific patterns, conventions, and knowledge for AI agents working on t
 
 ## Project Context
 
-Next.js 15 stock fundamental analysis tool with DCF valuation, scenario modeling, and Yahoo Finance integration. Company-specific smart defaults are auto-populated from analyst estimates and historical data.
+Next.js 15 stock fundamental analysis tool with DCF valuation, scenario modeling, Yahoo Finance integration, AI-generated investment analysis (Claude Sonnet 4.6 + web search), and user accounts with saved reports.
 
-**Tech Stack:** Next.js 15 (App Router), TypeScript (strict), React 19, yahoo-finance2, Vitest + Testing Library, Tailwind CSS, Framer Motion, Recharts
+**Tech Stack:** Next.js 15 (App Router), TypeScript (strict), React 19, yahoo-finance2, Prisma 7 + SQLite, Auth.js v5, Anthropic SDK, Vitest + Testing Library, Tailwind CSS, Framer Motion, Recharts
 
 ---
 
 ## Directory Structure
 
 ```
-types/             # Shared TypeScript types (fundamentals, market, valuation)
+types/             # Shared TypeScript types (fundamentals, market, valuation, analysis, auth, ai)
 lib/               # Business logic and utilities
   valuation/       # DCF engine and scenario presets
+  ai/              # AI prompt builders (prompts.ts)
   yahoo-client.ts  # Yahoo Finance API adapter
+  auth.ts          # Auth.js v5 config
+  db.ts            # Prisma singleton client
+  analyses.ts      # Client-side fetch helpers for saved analyses
   format.ts        # Formatting utilities
 components/        # React components (all client-side, all "use client")
-app/api/           # API route handlers ({resource}/[ticker]/route.ts)
+app/api/           # API route handlers
+app/login/         # Login page
+app/register/      # Register page
+app/analyses/      # Saved analyses list + detail pages
+generated/prisma/  # Prisma 7 generated client (gitignored, run `npx prisma generate`)
+prisma/            # Schema + migrations
 __tests__/         # Vitest tests (mirrors source structure)
 ```
 
 ### Placement Rules
 
-1. **Types** in `types/`, component prop types inline. Exception: UI-only types (e.g., `ScenarioSource`) can live in component files.
+1. **Types** in `types/`, component prop types inline.
 2. **Business logic** in `lib/`, never in components or API routes.
-3. **API routes** follow `app/api/{resource}/[ticker]/route.ts`, export `GET`/`POST`.
+3. **API routes** follow `app/api/{resource}/[...]/route.ts`, export `GET`/`POST`/`DELETE`.
 4. **Components** all start with `"use client"` directive.
 
 ---
@@ -38,13 +47,14 @@ __tests__/         # Vitest tests (mirrors source structure)
 
 ### Types
 - API types: `QuoteResponse`, `ValuationRequest`, `AnalystEstimatesResponse`
-- Domain types: `ScenarioInput`, `AnalystEstimates`, `AnnualFundamentalPoint`
+- Domain types: `ScenarioInput`, `AnalystEstimates`, `SavedAnalysis`, `AnalyzeRequest`
 - Literal unions: `ScenarioName = "bull" | "base" | "bear"`
 
 ### Functions
 - Data fetchers: `getQuote()`, `getFundamentals()`, `getAnalystEstimates()`, `getRiskFreeRate()`
 - Data mappers: `mapFundamentalsFromTimeSeries()`, `mapAnalystEstimates()`
 - Factories: `getDefaultScenarios()`, `getCompanyScenarios()`
+- Prompt builders: `buildSystemPrompt()`, `buildUserPrompt()` in `lib/ai/prompts.ts`
 - Utilities: `extractRawNumber()`, `formatCurrency()`, `clamp()`
 
 ### LocalStorage Keys
@@ -64,7 +74,14 @@ export async function POST(request: Request, context: RouteContext) {
 }
 ```
 
-**Endpoints:** `/api/quote`, `/api/fundamentals`, `/api/valuation` (POST), `/api/analyst-estimates`, `/api/macro/risk-free-rate`
+**Auth check in protected routes:**
+```typescript
+const session = await auth(); // from "@/lib/auth"
+if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+// Use session.user.id — typed via declaration merge in types/auth.ts
+```
+
+**Endpoints:** `/api/quote`, `/api/fundamentals`, `/api/valuation` (POST), `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/DELETE), `/api/ai/analyze` (POST, streaming)
 
 ---
 
@@ -90,8 +107,42 @@ useEffect(() => { mosRef.current = mosPercent; }, [mosPercent]);
 // Use mosRef.current in fetch callbacks to avoid stale closures
 ```
 
-### Scenario Source Tracking
-Dashboard tracks `scenarioSource: "smart" | "generic" | "custom"` — updated on fetch, reset, or manual edit. Passed to ScenarioPanel for the UI badge.
+### Streaming AI Response
+```typescript
+const res = await fetch("/api/ai/analyze", { method: "POST", body: JSON.stringify(payload) });
+const reader = res.body!.getReader();
+const decoder = new TextDecoder();
+let done = false;
+while (!done) {
+  const { value, done: streamDone } = await reader.read();
+  done = streamDone;
+  if (value) setReport(prev => prev + decoder.decode(value, { stream: !streamDone }));
+}
+```
+
+### Next.js Typed Routes (`typedRoutes: true`)
+`router.push(dynamicString)` fails type check. Use `window.location.href` for dynamic redirects after auth.
+
+---
+
+## Auth.js v5 (next-auth@beta)
+
+- `auth()` is the server-side session getter — replaces `getServerSession`
+- `handlers` from config used directly in `/api/auth/[...nextauth]/route.ts`
+- `session.user.id` requires declaration merge in `types/auth.ts` (already done)
+- JWT sessions — no DB session table needed
+- `SessionProvider` must be a client component wrapper (see `components/session-provider.tsx`)
+
+---
+
+## Prisma 7 (Breaking Changes from v4/v5)
+
+- `generator client { provider = "prisma-client" }` — new provider name
+- **No `url` field** in `datasource db` — URL goes in `prisma.config.ts`
+- `PrismaClient` constructor **requires a driver adapter** — no built-in SQLite
+- Use `PrismaBetterSqlite3({ url: string })` from `@prisma/adapter-better-sqlite3`
+- Import client from `../generated/prisma/client` (not `../generated/prisma`)
+- After schema changes: `npx prisma migrate dev --name <name>` then `npx prisma generate`
 
 ---
 
@@ -99,36 +150,32 @@ Dashboard tracks `scenarioSource: "smart" | "generic" | "custom"` — updated on
 
 ### Critical: Deprecated Modules (Nov 2024)
 
-`incomeStatementHistory` and `cashflowStatementHistory` are **deprecated** — they return mostly empty data (`ebit: 0`, no cashflow fields). Use `fundamentalsTimeSeries` instead.
+`incomeStatementHistory` and `cashflowStatementHistory` return empty. Use `fundamentalsTimeSeries` instead.
 
 ```typescript
-// CORRECT: fundamentalsTimeSeries for historical data
-yahooFinance.fundamentalsTimeSeries(ticker, {
-  period1: "2020-01-01", period2: "2026-01-01",
-  type: "annual", module: "all"
-});
-// Fields: totalRevenue, EBIT (uppercase!), operatingIncome, netIncome,
-//         freeCashFlow, operatingCashFlow, capitalExpenditure, date (Date object)
+// Always pass validateResult: false to handle TYPE: 'UNKNOWN' records from non-US tickers
+yahooFinance.fundamentalsTimeSeries(ticker, { period1, period2, type: "annual", module: "all" }, { validateResult: false });
+// Fields: totalRevenue, EBIT (uppercase!), netIncome, freeCashFlow, date (Date object)
 
-// CORRECT: quoteSummary still works for ratios, financialData, earningsTrend
-yahooFinance.quoteSummary(ticker, {
-  modules: ["summaryDetail", "defaultKeyStatistics", "financialData", "earningsTrend"]
-});
+// quoteSummary still works for ratios and analyst data
+yahooFinance.quoteSummary(ticker, { modules: ["summaryDetail", "defaultKeyStatistics", "financialData", "earningsTrend"] });
 ```
 
 ### Key Gotchas
 - **Mixed schema**: Yahoo returns `number | { raw: number }` — always use `extractRawNumber()`
-- **fundamentalsTimeSeries dates**: Returns `Date` objects, not `{raw: unix_timestamp}`
-- **Oldest entry may be empty**: Filter entries where `totalRevenue != null && date instanceof Date`
+- **TYPE: UNKNOWN records**: Some tickers (e.g. Italian small-caps) return EPS/shares entries that fail schema validation — use `{ validateResult: false }` + filter by `totalRevenue != null`
 - **EBIT field name**: Uppercase `EBIT` in fundamentalsTimeSeries, fallback to `operatingIncome`
-- **FCF from financialData**: More reliable than historical — use for `deriveReinvestmentRate()`
-- **^TNX yield encoding**: `regularMarketPrice` contains the yield in percentage points (e.g., 4.12 = 4.12%), not a decimal — divide by 100 before using as a rate
+- **^TNX yield encoding**: `regularMarketPrice` is in percentage points (4.12 = 4.12%) — divide by 100
 
-### Fallback Chains (scenario-presets.ts)
-- Revenue growth: analyst 5yr → analyst 1yr → historical CAGR → TTM growth → 5%
-- Operating margin: analyst → latest historical → 3yr average → 18%
-- Tax rate: derived from EBIT/netIncome → 22%
-- Reinvestment: financialData FCF/NOPAT → historical → 30%
+---
+
+## Anthropic AI Integration
+
+- Model: `claude-sonnet-4-6`, `max_tokens: 16000` (4096 was too low for full reports)
+- Web search: `tools: [{ type: "web_search_20250305" as const, name: "web_search" }]`
+- Stream via `client.messages.stream()` — listen for `content_block_delta` + `text_delta` events
+- Prompt builders in `lib/ai/prompts.ts` — always inject language in both system + user prompt (Claude can "forget" mid-generation with web search)
+- Always add "Do not write any preamble before the report" to system prompt — prevents transitional text visible in stream
 
 ---
 
@@ -147,7 +194,6 @@ yahooFinance.quoteSummary(ticker, {
 - **Framework**: Vitest with jsdom, Testing Library for components
 - **Run**: `npm run test` (once) or `npm run test:watch`
 - **Build check**: `npm run build` for type-checking (don't use `npm run lint` — interactive/deprecated)
-- **Current**: 15 tests across 4 files (dcf, scenario-presets, yahoo-client, scenario-panel)
 
 ---
 
@@ -169,6 +215,7 @@ yahooFinance.quoteSummary(ticker, {
 import { QuoteResponse } from "@/types/market";
 import { FundamentalsResponse } from "@/types/fundamentals";
 import { ScenarioInput, AnalystEstimates, ValuationResponse } from "@/types/valuation";
+import { SavedAnalysis } from "@/types/analysis";
 ```
 
 ### Lib Imports
@@ -177,6 +224,8 @@ import { runDcf, validateScenarioInput } from "@/lib/valuation/dcf";
 import { getDefaultScenarios, getCompanyScenarios } from "@/lib/valuation/scenario-presets";
 import { getQuote, getFundamentals, getAnalystEstimates } from "@/lib/yahoo-client";
 import { formatCurrency, formatPercent, formatCompactNumber } from "@/lib/format";
+import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
 ```
 
 ---

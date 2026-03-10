@@ -20,6 +20,7 @@ import { FundamentalsCharts } from "@/components/fundamentals-charts";
 import { PriceSummary } from "@/components/price-summary";
 import { ScenarioPanel } from "@/components/scenario-panel";
 import { TickerSearch } from "@/components/ticker-search";
+import AiAnalysisPanel from "@/components/ai-analysis-panel";
 import { getDefaultScenarios } from "@/lib/valuation/scenario-presets";
 import { FundamentalsResponse } from "@/types/fundamentals";
 import { QuoteResponse } from "@/types/market";
@@ -372,6 +373,13 @@ export function DashboardClient() {
             </div>
 
             <FundamentalsCharts fundamentals={fundamentals} />
+
+            <AiAnalysisPanel
+              ticker={ticker}
+              mosPercent={mosPercent}
+              scenarios={scenarios}
+              companyName={quote.shortName}
+            />
           </motion.div>
         )}
       </div>

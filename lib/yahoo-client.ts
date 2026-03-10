@@ -211,12 +211,20 @@ export async function getFundamentals(ticker: string): Promise<FundamentalsRespo
     // Fetch time series (income + cashflow) and ratios in parallel
     const [timeSeries, summary] = await Promise.all([
       withRetry(() =>
-        yahooFinance.fundamentalsTimeSeries(ticker, {
-          period1: new Date(new Date().getFullYear() - 6, 0, 1).toISOString().slice(0, 10),
-          period2: new Date().toISOString().slice(0, 10),
-          type: "annual",
-          module: "all",
-        })
+        yahooFinance.fundamentalsTimeSeries(
+          ticker,
+          {
+            period1: new Date(new Date().getFullYear() - 6, 0, 1).toISOString().slice(0, 10),
+            period2: new Date().toISOString().slice(0, 10),
+            type: "annual",
+            module: "all",
+          },
+          // Some tickers (e.g. Italian small-caps) return records with TYPE: 'UNKNOWN'
+          // that don't match any known schema. validateResult: false skips schema errors
+          // so we still get all valid records — our filter (totalRevenue != null) handles
+          // the rest.
+          { validateResult: false }
+        )
       ),
       withRetry(() =>
         yahooFinance.quoteSummary(ticker, {

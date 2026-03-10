@@ -24,3 +24,27 @@
 
 - Fixed high-severity path traversal vulnerability in rollup dependency
 - Fixed moderate-severity dev server exposure vulnerability in esbuild/vite
+
+---
+
+## ✨ New Features (v0.3.0)
+
+- Added AI-powered investment analysis — click "Generate AI Analysis" to get a full research report on any stock (Company Overview, MOAT analysis, Bull/Base/Bear price targets, Key Risks, Investment Summary)
+- AI reports use web search to include the latest news, earnings results, and competitive developments
+- Added language selector for AI reports (English, Italiano, Español, Français, Deutsch, Português, 中文, 日本語)
+- Added user accounts — register with email and password to save your reports
+- Added saved analyses — save any AI report and revisit it later at `/analyses`
+- Added sign in / sign out and auth-aware navigation bar
+
+## 🐛 Bug Fixes (v0.3.0)
+
+- Fixed fundamental analysis failing for some European tickers (e.g. Italian small-caps) that return unknown data types from Yahoo Finance
+
+## 🔧 Improvements (v0.3.0)
+
+- AI reports no longer show transitional text ("Now I have the data…") before the actual content
+
+## 🔒 Security (v0.3.0)
+
+- Registration can be disabled via `DISABLE_REGISTRATION=true` environment variable — useful to lock down the app after initial setup
+- AI analysis price targets are always computed server-side and cannot be manipulated by the client
