@@ -6,6 +6,38 @@
 export type ScenarioName = "bull" | "base" | "bear";
 
 /**
+ * Input parameters for a single DDM scenario (Dividend Discount Model).
+ *
+ * All rates expressed as decimals (0.05 = 5%).
+ */
+export type DdmScenarioInput = {
+  dividendGrowthRate: number;   // Expected dividend growth rate years 1-10
+  costOfEquity: number;         // Required return / Ke (CAPM: Rf + β × ERP)
+  terminalGrowthRate: number;   // Perpetual growth rate for terminal value (must be < costOfEquity)
+};
+
+/**
+ * Complete set of DDM scenario inputs for bull, base, and bear cases.
+ */
+export type DdmScenariosInput = Record<ScenarioName, DdmScenarioInput>;
+
+/**
+ * Input parameters for a single EV/EBITDA scenario.
+ *
+ * Appropriate for commodity-driven sectors (Energy, Materials) where FCF is
+ * distorted by capex cycles. A target EV/EBITDA multiple is applied to TTM
+ * EBITDA to estimate enterprise value.
+ */
+export type EvEbitdaScenarioInput = {
+  targetMultiple: number;   // EV/EBITDA multiple to apply to TTM EBITDA
+};
+
+/**
+ * Complete set of EV/EBITDA scenario inputs for bull, base, and bear cases.
+ */
+export type EvEbitdaScenariosInput = Record<ScenarioName, EvEbitdaScenarioInput>;
+
+/**
  * Input parameters for a single DCF scenario.
  *
  * All rates are expressed as decimals (0.12 = 12%). These assumptions
@@ -27,12 +59,18 @@ export type ScenarioInput = {
 export type ScenariosInput = Record<ScenarioName, ScenarioInput>;
 
 /**
- * Request payload for DCF valuation API endpoint.
+ * Request payload for valuation API endpoint.
+ *
+ * Supports both DCF and DDM. The server auto-detects the method from the
+ * company's sector — always send both scenarios and ddmScenarios so the
+ * server can choose the appropriate engine.
  */
 export type ValuationRequest = {
   mosPercent: number;                      // Margin of safety (0-80%) applied to fair value
   sharesOutstandingOverride?: number;      // Optional override if Yahoo data is missing
-  scenarios: ScenariosInput;
+  scenarios: ScenariosInput;               // DCF scenarios (used when method is DCF)
+  ddmScenarios?: DdmScenariosInput;        // DDM scenarios (used when method is DDM)
+  evEbitdaScenarios?: EvEbitdaScenariosInput; // EV/EBITDA scenarios (used when method is EV/EBITDA)
 };
 
 /**
@@ -67,6 +105,9 @@ export type AnalystEstimates = {
   freeCashflow: number | null;           // Current free cash flow from financialData (more reliable than historical)
   totalRevenue: number | null;           // Current total revenue from financialData
   beta: number | null;                   // Stock beta from defaultKeyStatistics (used for WACC via CAPM)
+  dividendRate: number | null;           // D₀: trailing annual dividend per share (for DDM)
+  ebitda: number | null;                 // TTM EBITDA from financialData (for EV/EBITDA engine)
+  evEbitda: number | null;               // Current EV/EBITDA ratio (for EV/EBITDA smart defaults)
 };
 
 /**
@@ -90,6 +131,7 @@ export type ValuationResponse = {
   ticker: string;
   currentPrice: number;
   mosPercent: number;                                  // Margin of safety % used in calculation
+  valuationMethod: "dcf" | "ddm" | "ev-ebitda";       // Engine used by the server
   scenarios: Record<ScenarioName, ScenarioResult>;
   summary: {
     status: "undervalued" | "fair" | "overvalued";    // Based on base scenario upside

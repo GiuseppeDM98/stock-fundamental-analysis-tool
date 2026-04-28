@@ -20,6 +20,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { runDcf } from "@/lib/valuation/dcf";
+import { runDdm } from "@/lib/valuation/ddm";
+import { runEvEbitda } from "@/lib/valuation/ev-ebitda";
+import { detectSector, getRecommendedMethod } from "@/lib/valuation/sector";
 import { getFundamentals, getNetDebtEstimate, getQuote } from "@/lib/yahoo-client";
 import { ScenarioName } from "@/types/valuation";
 
@@ -33,6 +36,12 @@ const scenarioSchema = z.object({
   terminalGrowth: z.number().min(-0.02).max(0.06)
 });
 
+const ddmScenarioSchema = z.object({
+  dividendGrowthRate: z.number().min(-0.02).max(0.15),
+  costOfEquity: z.number().min(0.03).max(0.25),
+  terminalGrowthRate: z.number().min(-0.01).max(0.05),
+});
+
 const requestSchema = z.object({
   mosPercent: z.number().min(0).max(80),
   sharesOutstandingOverride: z.number().positive().optional(),
@@ -40,7 +49,17 @@ const requestSchema = z.object({
     bull: scenarioSchema,
     base: scenarioSchema,
     bear: scenarioSchema
-  })
+  }),
+  ddmScenarios: z.object({
+    bull: ddmScenarioSchema,
+    base: ddmScenarioSchema,
+    bear: ddmScenarioSchema,
+  }).optional(),
+  evEbitdaScenarios: z.object({
+    bull: z.object({ targetMultiple: z.number().min(1).max(30) }),
+    base: z.object({ targetMultiple: z.number().min(1).max(30) }),
+    bear: z.object({ targetMultiple: z.number().min(1).max(30) }),
+  }).optional(),
 });
 
 /**
@@ -99,47 +118,70 @@ export async function POST(request: Request, context: RouteContext) {
       getNetDebtEstimate(params.ticker)
     ]);
 
-    // Validate required fundamental data
-    const latestPoint = fundamentals.annual[0];
-    if (!latestPoint || latestPoint.revenue <= 0) {
-      return NextResponse.json({ error: "Missing revenue data for valuation." }, { status: 422 });
-    }
+    // Determine valuation method from sector
+    const sector = detectSector(fundamentals.sector);
+    const recommendedMethod = getRecommendedMethod(sector).label;
+    const useDdm = recommendedMethod === "DDM" && !!payload.ddmScenarios;
+    const useEvEbitda = recommendedMethod === "EV/EBITDA" && !!payload.evEbitdaScenarios;
 
-    // Use manual override if provided, otherwise use Yahoo Finance data
-    // Some non-US tickers don't expose shares outstanding via Yahoo API
-    const sharesOutstanding = payload.sharesOutstandingOverride ?? quote.sharesOutstanding;
-    if (!sharesOutstanding || sharesOutstanding <= 0) {
-      return NextResponse.json({ error: "Missing shares outstanding." }, { status: 422 });
-    }
-
-    // Run DCF valuation for all three scenarios
     const scenarioNames: ScenarioName[] = ["bull", "base", "bear"];
-    const scenarios = {
-      bull: runDcf({
-        currentRevenue: latestPoint.revenue,
-        netDebt,
-        sharesOutstanding,
-        currentPrice: quote.regularMarketPrice,
-        mosPercent: payload.mosPercent,
-        scenario: payload.scenarios.bull
-      }),
-      base: runDcf({
-        currentRevenue: latestPoint.revenue,
-        netDebt,
-        sharesOutstanding,
-        currentPrice: quote.regularMarketPrice,
-        mosPercent: payload.mosPercent,
-        scenario: payload.scenarios.base
-      }),
-      bear: runDcf({
-        currentRevenue: latestPoint.revenue,
-        netDebt,
-        sharesOutstanding,
-        currentPrice: quote.regularMarketPrice,
-        mosPercent: payload.mosPercent,
-        scenario: payload.scenarios.bear
-      })
-    };
+    let scenarios: Record<ScenarioName, ReturnType<typeof runDcf>>;
+
+    if (useDdm) {
+      // DDM path: requires a positive dividend per share
+      if (!fundamentals.dividendRate || fundamentals.dividendRate <= 0) {
+        return NextResponse.json(
+          { error: "Nessun dato dividendo disponibile per la valutazione DDM." },
+          { status: 422 }
+        );
+      }
+
+      const ddm = payload.ddmScenarios!;
+      scenarios = {
+        bull: runDdm({ dividendPerShare: fundamentals.dividendRate, currentPrice: quote.regularMarketPrice, mosPercent: payload.mosPercent, scenario: ddm.bull }),
+        base: runDdm({ dividendPerShare: fundamentals.dividendRate, currentPrice: quote.regularMarketPrice, mosPercent: payload.mosPercent, scenario: ddm.base }),
+        bear: runDdm({ dividendPerShare: fundamentals.dividendRate, currentPrice: quote.regularMarketPrice, mosPercent: payload.mosPercent, scenario: ddm.bear }),
+      };
+    } else if (useEvEbitda) {
+      // EV/EBITDA path: requires positive EBITDA and shares outstanding
+      if (!fundamentals.ebitda || fundamentals.ebitda <= 0) {
+        return NextResponse.json(
+          { error: "Nessun dato EBITDA disponibile per la valutazione EV/EBITDA." },
+          { status: 422 }
+        );
+      }
+
+      const sharesOutstanding = payload.sharesOutstandingOverride ?? quote.sharesOutstanding;
+      if (!sharesOutstanding || sharesOutstanding <= 0) {
+        return NextResponse.json({ error: "Missing shares outstanding." }, { status: 422 });
+      }
+
+      const evEbitda = payload.evEbitdaScenarios!;
+      scenarios = {
+        bull: runEvEbitda({ ebitda: fundamentals.ebitda, netDebt, sharesOutstanding, currentPrice: quote.regularMarketPrice, mosPercent: payload.mosPercent, scenario: evEbitda.bull }),
+        base: runEvEbitda({ ebitda: fundamentals.ebitda, netDebt, sharesOutstanding, currentPrice: quote.regularMarketPrice, mosPercent: payload.mosPercent, scenario: evEbitda.base }),
+        bear: runEvEbitda({ ebitda: fundamentals.ebitda, netDebt, sharesOutstanding, currentPrice: quote.regularMarketPrice, mosPercent: payload.mosPercent, scenario: evEbitda.bear }),
+      };
+    } else {
+      // DCF path: requires revenue and shares outstanding
+      const latestPoint = fundamentals.annual[0];
+      if (!latestPoint || latestPoint.revenue <= 0) {
+        return NextResponse.json({ error: "Missing revenue data for valuation." }, { status: 422 });
+      }
+
+      // Use manual override if provided, otherwise use Yahoo Finance data
+      // Some non-US tickers don't expose shares outstanding via Yahoo API
+      const sharesOutstanding = payload.sharesOutstandingOverride ?? quote.sharesOutstanding;
+      if (!sharesOutstanding || sharesOutstanding <= 0) {
+        return NextResponse.json({ error: "Missing shares outstanding." }, { status: 422 });
+      }
+
+      scenarios = {
+        bull: runDcf({ currentRevenue: latestPoint.revenue, netDebt, sharesOutstanding, currentPrice: quote.regularMarketPrice, mosPercent: payload.mosPercent, scenario: payload.scenarios.bull }),
+        base: runDcf({ currentRevenue: latestPoint.revenue, netDebt, sharesOutstanding, currentPrice: quote.regularMarketPrice, mosPercent: payload.mosPercent, scenario: payload.scenarios.base }),
+        bear: runDcf({ currentRevenue: latestPoint.revenue, netDebt, sharesOutstanding, currentPrice: quote.regularMarketPrice, mosPercent: payload.mosPercent, scenario: payload.scenarios.bear }),
+      };
+    }
 
     // Sanity check: ensure all fair values are valid numbers
     // Catches edge cases like division by zero or NaN propagation
@@ -154,6 +196,7 @@ export async function POST(request: Request, context: RouteContext) {
       ticker: quote.ticker,
       currentPrice: quote.regularMarketPrice,
       mosPercent: payload.mosPercent,
+      valuationMethod: useDdm ? "ddm" : useEvEbitda ? "ev-ebitda" : "dcf",
       scenarios,
       summary: {
         status: getStatus(scenarios.base.upsideVsPricePercent),

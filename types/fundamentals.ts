@@ -39,4 +39,8 @@ export type FundamentalsResponse = {
   currency: string;
   annual: AnnualFundamentalPoint[];
   ratios: Ratios;
+  sector: string | null;
+  industry: string | null;
+  dividendRate: number | null;   // D₀: trailing annual dividend per share
+  ebitda: number | null;         // TTM EBITDA derived from EV / EV/EBITDA ratio (for EV/EBITDA engine)
 };

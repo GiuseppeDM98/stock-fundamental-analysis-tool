@@ -6,7 +6,7 @@ Project-specific patterns, conventions, and knowledge for AI agents working on t
 
 ## Project Context
 
-Next.js 15 stock fundamental analysis tool with DCF valuation, scenario modeling, Yahoo Finance integration, AI-generated investment analysis (Claude Sonnet 4.6 + web search), and user accounts with saved reports.
+Next.js 15 stock fundamental analysis tool with multi-method valuation (DCF, DDM, EV/EBITDA), sector-adaptive scenario modeling, Yahoo Finance integration, AI-generated investment analysis (Claude Sonnet 4.6 + web search), and user accounts with saved reports.
 
 **Tech Stack:** Next.js 15 (App Router), TypeScript (strict), React 19, yahoo-finance2, Prisma 7 + Turso (libSQL), Auth.js v5, Anthropic SDK, Vitest + Testing Library, Tailwind CSS, Framer Motion, Recharts
 
@@ -17,7 +17,13 @@ Next.js 15 stock fundamental analysis tool with DCF valuation, scenario modeling
 ```
 types/             # Shared TypeScript types (fundamentals, market, valuation, analysis, auth, ai)
 lib/               # Business logic and utilities
-  valuation/       # DCF engine and scenario presets
+  valuation/       # Valuation engines and presets
+    dcf.ts         # DCF engine
+    ddm.ts         # DDM engine (Utilities)
+    ev-ebitda.ts   # EV/EBITDA engine (Energy, Materials)
+    sector.ts      # Sector detection + method routing
+    scenario-presets.ts
+    valuation-metrics.ts
   ai/              # AI prompt builders (prompts.ts)
   yahoo-client.ts  # Yahoo Finance API adapter
   auth.ts          # Auth.js v5 config
@@ -53,12 +59,12 @@ __tests__/         # Vitest tests (mirrors source structure)
 ### Functions
 - Data fetchers: `getQuote()`, `getFundamentals()`, `getAnalystEstimates()`, `getRiskFreeRate()`
 - Data mappers: `mapFundamentalsFromTimeSeries()`, `mapAnalystEstimates()`
-- Factories: `getDefaultScenarios()`, `getCompanyScenarios()`
+- Factories: `getDefaultScenarios()`, `getCompanyScenarios()`, `getDefaultDdmScenarios()`, `getCompanyDdmScenarios()`, `getDefaultEvEbitdaScenarios()`, `getCompanyEvEbitdaScenarios()`
 - Prompt builders: `buildSystemPrompt()`, `buildUserPrompt()` in `lib/ai/prompts.ts`
 - Utilities: `extractRawNumber()`, `formatCurrency()`, `clamp()`
 
 ### LocalStorage Keys
-All prefixed with `sfa:`: `sfa:lastTicker`, `sfa:mosPercent`, `sfa:scenarioOverrides`
+All prefixed with `sfa:`: `sfa:lastTicker`, `sfa:mosPercent`, `sfa:scenarioOverrides`, `sfa:ddmScenarioOverrides`, `sfa:evEbitdaScenarioOverrides`
 
 ---
 
@@ -106,6 +112,8 @@ const mosRef = useRef(mosPercent);
 useEffect(() => { mosRef.current = mosPercent; }, [mosPercent]);
 // Use mosRef.current in fetch callbacks to avoid stale closures
 ```
+
+Pattern also used for `ddmScenariosRef` and `evEbitdaScenariosRef` — any state that is read inside `fetchValuation` (called from a timeout/debounce or another async context) should use a ref to avoid stale closures.
 
 ### Streaming AI Response
 ```typescript
@@ -159,7 +167,7 @@ yahooFinance.fundamentalsTimeSeries(ticker, { period1, period2, type: "annual", 
 // Fields: totalRevenue, EBIT (uppercase!), netIncome, freeCashFlow, date (Date object)
 
 // quoteSummary still works for ratios and analyst data
-yahooFinance.quoteSummary(ticker, { modules: ["summaryDetail", "defaultKeyStatistics", "financialData", "earningsTrend"] });
+yahooFinance.quoteSummary(ticker, { modules: ["summaryDetail", "defaultKeyStatistics", "financialData", "earningsTrend", "assetProfile"] });
 ```
 
 ### Key Gotchas
@@ -169,6 +177,36 @@ yahooFinance.quoteSummary(ticker, { modules: ["summaryDetail", "defaultKeyStatis
 - **^TNX yield encoding**: `regularMarketPrice` is in percentage points (4.12 = 4.12%) — divide by 100
 - **TTM margin vs historical**: `financialData.operatingMargins` is the trailing 12-month margin — very volatile for commodity/cyclical companies. Always prefer multi-year historical average for scenario defaults.
 - **fundamentalsTimeSeries history**: Yahoo only has 4-5 years of data for many non-US tickers despite requesting 10 years — this is a Yahoo limitation, not a bug.
+- **`assetProfile` null for non-US tickers**: `quoteSummary` with `assetProfile` module returns null for some small-cap non-US tickers. Always guard with `assetProfile?.sector ?? null`. The sector badge simply won't appear — no crash.
+- **`yahooFinance.quote()` returns undefined**: For unknown/delisted tickers, `quote()` returns `undefined` instead of throwing. Always null-check before accessing any property: `if (!quote) throw new Error("Ticker not found or unavailable")`.
+- **EBITDA derivation without extra module**: Derive EBITDA from `defaultKeyStatistics` (already fetched): `ebitda = enterpriseValue / enterpriseToEbitda` — avoids adding `financialData` to `getFundamentals`.
+- **`summaryDetail.dividendRate`**: D₀ for DDM. Can be null/zero for non-dividend payers — guard explicitly and return 422 if DDM is required but dividend is absent.
+
+---
+
+## Multi-Method Valuation
+
+The valuation route auto-selects the engine based on Yahoo's detected sector:
+
+```typescript
+// lib/valuation/sector.ts
+detectSector(yahooSector: string | null): Sector  // maps Yahoo strings → canonical Sector
+getRecommendedMethod(sector: Sector): ValuationMethodInfo  // returns { label, isDcfAppropriate }
+```
+
+**Method routing:**
+- `Energy` → EV/EBITDA
+- `Materials` → EV/EBITDA
+- `Utilities` → DDM
+- `Financial` → P/B (disclaimer only, DCF used as fallback)
+- `Real Estate` → FFO/NAV (disclaimer only, DCF used as fallback)
+- All others → DCF
+
+**Client pattern**: Always send all three scenario sets (`scenarios`, `ddmScenarios`, `evEbitdaScenarios`) in the POST body. Server selects the right one. This avoids client needing to know which method the server will use.
+
+**Smart defaults timing**: Compute DDM and EV/EBITDA smart scenarios inside `fetchSmartScenarios` (sequential, before parallel batch) so the first render uses company-specific inputs — not generic fallbacks.
+
+**Scenario panel switching**: Render `<EvEbitdaScenarioPanel>` / `<DdmScenarioPanel>` / `<ScenarioPanel>` based on `valuation?.valuationMethod`. The disclaimer under fair value cards should only show for `valuationMethod === "dcf"`.
 
 ---
 
@@ -221,14 +259,17 @@ yahooFinance.quoteSummary(ticker, { modules: ["summaryDetail", "defaultKeyStatis
 ```typescript
 import { QuoteResponse } from "@/types/market";
 import { FundamentalsResponse } from "@/types/fundamentals";
-import { ScenarioInput, AnalystEstimates, ValuationResponse } from "@/types/valuation";
+import { ScenarioInput, AnalystEstimates, ValuationResponse, DdmScenariosInput, EvEbitdaScenariosInput } from "@/types/valuation";
 import { SavedAnalysis } from "@/types/analysis";
 ```
 
 ### Lib Imports
 ```typescript
 import { runDcf, validateScenarioInput } from "@/lib/valuation/dcf";
-import { getDefaultScenarios, getCompanyScenarios } from "@/lib/valuation/scenario-presets";
+import { runDdm } from "@/lib/valuation/ddm";
+import { runEvEbitda } from "@/lib/valuation/ev-ebitda";
+import { detectSector, getRecommendedMethod, getSectorColor } from "@/lib/valuation/sector";
+import { getDefaultScenarios, getCompanyScenarios, getDefaultDdmScenarios, getCompanyDdmScenarios, getDefaultEvEbitdaScenarios, getCompanyEvEbitdaScenarios } from "@/lib/valuation/scenario-presets";
 import { computeValuationMetrics } from "@/lib/valuation/valuation-metrics";
 import { getQuote, getFundamentals, getAnalystEstimates } from "@/lib/yahoo-client";
 import { formatCurrency, formatPercent, formatCompactNumber } from "@/lib/format";

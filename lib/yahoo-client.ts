@@ -135,6 +135,10 @@ export async function getQuote(ticker: string): Promise<QuoteResponse> {
   try {
     const quote = await withRetry(() => yahooFinance.quote(ticker));
 
+    if (!quote) {
+      throw new Error("Ticker not found or unavailable on Yahoo Finance.");
+    }
+
     const exchange = String(quote.fullExchangeName || quote.exchange || "UNKNOWN");
 
     return {
@@ -164,7 +168,11 @@ export function mapFundamentalsFromTimeSeries(
   ticker: string,
   entries: any[],
   ratios: { pe: number | null; pb: number | null; ps: number | null; evEbitda?: number | null },
-  currency: string
+  currency: string,
+  sector?: string | null,
+  industry?: string | null,
+  dividendRate?: number | null,
+  ebitda?: number | null
 ): FundamentalsResponse {
   const annual = entries
     .filter((e: any) => e.totalRevenue != null && e.date instanceof Date)
@@ -191,7 +199,7 @@ export function mapFundamentalsFromTimeSeries(
     // Sort descending (most recent first) to match existing conventions
     .sort((a: { year: number }, b: { year: number }) => b.year - a.year);
 
-  return { ticker: ticker.toUpperCase(), currency, annual, ratios };
+  return { ticker: ticker.toUpperCase(), currency, annual, ratios, sector: sector ?? null, industry: industry ?? null, dividendRate: dividendRate ?? null, ebitda: ebitda ?? null };
 }
 
 /**
@@ -228,13 +236,14 @@ export async function getFundamentals(ticker: string): Promise<FundamentalsRespo
       ),
       withRetry(() =>
         yahooFinance.quoteSummary(ticker, {
-          modules: ["summaryDetail", "defaultKeyStatistics", "price"],
+          modules: ["summaryDetail", "defaultKeyStatistics", "price", "assetProfile"],
         })
       ),
     ]);
 
     const summaryDetail: any = summary?.summaryDetail ?? {};
     const defaultKeyStatistics: any = summary?.defaultKeyStatistics ?? {};
+    const assetProfile: any = summary?.assetProfile ?? {};
     const currency = String(summary?.price?.currency || "USD");
 
     const ratios = {
@@ -244,7 +253,19 @@ export async function getFundamentals(ticker: string): Promise<FundamentalsRespo
       evEbitda: extractRawNumber(defaultKeyStatistics?.enterpriseToEbitda),
     };
 
-    return mapFundamentalsFromTimeSeries(ticker, timeSeries, ratios, currency);
+    const sector = typeof assetProfile.sector === "string" ? assetProfile.sector : null;
+    const industry = typeof assetProfile.industry === "string" ? assetProfile.industry : null;
+    const dividendRate = extractRawNumber(summaryDetail?.dividendRate) ?? extractRawNumber(summaryDetail?.trailingAnnualDividendRate) ?? null;
+
+    // Derive TTM EBITDA from EV / EV/EBITDA ratio (both available in defaultKeyStatistics).
+    // Avoids adding a separate financialData module fetch to this call.
+    const evEbitdaRatio = extractRawNumber(defaultKeyStatistics?.enterpriseToEbitda);
+    const enterpriseValue = extractRawNumber(defaultKeyStatistics?.enterpriseValue);
+    const ebitda = evEbitdaRatio && enterpriseValue && evEbitdaRatio > 0
+      ? enterpriseValue / evEbitdaRatio
+      : null;
+
+    return mapFundamentalsFromTimeSeries(ticker, timeSeries, ratios, currency, sector, industry, dividendRate, ebitda);
   } catch (error) {
     throw normalizeYahooError(error);
   }
@@ -291,6 +312,7 @@ export function mapAnalystEstimates(summary: any): AnalystEstimates {
   const trend = summary?.earningsTrend?.trend ?? [];
   const fd = summary?.financialData ?? {};
   const dks = summary?.defaultKeyStatistics ?? {};
+  const sd = summary?.summaryDetail ?? {};
 
   // Helper: find a specific period entry in the earningsTrend array
   const findPeriod = (period: string) =>
@@ -314,6 +336,11 @@ export function mapAnalystEstimates(summary: any): AnalystEstimates {
     // Beta from defaultKeyStatistics — used to compute company-specific WACC via CAPM.
     // Null for tickers without analyst coverage or newly listed companies.
     beta: extractRawNumber(dks?.beta) ?? null,
+    // Trailing annual dividend per share — D₀ for DDM valuation.
+    dividendRate: extractRawNumber(sd?.dividendRate) ?? extractRawNumber(sd?.trailingAnnualDividendRate) ?? null,
+    // TTM EBITDA and current EV/EBITDA for EV/EBITDA engine and smart defaults.
+    ebitda:   extractRawNumber(fd?.ebitda) ?? null,
+    evEbitda: extractRawNumber(dks?.enterpriseToEbitda) ?? null,
   };
 }
 
@@ -366,7 +393,8 @@ export async function getAnalystEstimates(ticker: string): Promise<AnalystEstima
     const summary = await withRetry(() =>
       yahooFinance.quoteSummary(ticker, {
         // defaultKeyStatistics provides beta for CAPM-based WACC calculation
-        modules: ["earningsTrend", "financialData", "defaultKeyStatistics"]
+        // summaryDetail provides dividendRate for DDM valuation
+        modules: ["earningsTrend", "financialData", "defaultKeyStatistics", "summaryDetail"]
       })
     );
 

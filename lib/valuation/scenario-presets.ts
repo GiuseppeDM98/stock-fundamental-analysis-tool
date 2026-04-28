@@ -1,5 +1,5 @@
 import { FundamentalsResponse } from "@/types/fundamentals";
-import { AnalystEstimates, ScenarioInput, ScenariosInput } from "@/types/valuation";
+import { AnalystEstimates, DdmScenarioInput, DdmScenariosInput, EvEbitdaScenariosInput, ScenarioInput, ScenariosInput } from "@/types/valuation";
 
 /**
  * Return default bull/base/bear assumptions meant for retail users.
@@ -245,4 +245,102 @@ export function getCompanyScenarios(
   }
 
   return { bull, base, bear };
+}
+
+/**
+ * Return generic DDM bull/base/bear assumptions for a mature dividend-paying company.
+ *
+ * Calibrated for regulated utilities: low but stable dividend growth,
+ * moderate cost of equity reflecting their defensive, bond-like nature.
+ */
+export function getDefaultDdmScenarios(): DdmScenariosInput {
+  return {
+    bull: { dividendGrowthRate: 0.05, costOfEquity: 0.07,  terminalGrowthRate: 0.025 },
+    base: { dividendGrowthRate: 0.03, costOfEquity: 0.08,  terminalGrowthRate: 0.02  },
+    bear: { dividendGrowthRate: 0.01, costOfEquity: 0.095, terminalGrowthRate: 0.015 },
+  };
+}
+
+/**
+ * Generate company-specific DDM scenarios using analyst estimates and CAPM.
+ *
+ * Base cost of equity uses CAPM (reuses computeWacc from DCF presets).
+ * Dividend growth defaults to 3% (mature utility norm) — Yahoo Finance
+ * does not provide a reliable multi-year dividend growth estimate via
+ * the free API, so we use a conservative sector-appropriate default.
+ *
+ * @param estimates - Analyst estimates including beta and dividendRate
+ * @param riskFreeRate - Current risk-free rate. Defaults to 4.5% if not provided.
+ */
+export function getCompanyDdmScenarios(
+  estimates: AnalystEstimates,
+  riskFreeRate?: number
+): DdmScenariosInput {
+  const rf = riskFreeRate ?? 0.045;
+  const baseKe = computeWacc(estimates.beta, rf);
+
+  // Utility dividend growth: no reliable API source, use 3% sector default
+  const baseGrowth = 0.03;
+  const baseTerminal = 0.02;
+
+  const base: DdmScenarioInput = {
+    dividendGrowthRate: clamp(baseGrowth, -0.02, 0.15),
+    costOfEquity: baseKe,
+    terminalGrowthRate: clamp(baseTerminal, -0.01, 0.05),
+  };
+
+  const bull: DdmScenarioInput = {
+    dividendGrowthRate: clamp(base.dividendGrowthRate + 0.02, -0.02, 0.15),
+    costOfEquity: clamp(base.costOfEquity - 0.0075, 0.03, 0.25),
+    terminalGrowthRate: clamp(base.terminalGrowthRate + 0.0025, -0.01, 0.05),
+  };
+
+  const bear: DdmScenarioInput = {
+    dividendGrowthRate: clamp(base.dividendGrowthRate - 0.02, -0.02, 0.15),
+    costOfEquity: clamp(base.costOfEquity + 0.01, 0.03, 0.25),
+    terminalGrowthRate: clamp(base.terminalGrowthRate - 0.0025, -0.01, 0.05),
+  };
+
+  // Ensure Ke > terminalGrowthRate for all scenarios (Gordon Growth constraint)
+  if (bull.costOfEquity <= bull.terminalGrowthRate) {
+    bull.terminalGrowthRate = bull.costOfEquity - 0.005;
+  }
+  if (bear.costOfEquity <= bear.terminalGrowthRate) {
+    bear.terminalGrowthRate = bear.costOfEquity - 0.005;
+  }
+
+  return { bull, base, bear };
+}
+
+/**
+ * Return generic EV/EBITDA bull/base/bear multiples for energy/materials companies.
+ *
+ * Calibrated for integrated energy majors (ENI, Shell, BP range: 4-8x).
+ */
+export function getDefaultEvEbitdaScenarios(): EvEbitdaScenariosInput {
+  return {
+    bull: { targetMultiple: 8 },
+    base: { targetMultiple: 6 },
+    bear: { targetMultiple: 4 },
+  };
+}
+
+/**
+ * Generate company-specific EV/EBITDA scenarios using the current market multiple.
+ *
+ * Uses the actual EV/EBITDA ratio as base, then applies bull/bear adjustments.
+ * Clamped to [2, 20] to exclude outlier multiples from distressed or loss years.
+ *
+ * @param estimates - Analyst estimates including the current evEbitda ratio
+ */
+export function getCompanyEvEbitdaScenarios(
+  estimates: AnalystEstimates
+): EvEbitdaScenariosInput {
+  const baseMultiple = clamp(estimates.evEbitda ?? 6, 2, 20);
+
+  return {
+    bull: { targetMultiple: parseFloat((baseMultiple * 1.25).toFixed(1)) },
+    base: { targetMultiple: parseFloat(baseMultiple.toFixed(1)) },
+    bear: { targetMultiple: parseFloat((baseMultiple * 0.75).toFixed(1)) },
+  };
 }

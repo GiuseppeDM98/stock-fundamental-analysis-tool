@@ -2,7 +2,7 @@
 
 A Next.js web application for stock valuation using Discounted Cash Flow (DCF) analysis with scenario modeling. Fetch real-time financial data from Yahoo Finance and run bull/base/bear scenario valuations with interactive charts.
 
-![Version](https://img.shields.io/badge/version-0.3.0-blue)
+![Version](https://img.shields.io/badge/version-0.4.0-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-green)
 ![Next.js](https://img.shields.io/badge/Next.js-15.5.12-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7.3-blue)
@@ -14,6 +14,7 @@ A Next.js web application for stock valuation using Discounted Cash Flow (DCF) a
 
 This tool helps investors and analysts perform fundamental stock valuation through:
 
+- **Sector-adaptive valuation** — DCF for most stocks, DDM for utilities, EV/EBITDA for energy and materials, auto-detected from Yahoo Finance
 - **10-year DCF projections** with Gordon Growth terminal value
 - **Smart scenario defaults** auto-populated from analyst estimates and historical data
 - **Three scenario modeling** (Bull/Base/Bear) with independent parameters
@@ -43,9 +44,9 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 
 ## ✨ Key Features
 
-- 🎯 **Multi-Scenario DCF**: Bull/Base/Bear scenarios with 7 configurable inputs each
+- 🎯 **Multi-Method Valuation**: DCF, DDM (Utilities), or EV/EBITDA (Energy/Materials) — auto-selected by sector
 - 🧠 **Smart Defaults**: Scenarios auto-populated from Yahoo Finance analyst estimates and historical data
-- ⚡ **Real-Time Data**: Yahoo Finance integration for quotes and 5-year fundamentals
+- ⚡ **Real-Time Data**: Yahoo Finance integration for quotes and up to 10-year fundamentals
 - 📊 **Interactive Charts**: Fair value comparison and historical financial metrics with formatted axes
 - 🔒 **Input Validation**: Hard constraints prevent mathematically invalid scenarios (e.g., WACC must exceed terminal growth)
 - 📈 **Live Risk-Free Rate**: US 10Y Treasury yield displayed next to WACC as a real-time reference

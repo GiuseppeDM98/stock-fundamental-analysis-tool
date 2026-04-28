@@ -1,5 +1,10 @@
 ## ✨ New Features
 
+- Added **sector detection** — the app now automatically identifies each company's sector from Yahoo Finance and displays a `[Sector · Method]` badge in the dashboard header (e.g. `[Energy · EV/EBITDA]`, `[Utilities · DDM]`)
+- Added **DDM (Dividend Discount Model)** valuation for Utilities companies — automatically applied when a utility is detected; uses a 2-stage model (10 years of explicit dividends + Gordon Growth terminal value) with smart defaults derived from CAPM cost of equity and analyst dividend growth estimates
+- Added **EV/EBITDA valuation** for Energy and Materials companies — automatically applied when detected; estimates fair value as `EBITDA × target multiple − net debt` with smart defaults based on the company's current market multiple
+- Added disclaimer under fair value cards when DCF is used for a sector where it may be inaccurate (e.g. financials, real estate)
+
 - Added valuation metrics cards above the historical charts: **Years of Earnings** (P/E reframed), **Years of FCF** (P/FCF), **FCF Yield**, and **Earnings Yield** — instantly see how many years of profits it would take to buy back the company at its current price
 - Each valuation metric card shows a year-over-year trend badge (Improved / Worsened / Stable) reflecting whether the underlying fundamental (earnings or FCF) improved vs the prior year
 - Each card has a clickable **?** info button that opens an educational modal explaining what the metric measures and how to interpret its value, including comparison benchmarks (e.g. vs. Treasury yield)
@@ -19,6 +24,8 @@
 - Added live US 10-Year Treasury yield badge next to the WACC field — provides a real-time reference for the risk-free rate
 
 ## 🐛 Bug Fixes
+
+- Fixed crash when loading certain tickers (e.g. some European stocks) that Yahoo Finance returns as unavailable — now shows a clear error message instead of crashing
 
 - Fixed historical charts showing year "1970" on X-axis — migrated from deprecated Yahoo Finance modules to `fundamentalsTimeSeries`
 - Fixed Free Cash Flow always showing $0 in Revenue & FCF chart

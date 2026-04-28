@@ -6,9 +6,9 @@ Current project state and context for AI assistants.
 
 ## Version & Status
 
-**Version**: `0.3.1`
+**Version**: `0.4.0`
 **Status**: Active Development
-**Last Updated**: March 10, 2026 (Valuation metrics cards + Net Income in chart)
+**Last Updated**: April 28, 2026 (Sector detection + DDM + EV/EBITDA)
 
 ---
 
@@ -30,7 +30,7 @@ Current project state and context for AI assistants.
 
 - **Frontend**: Single-page dashboard + auth pages + saved analyses pages
 - **API Layer**: `/api/quote`, `/api/fundamentals`, `/api/valuation`, `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses`, `/api/ai/analyze`
-- **Business Logic**: Pure TypeScript in `lib/` (DCF engine, scenario presets, Yahoo adapter, AI prompts, formatters)
+- **Business Logic**: Pure TypeScript in `lib/` (DCF/DDM/EV-EBITDA engines, sector routing, scenario presets, Yahoo adapter, AI prompts, formatters)
 - **Database**: SQLite via Prisma 7 — `User` + `Analysis` models
 - **Auth**: Auth.js v5 credentials provider, JWT sessions
 - **Types**: Centralized in `types/` (fundamentals, market, valuation, analysis, auth, ai)
@@ -42,14 +42,19 @@ Current project state and context for AI assistants.
 ### Stock Data & Valuation
 - Real-time quotes from Yahoo Finance with retry logic
 - Historical fundamentals via `fundamentalsTimeSeries` (up to 10 years income + cashflow)
-- 10-year DCF with Gordon Growth terminal value, three scenarios (bull/base/bear)
+- **Sector-adaptive valuation**: auto-detects sector from Yahoo `assetProfile`, selects the appropriate engine
+  - **DCF** (10-year + Gordon Growth terminal) — Technology, Healthcare, Consumer, Industrials, etc.
+  - **DDM 2-stage** — Utilities (e.g. ACEA.MI): 10 explicit dividend years + Gordon Growth terminal
+  - **EV/EBITDA** — Energy, Materials (e.g. ENI.MI): `EV = EBITDA × multiple → equity / shares`
+- **Sector badge** `[Sector · Method]` in dashboard header
+- Disclaimer under fair value cards when sector suggests a non-DCF method (DCF only)
 - Margin of safety adjustment (0-80%)
 
 ### Smart Scenario Defaults
 - Company-specific scenarios auto-populated from analyst estimates + historical data
-- Fallback chains: analyst 5yr growth → CAGR → TTM → 5%, margins from 5yr avg → 3yr avg → TTM → 18%
-- WACC computed via CAPM: `Ke = Rf + β × ERP` (beta from Yahoo, Rf from ^TNX, ERP = 5.5%)
-- Reinvestment rate derived from real FCF/NOPAT
+- DCF: fallback chain for growth, margins, WACC via CAPM, reinvestment rate from real FCF/NOPAT
+- DDM: smart cost of equity via CAPM, dividend growth from analyst estimates
+- EV/EBITDA: smart multiple based on current market EV/EBITDA (clamped [2,20])
 - Source indicator badge: "Smart defaults (Yahoo)" / "Generic defaults" / "Custom"
 
 ### AI Investment Analysis
@@ -76,7 +81,7 @@ Current project state and context for AI assistants.
 ### Interactive UI
 - Scenario parameters displayed as percentages, stored as decimals
 - Analyst estimates reference banner
-- Historical charts with compact number formatting
+- Historical charts with compact number formatting (Revenue, FCF, Net Income, Margins)
 - LocalStorage persistence for ticker, scenarios, margin of safety
 - US 10Y Treasury yield badge next to WACC field
 - Auth-aware NavBar on all pages
@@ -99,7 +104,10 @@ Current project state and context for AI assistants.
 ```
 types/                 # fundamentals.ts, market.ts, valuation.ts, analysis.ts, auth.ts, ai.ts
 lib/
-  valuation/dcf.ts     # DCF engine
+  valuation/dcf.ts         # DCF engine
+  valuation/ddm.ts         # DDM engine (Utilities)
+  valuation/ev-ebitda.ts   # EV/EBITDA engine (Energy, Materials)
+  valuation/sector.ts      # Sector detection + method routing
   valuation/scenario-presets.ts
   valuation/valuation-metrics.ts  # P/E, P/FCF, FCF Yield, Earnings Yield computation
   ai/prompts.ts        # Prompt builders for AI analysis
@@ -115,7 +123,8 @@ app/api/
   analyses/            analyses/[id]/
   ai/analyze/          # Streaming AI analysis
 app/login/ app/register/ app/analyses/ app/analyses/[id]/
-components/            # dashboard-client, scenario-panel, fair-value-card,
+components/            # dashboard-client, scenario-panel, ddm-scenario-panel,
+                       # ev-ebitda-scenario-panel, sector-badge, fair-value-card,
                        # ticker-search, fundamentals-charts, price-summary,
                        # disclaimer-banner, ai-analysis-panel, analyses-list,
                        # nav-bar, login-form, register-form, session-provider,
@@ -159,11 +168,11 @@ See `.env.example` for full template.
 
 ## Next Priorities
 
-1. **Sector Detection** — Yahoo `assetProfile` module (free) → `sector`/`industry` in `FundamentalsResponse`, sector badge in UI, disclaimer when DCF is not the right method — see `.claude/plans/replicated-nibbling-jellyfish.md`
-2. **Claude Deep Value** — new `/api/ai/deep-value` endpoint where Claude autonomously picks the valuation method (EV/EBITDA for energy, P/B for banks, DDM for utilities) and sources data via web search — see `.claude/plans/replicated-nibbling-jellyfish.md`
-3. Manual shares outstanding override UI
-4. Caching layer for Yahoo API calls
-5. Sensitivity analysis table (WACC vs growth matrix)
+1. **Claude Deep Value** — new `/api/ai/deep-value` endpoint where Claude autonomously picks the valuation method and sources data via web search
+2. Manual shares outstanding override UI
+3. Caching layer for Yahoo API calls
+4. Sensitivity analysis table (WACC vs growth matrix)
+5. P/B for Financial sector (currently shows DCF + disclaimer)
 
 ---
 

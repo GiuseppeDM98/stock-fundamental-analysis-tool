@@ -1,8 +1,11 @@
 import { QuoteResponse } from "@/types/market";
 import { formatCompactNumber, formatCurrency } from "@/lib/format";
+import { SectorBadge } from "@/components/sector-badge";
 
 type PriceSummaryProps = {
   quote: QuoteResponse;
+  sector?: string | null;
+  industry?: string | null;
 };
 
 /**
@@ -13,16 +16,19 @@ type PriceSummaryProps = {
  *
  * @param quote - Market data including price, market cap, and exchange info
  */
-export function PriceSummary({ quote }: PriceSummaryProps) {
+export function PriceSummary({ quote, sector, industry }: PriceSummaryProps) {
   return (
     <div className="card">
       <p className="text-xs font-semibold uppercase tracking-wider text-muted">Market snapshot</p>
       <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="font-display text-2xl font-bold">{quote.shortName}</h2>
-          <p className="text-sm text-muted">
-            {quote.ticker} · {quote.exchange}
-          </p>
+          <div className="mt-0.5 flex flex-wrap items-center gap-2">
+            <p className="text-sm text-muted">
+              {quote.ticker} · {quote.exchange}
+            </p>
+            <SectorBadge sector={sector ?? null} industry={industry ?? null} />
+          </div>
         </div>
         <div className="text-right">
           <p className="font-display text-3xl font-bold text-accent">
