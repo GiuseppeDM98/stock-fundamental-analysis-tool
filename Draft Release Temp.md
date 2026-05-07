@@ -27,6 +27,8 @@
 
 ## 🐛 Bug Fixes
 
+- Fixed Deep Value Analysis showing intermediate "thinking" text (reasoning steps between web searches) before the actual report — the analysis now appears cleanly, starting directly with the valuation results
+- Fixed Deep Value Analysis reports referencing the wrong year — reports now correctly anchor to the current date, ensuring the analysis reflects the most recently published financial data rather than assuming it's still 2025
 - Fixed AI analysis reports displaying tables as raw pipe-separated text instead of formatted tables
 - Fixed crash when loading certain tickers (e.g. some European stocks) that Yahoo Finance returns as unavailable — now shows a clear error message instead of crashing
 

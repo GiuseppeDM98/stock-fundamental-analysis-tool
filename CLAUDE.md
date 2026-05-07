@@ -8,7 +8,7 @@ Current project state and context for AI assistants.
 
 **Version**: `0.5.0`
 **Status**: Active Development
-**Last Updated**: May 7, 2026 (Deep Value AI endpoint + Markdown table fix)
+**Last Updated**: May 7, 2026 (Deep Value stream fix + date injection)
 
 ---
 
@@ -73,6 +73,8 @@ Current project state and context for AI assistants.
 - Outputs a JSON block (method + sector + bull/base/bear fair values) followed by a full Markdown report
 - Fair value cards and method badge appear after streaming completes
 - Prompt builders in `lib/ai/deep-value-prompts.ts`; endpoint at `/api/ai/deep-value`
+- **Date injection**: route computes `currentDate` from `new Date()` and passes it to both prompt builders — prevents Claude from anchoring analysis to its training year (Aug 2025)
+- **Stream suppression**: server buffers all text until the ` ```json ` marker appears; intermediate reasoning text emitted between tool calls is silently discarded before reaching the client
 
 ### User Accounts & Saved Analyses
 - Email + password registration/login (Auth.js v5, bcrypt)
