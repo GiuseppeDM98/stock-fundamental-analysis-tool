@@ -239,6 +239,14 @@ getRecommendedMethod(sector: Sector): ValuationMethodInfo  // returns { label, i
   const markdown = text.replace(/```json\n[\s\S]*?\n```\n?/, "");
   ```
 - System prompt must say "the JSON block MUST be the very first thing you output" — Claude will otherwise sometimes write a sentence before it
+- **"No preamble" prompt instruction is insufficient** — Claude still emits reasoning text between web search tool calls even when instructed not to. The only reliable fix is server-side buffering: accumulate `preJsonBuffer` until ` ```json ` appears, then start forwarding. Discard everything before it.
+- **Always inject `currentDate` from the server** into prompts that reference "most recent" financial data. Claude's training cutoff is Aug 2025; without a date signal it assumes the wrong year, misdates reports, and treats FY2024 results as current. Compute via:
+  ```typescript
+  const currentDate = new Date().toLocaleDateString("en-US", {
+    year: "numeric", month: "long", day: "numeric",
+  });
+  ```
+  Pass to both `buildDeepValueSystemPrompt(language, currentDate)` and `buildDeepValueUserPrompt(ticker, price, currency, language, currentDate)`. Use English locale regardless of report language — Claude reasons better on English dates.
 
 ---
 

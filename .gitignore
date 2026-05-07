@@ -12,3 +12,6 @@ coverage
 *.db-wal
 
 /generated/prisma
+
+# TypeScript incremental build cache
+*.tsbuildinfo
