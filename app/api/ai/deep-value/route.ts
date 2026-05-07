@@ -35,8 +35,15 @@ export async function POST(request: Request) {
     const currentPrice = quote.regularMarketPrice;
     const currency = quote.currency ?? "USD";
 
-    const systemPrompt = buildDeepValueSystemPrompt(body.language);
-    const userPrompt = buildDeepValueUserPrompt(body.ticker, currentPrice, currency, body.language);
+    // Inject the real current date so Claude doesn't assume it's still in its training year.
+    const currentDate = new Date().toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    const systemPrompt = buildDeepValueSystemPrompt(body.language, currentDate);
+    const userPrompt = buildDeepValueUserPrompt(body.ticker, currentPrice, currency, body.language, currentDate);
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -51,12 +58,30 @@ export async function POST(request: Request) {
             messages: [{ role: "user", content: userPrompt }],
           });
 
+          // Buffer text before the JSON block to suppress reasoning text that Claude
+          // emits between web search tool calls. Only forward once ```json is seen.
+          let jsonBlockStarted = false;
+          let preJsonBuffer = "";
+
           for await (const event of stream) {
             if (
               event.type === "content_block_delta" &&
               event.delta.type === "text_delta"
             ) {
-              controller.enqueue(new TextEncoder().encode(event.delta.text));
+              const text = event.delta.text;
+
+              if (!jsonBlockStarted) {
+                preJsonBuffer += text;
+                const jsonIdx = preJsonBuffer.indexOf("```json");
+                if (jsonIdx !== -1) {
+                  jsonBlockStarted = true;
+                  controller.enqueue(new TextEncoder().encode(preJsonBuffer.slice(jsonIdx)));
+                  preJsonBuffer = "";
+                }
+                // Silently discard pre-JSON reasoning text
+              } else {
+                controller.enqueue(new TextEncoder().encode(text));
+              }
             }
           }
         } catch (streamErr) {

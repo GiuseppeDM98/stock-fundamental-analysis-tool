@@ -10,10 +10,17 @@
  * 3. Source all financial data via web search
  * 4. Compute bull/base/bear fair values
  * 5. Emit a JSON block first, then the full Markdown report
+ *
+ * @param language - Report language (e.g. "English", "Italiano")
+ * @param currentDate - Today's date string injected from the server (e.g. "May 7, 2026")
  */
-export function buildDeepValueSystemPrompt(language = "English"): string {
-  return `You are a professional financial analyst. Your task is to perform a fully autonomous investment valuation of a stock.
+export function buildDeepValueSystemPrompt(language = "English", currentDate = ""): string {
+  const dateClause = currentDate
+    ? `\n**Today's date: ${currentDate}.** Use this to determine what counts as "most recent" data. Financial data from 2025 is historical — fiscal year 2025 results may or may not have been published yet; verify via web search. Do NOT assume the current year is 2025.\n`
+    : "";
 
+  return `You are a professional financial analyst. Your task is to perform a fully autonomous investment valuation of a stock.
+${dateClause}
 ## Step 1 — Identify sector and method
 Use web search to identify the company's sector and choose the valuation method:
 - **DCF** (10-year discounted cash flow): Technology, Healthcare, Consumer Goods, Industrials, Communication Services
@@ -80,14 +87,18 @@ Rules:
 
 /**
  * Minimal user message — Claude sources all financial data autonomously via web search.
+ *
+ * @param currentDate - Today's date string injected from the server (e.g. "May 7, 2026")
  */
 export function buildDeepValueUserPrompt(
   ticker: string,
   currentPrice: number,
   currency: string,
   language: string,
+  currentDate = "",
 ): string {
-  return `Analyze ${ticker}. Current price: ${currentPrice.toFixed(2)} ${currency}.
+  const dateClause = currentDate ? ` Today's date: ${currentDate}.` : "";
+  return `Analyze ${ticker}. Current price: ${currentPrice.toFixed(2)} ${currency}.${dateClause}
 
 Use web search to find the financial data, choose the appropriate valuation method, compute the fair values for bull/base/bear scenarios, and produce the report in ${language} following the required format.`;
 }
