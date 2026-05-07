@@ -24,7 +24,7 @@ lib/               # Business logic and utilities
     sector.ts      # Sector detection + method routing
     scenario-presets.ts
     valuation-metrics.ts
-  ai/              # AI prompt builders (prompts.ts)
+  ai/              # AI prompt builders (prompts.ts, deep-value-prompts.ts)
   yahoo-client.ts  # Yahoo Finance API adapter
   auth.ts          # Auth.js v5 config
   db.ts            # Prisma singleton client
@@ -60,7 +60,7 @@ __tests__/         # Vitest tests (mirrors source structure)
 - Data fetchers: `getQuote()`, `getFundamentals()`, `getAnalystEstimates()`, `getRiskFreeRate()`
 - Data mappers: `mapFundamentalsFromTimeSeries()`, `mapAnalystEstimates()`
 - Factories: `getDefaultScenarios()`, `getCompanyScenarios()`, `getDefaultDdmScenarios()`, `getCompanyDdmScenarios()`, `getDefaultEvEbitdaScenarios()`, `getCompanyEvEbitdaScenarios()`
-- Prompt builders: `buildSystemPrompt()`, `buildUserPrompt()` in `lib/ai/prompts.ts`
+- Prompt builders: `buildSystemPrompt()`, `buildUserPrompt()` in `lib/ai/prompts.ts`; `buildDeepValueSystemPrompt()`, `buildDeepValueUserPrompt()` in `lib/ai/deep-value-prompts.ts`
 - Utilities: `extractRawNumber()`, `formatCurrency()`, `clamp()`
 
 ### LocalStorage Keys
@@ -87,7 +87,7 @@ if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 
 // Use session.user.id — typed via declaration merge in types/auth.ts
 ```
 
-**Endpoints:** `/api/quote`, `/api/fundamentals`, `/api/valuation` (POST), `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/DELETE), `/api/ai/analyze` (POST, streaming)
+**Endpoints:** `/api/quote`, `/api/fundamentals`, `/api/valuation` (POST), `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/DELETE), `/api/ai/analyze` (POST, streaming), `/api/ai/deep-value` (POST, streaming)
 
 ---
 
@@ -130,6 +130,13 @@ while (!done) {
 
 ### Next.js Typed Routes (`typedRoutes: true`)
 `router.push(dynamicString)` fails type check. Use `window.location.href` for dynamic redirects after auth.
+
+### Markdown Rendering
+Use `react-markdown` with `remark-gfm` plugin for GFM table support. Without it, pipe-syntax tables render as raw text.
+```typescript
+import remarkGfm from "remark-gfm";
+<ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+```
 
 ---
 
@@ -218,6 +225,21 @@ getRecommendedMethod(sector: Sector): ValuationMethodInfo  // returns { label, i
 - Prompt builders in `lib/ai/prompts.ts` — always inject language in both system + user prompt (Claude can "forget" mid-generation with web search)
 - Always add "Do not write any preamble before the report" to system prompt — prevents transitional text visible in stream
 
+### Deep Value pattern (autonomous valuation)
+
+`/api/ai/deep-value` has Claude find all financial data via web search and pick the method autonomously. Key points:
+
+- Route only calls `getQuote()` for the current price — no Yahoo fundamentals fetch
+- System prompt instructs Claude to output a **JSON block first**, then the Markdown report
+- JSON block format: ` ```json { "method", "sector", "currency", "bull/base/bear": { "fairValue", "upside" } } ``` `
+- **Parse on the client, not the server** — incremental streaming makes server-side JSON extraction fragile. Client accumulates the full text, then extracts with regex after `done`:
+  ```typescript
+  const match = text.match(/```json\n([\s\S]*?)\n```/);
+  const result = match ? JSON.parse(match[1]) : null;
+  const markdown = text.replace(/```json\n[\s\S]*?\n```\n?/, "");
+  ```
+- System prompt must say "the JSON block MUST be the very first thing you output" — Claude will otherwise sometimes write a sentence before it
+
 ---
 
 ## DCF Valuation Model
@@ -275,6 +297,7 @@ import { getQuote, getFundamentals, getAnalystEstimates } from "@/lib/yahoo-clie
 import { formatCurrency, formatPercent, formatCompactNumber } from "@/lib/format";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { buildDeepValueSystemPrompt, buildDeepValueUserPrompt } from "@/lib/ai/deep-value-prompts";
 ```
 
 ---

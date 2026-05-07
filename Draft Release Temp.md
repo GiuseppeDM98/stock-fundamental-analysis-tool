@@ -1,5 +1,7 @@
 ## ✨ New Features
 
+- Added **Deep Value Analysis** — a new AI-powered panel that works for any stock worldwide, including tickers where Yahoo Finance data is incomplete or missing. Claude autonomously picks the valuation method (DCF, DDM, EV/EBITDA, or P/B) based on the company's sector, sources all financial data from the web, and produces bull/base/bear fair value estimates alongside a full research report. Available in all 8 supported languages.
+
 - Added **sector detection** — the app now automatically identifies each company's sector from Yahoo Finance and displays a `[Sector · Method]` badge in the dashboard header (e.g. `[Energy · EV/EBITDA]`, `[Utilities · DDM]`)
 - Added **DDM (Dividend Discount Model)** valuation for Utilities companies — automatically applied when a utility is detected; uses a 2-stage model (10 years of explicit dividends + Gordon Growth terminal value) with smart defaults derived from CAPM cost of equity and analyst dividend growth estimates
 - Added **EV/EBITDA valuation** for Energy and Materials companies — automatically applied when detected; estimates fair value as `EBITDA × target multiple − net debt` with smart defaults based on the company's current market multiple
@@ -25,6 +27,7 @@
 
 ## 🐛 Bug Fixes
 
+- Fixed AI analysis reports displaying tables as raw pipe-separated text instead of formatted tables
 - Fixed crash when loading certain tickers (e.g. some European stocks) that Yahoo Finance returns as unavailable — now shows a clear error message instead of crashing
 
 - Fixed historical charts showing year "1970" on X-axis — migrated from deprecated Yahoo Finance modules to `fundamentalsTimeSeries`
@@ -49,6 +52,10 @@
 - AI analysis price targets are always computed server-side and cannot be manipulated by the client
 - Fixed high-severity path traversal vulnerability in rollup dependency
 - Fixed moderate-severity dev server exposure vulnerability in esbuild/vite
+
+## 📚 Documentation
+
+- Added database inspection guide to README — how to browse users and saved analyses via Turso web UI (`app.turso.tech`), Turso CLI, local SQLite, and Prisma Studio
 
 ## 🏗️ Technical
 

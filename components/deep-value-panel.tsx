@@ -1,35 +1,31 @@
 "use client";
 
-// AI Analysis Panel — streams a Claude-generated investment report.
-// Shows a "Generate AI Analysis" button. On click, POSTs to /api/ai/analyze
-// and reads the response as a text stream, rendering Markdown in real-time.
-// After completion, lets the user save the report to their account.
+// Deep Value Panel — Claude autonomously picks the valuation method,
+// finds all financial data via web search, and streams a JSON block
+// (method + fair values) followed by a full Markdown report.
 import { useState, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { saveAnalysis } from "@/lib/analyses";
-import type { ScenariosInput } from "@/types/valuation";
 
 type Props = {
   ticker: string | null;
-  mosPercent: number;
-  scenarios: ScenariosInput;
   companyName?: string;
 };
 
 type Status = "idle" | "loading" | "streaming" | "done" | "error";
 
-/**
- * Streams the AI analysis from /api/ai/analyze and renders it with react-markdown.
- *
- * Streaming pattern:
- * 1. POST request with ticker, mosPercent, scenarios
- * 2. Read response.body as a ReadableStream
- * 3. Decode each chunk and append to report state
- * 4. react-markdown re-renders on each state update
- */
+type DeepValueResult = {
+  method: string;
+  sector: string;
+  currency: string;
+  bull: { fairValue: number; upside: number };
+  base: { fairValue: number; upside: number };
+  bear: { fairValue: number; upside: number };
+};
+
 const LANGUAGES = [
   { value: "English", label: "🇬🇧 English" },
   { value: "Italiano", label: "🇮🇹 Italiano" },
@@ -41,7 +37,33 @@ const LANGUAGES = [
   { value: "日本語", label: "🇯🇵 日本語" },
 ];
 
-export default function AiAnalysisPanel({ ticker, mosPercent, scenarios, companyName }: Props) {
+function parseDeepValueJson(text: string): DeepValueResult | null {
+  const match = text.match(/```json\n([\s\S]*?)\n```/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[1]) as DeepValueResult;
+  } catch {
+    return null;
+  }
+}
+
+function stripJsonBlock(text: string): string {
+  return text.replace(/```json\n[\s\S]*?\n```\n?/, "");
+}
+
+function UpsideBadge({ upside }: { upside: number }) {
+  const isPositive = upside >= 0;
+  return (
+    <span
+      className={`text-xs font-semibold ${isPositive ? "text-emerald-400" : "text-red-400"}`}
+    >
+      {isPositive ? "+" : ""}
+      {upside.toFixed(1)}%
+    </span>
+  );
+}
+
+export default function DeepValuePanel({ ticker, companyName }: Props) {
   const { data: session } = useSession();
   const router = useRouter();
 
@@ -50,34 +72,33 @@ export default function AiAnalysisPanel({ ticker, mosPercent, scenarios, company
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [result, setResult] = useState<DeepValueResult | null>(null);
 
-  // Abort controller ref to allow cancelling an in-progress stream.
   const abortRef = useRef<AbortController | null>(null);
 
   async function handleGenerate() {
     if (!ticker) return;
 
-    // Redirect to login if not authenticated.
     if (!session) {
       router.push("/login");
       return;
     }
 
-    // Cancel any ongoing stream before starting a new one.
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
 
     setReport("");
+    setResult(null);
     setStatus("loading");
     setErrorMsg(null);
     setSaveStatus("idle");
 
     try {
-      const res = await fetch("/api/ai/analyze", {
+      const res = await fetch("/api/ai/deep-value", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ticker, mosPercent, scenarios, language }),
+        body: JSON.stringify({ ticker, language }),
         signal: controller.signal,
       });
 
@@ -88,26 +109,32 @@ export default function AiAnalysisPanel({ ticker, mosPercent, scenarios, company
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? `Request failed (${res.status})`);
+        throw new Error((body as { error?: string }).error ?? `Request failed (${res.status})`);
       }
 
       if (!res.body) throw new Error("No response stream");
 
       setStatus("streaming");
 
-      // Read the plain-text stream and append each chunk to state.
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let done = false;
+      let accumulated = "";
 
       while (!done) {
         const { value, done: streamDone } = await reader.read();
         done = streamDone;
         if (value) {
-          setReport((prev) => prev + decoder.decode(value, { stream: !streamDone }));
+          const chunk = decoder.decode(value, { stream: !streamDone });
+          accumulated += chunk;
+          setReport(accumulated);
         }
       }
 
+      // Parse the JSON block once streaming is complete.
+      const parsed = parseDeepValueJson(accumulated);
+      setResult(parsed);
+      setReport(accumulated);
       setStatus("done");
     } catch (err) {
       if ((err as Error).name === "AbortError") {
@@ -128,7 +155,7 @@ export default function AiAnalysisPanel({ ticker, mosPercent, scenarios, company
         ticker,
         companyName: companyName ?? ticker,
         reportMd: report,
-        mosPercent,
+        mosPercent: 0,
       });
       setSaveStatus("saved");
     } catch (err) {
@@ -138,25 +165,25 @@ export default function AiAnalysisPanel({ ticker, mosPercent, scenarios, company
   }
 
   const isStreaming = status === "loading" || status === "streaming";
+  const markdownContent = status === "done" && report ? stripJsonBlock(report) : report;
 
   return (
     <div className="card space-y-4">
-      {/* Header row */}
+      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-100">AI Analysis</h2>
+          <h2 className="text-lg font-semibold text-slate-100">Deep Value Analysis</h2>
           <p className="text-sm text-slate-400">
-            Claude Sonnet 4.6 with web search — comprehensive investment report
+            Claude picks the valuation method and sources all data via web search
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Language selector — compact dropdown, no dialog needed */}
           <select
             value={language}
             onChange={(e) => setLanguage(e.target.value)}
             disabled={isStreaming}
-            className="rounded-lg border border-slate-700 bg-slate-800/60 px-2 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none disabled:opacity-50"
+            className="rounded-lg border border-slate-700 bg-slate-800/60 px-2 py-2 text-sm text-slate-200 focus:border-violet-500 focus:outline-none disabled:opacity-50"
             aria-label="Report language"
           >
             {LANGUAGES.map((l) => (
@@ -169,52 +196,83 @@ export default function AiAnalysisPanel({ ticker, mosPercent, scenarios, company
           <button
             onClick={handleGenerate}
             disabled={!ticker || isStreaming}
-            className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-400 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {isStreaming ? (
               <span className="flex items-center gap-2">
                 <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                {status === "loading" ? "Starting…" : "Generating…"}
+                {status === "loading" ? "Starting…" : "Analyzing…"}
               </span>
             ) : (
-              "Generate AI Analysis"
+              "Deep Analysis (AI)"
             )}
           </button>
         </div>
       </div>
 
-      {/* Auth hint for logged-out users */}
+      {/* Auth hint */}
       {!session && ticker && (
-        <p className="rounded-lg bg-sky-500/10 px-3 py-2 text-sm text-sky-300">
+        <p className="rounded-lg bg-violet-500/10 px-3 py-2 text-sm text-violet-300">
           <button onClick={() => router.push("/login")} className="underline hover:no-underline">
             Sign in
           </button>{" "}
-          to generate AI analyses and save your reports.
+          to generate deep value analyses and save your reports.
         </p>
       )}
 
-      {/* Error state */}
+      {/* Error */}
       {status === "error" && errorMsg && (
-        <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">
-          {errorMsg}
-        </p>
+        <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{errorMsg}</p>
       )}
 
-      {/* Streaming/done report — rendered as Markdown */}
-      {report && (
-        <div className="rounded-xl border border-slate-700/60 bg-slate-900/50 p-5">
-          {/* Blinking cursor while streaming */}
-          {isStreaming && (
-            <span className="mb-2 inline-block h-3 w-1.5 animate-pulse bg-sky-400" />
-          )}
+      {/* Method + fair value cards — shown after streaming completes */}
+      {status === "done" && result && (
+        <div className="space-y-3">
+          {/* Method badge */}
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-slate-700 px-3 py-1 text-xs font-medium text-slate-300">
+              {result.sector}
+            </span>
+            <span className="rounded-full bg-violet-900/50 px-3 py-1 text-xs font-semibold text-violet-300">
+              {result.method}
+            </span>
+          </div>
 
-          <div className="prose prose-invert prose-sm max-w-none prose-headings:text-slate-100 prose-p:text-slate-300 prose-strong:text-slate-100 prose-li:text-slate-300 prose-a:text-sky-400 prose-table:w-full prose-th:text-slate-200 prose-td:text-slate-300">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{report}</ReactMarkdown>
+          {/* Fair value cards */}
+          <div className="grid grid-cols-3 gap-3">
+            {(["bull", "base", "bear"] as const).map((scenario) => {
+              const s = result[scenario];
+              const labels = { bull: "Bull", base: "Base", bear: "Bear" };
+              return (
+                <div
+                  key={scenario}
+                  className="rounded-xl border border-slate-700/60 bg-slate-800/50 p-3 text-center"
+                >
+                  <p className="text-xs text-slate-400">{labels[scenario]}</p>
+                  <p className="mt-1 text-base font-bold text-slate-100">
+                    {result.currency} {s.fairValue.toFixed(2)}
+                  </p>
+                  <UpsideBadge upside={s.upside} />
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
 
-      {/* Save / navigation controls — show after streaming completes */}
+      {/* Streaming report */}
+      {report && (
+        <div className="rounded-xl border border-slate-700/60 bg-slate-900/50 p-5">
+          {isStreaming && (
+            <span className="mb-2 inline-block h-3 w-1.5 animate-pulse bg-violet-400" />
+          )}
+          <div className="prose prose-invert prose-sm max-w-none prose-headings:text-slate-100 prose-p:text-slate-300 prose-strong:text-slate-100 prose-li:text-slate-300 prose-a:text-violet-400 prose-table:w-full prose-th:text-slate-200 prose-td:text-slate-300">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdownContent}</ReactMarkdown>
+          </div>
+        </div>
+      )}
+
+      {/* Save controls */}
       {status === "done" && report && (
         <div className="flex items-center gap-3 pt-1">
           <button
@@ -231,7 +289,7 @@ export default function AiAnalysisPanel({ ticker, mosPercent, scenarios, company
           {saveStatus === "saved" && (
             <button
               onClick={() => router.push("/analyses")}
-              className="text-sm text-sky-400 hover:text-sky-300"
+              className="text-sm text-violet-400 hover:text-violet-300"
             >
               View Saved Analyses →
             </button>

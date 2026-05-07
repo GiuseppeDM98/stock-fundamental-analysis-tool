@@ -6,9 +6,9 @@ Current project state and context for AI assistants.
 
 ## Version & Status
 
-**Version**: `0.4.0`
+**Version**: `0.5.0`
 **Status**: Active Development
-**Last Updated**: April 28, 2026 (Sector detection + DDM + EV/EBITDA)
+**Last Updated**: May 7, 2026 (Deep Value AI endpoint + Markdown table fix)
 
 ---
 
@@ -19,7 +19,7 @@ Current project state and context for AI assistants.
 - **Prisma** `7.4.2` + **Turso** (libSQL) via `@prisma/adapter-libsql`
 - **Auth.js** `next-auth@5.0.0-beta.30` + **bcryptjs**
 - **Anthropic SDK** + **Claude Sonnet 4.6** (web search enabled)
-- **Tailwind CSS** `3.4.17` + **Framer Motion** `11.18.2` + **Recharts** `2.15.1` + **react-markdown**
+- **Tailwind CSS** `3.4.17` + **Framer Motion** `11.18.2` + **Recharts** `2.15.1` + **react-markdown** + **remark-gfm**
 - **Vitest** `3.2.4` + **Testing Library** `16.2.0`
 
 ---
@@ -29,7 +29,7 @@ Current project state and context for AI assistants.
 **Pattern**: Next.js App Router with client-side interactivity and server-side API routes.
 
 - **Frontend**: Single-page dashboard + auth pages + saved analyses pages
-- **API Layer**: `/api/quote`, `/api/fundamentals`, `/api/valuation`, `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses`, `/api/ai/analyze`
+- **API Layer**: `/api/quote`, `/api/fundamentals`, `/api/valuation`, `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses`, `/api/ai/analyze`, `/api/ai/deep-value`
 - **Business Logic**: Pure TypeScript in `lib/` (DCF/DDM/EV-EBITDA engines, sector routing, scenario presets, Yahoo adapter, AI prompts, formatters)
 - **Database**: SQLite via Prisma 7 — `User` + `Analysis` models
 - **Auth**: Auth.js v5 credentials provider, JWT sessions
@@ -65,6 +65,14 @@ Current project state and context for AI assistants.
 - Language selector (8 languages: EN, IT, ES, FR, DE, PT, ZH, JA)
 - Respects user's margin of safety setting — price targets are MoS-adjusted
 - DCF re-computed server-side (not from client) to prevent prompt injection
+
+### Deep Value Analysis (AI-Autonomous)
+- "Deep Analysis (AI)" panel (violet) below the standard AI Analysis panel
+- Claude autonomously picks the valuation method (DCF/DDM/EV/EBITDA/P/B) and sources all financial data via web search — no Yahoo Finance fundamentals dependency
+- Works for any global ticker regardless of Yahoo Finance data coverage or missing fields
+- Outputs a JSON block (method + sector + bull/base/bear fair values) followed by a full Markdown report
+- Fair value cards and method badge appear after streaming completes
+- Prompt builders in `lib/ai/deep-value-prompts.ts`; endpoint at `/api/ai/deep-value`
 
 ### User Accounts & Saved Analyses
 - Email + password registration/login (Auth.js v5, bcrypt)
@@ -111,6 +119,7 @@ lib/
   valuation/scenario-presets.ts
   valuation/valuation-metrics.ts  # P/E, P/FCF, FCF Yield, Earnings Yield computation
   ai/prompts.ts        # Prompt builders for AI analysis
+  ai/deep-value-prompts.ts  # Prompt builders for deep value AI analysis
   yahoo-client.ts      # Yahoo adapter
   auth.ts              # Auth.js v5 config
   db.ts                # Prisma singleton
@@ -122,13 +131,14 @@ app/api/
   auth/[...nextauth]/  auth/register/
   analyses/            analyses/[id]/
   ai/analyze/          # Streaming AI analysis
+  ai/deep-value/       # Autonomous deep value AI analysis
 app/login/ app/register/ app/analyses/ app/analyses/[id]/
 components/            # dashboard-client, scenario-panel, ddm-scenario-panel,
                        # ev-ebitda-scenario-panel, sector-badge, fair-value-card,
                        # ticker-search, fundamentals-charts, price-summary,
-                       # disclaimer-banner, ai-analysis-panel, analyses-list,
-                       # nav-bar, login-form, register-form, session-provider,
-                       # valuation-metrics-cards
+                       # disclaimer-banner, ai-analysis-panel, deep-value-panel,
+                       # analyses-list, nav-bar, login-form, register-form,
+                       # session-provider, valuation-metrics-cards
 prisma/                # schema.prisma + migrations
 generated/prisma/      # Prisma 7 generated client (gitignored)
 __tests__/             # 17 tests across 4 files
@@ -168,11 +178,10 @@ See `.env.example` for full template.
 
 ## Next Priorities
 
-1. **Claude Deep Value** — new `/api/ai/deep-value` endpoint where Claude autonomously picks the valuation method and sources data via web search
-2. Manual shares outstanding override UI
-3. Caching layer for Yahoo API calls
-4. Sensitivity analysis table (WACC vs growth matrix)
-5. P/B for Financial sector (currently shows DCF + disclaimer)
+1. Manual shares outstanding override UI
+2. Caching layer for Yahoo API calls
+3. Sensitivity analysis table (WACC vs growth matrix)
+4. P/B for Financial sector (currently shows DCF + disclaimer)
 
 ---
 

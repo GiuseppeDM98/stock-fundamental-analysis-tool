@@ -23,6 +23,7 @@ import { PriceSummary } from "@/components/price-summary";
 import { ScenarioPanel } from "@/components/scenario-panel";
 import { TickerSearch } from "@/components/ticker-search";
 import AiAnalysisPanel from "@/components/ai-analysis-panel";
+import DeepValuePanel from "@/components/deep-value-panel";
 import { ValuationMetricsCards } from "@/components/valuation-metrics-cards";
 import { getDefaultDdmScenarios, getCompanyDdmScenarios, getDefaultEvEbitdaScenarios, getCompanyEvEbitdaScenarios, getDefaultScenarios } from "@/lib/valuation/scenario-presets";
 import { detectSector, getRecommendedMethod } from "@/lib/valuation/sector";
@@ -515,6 +516,11 @@ export function DashboardClient() {
               ticker={ticker}
               mosPercent={mosPercent}
               scenarios={scenarios}
+              companyName={quote.shortName}
+            />
+
+            <DeepValuePanel
+              ticker={ticker}
               companyName={quote.shortName}
             />
           </motion.div>

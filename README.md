@@ -23,6 +23,7 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **Margin of safety** adjustment (0-80%) for conservative valuations
 - **Client-side persistence** with localStorage for scenario configurations
 - **AI investment analysis** — Claude Sonnet 4.6 generates full research reports with web search
+- **Deep Value Analysis** — Claude autonomously picks the valuation method and sources all financial data via web search; works for any global ticker
 - **User accounts** with saved reports — revisit your analyses anytime
 
 ### What Problem Does It Solve?
@@ -52,6 +53,7 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - 📈 **Live Risk-Free Rate**: US 10Y Treasury yield displayed next to WACC as a real-time reference
 - 💾 **State Persistence**: LocalStorage saves ticker history and scenario overrides
 - 🤖 **AI Analysis**: Claude Sonnet 4.6 generates full investment reports with live web search
+- 🔍 **Deep Value Analysis**: Fully autonomous AI valuation — Claude picks the method and finds all data via web search, works for any global ticker
 - 👤 **User Accounts**: Save and revisit AI-generated reports with email/password auth
 - 🧮 **Valuation Metrics**: P/E, P/FCF, FCF Yield, Earnings Yield cards with YoY trend and educational tooltips
 - 🧪 **Fully Tested**: Vitest + Testing Library coverage for calculations and UI
@@ -381,6 +383,51 @@ Run DCF valuation with custom scenarios.
     ...
   }
 }
+```
+
+---
+
+## 🗄️ Database
+
+The app uses **Turso** (libSQL/SQLite) in production and a local `prisma/dev.db` file in development.
+
+### Inspect data — Turso web UI (easiest)
+
+Go to [app.turso.tech](https://app.turso.tech), open your database, and use the built-in SQL editor to run queries directly from the browser:
+
+```sql
+SELECT id, email, createdAt FROM User;
+SELECT ticker, companyName, createdAt FROM Analysis ORDER BY createdAt DESC;
+```
+
+### Inspect data — Turso CLI
+
+```bash
+turso db shell <your-db-name>
+# then run any SQL query interactively
+```
+
+### Inspect data — local dev.db (development only)
+
+```bash
+# SQLite CLI
+sqlite3 prisma/dev.db "SELECT email, createdAt FROM User;"
+
+# Or Prisma Studio (browser UI on http://localhost:5555)
+npx prisma studio
+```
+
+### Run migrations
+
+```bash
+# Apply pending migrations to local dev.db
+npx prisma migrate dev
+
+# After a schema change, create a new migration
+npx prisma migrate dev --name <migration-name>
+
+# Deploy migrations to production (Turso) via Turso shell
+turso db shell <your-db-name> < prisma/migrations/<latest>/migration.sql
 ```
 
 ---
