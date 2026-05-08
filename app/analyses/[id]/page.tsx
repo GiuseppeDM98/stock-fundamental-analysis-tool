@@ -1,5 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -49,20 +50,29 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
         </p>
       </div>
 
-      {/* Report content */}
+      {/* Report content — strip any leading JSON block (from Deep Value analyses) */}
       <div className="card">
-        <div className="prose prose-invert prose-sm max-w-none prose-headings:text-slate-100 prose-p:text-slate-300 prose-strong:text-slate-100 prose-li:text-slate-300 prose-a:text-sky-400">
-          <ReactMarkdown>{analysis.reportMd}</ReactMarkdown>
+        <div className="prose prose-invert prose-sm max-w-none prose-headings:text-slate-100 prose-p:text-slate-300 prose-strong:text-slate-100 prose-li:text-slate-300 prose-a:text-sky-400 prose-table:w-full prose-th:text-slate-200 prose-td:text-slate-300">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            {analysis.reportMd.replace(/^```json\n[\s\S]*?\n```\n?/, "")}
+          </ReactMarkdown>
         </div>
       </div>
 
-      <div className="mt-6">
+      <div className="mt-6 flex items-center justify-between">
         <Link
           href="/analyses"
           className="text-sm text-slate-400 hover:text-slate-200"
         >
           ← Back to Saved Analyses
         </Link>
+        {/* Re-run opens dashboard with this ticker pre-loaded */}
+        <a
+          href={`/?ticker=${encodeURIComponent(analysis.ticker)}`}
+          className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-sky-400 transition hover:border-sky-500/50 hover:text-sky-300"
+        >
+          Re-run Analysis
+        </a>
       </div>
     </main>
   );

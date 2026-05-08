@@ -13,6 +13,7 @@ import { saveAnalysis } from "@/lib/analyses";
 type Props = {
   ticker: string | null;
   companyName?: string;
+  mosPercent?: number;
 };
 
 type Status = "idle" | "loading" | "streaming" | "done" | "error";
@@ -63,7 +64,7 @@ function UpsideBadge({ upside }: { upside: number }) {
   );
 }
 
-export default function DeepValuePanel({ ticker, companyName }: Props) {
+export default function DeepValuePanel({ ticker, companyName, mosPercent = 0 }: Props) {
   const { data: session } = useSession();
   const router = useRouter();
 
@@ -155,7 +156,12 @@ export default function DeepValuePanel({ ticker, companyName }: Props) {
         ticker,
         companyName: companyName ?? ticker,
         reportMd: report,
-        mosPercent: 0,
+        mosPercent,
+        // Snapshot fair values from the parsed JSON result so we can track performance
+        fairValueBull: result?.bull.fairValue,
+        fairValueBase: result?.base.fairValue,
+        fairValueBear: result?.bear.fairValue,
+        valuationMethod: result?.method,
       });
       setSaveStatus("saved");
     } catch (err) {

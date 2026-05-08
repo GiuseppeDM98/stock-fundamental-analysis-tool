@@ -148,12 +148,21 @@ export function DashboardClient() {
   const scenariosRef = useRef(scenarios);
   const ddmScenariosRef = useRef(ddmScenarios);
   const evEbitdaScenariosRef = useRef(evEbitdaScenarios);
+  // Holds a ticker from ?ticker= URL param so the post-hydration effect can auto-fetch it
+  const urlTickerRef = useRef<string | null>(null);
 
   // SSR Hydration: Load persisted state from localStorage on client mount only
   // This useEffect runs once after the initial server-side render completes,
   // ensuring window.localStorage is available and preventing hydration mismatches
   useEffect(() => {
-    const storedTicker = getStorageItem("sfa:lastTicker", (value) => String(value), "AAPL");
+    // ?ticker= URL param (from Re-run button) takes precedence over localStorage
+    const urlParam = new URLSearchParams(window.location.search).get("ticker");
+    if (urlParam) {
+      urlTickerRef.current = urlParam.toUpperCase();
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+
+    const storedTicker = urlTickerRef.current ?? getStorageItem("sfa:lastTicker", (value) => String(value), "AAPL");
     const storedMos = getStorageItem("sfa:mosPercent", (value) => Number(value), 25);
     const storedScenarios = getStorageItem(
       "sfa:scenarioOverrides",
@@ -185,6 +194,15 @@ export function DashboardClient() {
     }
     window.localStorage.setItem("sfa:lastTicker", ticker);
   }, [ticker, isHydrated]);
+
+  // Auto-fetch when the page was opened via ?ticker= URL param (e.g. Re-run button)
+  useEffect(() => {
+    if (isHydrated && urlTickerRef.current) {
+      void fetchDashboardData(urlTickerRef.current, true);
+    }
+  // fetchDashboardData is stable (useCallback with no deps that change on hydration)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHydrated]);
 
   // Persist margin of safety and sync ref for async callbacks
   useEffect(() => {
@@ -517,11 +535,13 @@ export function DashboardClient() {
               mosPercent={mosPercent}
               scenarios={scenarios}
               companyName={quote.shortName}
+              valuation={valuation}
             />
 
             <DeepValuePanel
               ticker={ticker}
               companyName={quote.shortName}
+              mosPercent={mosPercent}
             />
           </motion.div>
         )}

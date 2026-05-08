@@ -10,13 +10,15 @@ import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { saveAnalysis } from "@/lib/analyses";
-import type { ScenariosInput } from "@/types/valuation";
+import type { ScenariosInput, ValuationResponse } from "@/types/valuation";
 
 type Props = {
   ticker: string | null;
   mosPercent: number;
   scenarios: ScenariosInput;
   companyName?: string;
+  // Passed from dashboard so we can snapshot price + fair values at save time
+  valuation?: ValuationResponse | null;
 };
 
 type Status = "idle" | "loading" | "streaming" | "done" | "error";
@@ -41,7 +43,7 @@ const LANGUAGES = [
   { value: "日本語", label: "🇯🇵 日本語" },
 ];
 
-export default function AiAnalysisPanel({ ticker, mosPercent, scenarios, companyName }: Props) {
+export default function AiAnalysisPanel({ ticker, mosPercent, scenarios, companyName, valuation }: Props) {
   const { data: session } = useSession();
   const router = useRouter();
 
@@ -129,6 +131,12 @@ export default function AiAnalysisPanel({ ticker, mosPercent, scenarios, company
         companyName: companyName ?? ticker,
         reportMd: report,
         mosPercent,
+        // Snapshot market data so we can track performance later
+        priceAtAnalysis: valuation?.currentPrice,
+        fairValueBull: valuation?.scenarios.bull.fairValueAfterMos,
+        fairValueBase: valuation?.scenarios.base.fairValueAfterMos,
+        fairValueBear: valuation?.scenarios.bear.fairValueAfterMos,
+        valuationMethod: valuation?.valuationMethod,
       });
       setSaveStatus("saved");
     } catch (err) {

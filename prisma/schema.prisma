@@ -16,17 +16,42 @@ model User {
   passwordHash String
   createdAt    DateTime   @default(now())
   analyses     Analysis[]
+  positions    Position[]
 }
 
 model Analysis {
-  id          String   @id @default(cuid())
-  userId      String
-  ticker      String
-  companyName String
-  reportMd    String
-  mosPercent  Float
-  createdAt   DateTime @default(now())
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               String   @id @default(cuid())
+  userId           String
+  ticker           String
+  companyName      String
+  reportMd         String
+  mosPercent       Float
+  // Price snapshot at save time — used to track performance vs current price
+  priceAtAnalysis  Float?
+  fairValueBull    Float?
+  fairValueBase    Float?
+  fairValueBear    Float?
+  valuationMethod  String?
+  createdAt        DateTime @default(now())
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+}
+
+// Tracks real purchases made by the user for long-term P&L tracking.
+model Position {
+  id            String   @id @default(cuid())
+  userId        String
+  ticker        String
+  companyName   String
+  purchasePrice Float
+  shares        Float
+  currency      String   @default("EUR")
+  purchasedAt   DateTime
+  notes         String?
+  createdAt     DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, ticker])
 }

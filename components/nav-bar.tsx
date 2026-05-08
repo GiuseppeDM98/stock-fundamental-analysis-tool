@@ -31,6 +31,12 @@ export default function NavBar() {
               >
                 Saved Analyses
               </Link>
+              <Link
+                href="/portfolio"
+                className="text-slate-300 hover:text-slate-100"
+              >
+                Portfolio
+              </Link>
               <span className="text-slate-500">{session.user?.email}</span>
               <button
                 onClick={() => signOut({ callbackUrl: "/" })}

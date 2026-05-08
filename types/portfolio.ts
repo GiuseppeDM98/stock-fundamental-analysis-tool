@@ -1,0 +1,23 @@
+/** A real stock purchase saved by the user for P&L tracking. */
+export type Position = {
+  id: string;
+  ticker: string;
+  companyName: string;
+  purchasePrice: number;
+  shares: number;
+  currency: string;
+  purchasedAt: string; // ISO 8601 string
+  notes?: string | null;
+  createdAt: string;
+};
+
+/** Payload required to create a new position. */
+export type CreatePositionRequest = {
+  ticker: string;
+  companyName: string;
+  purchasePrice: number;
+  shares: number;
+  currency: string;
+  purchasedAt: string; // ISO date string YYYY-MM-DD
+  notes?: string;
+};

@@ -6,7 +6,7 @@ Project-specific patterns, conventions, and knowledge for AI agents working on t
 
 ## Project Context
 
-Next.js 15 stock fundamental analysis tool with multi-method valuation (DCF, DDM, EV/EBITDA), sector-adaptive scenario modeling, Yahoo Finance integration, AI-generated investment analysis (Claude Sonnet 4.6 + web search), and user accounts with saved reports.
+Next.js 15 stock fundamental analysis tool with multi-method valuation (DCF, DDM, EV/EBITDA), sector-adaptive scenario modeling, Yahoo Finance integration, AI-generated investment analysis (Claude Sonnet 4.6 + web search), portfolio tracker with live P&L, and user accounts with saved reports.
 
 **Tech Stack:** Next.js 15 (App Router), TypeScript (strict), React 19, yahoo-finance2, Prisma 7 + Turso (libSQL), Auth.js v5, Anthropic SDK, Vitest + Testing Library, Tailwind CSS, Framer Motion, Recharts
 
@@ -15,29 +15,24 @@ Next.js 15 stock fundamental analysis tool with multi-method valuation (DCF, DDM
 ## Directory Structure
 
 ```
-types/             # Shared TypeScript types (fundamentals, market, valuation, analysis, auth, ai)
+types/             # fundamentals.ts, market.ts, valuation.ts, analysis.ts, auth.ts, ai.ts, portfolio.ts
 lib/               # Business logic and utilities
-  valuation/       # Valuation engines and presets
-    dcf.ts         # DCF engine
-    ddm.ts         # DDM engine (Utilities)
-    ev-ebitda.ts   # EV/EBITDA engine (Energy, Materials)
-    sector.ts      # Sector detection + method routing
-    scenario-presets.ts
-    valuation-metrics.ts
-  ai/              # AI prompt builders (prompts.ts, deep-value-prompts.ts)
+  valuation/       # DCF, DDM, EV-EBITDA engines + sector routing + presets + metrics
+  ai/              # prompts.ts, deep-value-prompts.ts
   yahoo-client.ts  # Yahoo Finance API adapter
   auth.ts          # Auth.js v5 config
   db.ts            # Prisma singleton client
   analyses.ts      # Client-side fetch helpers for saved analyses
+  portfolio.ts     # Client-side fetch helpers for positions
   format.ts        # Formatting utilities
 components/        # React components (all client-side, all "use client")
 app/api/           # API route handlers
-app/login/         # Login page
-app/register/      # Register page
 app/analyses/      # Saved analyses list + detail pages
-generated/prisma/  # Prisma 7 generated client (gitignored — auto-generated on `npm run build` via prisma generate)
+app/portfolio/     # Portfolio tracker page
+docs/              # Feature specs (ordered 1-, 2-, 3- by implementation priority)
+generated/prisma/  # Prisma 7 generated client (gitignored)
 prisma/            # Schema + migrations
-__tests__/         # Vitest tests (mirrors source structure)
+__tests__/         # Vitest tests
 ```
 
 ### Placement Rules
@@ -53,15 +48,14 @@ __tests__/         # Vitest tests (mirrors source structure)
 
 ### Types
 - API types: `QuoteResponse`, `ValuationRequest`, `AnalystEstimatesResponse`
-- Domain types: `ScenarioInput`, `AnalystEstimates`, `SavedAnalysis`, `AnalyzeRequest`
+- Domain types: `ScenarioInput`, `AnalystEstimates`, `SavedAnalysis`, `Position`, `CreatePositionRequest`
 - Literal unions: `ScenarioName = "bull" | "base" | "bear"`
 
 ### Functions
 - Data fetchers: `getQuote()`, `getFundamentals()`, `getAnalystEstimates()`, `getRiskFreeRate()`
-- Data mappers: `mapFundamentalsFromTimeSeries()`, `mapAnalystEstimates()`
+- Client helpers: `fetchAnalyses()`, `saveAnalysis()`, `fetchPositions()`, `createPosition()`, `deletePosition()`
 - Factories: `getDefaultScenarios()`, `getCompanyScenarios()`, `getDefaultDdmScenarios()`, `getCompanyDdmScenarios()`, `getDefaultEvEbitdaScenarios()`, `getCompanyEvEbitdaScenarios()`
 - Prompt builders: `buildSystemPrompt()`, `buildUserPrompt()` in `lib/ai/prompts.ts`; `buildDeepValueSystemPrompt()`, `buildDeepValueUserPrompt()` in `lib/ai/deep-value-prompts.ts`
-- Utilities: `extractRawNumber()`, `formatCurrency()`, `clamp()`
 
 ### LocalStorage Keys
 All prefixed with `sfa:`: `sfa:lastTicker`, `sfa:mosPercent`, `sfa:scenarioOverrides`, `sfa:ddmScenarioOverrides`, `sfa:evEbitdaScenarioOverrides`
@@ -87,7 +81,7 @@ if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 
 // Use session.user.id — typed via declaration merge in types/auth.ts
 ```
 
-**Endpoints:** `/api/quote`, `/api/fundamentals`, `/api/valuation` (POST), `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/DELETE), `/api/ai/analyze` (POST, streaming), `/api/ai/deep-value` (POST, streaming)
+**Endpoints:** `/api/quote`, `/api/fundamentals`, `/api/valuation` (POST), `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/DELETE), `/api/positions` (GET/POST), `/api/positions/[id]` (DELETE), `/api/ai/analyze` (POST, streaming), `/api/ai/deep-value` (POST, streaming)
 
 ---
 
@@ -106,6 +100,29 @@ useEffect(() => {
 }, [value, isHydrated]);
 ```
 
+### URL Param on Mount (Re-run pattern)
+When a page needs to read a `?param=` URL param on mount and auto-trigger a fetch, do it inside the hydration `useEffect` — not in a separate effect — to avoid a double render. Clean the URL with `replaceState` so back-navigation doesn't re-trigger.
+
+```typescript
+const urlParamRef = useRef<string | null>(null);
+
+useEffect(() => {
+  const param = new URLSearchParams(window.location.search).get("ticker");
+  if (param) {
+    urlParamRef.current = param.toUpperCase();
+    window.history.replaceState({}, "", window.location.pathname);
+  }
+  // ... rest of hydration (localStorage reads, setIsHydrated)
+}, []);
+
+// Separate effect that fires once after hydration
+useEffect(() => {
+  if (isHydrated && urlParamRef.current) {
+    void fetchDashboardData(urlParamRef.current, true);
+  }
+}, [isHydrated]);
+```
+
 ### Refs for Async Callbacks
 ```typescript
 const mosRef = useRef(mosPercent);
@@ -113,7 +130,7 @@ useEffect(() => { mosRef.current = mosPercent; }, [mosPercent]);
 // Use mosRef.current in fetch callbacks to avoid stale closures
 ```
 
-Pattern also used for `ddmScenariosRef` and `evEbitdaScenariosRef` — any state that is read inside `fetchValuation` (called from a timeout/debounce or another async context) should use a ref to avoid stale closures.
+Pattern also used for `ddmScenariosRef` and `evEbitdaScenariosRef` — any state read inside async callbacks should use a ref.
 
 ### Streaming AI Response
 ```typescript
@@ -132,11 +149,18 @@ while (!done) {
 `router.push(dynamicString)` fails type check. Use `window.location.href` for dynamic redirects after auth.
 
 ### Markdown Rendering
-Use `react-markdown` with `remark-gfm` plugin for GFM table support. Without it, pipe-syntax tables render as raw text.
+Use `react-markdown` with `remark-gfm` plugin — required in **every** page/component that renders markdown (list, detail page, stream panel). Without it, GFM tables, bold, and headings don't render.
 ```typescript
 import remarkGfm from "remark-gfm";
 <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
 ```
+Also strip the Deep Value JSON block before rendering saved reports:
+```typescript
+reportMd.replace(/^```json\n[\s\S]*?\n```\n?/, "")
+```
+
+### Modals / Overlays
+Use `ReactDOM.createPortal(modal, document.body)` for any modal. The `.card` class has `overflow: hidden` which clips absolutely-positioned children. Portal to `document.body` is the only reliable fix.
 
 ---
 
@@ -157,8 +181,11 @@ import remarkGfm from "remark-gfm";
 - `PrismaClient` constructor **requires a driver adapter** — no built-in SQLite
 - Use `PrismaLibSql({ url, authToken })` from `@prisma/adapter-libsql` (Turso)
 - Import client from `../generated/prisma/client` (not `../generated/prisma`)
-- **Migration workflow**: develop locally with `npx prisma migrate dev` (uses `DATABASE_URL=file:./dev.db`), then apply to Turso with `turso db shell <db-name> < prisma/migrations/<name>/migration.sql`
-- `prisma.config.ts` uses `DATABASE_URL` (local SQLite) — the app runtime uses `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`
+- **Migration workflow**: `npx prisma migrate dev` applies to local `dev.db` only. The app runtime always uses Turso (`TURSO_DATABASE_URL`). Apply to Turso manually:
+  ```bash
+  turso db shell stock-analysis < prisma/migrations/<name>/migration.sql
+  ```
+- **Critical**: if you add a column and forget to apply to Turso, the app will crash at runtime with `no such column` even though local dev.db is fine.
 
 ---
 
@@ -169,84 +196,68 @@ import remarkGfm from "remark-gfm";
 `incomeStatementHistory` and `cashflowStatementHistory` return empty. Use `fundamentalsTimeSeries` instead.
 
 ```typescript
-// Always pass validateResult: false to handle TYPE: 'UNKNOWN' records from non-US tickers
 yahooFinance.fundamentalsTimeSeries(ticker, { period1, period2, type: "annual", module: "all" }, { validateResult: false });
 // Fields: totalRevenue, EBIT (uppercase!), netIncome, freeCashFlow, date (Date object)
-
-// quoteSummary still works for ratios and analyst data
 yahooFinance.quoteSummary(ticker, { modules: ["summaryDetail", "defaultKeyStatistics", "financialData", "earningsTrend", "assetProfile"] });
 ```
 
 ### Key Gotchas
 - **Mixed schema**: Yahoo returns `number | { raw: number }` — always use `extractRawNumber()`
-- **TYPE: UNKNOWN records**: Some tickers (e.g. Italian small-caps) return EPS/shares entries that fail schema validation — use `{ validateResult: false }` + filter by `totalRevenue != null`
+- **TYPE: UNKNOWN records**: Use `{ validateResult: false }` + filter by `totalRevenue != null`
 - **EBIT field name**: Uppercase `EBIT` in fundamentalsTimeSeries, fallback to `operatingIncome`
-- **^TNX yield encoding**: `regularMarketPrice` is in percentage points (4.12 = 4.12%) — divide by 100
-- **TTM margin vs historical**: `financialData.operatingMargins` is the trailing 12-month margin — very volatile for commodity/cyclical companies. Always prefer multi-year historical average for scenario defaults.
-- **fundamentalsTimeSeries history**: Yahoo only has 4-5 years of data for many non-US tickers despite requesting 10 years — this is a Yahoo limitation, not a bug.
-- **`assetProfile` null for non-US tickers**: `quoteSummary` with `assetProfile` module returns null for some small-cap non-US tickers. Always guard with `assetProfile?.sector ?? null`. The sector badge simply won't appear — no crash.
-- **`yahooFinance.quote()` returns undefined**: For unknown/delisted tickers, `quote()` returns `undefined` instead of throwing. Always null-check before accessing any property: `if (!quote) throw new Error("Ticker not found or unavailable")`.
-- **EBITDA derivation without extra module**: Derive EBITDA from `defaultKeyStatistics` (already fetched): `ebitda = enterpriseValue / enterpriseToEbitda` — avoids adding `financialData` to `getFundamentals`.
-- **`summaryDetail.dividendRate`**: D₀ for DDM. Can be null/zero for non-dividend payers — guard explicitly and return 422 if DDM is required but dividend is absent.
+- **^TNX yield encoding**: `regularMarketPrice` is in percentage points — divide by 100
+- **TTM margin vs historical**: prefer 5yr average over TTM for cyclical companies
+- **`assetProfile` null for non-US tickers**: always guard with `assetProfile?.sector ?? null`
+- **`yahooFinance.quote()` returns undefined**: always null-check — `if (!quote) throw new Error(...)`
+- **Quote prices are in the stock's native currency**: ENI.MI price is in EUR, AAPL in USD. Don't assume USD.
 
 ---
 
 ## Multi-Method Valuation
 
-The valuation route auto-selects the engine based on Yahoo's detected sector:
-
 ```typescript
 // lib/valuation/sector.ts
-detectSector(yahooSector: string | null): Sector  // maps Yahoo strings → canonical Sector
+detectSector(yahooSector: string | null): Sector
 getRecommendedMethod(sector: Sector): ValuationMethodInfo  // returns { label, isDcfAppropriate }
 ```
 
-**Method routing:**
-- `Energy` → EV/EBITDA
-- `Materials` → EV/EBITDA
-- `Utilities` → DDM
-- `Financial` → P/B (disclaimer only, DCF used as fallback)
-- `Real Estate` → FFO/NAV (disclaimer only, DCF used as fallback)
-- All others → DCF
+**Method routing:** Energy/Materials → EV/EBITDA · Utilities → DDM · Financial/Real Estate → DCF + disclaimer · Others → DCF
 
-**Client pattern**: Always send all three scenario sets (`scenarios`, `ddmScenarios`, `evEbitdaScenarios`) in the POST body. Server selects the right one. This avoids client needing to know which method the server will use.
-
-**Smart defaults timing**: Compute DDM and EV/EBITDA smart scenarios inside `fetchSmartScenarios` (sequential, before parallel batch) so the first render uses company-specific inputs — not generic fallbacks.
-
-**Scenario panel switching**: Render `<EvEbitdaScenarioPanel>` / `<DdmScenarioPanel>` / `<ScenarioPanel>` based on `valuation?.valuationMethod`. The disclaimer under fair value cards should only show for `valuationMethod === "dcf"`.
+**Client pattern**: Always send all three scenario sets in the POST body. Server selects the right one.
 
 ---
 
 ## Anthropic AI Integration
 
-- Model: `claude-sonnet-4-6`, `max_tokens: 16000` (4096 was too low for full reports)
+- Model: `claude-sonnet-4-6`, `max_tokens: 16000`
 - Web search: `tools: [{ type: "web_search_20250305" as const, name: "web_search" }]`
 - Stream via `client.messages.stream()` — listen for `content_block_delta` + `text_delta` events
-- Prompt builders in `lib/ai/prompts.ts` — always inject language in both system + user prompt (Claude can "forget" mid-generation with web search)
-- Always add "Do not write any preamble before the report" to system prompt — prevents transitional text visible in stream
+- Always inject language in both system + user prompt
 
 ### Deep Value pattern (autonomous valuation)
 
-`/api/ai/deep-value` has Claude find all financial data via web search and pick the method autonomously. Key points:
-
-- Route only calls `getQuote()` for the current price — no Yahoo fundamentals fetch
-- System prompt instructs Claude to output a **JSON block first**, then the Markdown report
-- JSON block format: ` ```json { "method", "sector", "currency", "bull/base/bear": { "fairValue", "upside" } } ``` `
-- **Parse on the client, not the server** — incremental streaming makes server-side JSON extraction fragile. Client accumulates the full text, then extracts with regex after `done`:
+- JSON block first, then Markdown — parse on client after streaming completes
+- **Parse on the client, not the server** — incremental streaming makes server-side extraction fragile:
   ```typescript
   const match = text.match(/```json\n([\s\S]*?)\n```/);
   const result = match ? JSON.parse(match[1]) : null;
   const markdown = text.replace(/```json\n[\s\S]*?\n```\n?/, "");
   ```
-- System prompt must say "the JSON block MUST be the very first thing you output" — Claude will otherwise sometimes write a sentence before it
-- **"No preamble" prompt instruction is insufficient** — Claude still emits reasoning text between web search tool calls even when instructed not to. The only reliable fix is server-side buffering: accumulate `preJsonBuffer` until ` ```json ` appears, then start forwarding. Discard everything before it.
-- **Always inject `currentDate` from the server** into prompts that reference "most recent" financial data. Claude's training cutoff is Aug 2025; without a date signal it assumes the wrong year, misdates reports, and treats FY2024 results as current. Compute via:
-  ```typescript
-  const currentDate = new Date().toLocaleDateString("en-US", {
-    year: "numeric", month: "long", day: "numeric",
-  });
-  ```
-  Pass to both `buildDeepValueSystemPrompt(language, currentDate)` and `buildDeepValueUserPrompt(ticker, price, currency, language, currentDate)`. Use English locale regardless of report language — Claude reasons better on English dates.
+- Server buffers pre-JSON text — discards reasoning emitted between tool calls before the JSON block appears
+- Always inject `currentDate` from server — Claude anchors to training year (Aug 2025) without it
+- **DeepValuePanel must receive `mosPercent` as prop** — it was previously hardcoded to 0. Also save `fairValueBull/Base/Bear` from the parsed `result` object at save time.
+
+---
+
+## Portfolio Tracker
+
+- `Position` model: `id, userId, ticker, companyName, purchasePrice, shares, currency, purchasedAt, notes`
+- Client helpers in `lib/portfolio.ts` — same pattern as `lib/analyses.ts`
+- Live prices fetched client-side via `/api/quote/[ticker]` in parallel for all unique tickers
+- FX conversion via `frankfurter.app` (free, no API key): `GET https://api.frankfurter.app/latest?base=EUR&symbols=USD,GBP,...`
+  - Response: `{ rates: { USD: 1.08, GBP: 0.85 } }` — 1 EUR = X units of currency
+  - To convert amount in USD to EUR: `usdAmount / rates.USD`
+- Summary bar only renders when at least one live price + FX rate is resolved — fails silently otherwise
 
 ---
 
@@ -255,11 +266,8 @@ getRecommendedMethod(sector: Sector): ValuationMethodInfo  // returns { label, i
 - **10-year projection** with Gordon Growth terminal value
 - **NOPAT-based FCF**: `fcf = ebit * (1 - taxRate) * (1 - reinvestmentRate)`
 - **Critical constraint**: `wacc > terminalGrowth` (enforced by `validateScenarioInput()`)
-- **Validation bounds**: growth [-50%, +60%], margin [0%, 80%], WACC [3%, 30%], terminal [-2%, 6%]
-- **Scenario display**: Values shown as percentages in UI, stored as decimals internally
-- **WACC via CAPM**: `computeWacc(beta, riskFreeRate, erp=0.055)` in `scenario-presets.ts` — `Ke = Rf + β × ERP`. Beta from `defaultKeyStatistics`, Rf from `^TNX`, ERP hardcoded 5.5% (Damodaran). Falls back to β=1.0 if null. Clamped [6%, 18%].
-- **Operating margin**: `getCompanyScenarios` uses 5yr historical average as primary signal (not TTM). TTM from `financialData.operatingMargins` is volatile for cyclical companies (oil, materials) — single bad year distorts results.
-- **`getCompanyScenarios` signature**: accepts optional `riskFreeRate?: number` — pass from `getRiskFreeRate()` in the route handler. Defaults to 4.5% if absent.
+- **WACC via CAPM**: `computeWacc(beta, riskFreeRate, erp=0.055)` — clamped [6%, 18%]
+- **Operating margin**: 5yr historical average (not TTM) for cyclical companies
 
 ---
 
@@ -275,11 +283,11 @@ getRecommendedMethod(sector: Sector): ValuationMethodInfo  // returns { label, i
 
 1. **Next.js 15 async params**: Always `await context.params`
 2. **Yahoo rate limits**: 429 errors — retry logic helps but doesn't eliminate
-3. **Missing shares outstanding**: Some non-US tickers — returns 422 with clear message
-4. **Hydration mismatch**: Never access localStorage during render — use hydration guard
-5. **WACC vs terminal growth**: DCF blows up if `wacc <= terminalGrowth`
-6. **Capital-light companies**: FCF can exceed NOPAT → reinvestment rate near 0% (clamped to 5%)
-7. **CSS variable naming**: The project only defines `--bg`, `--card`, `--accent`, `--muted`, `--success`, `--warning`, `--danger`. There is no `--surface` — use `bg-[var(--card)]` for solid backgrounds (e.g. modals). The `.card` class has implicit `overflow: hidden` from its shadow — use `ReactDOM.createPortal(…, document.body)` for any overlay/popover/modal that must render outside a card.
+3. **Hydration mismatch**: Never access localStorage during render — use hydration guard
+4. **WACC vs terminal growth**: DCF blows up if `wacc <= terminalGrowth`
+5. **CSS variable naming**: Only `--bg`, `--card`, `--accent`, `--muted`, `--success`, `--warning`, `--danger` exist. No `--surface`. Use `bg-[var(--card)]` for modals.
+6. **`remarkGfm` missing**: Easy to forget in server-rendered pages. All pages rendering saved markdown need it explicitly — it's not inherited from the streaming panels.
+7. **Turso migration gap**: Local `prisma migrate dev` applies to `dev.db` only. App always hits Turso. Adding a column without applying the migration to Turso causes `no such column` in production/dev-with-Turso.
 
 ---
 
@@ -290,22 +298,20 @@ getRecommendedMethod(sector: Sector): ValuationMethodInfo  // returns { label, i
 import { QuoteResponse } from "@/types/market";
 import { FundamentalsResponse } from "@/types/fundamentals";
 import { ScenarioInput, AnalystEstimates, ValuationResponse, DdmScenariosInput, EvEbitdaScenariosInput } from "@/types/valuation";
-import { SavedAnalysis } from "@/types/analysis";
+import { SavedAnalysis, SaveAnalysisRequest } from "@/types/analysis";
+import { Position, CreatePositionRequest } from "@/types/portfolio";
 ```
 
 ### Lib Imports
 ```typescript
 import { runDcf, validateScenarioInput } from "@/lib/valuation/dcf";
-import { runDdm } from "@/lib/valuation/ddm";
-import { runEvEbitda } from "@/lib/valuation/ev-ebitda";
-import { detectSector, getRecommendedMethod, getSectorColor } from "@/lib/valuation/sector";
-import { getDefaultScenarios, getCompanyScenarios, getDefaultDdmScenarios, getCompanyDdmScenarios, getDefaultEvEbitdaScenarios, getCompanyEvEbitdaScenarios } from "@/lib/valuation/scenario-presets";
-import { computeValuationMetrics } from "@/lib/valuation/valuation-metrics";
+import { detectSector, getRecommendedMethod } from "@/lib/valuation/sector";
+import { getDefaultScenarios, getCompanyScenarios } from "@/lib/valuation/scenario-presets";
 import { getQuote, getFundamentals, getAnalystEstimates } from "@/lib/yahoo-client";
 import { formatCurrency, formatPercent, formatCompactNumber } from "@/lib/format";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { buildDeepValueSystemPrompt, buildDeepValueUserPrompt } from "@/lib/ai/deep-value-prompts";
+import { fetchPositions, createPosition, deletePosition } from "@/lib/portfolio";
 ```
 
 ---

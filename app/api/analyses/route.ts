@@ -10,6 +10,12 @@ const saveSchema = z.object({
   companyName: z.string().min(1),
   reportMd: z.string().min(1),
   mosPercent: z.number().min(0).max(80),
+  // Optional price snapshot for tracking performance over time
+  priceAtAnalysis: z.number().positive().optional(),
+  fairValueBull: z.number().positive().optional(),
+  fairValueBase: z.number().positive().optional(),
+  fairValueBear: z.number().positive().optional(),
+  valuationMethod: z.string().optional(),
 });
 
 export async function GET() {
@@ -19,7 +25,19 @@ export async function GET() {
   const analyses = await db.analysis.findMany({
     where: { userId: session.user.id },
     orderBy: { createdAt: "desc" },
-    select: { id: true, ticker: true, companyName: true, mosPercent: true, createdAt: true, reportMd: true },
+    select: {
+      id: true,
+      ticker: true,
+      companyName: true,
+      mosPercent: true,
+      createdAt: true,
+      reportMd: true,
+      priceAtAnalysis: true,
+      fairValueBull: true,
+      fairValueBase: true,
+      fairValueBear: true,
+      valuationMethod: true,
+    },
   });
 
   return NextResponse.json(analyses);
@@ -46,6 +64,11 @@ export async function POST(request: Request) {
       companyName: body.companyName,
       reportMd: body.reportMd,
       mosPercent: body.mosPercent,
+      priceAtAnalysis: body.priceAtAnalysis,
+      fairValueBull: body.fairValueBull,
+      fairValueBase: body.fairValueBase,
+      fairValueBear: body.fairValueBear,
+      valuationMethod: body.valuationMethod,
     },
   });
 

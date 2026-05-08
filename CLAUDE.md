@@ -6,9 +6,9 @@ Current project state and context for AI assistants.
 
 ## Version & Status
 
-**Version**: `0.5.0`
+**Version**: `0.6.0`
 **Status**: Active Development
-**Last Updated**: May 7, 2026 (Deep Value stream fix + date injection)
+**Last Updated**: May 8, 2026 (Portfolio Tracker + Analysis Performance Tracking)
 
 ---
 
@@ -28,12 +28,12 @@ Current project state and context for AI assistants.
 
 **Pattern**: Next.js App Router with client-side interactivity and server-side API routes.
 
-- **Frontend**: Single-page dashboard + auth pages + saved analyses pages
-- **API Layer**: `/api/quote`, `/api/fundamentals`, `/api/valuation`, `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses`, `/api/ai/analyze`, `/api/ai/deep-value`
+- **Frontend**: Single-page dashboard + auth pages + saved analyses pages + portfolio page
+- **API Layer**: `/api/quote`, `/api/fundamentals`, `/api/valuation`, `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses`, `/api/analyses/[id]`, `/api/positions`, `/api/positions/[id]`, `/api/ai/analyze`, `/api/ai/deep-value`
 - **Business Logic**: Pure TypeScript in `lib/` (DCF/DDM/EV-EBITDA engines, sector routing, scenario presets, Yahoo adapter, AI prompts, formatters)
-- **Database**: SQLite via Prisma 7 — `User` + `Analysis` models
+- **Database**: SQLite via Prisma 7 — `User` + `Analysis` + `Position` models
 - **Auth**: Auth.js v5 credentials provider, JWT sessions
-- **Types**: Centralized in `types/` (fundamentals, market, valuation, analysis, auth, ai)
+- **Types**: Centralized in `types/` (fundamentals, market, valuation, analysis, auth, ai, portfolio)
 
 ---
 
@@ -81,6 +81,19 @@ Current project state and context for AI assistants.
 - `DISABLE_REGISTRATION=true` env var blocks new signups server-side
 - Save AI reports to personal account, view/delete at `/analyses`
 - JWT sessions (no DB session table)
+- **Analysis snapshot**: each saved report stores `priceAtAnalysis`, `fairValueBull`, `fairValueBase`, `fairValueBear`, `valuationMethod` — all nullable for backward compat
+- **Performance badge** in analyses list: shows `$priceAtSave → $priceNow +/-X%` and "Under FV" / "Above FV" indicator for analyses with snapshots
+- **Re-run button** in analyses list and detail page — redirects to dashboard with `?ticker=` URL param, triggers auto-fetch
+
+### Portfolio Tracker
+- New section at `/portfolio` — track real stock purchases with live P&L
+- `Position` model: `ticker`, `companyName`, `purchasePrice`, `shares`, `currency`, `purchasedAt`, `notes`
+- Per-position P&L: cost basis, current value, gain/loss in currency and %
+- Multi-currency support — currency stored per position (EUR/USD/GBP/CHF/JPY/CAD/AUD/SEK/NOK/DKK)
+- Aggregate summary bar with total cost, total value, total P&L — all converted to EUR via Frankfurter API (`api.frankfurter.app/latest?base=EUR`)
+- Summary bar only renders when at least one live price and FX rate are resolved
+- Add position modal (ReactDOM.createPortal), delete with confirmation
+- Live prices via `/api/quote/[ticker]` — parallel fetch for all unique tickers at mount
 
 ### Valuation Metrics Cards
 - 4 quick-glance cards above historical charts: **Anni di Utili** (P/E), **Anni di FCF** (P/FCF), **FCF Yield**, **Earnings Yield**
@@ -94,7 +107,7 @@ Current project state and context for AI assistants.
 - Historical charts with compact number formatting (Revenue, FCF, Net Income, Margins)
 - LocalStorage persistence for ticker, scenarios, margin of safety
 - US 10Y Treasury yield badge next to WACC field
-- Auth-aware NavBar on all pages
+- Auth-aware NavBar on all pages (Dashboard / Saved Analyses / Portfolio / user info)
 
 ---
 
@@ -112,7 +125,7 @@ Current project state and context for AI assistants.
 ## Project Structure
 
 ```
-types/                 # fundamentals.ts, market.ts, valuation.ts, analysis.ts, auth.ts, ai.ts
+types/                 # fundamentals.ts, market.ts, valuation.ts, analysis.ts, auth.ts, ai.ts, portfolio.ts
 lib/
   valuation/dcf.ts         # DCF engine
   valuation/ddm.ts         # DDM engine (Utilities)
@@ -126,23 +139,26 @@ lib/
   auth.ts              # Auth.js v5 config
   db.ts                # Prisma singleton
   analyses.ts          # Client-side fetch helpers
+  portfolio.ts         # Client-side fetch helpers for positions
   format.ts            # Formatting utilities
 app/api/
   quote/[ticker]/      fundamentals/[ticker]/      valuation/[ticker]/
   analyst-estimates/[ticker]/      macro/risk-free-rate/
   auth/[...nextauth]/  auth/register/
   analyses/            analyses/[id]/
+  positions/           positions/[id]/
   ai/analyze/          # Streaming AI analysis
   ai/deep-value/       # Autonomous deep value AI analysis
-app/login/ app/register/ app/analyses/ app/analyses/[id]/
+app/login/ app/register/ app/analyses/ app/analyses/[id]/ app/portfolio/
 components/            # dashboard-client, scenario-panel, ddm-scenario-panel,
                        # ev-ebitda-scenario-panel, sector-badge, fair-value-card,
                        # ticker-search, fundamentals-charts, price-summary,
                        # disclaimer-banner, ai-analysis-panel, deep-value-panel,
-                       # analyses-list, nav-bar, login-form, register-form,
-                       # session-provider, valuation-metrics-cards
+                       # analyses-list, portfolio-list, nav-bar, login-form,
+                       # register-form, session-provider, valuation-metrics-cards
 prisma/                # schema.prisma + migrations
 generated/prisma/      # Prisma 7 generated client (gitignored)
+docs/                  # Feature specs (1-position-average-cost, 2-position-analysis-link, 3-portfolio-pnl-history)
 __tests__/             # 17 tests across 4 files
 ```
 
@@ -180,10 +196,12 @@ See `.env.example` for full template.
 
 ## Next Priorities
 
-1. Manual shares outstanding override UI
-2. Caching layer for Yahoo API calls
-3. Sensitivity analysis table (WACC vs growth matrix)
-4. P/B for Financial sector (currently shows DCF + disclaimer)
+1. Position average cost (WAC/DCA) — see `docs/1-position-average-cost.md`
+2. Portfolio ↔ analyses link — see `docs/2-position-analysis-link.md`
+3. Portfolio P&L history with snapshots — see `docs/3-portfolio-pnl-history.md`
+4. Caching layer for Yahoo API calls
+5. Sensitivity analysis table (WACC vs growth matrix)
+6. P/B for Financial sector (currently shows DCF + disclaimer)
 
 ---
 

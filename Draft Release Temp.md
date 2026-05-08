@@ -25,7 +25,19 @@
 - Added "Smart defaults" and "Generic defaults" reset buttons for quick scenario switching
 - Added live US 10-Year Treasury yield badge next to the WACC field — provides a real-time reference for the risk-free rate
 
+- Added **Portfolio Tracker** — new `/portfolio` section to track real stock purchases with live P&L. Add positions (ticker, shares, purchase price, currency, date) and see per-position gain/loss in real time. Supports EUR, USD, GBP, CHF, JPY, CAD, AUD, SEK, NOK, DKK with automatic FX conversion to EUR for the aggregate summary bar (powered by [Frankfurter API](https://api.frankfurter.app)).
+
+- Added **analysis performance tracking** — analyses list now shows `$priceAtSave → $priceNow +/-X%` and an "Under FV" / "Above FV" badge for each saved report. Prices are fetched once at page load for all unique tickers; the badge is silently absent for older analyses without a snapshot.
+
+- Added **Re-run Analysis** button in the analyses list and detail page — one click redirects to the dashboard with the ticker pre-filled and the data fetch triggered automatically.
+
 ## 🐛 Bug Fixes
+
+- Fixed Deep Value Analysis saving with MoS 0% — the panel was hardcoding `mosPercent: 0` instead of reading the dashboard's actual margin of safety setting
+- Fixed Deep Value Analysis not saving bull/base/bear fair values — the save call now reads them from the parsed JSON result block
+- Fixed saved analysis detail page not rendering markdown — added missing `remark-gfm` plugin; tables, bold, and headings now render correctly
+- Fixed analyses list preview showing raw JSON block for Deep Value reports — the JSON block is now stripped before the preview text slice
+- Fixed Re-run button not pre-filling the ticker — the dashboard now reads `?ticker=` from the URL on mount and auto-triggers the data fetch
 
 - Fixed Deep Value Analysis showing intermediate "thinking" text (reasoning steps between web searches) before the actual report — the analysis now appears cleanly, starting directly with the valuation results
 - Fixed Deep Value Analysis reports referencing the wrong year — reports now correctly anchor to the current date, ensuring the analysis reflects the most recently published financial data rather than assuming it's still 2025
