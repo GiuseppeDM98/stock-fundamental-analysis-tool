@@ -87,7 +87,9 @@ if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 
 
 ## Component Patterns
 
-### Hydration Guard for LocalStorage
+### Hydration Guard (LocalStorage + Intl formatting)
+
+**localStorage**: prevents SSR access before client mount.
 ```typescript
 const [isHydrated, setIsHydrated] = useState(false);
 useEffect(() => {
@@ -99,6 +101,15 @@ useEffect(() => {
   window.localStorage.setItem("key", value);
 }, [value, isHydrated]);
 ```
+
+**Intl.NumberFormat / toLocaleString**: `Intl.NumberFormat(undefined)` uses the Node.js locale on the server and the browser locale on the client — produces different output (e.g. `€4.421` vs `4,421 €`), causing hydration mismatch. Client components that receive numeric props from a server component and format them for display must use a `mounted` guard:
+```typescript
+const [mounted, setMounted] = useState(false);
+useEffect(() => setMounted(true), []);
+if (!mounted) return null;
+// now safe to call Intl.NumberFormat(undefined, ...)
+```
+This applies to any `"use client"` component that formats currency/numbers from server-passed props.
 
 ### URL Param on Mount (Re-run pattern)
 When a page needs to read a `?param=` URL param on mount and auto-trigger a fetch, do it inside the hydration `useEffect` — not in a separate effect — to avoid a double render. Clean the URL with `replaceState` so back-navigation doesn't re-trigger.
@@ -322,7 +333,7 @@ Use Tailwind built-in equivalents instead:
 
 1. **Next.js 15 async params**: Always `await context.params`
 2. **Yahoo rate limits**: 429 errors — retry logic helps but doesn't eliminate
-3. **Hydration mismatch**: Never access localStorage during render — use hydration guard
+3. **Hydration mismatch**: Never access localStorage during render — use hydration guard. Same applies to `Intl.NumberFormat(undefined)` in client components receiving server props — outputs differ between Node.js and browser locale.
 4. **WACC vs terminal growth**: DCF blows up if `wacc <= terminalGrowth`
 5. **CSS variable naming**: Only `--bg`, `--card`, `--accent`, `--muted`, `--success`, `--warning`, `--danger` exist. No `--surface`. Use `bg-[var(--card)]` for modals.
 6. **`remarkGfm` missing**: Easy to forget in server-rendered pages. All pages rendering saved markdown need it explicitly — it's not inherited from the streaming panels.

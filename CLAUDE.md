@@ -6,9 +6,9 @@ Current project state and context for AI assistants.
 
 ## Version & Status
 
-**Version**: `0.7.0`
+**Version**: `0.7.1`
 **Status**: Active Development
-**Last Updated**: May 10, 2026 (Portfolio WAC/DCA Aggregation)
+**Last Updated**: May 10, 2026 (Portfolio ↔ Analyses Link)
 
 ---
 
@@ -84,6 +84,8 @@ Current project state and context for AI assistants.
 - **Analysis snapshot**: each saved report stores `priceAtAnalysis`, `fairValueBull`, `fairValueBase`, `fairValueBear`, `valuationMethod` — all nullable for backward compat
 - **Performance badge** in analyses list: shows `$priceAtSave → $priceNow +/-X%` and "Under FV" / "Above FV" indicator for analyses with snapshots
 - **Re-run button** in analyses list and detail page — redirects to dashboard with `?ticker=` URL param, triggers auto-fetch
+- **Open position badge** in analyses list: if the user holds the ticker, shows WAC, total shares, and live P&L inline under each analysis card
+- **Open position banner** in analyses detail page: server-side `db.position.findMany` fetches positions for the ticker; `OpenPositionBanner` client component fetches live price on mount and shows P&L
 
 ### Portfolio Tracker
 - Section at `/portfolio` — track real stock purchases with live P&L
@@ -98,6 +100,7 @@ Current project state and context for AI assistants.
 - Add position modal (ReactDOM.createPortal), delete with confirmation
 - Live prices via `/api/quote/[ticker]` — parallel fetch for all unique tickers at mount
 - Types: `Position`, `CreatePositionRequest`, `AggregatedPosition` in `types/portfolio.ts`
+- **Portfolio ↔ Analyses link**: each position row shows "N analisi salvate ▼" (collapsible) if saved analyses exist for that ticker — date, MoS%, FV base, link to detail page. Implemented via `Promise.all([fetchPositions(), fetchAnalyses()])` on mount, no extra API calls.
 
 ### Valuation Metrics Cards
 - 4 quick-glance cards above historical charts: **Anni di Utili** (P/E), **Anni di FCF** (P/FCF), **FCF Yield**, **Earnings Yield**
@@ -161,8 +164,9 @@ components/            # dashboard-client, scenario-panel, ddm-scenario-panel,
                        # ev-ebitda-scenario-panel, sector-badge, fair-value-card,
                        # ticker-search, fundamentals-charts, price-summary,
                        # disclaimer-banner, ai-analysis-panel, deep-value-panel,
-                       # analyses-list, portfolio-list, nav-bar, login-form,
-                       # register-form, session-provider, valuation-metrics-cards
+                       # analyses-list, portfolio-list, open-position-banner,
+                       # nav-bar, login-form, register-form, session-provider,
+                       # valuation-metrics-cards
 prisma/                # schema.prisma + migrations
 generated/prisma/      # Prisma 7 generated client (gitignored)
 docs/                  # Feature specs (2-position-analysis-link, 3-portfolio-pnl-history)
@@ -203,11 +207,10 @@ See `.env.example` for full template.
 
 ## Next Priorities
 
-1. Portfolio ↔ analyses link — see `docs/2-position-analysis-link.md`
-2. Portfolio P&L history with snapshots — see `docs/3-portfolio-pnl-history.md`
-3. Caching layer for Yahoo API calls
-4. Sensitivity analysis table (WACC vs growth matrix)
-5. P/B for Financial sector (currently shows DCF + disclaimer)
+1. Portfolio P&L history with snapshots — see `docs/3-portfolio-pnl-history.md`
+2. Caching layer for Yahoo API calls
+3. Sensitivity analysis table (WACC vs growth matrix)
+4. P/B for Financial sector (currently shows DCF + disclaimer)
 
 ---
 

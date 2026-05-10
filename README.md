@@ -25,7 +25,7 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **AI investment analysis** — Claude Sonnet 4.6 generates full research reports with web search
 - **Deep Value Analysis** — Claude autonomously picks the valuation method and sources all financial data via web search; works for any global ticker
 - **User accounts** with saved reports — revisit your analyses anytime
-- **Portfolio tracker** — track real purchases with live P&L, multi-currency FX conversion, and DCA aggregation (Weighted Average Cost per ticker)
+- **Portfolio tracker** — track real purchases with live P&L, multi-currency FX conversion, DCA aggregation (Weighted Average Cost per ticker), and cross-links to saved analyses per ticker
 - **Analysis performance tracking** — see how the stock price moved since you saved each analysis vs. fair value
 
 ### What Problem Does It Solve?
@@ -58,7 +58,7 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - 🔍 **Deep Value Analysis**: Fully autonomous AI valuation — Claude picks the method and finds all data via web search, works for any global ticker
 - 👤 **User Accounts**: Save and revisit AI-generated reports with email/password auth
 - 🧮 **Valuation Metrics**: P/E, P/FCF, FCF Yield, Earnings Yield cards with YoY trend and educational tooltips
-- 💼 **Portfolio Tracker**: Track real purchases with live P&L per position + DCA aggregation (Weighted Average Cost per ticker) + multi-currency aggregate summary (EUR conversion via Frankfurter)
+- 💼 **Portfolio Tracker**: Track real purchases with live P&L per position + DCA aggregation (Weighted Average Cost per ticker) + multi-currency aggregate summary (EUR conversion via Frankfurter) + cross-links to saved analyses per ticker
 - 📈 **Analysis Performance**: See how price moved since saving vs. fair value — "Under FV" / "Above FV" badge per report
 - 🧪 **Fully Tested**: Vitest + Testing Library coverage for calculations and UI
 

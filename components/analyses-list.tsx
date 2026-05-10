@@ -5,7 +5,9 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { fetchAnalyses, deleteAnalysis } from "@/lib/analyses";
+import { fetchPositions } from "@/lib/portfolio";
 import type { SavedAnalysis } from "@/types/analysis";
+import type { Position } from "@/types/portfolio";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, {
@@ -69,6 +71,53 @@ function PerformanceBadge({
   );
 }
 
+/** Inline badge showing an open portfolio position for this analysis's ticker. */
+function OpenPositionBadge({
+  positions,
+  currentPrice,
+}: {
+  positions: Position[];
+  currentPrice?: number;
+}) {
+  if (positions.length === 0) return null;
+
+  const totalShares = positions.reduce((s, p) => s + p.shares, 0);
+  const totalCost = positions.reduce((s, p) => s + p.purchasePrice * p.shares, 0);
+  const wac = totalCost / totalShares;
+  const currency = positions[0].currency;
+
+  const formatPrice = (v: number) =>
+    new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 4,
+    }).format(v);
+
+  const pnl = currentPrice != null ? (currentPrice - wac) * totalShares : null;
+  const returnPct = pnl != null ? (currentPrice! / wac - 1) * 100 : null;
+  const isPositive = pnl != null && pnl >= 0;
+
+  return (
+    <div className="mt-1 flex items-center gap-2 flex-wrap">
+      <span className="text-xs text-slate-500">
+        Posizione: {totalShares} shares @ {formatPrice(wac)}
+      </span>
+      {pnl != null && (
+        <span
+          className={`rounded px-1.5 py-0.5 text-xs font-semibold ${
+            isPositive ? "bg-emerald-500/15 text-success" : "bg-red-500/15 text-danger"
+          }`}
+        >
+          {isPositive ? "+" : ""}
+          {pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
+          ({isPositive ? "+" : ""}{returnPct!.toFixed(1)}%)
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function AnalysesList() {
   const router = useRouter();
   const [analyses, setAnalyses] = useState<SavedAnalysis[]>([]);
@@ -77,18 +126,27 @@ export default function AnalysesList() {
   const [deleting, setDeleting] = useState<string | null>(null);
   // Map of ticker → current price, fetched once on mount
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({});
+  const [positionsByTicker, setPositionsByTicker] = useState<Record<string, Position[]>>({});
 
   useEffect(() => {
-    fetchAnalyses()
-      .then((data) => {
+    // Fetch analyses and positions in parallel — used to cross-link the two views.
+    Promise.all([fetchAnalyses(), fetchPositions()])
+      .then(([data, posData]) => {
         setAnalyses(data);
-        // Fetch current prices only for analyses that have a price snapshot
+
+        const posMap: Record<string, Position[]> = {};
+        for (const p of posData) {
+          posMap[p.ticker] = [...(posMap[p.ticker] ?? []), p];
+        }
+        setPositionsByTicker(posMap);
+
+        // Fetch live prices for tickers with a snapshot (performance badge)
+        // OR with an open position (P&L in position badge).
         const tickers = [
-          ...new Set(
-            data
-              .filter((a) => a.priceAtAnalysis != null)
-              .map((a) => a.ticker)
-          ),
+          ...new Set([
+            ...data.filter((a) => a.priceAtAnalysis != null).map((a) => a.ticker),
+            ...posData.map((p) => p.ticker),
+          ]),
         ];
         if (tickers.length > 0) {
           fetchCurrentPrices(tickers);
@@ -198,6 +256,12 @@ export default function AnalysesList() {
                   fairValueBase={analysis.fairValueBase}
                 />
               )}
+
+              {/* Open position badge — shown when the user holds this ticker */}
+              <OpenPositionBadge
+                positions={positionsByTicker[analysis.ticker] ?? []}
+                currentPrice={currentPrice}
+              />
 
               <p className="mt-1 line-clamp-2 text-xs text-slate-400">
                 {analysis.reportMd

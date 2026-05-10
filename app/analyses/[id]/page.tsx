@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import OpenPositionBanner from "@/components/open-position-banner";
 
 type PageProps = { params: Promise<{ id: string }> };
 
@@ -21,6 +22,17 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
 
   // 404 for missing or foreign rows — don't leak existence.
   if (!analysis || analysis.userId !== session.user.id) notFound();
+
+  // Check for an open portfolio position on this ticker (server-side, no extra round-trip).
+  const positions = await db.position.findMany({
+    where: { ticker: analysis.ticker, userId: session.user.id },
+  });
+  const totalShares = positions.reduce((s, p) => s + p.shares, 0);
+  const wac =
+    totalShares > 0
+      ? positions.reduce((s, p) => s + p.purchasePrice * p.shares, 0) / totalShares
+      : 0;
+  const currency = positions[0]?.currency ?? "EUR";
 
   const formattedDate = new Date(analysis.createdAt).toLocaleDateString(undefined, {
     year: "numeric",
@@ -49,6 +61,16 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
           {formattedDate} · Margin of Safety: {analysis.mosPercent}%
         </p>
       </div>
+
+      {/* Open position banner — shown when the user holds this ticker in their portfolio */}
+      {positions.length > 0 && (
+        <OpenPositionBanner
+          ticker={analysis.ticker}
+          totalShares={totalShares}
+          wac={wac}
+          currency={currency}
+        />
+      )}
 
       {/* Report content — strip any leading JSON block (from Deep Value analyses) */}
       <div className="card">

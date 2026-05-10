@@ -6,7 +6,9 @@
 import { useState, useEffect } from "react";
 import ReactDOM from "react-dom";
 import { fetchPositions, createPosition, deletePosition } from "@/lib/portfolio";
+import { fetchAnalyses } from "@/lib/analyses";
 import type { Position, CreatePositionRequest, AggregatedPosition } from "@/types/portfolio";
+import type { SavedAnalysis } from "@/types/analysis";
 
 const CURRENCIES = ["EUR", "USD", "GBP", "CHF", "JPY", "CAD", "AUD", "SEK", "NOK", "DKK"];
 
@@ -68,6 +70,41 @@ function aggregateByTicker(positions: Position[]): AggregatedPosition[] {
 const inputClass =
   "w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-accent focus:outline-none focus:ring-1 focus:ring-sky-400/30";
 
+// ─── Ticker Analyses Inline ───────────────────────────────────────────────────
+
+// Collapsible list of saved analyses for a ticker, shown inside each portfolio row.
+function TickerAnalysesInline({ analyses }: { analyses: SavedAnalysis[] }) {
+  const [open, setOpen] = useState(false);
+  if (analyses.length === 0) return null;
+
+  return (
+    <div className="mt-1.5">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="text-xs text-sky-400 hover:text-sky-300 transition"
+      >
+        {analyses.length} {analyses.length === 1 ? "analisi salvata" : "analisi salvate"}{" "}
+        {open ? "▲" : "▼"}
+      </button>
+      {open && (
+        <ul className="mt-1 space-y-1 pl-2 border-l border-slate-700">
+          {analyses.map((a) => (
+            <li key={a.id} className="text-xs text-slate-400">
+              <a
+                href={`/analyses/${a.id}`}
+                className="hover:text-slate-200 transition"
+              >
+                {formatDate(a.createdAt)} · MoS {a.mosPercent}%
+                {a.fairValueBase != null && ` · FV base ${a.fairValueBase.toFixed(2)}`}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 // ─── Aggregated Position Row ──────────────────────────────────────────────────
 
 type AggregatedPositionRowProps = {
@@ -76,6 +113,7 @@ type AggregatedPositionRowProps = {
   onDelete: (id: string) => void;
   deleting: string | null;
   pricesLoading: boolean;
+  tickerAnalyses: SavedAnalysis[];
 };
 
 function AggregatedPositionRow({
@@ -84,6 +122,7 @@ function AggregatedPositionRow({
   onDelete,
   deleting,
   pricesLoading,
+  tickerAnalyses,
 }: AggregatedPositionRowProps) {
   const [expanded, setExpanded] = useState(false);
   const currentValue = currentPrice != null ? currentPrice * agg.totalShares : null;
@@ -151,6 +190,8 @@ function AggregatedPositionRow({
               </span>
             )}
           </div>
+
+          <TickerAnalysesInline analyses={tickerAnalyses} />
         </div>
 
         <div className="flex shrink-0 flex-col items-end gap-1.5">
@@ -442,13 +483,22 @@ export default function PortfolioList() {
   const [pricesLoading, setPricesLoading] = useState(false);
   // EUR-based FX rates from frankfurter.app: { USD: 1.08, GBP: 0.85, ... }
   const [fxRates, setFxRates] = useState<Record<string, number>>({});
+  const [analysesByTicker, setAnalysesByTicker] = useState<Record<string, SavedAnalysis[]>>({});
 
   useEffect(() => {
-    fetchPositions()
-      .then((data) => {
-        setPositions(data);
-        const tickers = [...new Set(data.map((p) => p.ticker))];
-        const currencies = [...new Set(data.map((p) => p.currency).filter((c) => c !== "EUR"))];
+    // Fetch positions and analyses in parallel — no sequential dependency between them.
+    Promise.all([fetchPositions(), fetchAnalyses()])
+      .then(([posData, analysesData]) => {
+        setPositions(posData);
+
+        const map: Record<string, SavedAnalysis[]> = {};
+        for (const a of analysesData) {
+          map[a.ticker] = [...(map[a.ticker] ?? []), a];
+        }
+        setAnalysesByTicker(map);
+
+        const tickers = [...new Set(posData.map((p) => p.ticker))];
+        const currencies = [...new Set(posData.map((p) => p.currency).filter((c) => c !== "EUR"))];
         if (tickers.length > 0) loadPrices(tickers);
         if (currencies.length > 0) loadFxRates(currencies);
       })
@@ -578,6 +628,7 @@ export default function PortfolioList() {
               onDelete={handleDelete}
               deleting={deleting}
               pricesLoading={pricesLoading}
+              tickerAnalyses={analysesByTicker[agg.ticker] ?? []}
             />
           ))}
         </ul>
@@ -644,6 +695,8 @@ export default function PortfolioList() {
                   {pos.notes && (
                     <p className="mt-1 text-xs text-slate-600 italic">{pos.notes}</p>
                   )}
+
+                  <TickerAnalysesInline analyses={analysesByTicker[pos.ticker] ?? []} />
                 </div>
 
                 <div className="flex shrink-0 flex-col items-end gap-1.5">

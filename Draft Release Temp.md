@@ -31,6 +31,8 @@
 
 - Added **analysis performance tracking** — analyses list now shows `$priceAtSave → $priceNow +/-X%` and an "Under FV" / "Above FV" badge for each saved report. Prices are fetched once at page load for all unique tickers; the badge is silently absent for older analyses without a snapshot.
 
+- Added **portfolio ↔ analyses cross-linking** — portfolio positions now show how many saved analyses exist for that ticker (e.g. "2 analisi salvate ▼"), expandable inline with date, MoS%, base fair value, and a direct link to the full report. Conversely, each saved analysis card now shows an open position badge if you hold that stock — displaying shares, weighted average cost, and live P&L. The analysis detail page also shows a live position banner with P&L at the top of the report.
+
 - Added **Re-run Analysis** button in the analyses list and detail page — one click redirects to the dashboard with the ticker pre-filled and the data fetch triggered automatically.
 
 ## 🐛 Bug Fixes
