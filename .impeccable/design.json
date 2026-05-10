@@ -1,0 +1,325 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-05-10T00:00:00Z",
+  "title": "Design System: Stock Fundamental Analysis Tool",
+  "extensions": {
+    "colorMeta": {
+      "signal-blue": {
+        "role": "primary",
+        "displayName": "Signal Blue",
+        "canonical": "oklch(78% 0.15 204)",
+        "tonalRamp": [
+          "oklch(15% 0.04 204)",
+          "oklch(25% 0.07 204)",
+          "oklch(35% 0.09 204)",
+          "oklch(47% 0.11 204)",
+          "oklch(58% 0.13 204)",
+          "oklch(68% 0.14 204)",
+          "oklch(78% 0.15 204)",
+          "oklch(88% 0.09 204)"
+        ]
+      },
+      "abyssal-navy": {
+        "role": "neutral",
+        "displayName": "Abyssal Navy",
+        "canonical": "oklch(11% 0.02 230)",
+        "tonalRamp": [
+          "oklch(7% 0.01 230)",
+          "oklch(11% 0.02 230)",
+          "oklch(16% 0.025 230)",
+          "oklch(22% 0.03 230)",
+          "oklch(30% 0.03 230)",
+          "oklch(40% 0.025 230)",
+          "oklch(55% 0.02 230)",
+          "oklch(70% 0.01 230)"
+        ]
+      },
+      "void-deep": {
+        "role": "neutral",
+        "displayName": "Void Deep",
+        "canonical": "oklch(8% 0.015 230)",
+        "tonalRamp": [
+          "oklch(5% 0.008 230)",
+          "oklch(8% 0.015 230)",
+          "oklch(12% 0.02 230)",
+          "oklch(18% 0.025 230)",
+          "oklch(25% 0.025 230)",
+          "oklch(35% 0.02 230)",
+          "oklch(48% 0.015 230)",
+          "oklch(62% 0.01 230)"
+        ]
+      },
+      "midnight-surface": {
+        "role": "neutral",
+        "displayName": "Midnight Surface",
+        "canonical": "oklch(15% 0.03 230)",
+        "tonalRamp": [
+          "oklch(8% 0.01 230)",
+          "oklch(12% 0.02 230)",
+          "oklch(15% 0.03 230)",
+          "oklch(20% 0.035 230)",
+          "oklch(28% 0.03 230)",
+          "oklch(38% 0.025 230)",
+          "oklch(52% 0.02 230)",
+          "oklch(68% 0.01 230)"
+        ]
+      },
+      "slate-mist": {
+        "role": "neutral",
+        "displayName": "Slate Mist",
+        "canonical": "oklch(57% 0.04 230)",
+        "tonalRamp": [
+          "oklch(20% 0.02 230)",
+          "oklch(30% 0.03 230)",
+          "oklch(40% 0.035 230)",
+          "oklch(48% 0.04 230)",
+          "oklch(57% 0.04 230)",
+          "oklch(66% 0.035 230)",
+          "oklch(76% 0.025 230)",
+          "oklch(88% 0.01 230)"
+        ]
+      },
+      "emerald-positive": {
+        "role": "semantic-positive",
+        "displayName": "Emerald Positive",
+        "canonical": "oklch(64% 0.20 150)",
+        "tonalRamp": [
+          "oklch(15% 0.06 150)",
+          "oklch(25% 0.09 150)",
+          "oklch(35% 0.12 150)",
+          "oklch(45% 0.16 150)",
+          "oklch(55% 0.18 150)",
+          "oklch(64% 0.20 150)",
+          "oklch(75% 0.16 150)",
+          "oklch(87% 0.10 150)"
+        ]
+      },
+      "amber-caution": {
+        "role": "semantic-caution",
+        "displayName": "Amber Caution",
+        "canonical": "oklch(78% 0.18 70)",
+        "tonalRamp": [
+          "oklch(20% 0.07 70)",
+          "oklch(30% 0.10 70)",
+          "oklch(40% 0.13 70)",
+          "oklch(52% 0.16 70)",
+          "oklch(62% 0.17 70)",
+          "oklch(70% 0.18 70)",
+          "oklch(78% 0.18 70)",
+          "oklch(88% 0.12 70)"
+        ]
+      },
+      "rose-negative": {
+        "role": "semantic-negative",
+        "displayName": "Rose Negative",
+        "canonical": "oklch(60% 0.22 25)",
+        "tonalRamp": [
+          "oklch(15% 0.07 25)",
+          "oklch(25% 0.10 25)",
+          "oklch(35% 0.14 25)",
+          "oklch(45% 0.18 25)",
+          "oklch(55% 0.20 25)",
+          "oklch(60% 0.22 25)",
+          "oklch(70% 0.18 25)",
+          "oklch(82% 0.10 25)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Page-level heading. One per page. Space Grotesk. Rare."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Company name in Market Snapshot. One per analysis session."
+      },
+      "title": {
+        "displayName": "Title / Price",
+        "purpose": "Current market price — the primary number the investor reads first. Signal Blue."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "AI analysis reports, scenario labels, general content. Manrope. 72ch max."
+      },
+      "label": {
+        "displayName": "Section Label",
+        "purpose": "Uppercase structural label opening each card section. Slate Mist. Never colored."
+      }
+    },
+    "shadows": [
+      {
+        "name": "card-glow",
+        "value": "0 10px 40px -20px rgba(56, 189, 248, 0.45)",
+        "purpose": "Applied to all .card surfaces. Signal Blue ambient glow. Always on — not a hover state. The system's single decorative shadow commitment."
+      },
+      {
+        "name": "modal-overlay",
+        "value": "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+        "purpose": "Modal panels only. Neutral dark drop shadow. No accent color. Combined with bg-black/75 backdrop scrim."
+      },
+      {
+        "name": "input-focus-ring",
+        "value": "0 0 0 3px rgba(56, 189, 248, 0.4)",
+        "purpose": "Input field focus state. Signal Blue at 40% opacity. Also used for button :focus-visible."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-standard",
+        "value": "cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "Default easing for state transitions (color, opacity, border). 150ms duration for most interactions."
+      },
+      {
+        "name": "ease-out-quick",
+        "value": "cubic-bezier(0, 0, 0.2, 1)",
+        "purpose": "Fast exit easing for button hover (brightness), nav link color shifts. 150ms."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "@media (prefers-reduced-motion: reduce)",
+        "purpose": "All non-essential animations suppressed. State-only transitions (color, border) remain. Framer Motion layout animations disabled."
+      }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" },
+      { "name": "7xl", "value": "1344px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main affirmative action. Signal Blue fill with Abyssal Navy text. Used for Analyze, Save, primary form submissions.",
+      "html": "<button class=\"ds-btn-primary\">Analyze</button>",
+      "css": ".ds-btn-primary { background: #38bdf8; color: #0a101f; padding: 8px 16px; border-radius: 12px; font-family: 'Manrope', ui-sans-serif, system-ui; font-size: 0.875rem; font-weight: 600; border: none; cursor: pointer; transition: filter 0.15s cubic-bezier(0, 0, 0.2, 1); } .ds-btn-primary:hover { filter: brightness(1.1); } .ds-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; filter: none; } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.4); }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Secondary action with no affirmative weight. Used for Sign Out, Reset, secondary navigation actions.",
+      "html": "<button class=\"ds-btn-ghost\">Sign out</button>",
+      "css": ".ds-btn-ghost { background: transparent; color: #94a3b8; padding: 4px 12px; border-radius: 8px; border: 1px solid #334155; font-family: 'Manrope', ui-sans-serif, system-ui; font-size: 0.875rem; font-weight: 400; cursor: pointer; transition: border-color 0.15s ease-out, color 0.15s ease-out; } .ds-btn-ghost:hover { border-color: #64748b; color: #f1f5f9; } .ds-btn-ghost:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.4); }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input-text",
+      "description": "Primary text field. Dark glassy background. Signal Blue focus ring. Used for ticker input, auth fields.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"AAPL or ASML.AS\" />",
+      "css": ".ds-input { width: 100%; background: rgba(15, 23, 42, 0.7); border: 1px solid #334155; border-radius: 12px; padding: 8px 12px; font-family: 'Manrope', ui-sans-serif, system-ui; font-size: 0.875rem; color: #f1f5f9; outline: none; transition: box-shadow 0.15s ease-out, border-color 0.15s ease-out; } .ds-input::placeholder { color: #475569; } .ds-input:focus { box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.4); border-color: #38bdf8; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The primary data container. Midnight Surface background, Signal Blue ambient glow. Every data section lives inside a card.",
+      "html": "<div class=\"ds-card\"><span class=\"ds-label\">Market snapshot</span><p style=\"margin-top:12px;color:#f1f5f9;font-size:0.875rem;\">Apple Inc. · AAPL</p></div>",
+      "css": ".ds-card { background: #121a2b; border: 1px solid rgba(30, 41, 59, 0.7); border-radius: 16px; padding: 20px; box-shadow: 0 10px 40px -20px rgba(56, 189, 248, 0.45); backdrop-filter: blur(4px); } .ds-label { font-family: 'Manrope', ui-sans-serif, system-ui; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.075em; color: #7b8ba9; display: block; }"
+    },
+    {
+      "name": "Fair Value Card (Bull)",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Scenario-typed fair value card. Inherits base card, overrides border with bull (emerald), base (sky), or bear (rose) scenario color at 40% opacity.",
+      "html": "<div class=\"ds-card ds-card-bull\"><span class=\"ds-label\">Bull scenario</span><div style=\"margin-top:12px;display:flex;flex-direction:column;gap:8px;\"><p class=\"ds-body-sm\">Current price: <strong>$189.30</strong></p><p class=\"ds-body-sm\">Fair value: <strong>$241.50</strong></p><p class=\"ds-body-sm ds-positive\">Upside vs price: <strong>+27.60%</strong></p></div></div>",
+      "css": ".ds-card { background: #121a2b; border-radius: 16px; padding: 20px; box-shadow: 0 10px 40px -20px rgba(56, 189, 248, 0.45); backdrop-filter: blur(4px); } .ds-card-bull { border: 1px solid rgba(16, 185, 129, 0.4); } .ds-label { font-family: 'Manrope', ui-sans-serif, system-ui; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.075em; color: #7b8ba9; display: block; } .ds-body-sm { font-family: 'Manrope', ui-sans-serif, system-ui; font-size: 0.875rem; color: #f1f5f9; } .ds-positive { color: #22c55e; }"
+    },
+    {
+      "name": "Navigation Bar",
+      "kind": "nav",
+      "refersTo": "card",
+      "description": "Sticky top nav. Void Deep at 80% opacity with backdrop blur. Signal Blue brand link. Ghost-toned nav links.",
+      "html": "<header class=\"ds-nav\"><a class=\"ds-nav-brand\" href=\"/\">Stock Analysis</a><nav class=\"ds-nav-links\"><a class=\"ds-nav-link\" href=\"/analyses\">Saved Analyses</a><a class=\"ds-nav-link\" href=\"/portfolio\">Portfolio</a></nav></header>",
+      "css": ".ds-nav { position: sticky; top: 0; z-index: 50; border-bottom: 1px solid rgba(30, 41, 59, 0.6); background: rgba(7, 13, 25, 0.8); backdrop-filter: blur(12px); padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; max-width: 100%; } .ds-nav-brand { font-family: 'Manrope', ui-sans-serif, system-ui; font-size: 0.875rem; font-weight: 600; color: #38bdf8; text-decoration: none; transition: color 0.15s; } .ds-nav-brand:hover { color: #bae6fd; } .ds-nav-links { display: flex; align-items: center; gap: 16px; } .ds-nav-link { font-family: 'Manrope', ui-sans-serif, system-ui; font-size: 0.875rem; color: #94a3b8; text-decoration: none; transition: color 0.15s; } .ds-nav-link:hover { color: #f1f5f9; }"
+    },
+    {
+      "name": "Price Display",
+      "kind": "custom",
+      "refersTo": "button-primary",
+      "description": "The current market price — the primary number on every analysis session. Space Grotesk, Signal Blue, 1.875rem/700.",
+      "html": "<p class=\"ds-price\">$189.30</p>",
+      "css": ".ds-price { font-family: 'Space Grotesk', ui-sans-serif, system-ui; font-size: 1.875rem; font-weight: 700; color: #38bdf8; line-height: 1.1; letter-spacing: -0.01em; }"
+    },
+    {
+      "name": "Section Label",
+      "kind": "custom",
+      "refersTo": "button-ghost",
+      "description": "Uppercase structural label that opens every card section. The printed column header of the Ledger.",
+      "html": "<span class=\"ds-section-label\">Market snapshot</span>",
+      "css": ".ds-section-label { font-family: 'Manrope', ui-sans-serif, system-ui; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.075em; color: #7b8ba9; display: block; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Investor's Ledger",
+    "overview": "This system carries the quiet authority of a well-kept financial document. Not a dashboard, not a trading terminal: a ledger. Data arrives structured and complete. The layout is dense when the data demands it (scenario panels, chart rows, AI reports) and spacious when the information is sparse (auth pages, empty states). Whitespace is not a default; it is earned by what the content requires. The interface projects calm competence — serious enough to trust with real money decisions, approachable enough that a self-directed investor who is not a professional is not intimidated.\n\nThe palette is restrained by doctrine and committed by signature. The dark neutrals (Abyssal Navy, Midnight Surface) recede completely; they are not a theme, they are the absence of a theme, creating the condition for Signal Blue to do its work. Signal Blue is the single chromatic commitment: it marks interactive controls, accents the current price, and traces the ambient glow under every card surface. Semantic colors (Emerald Positive, Amber Caution, Rose Negative) are strictly state signals.\n\nThe type pairing (Space Grotesk for structure, Manrope for reading) mirrors the tool's dual register: Space Grotesk sets the numbers and headings in confident geometric clarity; Manrope carries the body of AI reports and scenario labels in warm legibility.",
+    "keyCharacteristics": [
+      "Dark-first: the investor arrives in the evening, at a desk, in focused analysis mode. Dark is forced by the scene, not the category.",
+      "Tonal depth: three background tones (void-deep, abyssal-navy, midnight-surface) create layering without shadows on non-card surfaces.",
+      "Signal Blue as anchor: the one saturated color is rare by design, powerful by rarity.",
+      "Glow as signature: the sky-blue ambient shadow under cards is the single permitted decorative commitment.",
+      "Uppercase labels as structure: they divide every card into named sections, performing the role dividers and rules play in a printed document."
+    ],
+    "rules": [
+      {
+        "name": "The One Voice Rule",
+        "body": "Signal Blue appears on at most 15% of any given screen surface. Its rarity is the point: when the price renders in Signal Blue and the Analyze button glows against the dark field, those elements command instant attention precisely because nothing else competes.",
+        "section": "colors"
+      },
+      {
+        "name": "The State-Only Rule",
+        "body": "Emerald Positive, Amber Caution, and Rose Negative are semantic, not stylistic. They name the condition of a data point. Using them for decorative elements is prohibited.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tonal Depth Rule",
+        "body": "Background depth is created by tone (void-deep → abyssal-navy → midnight-surface), not by shadow. Flat non-card surfaces carry no shadows.",
+        "section": "colors"
+      },
+      {
+        "name": "The Label Doctrine",
+        "body": "Every card section opens with a text-xs font-semibold uppercase tracking-wider text-muted label. This tells the investor the data category before they read the numbers.",
+        "section": "typography"
+      },
+      {
+        "name": "The Weight Ceiling",
+        "body": "700 is the heaviest weight used. No font-black (900). Heavy weight competes with Signal Blue for attention.",
+        "section": "typography"
+      },
+      {
+        "name": "The Glow Covenant",
+        "body": "The Signal Blue card glow is the single permitted decorative shadow. It does not appear on buttons, inputs, nav, or inline elements. New card-like surfaces inherit it.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Flat-First Rule",
+        "body": "Every non-card surface is flat at rest. Depth is earned by card status. If a surface is not a card, it does not carry a box-shadow under any state.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do open every card section with a text-xs font-semibold uppercase tracking-wider text-muted label.",
+      "Do use Signal Blue exclusively for interactive controls, the current price figure, the nav brand, and the card glow.",
+      "Do use Emerald Positive, Amber Caution, and Rose Negative only to indicate state.",
+      "Do let layout density respond to data density.",
+      "Do use Space Grotesk for prices, company names, page headings; Manrope for everything else.",
+      "Do express depth through tonal stepping: void-deep → abyssal-navy → midnight-surface.",
+      "Do cap body text line length at 72ch."
+    ],
+    "donts": [
+      "Don't use an indigo sidebar, white card background, or a generic stat-card grid.",
+      "Don't recreate Bloomberg-style maximum data density with no visual hierarchy.",
+      "Don't use gradient text (background-clip: text). Signal Blue is a single solid color.",
+      "Don't apply the card glow to non-card surfaces.",
+      "Don't use Signal Blue, Emerald Positive, Amber Caution, or Rose Negative for decorative fills unrelated to their state meaning.",
+      "Don't add a side-stripe border (border-left > 1px as a colored accent) to cards or list items.",
+      "Don't introduce glassmorphism cards decoratively.",
+      "Don't use green, amber, or red for anything other than their defined semantic states."
+    ]
+  }
+}
