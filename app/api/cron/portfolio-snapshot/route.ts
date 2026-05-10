@@ -1,10 +1,11 @@
-// POST /api/cron/portfolio-snapshot
+// GET /api/cron/portfolio-snapshot
 // Triggered by Vercel Cron (vercel.json, schedule: "0 20 * * 1-5").
+// Vercel Cron Jobs send GET requests (not POST).
 // Vercel automatically injects: Authorization: Bearer <CRON_SECRET>
 import { NextResponse } from "next/server";
 import { createSnapshotsForAllUsers } from "@/lib/portfolio-snapshots";
 
-export async function POST(request: Request) {
+export async function GET(request: Request) {
   const authHeader = request.headers.get("Authorization");
   const cronSecret = process.env.CRON_SECRET;
 

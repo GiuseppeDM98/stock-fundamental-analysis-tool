@@ -263,7 +263,7 @@ getRecommendedMethod(sector: Sector): ValuationMethodInfo  // returns { label, i
 
 ## Vercel Cron Jobs
 
-Defined in `vercel.json` at project root. Vercel sends a `POST` (not GET) with `Authorization: Bearer <CRON_SECRET>` injected automatically from the project's env vars.
+Defined in `vercel.json` at project root. Vercel sends a **GET** request (not POST) with `Authorization: Bearer <CRON_SECRET>` injected automatically from the project's env vars.
 
 ```json
 { "crons": [{ "path": "/api/cron/my-job", "schedule": "0 20 * * 1-5" }] }
@@ -271,7 +271,7 @@ Defined in `vercel.json` at project root. Vercel sends a `POST` (not GET) with `
 
 **Route pattern:**
 ```typescript
-export async function POST(request: Request) {
+export async function GET(request: Request) {
   if (request.headers.get("Authorization") !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
