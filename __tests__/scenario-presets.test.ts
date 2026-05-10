@@ -15,6 +15,10 @@ const appleFundamentals: FundamentalsResponse = {
     { year: 2022, revenue: 365817e6, ebit: 119437e6, netIncome: 99803e6, fcf: 111443e6, operatingMargin: 0.327, netMargin: 0.273 },
   ],
   ratios: { pe: 28.5, pb: 45.2, ps: 7.8, evEbitda: 24.1 },
+  sector: "Technology",
+  industry: "Consumer Electronics",
+  dividendRate: null,
+  ebitda: null,
 };
 
 const appleAnalystEstimates: AnalystEstimates = {
@@ -25,9 +29,12 @@ const appleAnalystEstimates: AnalystEstimates = {
   numberOfAnalysts: 35,
   operatingMargins: 0.315,
   revenueGrowthTTM: 0.02,
-  freeCashflow: 108807e6,   // Apple's actual FCF
-  totalRevenue: 391035e6,   // Apple's actual revenue
+  freeCashflow: 108807e6,
+  totalRevenue: 391035e6,
   beta: 1.2,
+  dividendRate: null,
+  ebitda: null,
+  evEbitda: null,
 };
 
 // No analyst coverage (small cap / non-US)
@@ -42,6 +49,9 @@ const noAnalystEstimates: AnalystEstimates = {
   freeCashflow: null,
   totalRevenue: null,
   beta: null,
+  dividendRate: null,
+  ebitda: null,
+  evEbitda: null,
 };
 
 // Minimal fundamentals (only 1 year of data)
@@ -52,6 +62,10 @@ const minimalFundamentals: FundamentalsResponse = {
     { year: 2025, revenue: 100e6, ebit: 15e6, netIncome: 10e6, fcf: 8e6, operatingMargin: 0.15, netMargin: 0.10 },
   ],
   ratios: { pe: null, pb: null, ps: null },
+  sector: null,
+  industry: null,
+  dividendRate: null,
+  ebitda: null,
 };
 
 describe("getCompanyScenarios", () => {

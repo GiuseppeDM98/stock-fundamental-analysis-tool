@@ -8,7 +8,7 @@ Current project state and context for AI assistants.
 
 **Version**: `0.9.1`
 **Status**: Active Development
-**Last Updated**: May 10, 2026 (Deep Analysis improvements, remove standard AI panel)
+**Last Updated**: May 10, 2026 (Saved Analyses page restructured — grouped by ticker with Bear/Base/Bull cards and price-vs-FV bar)
 
 ---
 
@@ -77,10 +77,16 @@ Current project state and context for AI assistants.
 - Save AI reports to personal account, view/delete at `/analyses`
 - JWT sessions (no DB session table)
 - **Analysis snapshot**: each saved report stores `priceAtAnalysis`, `fairValueBull`, `fairValueBase`, `fairValueBear`, `valuationMethod` — all nullable for backward compat
-- **Performance badge** in analyses list: shows `$priceAtSave → $priceNow +/-X%` and "Under FV" / "Above FV" indicator for analyses with snapshots
+- **Analyses page** (`components/analyses-list.tsx`) groups analyses by ticker — each ticker is a card showing:
+  - Latest analysis: `FairValueTriple` (Bear/Base/Bull badges) + `PriceVsFVBar` (gradient bar with price marker, base FV tick, and Bear/Bull endpoint labels)
+  - Collapsible history (`▶ N analisi precedenti`) for older saves of the same ticker
+  - Controls bar: text search, "Under FV" filter toggle, sort (recent / ticker A-Z / performance)
+  - Summary count: `X ticker · Y analisi`
+- **Performance badge**: shows `$priceAtSave → $priceNow +/-X%` for analyses with snapshots
 - **Re-run button** in analyses list and detail page — redirects to dashboard with `?ticker=` URL param, triggers auto-fetch
-- **Open position badge** in analyses list: if the user holds the ticker, shows WAC, total shares, and live P&L inline under each analysis card
-- **Open position banner** in analyses detail page: server-side `db.position.findMany` fetches positions for the ticker; `OpenPositionBanner` client component fetches live price on mount and shows P&L
+- **Open position badge** in analyses list: if the user holds the ticker, shows WAC, total shares, and live P&L inline
+- **Open position banner** in analyses detail page: server-side `db.position.findMany` fetches positions; `OpenPositionBanner` client component fetches live price on mount and shows P&L
+- **Note**: label `"Prezzo"` in `PriceVsFVBar` is still hardcoded in Italian — add `currentPriceShort` i18n key if internationalising
 
 ### Portfolio Tracker
 - Section at `/portfolio` — track real stock purchases with live P&L
@@ -123,7 +129,7 @@ Current project state and context for AI assistants.
 - P&L and performance deltas shown as pill badges with colored background (`bg-emerald-500/15` / `bg-red-500/15`) — not plain colored text
 - Portfolio position rows: `N × buy_price → current_price [P&L badge]` — compact two-element layout
 - Input focus states (accent ring) on all scenario panel fields and Add Position modal
-- **Language toggle (EN/IT)** in NavBar — switches entire app UI; preference persisted in `sfa:language` localStorage. AI report panels default to the global language but allow per-report override. System: `lib/i18n/translations.ts` (type-safe ~120 key dictionary) + `context/language-context.tsx` (React context + `useLanguage()` hook)
+- **Language toggle (EN/IT)** in NavBar — switches entire app UI; preference persisted in `sfa:language` localStorage. AI report panels default to the global language but allow per-report override. System: `lib/i18n/translations.ts` (type-safe ~136 key dictionary) + `context/language-context.tsx` (React context + `useLanguage()` hook)
 
 ---
 

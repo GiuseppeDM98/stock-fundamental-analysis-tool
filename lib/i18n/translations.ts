@@ -72,6 +72,19 @@ export type Translations = {
   noAnalysesYet: string;
   noAnalysesDesc: string;
   goToDashboard: string;
+  searchPlaceholder: string;
+  underFvFilter: string;
+  sortLabel: string;
+  sortRecent: string;
+  sortTicker: string;
+  sortPerformance: string;
+  bearLabel: string;
+  baseLabel: string;
+  bullLabel: string;
+  olderAnalyses: string;
+  noAnalysesMatchFilter: string;
+  analysesCountLabel: string;
+  tickerCountLabel: string;
 
   // ─── Dashboard ──────────────────────────────────────────────────────────────
   appTitle: string;
@@ -243,6 +256,19 @@ const en: Translations = {
   noAnalysesYet: "No saved analyses yet.",
   noAnalysesDesc: "Generate an AI analysis from the dashboard and save it here.",
   goToDashboard: "Go to Dashboard",
+  searchPlaceholder: "Search ticker or company…",
+  underFvFilter: "Under FV",
+  sortLabel: "Sort:",
+  sortRecent: "Most recent",
+  sortTicker: "Ticker A-Z",
+  sortPerformance: "Performance",
+  bearLabel: "Bear",
+  baseLabel: "Base",
+  bullLabel: "Bull",
+  olderAnalyses: "older analysis|older analyses",
+  noAnalysesMatchFilter: "No analyses match the current filter.",
+  analysesCountLabel: "analyses",
+  tickerCountLabel: "tickers",
 
   // Dashboard
   appTitle: "Stock Fundamental Analysis Tool",
@@ -414,6 +440,19 @@ const it: Translations = {
   noAnalysesYet: "Nessuna analisi salvata.",
   noAnalysesDesc: "Genera un'analisi AI dalla dashboard e salvala qui.",
   goToDashboard: "Vai alla Dashboard",
+  searchPlaceholder: "Cerca ticker o azienda…",
+  underFvFilter: "Sotto FV",
+  sortLabel: "Ordina:",
+  sortRecent: "Più recenti",
+  sortTicker: "Ticker A-Z",
+  sortPerformance: "Performance",
+  bearLabel: "Bear",
+  baseLabel: "Base",
+  bullLabel: "Bull",
+  olderAnalyses: "analisi precedente|analisi precedenti",
+  noAnalysesMatchFilter: "Nessuna analisi corrisponde al filtro.",
+  analysesCountLabel: "analisi",
+  tickerCountLabel: "ticker",
 
   // Dashboard
   appTitle: "Stock Fundamental Analysis Tool",

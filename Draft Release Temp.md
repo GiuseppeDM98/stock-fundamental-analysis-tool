@@ -1,5 +1,8 @@
 ## ✨ New Features
 
+- **Saved Analyses page redesigned** — analyses are now grouped by ticker instead of shown as a flat list. Each ticker card shows the latest Bear / Base / Bull fair values at a glance, a visual gradient bar indicating where the current price falls relative to the full fair value range, and a collapsible history of older analyses for the same stock (with their own Bear/Base/Bull values).
+- Added **search, filter, and sort controls** to the Saved Analyses page — search by ticker or company name, filter to show only tickers still trading below their base fair value ("Under FV"), or sort by most recent, alphabetical ticker, or best performance since the analysis was saved.
+
 - **Deep Value Analysis** now includes a **Competitive Moat Analysis** section — Claude rates the company's competitive advantage as Wide, Narrow, or None, covering network effects, switching costs, cost advantages, intangible assets, and efficient scale
 - **Deep Value Analysis** now includes a **Near-term Catalysts** section — lists upcoming earnings, regulatory decisions, product launches, or macro events that could move the stock price in the next 6–12 months
 - **Deep Value Analysis** now includes a **Key Financial Data & Quality Metrics** section — presents ROIC, ROE, gross margin, FCF conversion rate, dividend yield, debt/equity ratio, and current ratio alongside income and cash flow data; also shows how current valuation multiples compare to their 3–5 year historical averages

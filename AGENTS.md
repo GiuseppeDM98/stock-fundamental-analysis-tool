@@ -388,6 +388,7 @@ vi.mock("@/context/language-context", () => ({
 - **Run**: `npm run test` (once) or `npm run test:watch`
 - **Build check**: `npm run build` for type-checking (don't use `npm run lint` — interactive/deprecated)
 - **Path alias**: `vitest.config.ts` must declare `resolve.alias { "@": path.resolve(__dirname, ".") }` — Next.js aliases are not inherited by Vitest
+- **Type gotcha**: when you add nullable fields to a shared type (`AnalystEstimates`, `FundamentalsResponse`, etc.), grep `__tests__/` for fixture objects of that type and add `null` for each new field — TS won't infer them and will fail silently on shape mismatches until `npx tsc --noEmit` runs
 
 ---
 
@@ -397,6 +398,16 @@ vi.mock("@/context/language-context", () => ({
 - **Semantic text/border colors**: always use tokens (`text-accent`, `text-muted`, `text-success`, `text-danger`, `text-warning`), never raw Tailwind palette classes like `text-sky-400` or `text-emerald-400`
 - **Primary buttons**: `bg-accent text-slate-950 hover:brightness-110` — not `bg-sky-500 text-white`
 - **Active nav link**: `usePathname()` from `next/navigation`; compare `pathname === href` to apply `font-medium text-slate-100`
+
+### Floating labels on a range bar
+
+When a label must stay within the bounds of a bar (e.g. a price marker on a bear–bull gradient), use `clamp()` inline rather than bare `${pct}%`:
+
+```tsx
+style={{ left: `clamp(12px, ${pct}%, calc(100% - 12px))` }}
+```
+
+This prevents overflow/clipping when the value is near 0% or 100% without any JS-side clamping logic.
 
 ### Tailwind Opacity Modifiers on CSS Vars — DO NOT USE
 `text-accent/80`, `bg-success/15`, `border-accent/40` **silently fail**. CSS custom properties (`var(--accent)`) resolve to hex strings at runtime; Tailwind cannot extract RGB channels for opacity math.

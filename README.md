@@ -57,6 +57,7 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - 💾 **State Persistence**: LocalStorage saves ticker history and scenario overrides
 - 🔍 **Deep Value Analysis**: Fully autonomous AI valuation — Claude picks the method, sources all data via web search, includes MOAT analysis, quality metrics (ROIC, ROE, FCF conversion), and near-term catalysts; works for any global ticker
 - 👤 **User Accounts**: Save and revisit AI-generated reports with email/password auth
+- 📋 **Saved Analyses by Ticker**: Analyses page groups reports by stock — see Bear/Base/Bull fair values at a glance with a visual price-vs-FV bar; search, filter (Under FV), and sort across all your saved research
 - 🧮 **Valuation Metrics**: P/E, P/FCF, FCF Yield, Earnings Yield cards with YoY trend and educational tooltips
 - 💼 **Portfolio Tracker**: Track real purchases with live P&L per position + DCA aggregation (Weighted Average Cost per ticker) + multi-currency aggregate summary (EUR conversion via Frankfurter) + cross-links to saved analyses per ticker
 - 📉 **Portfolio P&L History**: Line chart showing total portfolio value vs. cost basis over time — updated automatically every weekday after market close via Vercel Cron

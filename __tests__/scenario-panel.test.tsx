@@ -49,6 +49,10 @@ describe("ScenarioPanel", () => {
           revenueGrowthTTM: 0.05,
           freeCashflow: 100e9,
           totalRevenue: 400e9,
+          beta: null,
+          dividendRate: null,
+          ebitda: null,
+          evEbitda: null,
         }}
         scenarioSource="smart"
         onMosChange={() => {}}
