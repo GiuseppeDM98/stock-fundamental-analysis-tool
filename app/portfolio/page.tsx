@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import PortfolioList from "@/components/portfolio-list";
+import PortfolioHistoryChart from "@/components/portfolio-history-chart";
 
 export const metadata = { title: "Portfolio – Stock Analysis" };
 
@@ -20,6 +21,8 @@ export default async function PortfolioPage() {
           Track your stock positions and monitor P&amp;L against live prices
         </p>
       </div>
+
+      <PortfolioHistoryChart />
 
       <PortfolioList />
     </main>

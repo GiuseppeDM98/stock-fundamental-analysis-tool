@@ -1,5 +1,7 @@
 ## ✨ New Features
 
+- Added **Portfolio P&L History chart** — the Portfolio page now shows a line chart with your portfolio's total value over time vs. your cost basis (purchase price). The gap between the two lines shows your unrealized gain or loss at a glance. Data is captured automatically every weekday after market close — no action required.
+
 - Added **Deep Value Analysis** — a new AI-powered panel that works for any stock worldwide, including tickers where Yahoo Finance data is incomplete or missing. Claude autonomously picks the valuation method (DCF, DDM, EV/EBITDA, or P/B) based on the company's sector, sources all financial data from the web, and produces bull/base/bear fair value estimates alongside a full research report. Available in all 8 supported languages.
 
 - Added **sector detection** — the app now automatically identifies each company's sector from Yahoo Finance and displays a `[Sector · Method]` badge in the dashboard header (e.g. `[Energy · EV/EBITDA]`, `[Utilities · DDM]`)

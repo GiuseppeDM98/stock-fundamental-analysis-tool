@@ -32,3 +32,10 @@ export type AggregatedPosition = {
   totalCost: number;
   purchases: Position[]; // sorted oldest→newest
 };
+
+/** One daily data point for the portfolio P&L history chart. */
+export type SnapshotPoint = {
+  takenAt: string;   // ISO 8601 UTC
+  totalEur: number;
+  costEur: number;
+};

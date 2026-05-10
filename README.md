@@ -2,7 +2,7 @@
 
 A Next.js web application for stock valuation using Discounted Cash Flow (DCF) analysis with scenario modeling. Fetch real-time financial data from Yahoo Finance and run bull/base/bear scenario valuations with interactive charts.
 
-![Version](https://img.shields.io/badge/version-0.7.0-blue)
+![Version](https://img.shields.io/badge/version-0.8.0-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-green)
 ![Next.js](https://img.shields.io/badge/Next.js-15.5.12-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7.3-blue)
@@ -26,6 +26,7 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **Deep Value Analysis** — Claude autonomously picks the valuation method and sources all financial data via web search; works for any global ticker
 - **User accounts** with saved reports — revisit your analyses anytime
 - **Portfolio tracker** — track real purchases with live P&L, multi-currency FX conversion, DCA aggregation (Weighted Average Cost per ticker), and cross-links to saved analyses per ticker
+- **Portfolio P&L history** — line chart showing portfolio value vs. cost basis over time, updated automatically every weekday after market close
 - **Analysis performance tracking** — see how the stock price moved since you saved each analysis vs. fair value
 
 ### What Problem Does It Solve?
@@ -59,6 +60,7 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - 👤 **User Accounts**: Save and revisit AI-generated reports with email/password auth
 - 🧮 **Valuation Metrics**: P/E, P/FCF, FCF Yield, Earnings Yield cards with YoY trend and educational tooltips
 - 💼 **Portfolio Tracker**: Track real purchases with live P&L per position + DCA aggregation (Weighted Average Cost per ticker) + multi-currency aggregate summary (EUR conversion via Frankfurter) + cross-links to saved analyses per ticker
+- 📉 **Portfolio P&L History**: Line chart showing total portfolio value vs. cost basis over time — updated automatically every weekday after market close via Vercel Cron
 - 📈 **Analysis Performance**: See how price moved since saving vs. fair value — "Under FV" / "Above FV" badge per report
 - 🧪 **Fully Tested**: Vitest + Testing Library coverage for calculations and UI
 

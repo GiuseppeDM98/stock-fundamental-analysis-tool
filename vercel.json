@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/portfolio-snapshot",
+      "schedule": "0 20 * * 1-5"
+    }
+  ]
+}

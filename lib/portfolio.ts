@@ -1,6 +1,6 @@
-// Client-side fetch helpers for portfolio positions.
-// Thin wrappers over the /api/positions routes — keeps components clean.
-import type { Position, CreatePositionRequest } from "@/types/portfolio";
+// Client-side fetch helpers for portfolio positions and history.
+// Thin wrappers over the API routes — keeps components clean.
+import type { Position, CreatePositionRequest, SnapshotPoint } from "@/types/portfolio";
 
 export async function fetchPositions(): Promise<Position[]> {
   const res = await fetch("/api/positions");
@@ -24,4 +24,10 @@ export async function createPosition(data: CreatePositionRequest): Promise<Posit
 export async function deletePosition(id: string): Promise<void> {
   const res = await fetch(`/api/positions/${id}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Failed to delete position");
+}
+
+export async function fetchSnapshots(): Promise<SnapshotPoint[]> {
+  const res = await fetch("/api/portfolio/snapshots");
+  if (!res.ok) throw new Error("Failed to load portfolio history");
+  return res.json();
 }

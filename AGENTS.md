@@ -22,9 +22,10 @@ lib/               # Business logic and utilities
   yahoo-client.ts  # Yahoo Finance API adapter
   auth.ts          # Auth.js v5 config
   db.ts            # Prisma singleton client
-  analyses.ts      # Client-side fetch helpers for saved analyses
-  portfolio.ts     # Client-side fetch helpers for positions
-  format.ts        # Formatting utilities
+  analyses.ts              # Client-side fetch helpers for saved analyses
+  portfolio.ts             # Client-side fetch helpers for positions + snapshots (fetchSnapshots)
+  portfolio-snapshots.ts   # Server-only snapshot logic (import "server-only") — createSnapshotForUser, createSnapshotsForAllUsers
+  format.ts                # Formatting utilities
 components/        # React components (all client-side, all "use client")
 app/api/           # API route handlers
 app/analyses/      # Saved analyses list + detail pages
@@ -53,7 +54,7 @@ __tests__/         # Vitest tests
 
 ### Functions
 - Data fetchers: `getQuote()`, `getFundamentals()`, `getAnalystEstimates()`, `getRiskFreeRate()`
-- Client helpers: `fetchAnalyses()`, `saveAnalysis()`, `fetchPositions()`, `createPosition()`, `deletePosition()`
+- Client helpers: `fetchAnalyses()`, `saveAnalysis()`, `fetchPositions()`, `createPosition()`, `deletePosition()`, `fetchSnapshots()`
 - Factories: `getDefaultScenarios()`, `getCompanyScenarios()`, `getDefaultDdmScenarios()`, `getCompanyDdmScenarios()`, `getDefaultEvEbitdaScenarios()`, `getCompanyEvEbitdaScenarios()`
 - Prompt builders: `buildSystemPrompt()`, `buildUserPrompt()` in `lib/ai/prompts.ts`; `buildDeepValueSystemPrompt()`, `buildDeepValueUserPrompt()` in `lib/ai/deep-value-prompts.ts`
 
@@ -81,7 +82,7 @@ if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 
 // Use session.user.id — typed via declaration merge in types/auth.ts
 ```
 
-**Endpoints:** `/api/quote`, `/api/fundamentals`, `/api/valuation` (POST), `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/DELETE), `/api/positions` (GET/POST), `/api/positions/[id]` (DELETE), `/api/ai/analyze` (POST, streaming), `/api/ai/deep-value` (POST, streaming)
+**Endpoints:** `/api/quote`, `/api/fundamentals`, `/api/valuation` (POST), `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/DELETE), `/api/positions` (GET/POST), `/api/positions/[id]` (DELETE), `/api/ai/analyze` (POST, streaming), `/api/ai/deep-value` (POST, streaming), `/api/portfolio/snapshots` (GET), `/api/cron/portfolio-snapshot` (POST, Vercel Cron)
 
 ---
 
@@ -260,11 +261,48 @@ getRecommendedMethod(sector: Sector): ValuationMethodInfo  // returns { label, i
 
 ---
 
+## Vercel Cron Jobs
+
+Defined in `vercel.json` at project root. Vercel sends a `POST` (not GET) with `Authorization: Bearer <CRON_SECRET>` injected automatically from the project's env vars.
+
+```json
+{ "crons": [{ "path": "/api/cron/my-job", "schedule": "0 20 * * 1-5" }] }
+```
+
+**Route pattern:**
+```typescript
+export async function POST(request: Request) {
+  if (request.headers.get("Authorization") !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  // ... do work
+  return NextResponse.json({ ok: true });
+}
+```
+
+**Idempotency guard** (important for Vercel retries): query `takenAt >= startOfDay UTC` before writing, skip if found. Use UTC date (`new Date().toISOString().slice(0, 10)`) — not local time.
+
+**Timezone note**: schedule crons away from midnight UTC to avoid date boundary ambiguity. 20:00 UTC = after EU + US market close and well within the same calendar day for European users.
+
+---
+
+## Server-Only Modules
+
+Use `import "server-only"` at the top of any `lib/` module that imports Prisma (`db`) or server-side libs (yahoo-finance2, Anthropic SDK). This prevents accidental bundling on the client.
+
+**Pattern**: split server logic and client helpers into separate files:
+- `lib/portfolio-snapshots.ts` — `import "server-only"`, contains Prisma + Yahoo Finance calls
+- `lib/portfolio.ts` — client helpers only (`fetch()`), exports `fetchSnapshots()` for use in components
+
+Never export server-only functions from the same file as client helpers — Next.js tree-shakes per bundle but the import side-effects still execute.
+
+---
+
 ## Portfolio Tracker
 
 - `Position` model: `id, userId, ticker, companyName, purchasePrice, shares, currency, purchasedAt, notes`
-- Types: `Position`, `CreatePositionRequest`, `AggregatedPosition` — all in `types/portfolio.ts`
-- Client helpers in `lib/portfolio.ts` — same pattern as `lib/analyses.ts`
+- Types: `Position`, `CreatePositionRequest`, `AggregatedPosition`, `SnapshotPoint` — all in `types/portfolio.ts`
+- Client helpers in `lib/portfolio.ts` — same pattern as `lib/analyses.ts`; includes `fetchSnapshots()` for chart data
 - Live prices fetched client-side via `/api/quote/[ticker]` in parallel for all unique tickers
 - FX conversion via `frankfurter.app` (free, no API key): `GET https://api.frankfurter.app/latest?base=EUR&symbols=USD,GBP,...`
   - Response: `{ rates: { USD: 1.08, GBP: 0.85 } }` — 1 EUR = X units of currency
@@ -350,7 +388,7 @@ import { QuoteResponse } from "@/types/market";
 import { FundamentalsResponse } from "@/types/fundamentals";
 import { ScenarioInput, AnalystEstimates, ValuationResponse, DdmScenariosInput, EvEbitdaScenariosInput } from "@/types/valuation";
 import { SavedAnalysis, SaveAnalysisRequest } from "@/types/analysis";
-import { Position, CreatePositionRequest, AggregatedPosition } from "@/types/portfolio";
+import { Position, CreatePositionRequest, AggregatedPosition, SnapshotPoint } from "@/types/portfolio";
 ```
 
 ### Lib Imports
@@ -362,7 +400,8 @@ import { getQuote, getFundamentals, getAnalystEstimates } from "@/lib/yahoo-clie
 import { formatCurrency, formatPercent, formatCompactNumber } from "@/lib/format";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { fetchPositions, createPosition, deletePosition } from "@/lib/portfolio";
+import { fetchPositions, createPosition, deletePosition, fetchSnapshots } from "@/lib/portfolio";
+import { createSnapshotForUser, createSnapshotsForAllUsers } from "@/lib/portfolio-snapshots"; // server-only
 ```
 
 ---

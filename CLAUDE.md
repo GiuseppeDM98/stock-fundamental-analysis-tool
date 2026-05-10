@@ -6,9 +6,9 @@ Current project state and context for AI assistants.
 
 ## Version & Status
 
-**Version**: `0.7.1`
+**Version**: `0.8.0`
 **Status**: Active Development
-**Last Updated**: May 10, 2026 (Portfolio ↔ Analyses Link)
+**Last Updated**: May 10, 2026 (Portfolio P&L History)
 
 ---
 
@@ -29,11 +29,12 @@ Current project state and context for AI assistants.
 **Pattern**: Next.js App Router with client-side interactivity and server-side API routes.
 
 - **Frontend**: Single-page dashboard + auth pages + saved analyses pages + portfolio page
-- **API Layer**: `/api/quote`, `/api/fundamentals`, `/api/valuation`, `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses`, `/api/analyses/[id]`, `/api/positions`, `/api/positions/[id]`, `/api/ai/analyze`, `/api/ai/deep-value`
-- **Business Logic**: Pure TypeScript in `lib/` (DCF/DDM/EV-EBITDA engines, sector routing, scenario presets, Yahoo adapter, AI prompts, formatters)
-- **Database**: SQLite via Prisma 7 — `User` + `Analysis` + `Position` models
+- **API Layer**: `/api/quote`, `/api/fundamentals`, `/api/valuation`, `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses`, `/api/analyses/[id]`, `/api/positions`, `/api/positions/[id]`, `/api/ai/analyze`, `/api/ai/deep-value`, `/api/portfolio/snapshots`, `/api/cron/portfolio-snapshot`
+- **Business Logic**: Pure TypeScript in `lib/` (DCF/DDM/EV-EBITDA engines, sector routing, scenario presets, Yahoo adapter, AI prompts, snapshot logic, formatters)
+- **Database**: SQLite via Prisma 7 — `User` + `Analysis` + `Position` + `PortfolioSnapshot` models
 - **Auth**: Auth.js v5 credentials provider, JWT sessions
 - **Types**: Centralized in `types/` (fundamentals, market, valuation, analysis, auth, ai, portfolio)
+- **Cron**: Vercel Cron Job (`vercel.json`) fires POST to `/api/cron/portfolio-snapshot` weekdays at 20:00 UTC
 
 ---
 
@@ -99,8 +100,18 @@ Current project state and context for AI assistants.
 - Summary bar only renders when at least one live price and FX rate are resolved
 - Add position modal (ReactDOM.createPortal), delete with confirmation
 - Live prices via `/api/quote/[ticker]` — parallel fetch for all unique tickers at mount
-- Types: `Position`, `CreatePositionRequest`, `AggregatedPosition` in `types/portfolio.ts`
+- Types: `Position`, `CreatePositionRequest`, `AggregatedPosition`, `SnapshotPoint` in `types/portfolio.ts`
 - **Portfolio ↔ Analyses link**: each position row shows "N analisi salvate ▼" (collapsible) if saved analyses exist for that ticker — date, MoS%, FV base, link to detail page. Implemented via `Promise.all([fetchPositions(), fetchAnalyses()])` on mount, no extra API calls.
+- **P&L History chart**: Recharts LineChart in `/portfolio` showing portfolio value vs cost basis over time. Data sourced from `PortfolioSnapshot` rows created by the daily cron. Shows placeholder if < 2 snapshots exist.
+
+### Portfolio P&L History (Snapshots)
+- **`PortfolioSnapshot` model**: `totalEur`, `costEur`, `takenAt`, `data` (JSON with per-position detail + FX rates at snapshot time)
+- **Vercel Cron Job** (`0 20 * * 1-5` — weekdays, 20:00 UTC after market close) POSTs to `/api/cron/portfolio-snapshot`
+- Cron secured with `CRON_SECRET` env var — Vercel injects `Authorization: Bearer <secret>` automatically
+- **Idempotent**: skips users who already have a snapshot for today (UTC) — safe for Vercel retries
+- Sequential user processing to respect Yahoo Finance rate limits
+- FX rates stored in snapshot JSON — not recalculated retroactively
+- `lib/portfolio-snapshots.ts` is server-only (`import "server-only"`); `fetchSnapshots()` client helper lives in `lib/portfolio.ts`
 
 ### Valuation Metrics Cards
 - 4 quick-glance cards above historical charts: **Anni di Utili** (P/E), **Anni di FCF** (P/FCF), **FCF Yield**, **Earnings Yield**
@@ -143,20 +154,23 @@ lib/
   valuation/sector.ts      # Sector detection + method routing
   valuation/scenario-presets.ts
   valuation/valuation-metrics.ts  # P/E, P/FCF, FCF Yield, Earnings Yield computation
-  ai/prompts.ts        # Prompt builders for AI analysis
-  ai/deep-value-prompts.ts  # Prompt builders for deep value AI analysis
-  yahoo-client.ts      # Yahoo adapter
-  auth.ts              # Auth.js v5 config
-  db.ts                # Prisma singleton
-  analyses.ts          # Client-side fetch helpers
-  portfolio.ts         # Client-side fetch helpers for positions
-  format.ts            # Formatting utilities
+  ai/prompts.ts            # Prompt builders for AI analysis
+  ai/deep-value-prompts.ts # Prompt builders for deep value AI analysis
+  yahoo-client.ts          # Yahoo adapter
+  auth.ts                  # Auth.js v5 config
+  db.ts                    # Prisma singleton
+  analyses.ts              # Client-side fetch helpers
+  portfolio.ts             # Client-side fetch helpers (positions + fetchSnapshots)
+  portfolio-snapshots.ts   # Server-only: snapshot creation logic (import "server-only")
+  format.ts                # Formatting utilities
 app/api/
   quote/[ticker]/      fundamentals/[ticker]/      valuation/[ticker]/
   analyst-estimates/[ticker]/      macro/risk-free-rate/
   auth/[...nextauth]/  auth/register/
   analyses/            analyses/[id]/
   positions/           positions/[id]/
+  portfolio/snapshots/     # GET last 90 days of snapshots
+  cron/portfolio-snapshot/ # POST — Vercel Cron endpoint
   ai/analyze/          # Streaming AI analysis
   ai/deep-value/       # Autonomous deep value AI analysis
 app/login/ app/register/ app/analyses/ app/analyses/[id]/ app/portfolio/
@@ -164,12 +178,13 @@ components/            # dashboard-client, scenario-panel, ddm-scenario-panel,
                        # ev-ebitda-scenario-panel, sector-badge, fair-value-card,
                        # ticker-search, fundamentals-charts, price-summary,
                        # disclaimer-banner, ai-analysis-panel, deep-value-panel,
-                       # analyses-list, portfolio-list, open-position-banner,
-                       # nav-bar, login-form, register-form, session-provider,
-                       # valuation-metrics-cards
+                       # analyses-list, portfolio-list, portfolio-history-chart,
+                       # open-position-banner, nav-bar, login-form, register-form,
+                       # session-provider, valuation-metrics-cards
 prisma/                # schema.prisma + migrations
 generated/prisma/      # Prisma 7 generated client (gitignored)
-docs/                  # Feature specs (2-position-analysis-link, 3-portfolio-pnl-history)
+vercel.json            # Vercel Cron Job schedule
+docs/                  # Feature specs
 __tests__/             # 17 tests across 4 files
 ```
 
@@ -183,6 +198,10 @@ npm run build         # prisma generate + next build (type-check + production bu
 npm run test          # Vitest once
 npx prisma migrate dev --name <name>  # DB schema changes
 npx prisma generate   # Regenerate client after schema changes
+# Apply migration to Turso after migrate dev:
+turso db shell stock-analysis < prisma/migrations/<timestamp>_<name>/migration.sql
+# Test cron locally:
+curl -X POST http://localhost:3000/api/cron/portfolio-snapshot -H "Authorization: Bearer dev-cron-secret-local"
 ```
 
 **Note**: `npm run lint` is deprecated/interactive — use `npm run build` for type-checking.
@@ -199,6 +218,7 @@ NEXTAUTH_SECRET="..."                  # openssl rand -hex 32
 NEXTAUTH_URL="http://localhost:3000"   # production: https://your-domain.vercel.app
 ANTHROPIC_API_KEY="sk-ant-..."
 DISABLE_REGISTRATION="false"
+CRON_SECRET="..."                      # openssl rand -hex 32 — must also be set in Vercel project settings
 ```
 
 See `.env.example` for full template.
@@ -207,10 +227,9 @@ See `.env.example` for full template.
 
 ## Next Priorities
 
-1. Portfolio P&L history with snapshots — see `docs/3-portfolio-pnl-history.md`
-2. Caching layer for Yahoo API calls
-3. Sensitivity analysis table (WACC vs growth matrix)
-4. P/B for Financial sector (currently shows DCF + disclaimer)
+1. Caching layer for Yahoo API calls
+2. Sensitivity analysis table (WACC vs growth matrix)
+3. P/B for Financial sector (currently shows DCF + disclaimer)
 
 ---
 

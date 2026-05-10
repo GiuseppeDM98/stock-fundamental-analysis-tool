@@ -11,12 +11,13 @@ datasource db {
 }
 
 model User {
-  id           String     @id @default(cuid())
-  email        String     @unique
+  id           String              @id @default(cuid())
+  email        String              @unique
   passwordHash String
-  createdAt    DateTime   @default(now())
+  createdAt    DateTime            @default(now())
   analyses     Analysis[]
   positions    Position[]
+  snapshots    PortfolioSnapshot[]
 }
 
 model Analysis {
@@ -36,6 +37,21 @@ model Analysis {
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+}
+
+// Daily portfolio value snapshot written by the Vercel cron job.
+// costEur stored separately so the chart can draw the cost-basis line without parsing data JSON.
+// data stores FX rates used at snapshot time — never recalculated retroactively.
+model PortfolioSnapshot {
+  id       String   @id @default(cuid())
+  userId   String
+  takenAt  DateTime @default(now())
+  totalEur Float
+  costEur  Float
+  data     String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, takenAt])
 }
 
 // Tracks real purchases made by the user for long-term P&L tracking.
