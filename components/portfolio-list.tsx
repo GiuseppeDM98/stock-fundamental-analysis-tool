@@ -6,7 +6,7 @@
 import { useState, useEffect } from "react";
 import ReactDOM from "react-dom";
 import { fetchPositions, createPosition, deletePosition } from "@/lib/portfolio";
-import type { Position, CreatePositionRequest } from "@/types/portfolio";
+import type { Position, CreatePositionRequest, AggregatedPosition } from "@/types/portfolio";
 
 const CURRENCIES = ["EUR", "USD", "GBP", "CHF", "JPY", "CAD", "AUD", "SEK", "NOK", "DKK"];
 
@@ -38,10 +38,163 @@ function formatDate(iso: string): string {
   });
 }
 
+// ─── Aggregation ─────────────────────────────────────────────────────────────
+
+function aggregateByTicker(positions: Position[]): AggregatedPosition[] {
+  const map = new Map<string, Position[]>();
+  for (const p of positions) {
+    map.set(p.ticker, [...(map.get(p.ticker) ?? []), p]);
+  }
+  return [...map.entries()].map(([ticker, purchases]) => {
+    const sorted = [...purchases].sort(
+      (a, b) => new Date(a.purchasedAt).getTime() - new Date(b.purchasedAt).getTime()
+    );
+    const totalShares = sorted.reduce((s, p) => s + p.shares, 0);
+    const totalCost = sorted.reduce((s, p) => s + p.purchasePrice * p.shares, 0);
+    return {
+      ticker,
+      companyName: sorted[0].companyName,
+      currency: sorted[0].currency,
+      totalShares,
+      weightedAvgCost: totalCost / totalShares,
+      totalCost,
+      purchases: sorted,
+    };
+  });
+}
+
 // ─── Shared input class ───────────────────────────────────────────────────────
 
 const inputClass =
   "w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-accent focus:outline-none focus:ring-1 focus:ring-sky-400/30";
+
+// ─── Aggregated Position Row ──────────────────────────────────────────────────
+
+type AggregatedPositionRowProps = {
+  agg: AggregatedPosition;
+  currentPrice?: number;
+  onDelete: (id: string) => void;
+  deleting: string | null;
+  pricesLoading: boolean;
+};
+
+function AggregatedPositionRow({
+  agg,
+  currentPrice,
+  onDelete,
+  deleting,
+  pricesLoading,
+}: AggregatedPositionRowProps) {
+  const [expanded, setExpanded] = useState(false);
+  const currentValue = currentPrice != null ? currentPrice * agg.totalShares : null;
+  const pnl = currentValue != null ? currentValue - agg.totalCost : null;
+  const returnPct = pnl != null ? (currentValue! / agg.totalCost - 1) * 100 : null;
+  const isPositive = pnl != null && pnl >= 0;
+  const hasMultiple = agg.purchases.length > 1;
+
+  return (
+    <li className="card">
+      {/* Summary row */}
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <a
+              href={`/?ticker=${encodeURIComponent(agg.ticker)}`}
+              className="font-mono text-sm font-bold text-accent hover:text-sky-300"
+            >
+              {agg.ticker}
+            </a>
+            <span className="text-xs text-muted">{agg.companyName}</span>
+            <span className="rounded bg-slate-700/60 px-1.5 py-0.5 text-[11px] text-slate-400">
+              {agg.currency}
+            </span>
+            {hasMultiple && (
+              <button
+                onClick={() => setExpanded((e) => !e)}
+                className="ml-auto text-xs text-slate-500 hover:text-slate-300 transition"
+              >
+                {expanded ? "▲" : "▼"} {agg.purchases.length} acquisti
+              </button>
+            )}
+            {!hasMultiple && (
+              <span className="ml-auto text-xs text-muted">
+                {formatDate(agg.purchases[0].purchasedAt)}
+              </span>
+            )}
+          </div>
+
+          <div className="mt-1.5 flex items-center gap-2 flex-wrap text-xs">
+            <span className="text-muted">
+              {agg.totalShares} shares · WAC {formatPrice(agg.weightedAvgCost, agg.currency)}
+            </span>
+            {currentPrice != null ? (
+              <>
+                <span className="text-slate-600">→</span>
+                <span className="text-slate-200">{formatPrice(currentPrice, agg.currency)}</span>
+              </>
+            ) : pricesLoading ? (
+              <>
+                <span className="text-slate-600">→</span>
+                <span className="text-slate-600">loading…</span>
+              </>
+            ) : null}
+            {pnl != null && (
+              <span
+                className={`rounded px-1.5 py-0.5 font-semibold ${
+                  isPositive
+                    ? "bg-emerald-500/15 text-success"
+                    : "bg-red-500/15 text-danger"
+                }`}
+              >
+                {isPositive ? "+" : ""}{formatAmount(pnl, agg.currency)}{" "}
+                ({isPositive ? "+" : ""}{returnPct!.toFixed(1)}%)
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          <a
+            href={`/?ticker=${encodeURIComponent(agg.ticker)}`}
+            className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-accent transition hover:border-sky-400/40 hover:text-sky-300"
+          >
+            Analyze
+          </a>
+          {/* Delete only shown for single-purchase tickers; multi-purchase uses drill-down */}
+          {!hasMultiple && (
+            <button
+              onClick={() => onDelete(agg.purchases[0].id)}
+              disabled={deleting === agg.purchases[0].id}
+              className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-muted transition hover:border-red-500/50 hover:text-danger disabled:opacity-50"
+            >
+              {deleting === agg.purchases[0].id ? "…" : "Delete"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Drill-down: individual purchases */}
+      {expanded && hasMultiple && (
+        <ul className="mt-3 space-y-1 pl-4 border-l border-slate-700">
+          {agg.purchases.map((p) => (
+            <li key={p.id} className="flex items-center justify-between text-xs text-slate-400">
+              <span>
+                {formatDate(p.purchasedAt)} · {p.shares} @ {formatPrice(p.purchasePrice, p.currency)}
+              </span>
+              <button
+                onClick={() => onDelete(p.id)}
+                disabled={deleting === p.id}
+                className="ml-4 rounded border border-slate-700 px-1.5 py-0.5 text-muted transition hover:border-red-500/50 hover:text-danger disabled:opacity-50"
+              >
+                {deleting === p.id ? "…" : "×"}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
 
 // ─── Add Position Modal ───────────────────────────────────────────────────────
 
@@ -284,6 +437,7 @@ export default function PortfolioList() {
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [viewMode, setViewMode] = useState<"aggregated" | "flat">("aggregated");
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({});
   const [pricesLoading, setPricesLoading] = useState(false);
   // EUR-based FX rates from frankfurter.app: { USD: 1.08, GBP: 0.85, ... }
@@ -368,22 +522,68 @@ export default function PortfolioList() {
         <SummaryBar positions={positions} currentPrices={currentPrices} fxRates={fxRates} />
       )}
 
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <p className="text-sm text-muted">
           {positions.length === 0
             ? "No positions yet — add your first purchase."
+            : viewMode === "aggregated"
+            ? (() => {
+                const tickers = new Set(positions.map((p) => p.ticker)).size;
+                return `${tickers} ticker${tickers !== 1 ? "s" : ""}, ${positions.length} purchase${positions.length !== 1 ? "s" : ""}`;
+              })()
             : `${positions.length} position${positions.length !== 1 ? "s" : ""}`}
           {pricesLoading && <span className="ml-2 text-xs text-slate-600">Loading prices…</span>}
         </p>
-        <button
-          onClick={() => setShowModal(true)}
-          className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-slate-950 transition hover:brightness-110"
-        >
-          + Add Position
-        </button>
+        <div className="flex items-center gap-2">
+          {positions.length > 0 && (
+            <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs">
+              <button
+                onClick={() => setViewMode("aggregated")}
+                className={`px-3 py-1.5 transition ${
+                  viewMode === "aggregated"
+                    ? "bg-slate-700 text-slate-100"
+                    : "text-muted hover:text-slate-300"
+                }`}
+              >
+                Aggregated
+              </button>
+              <button
+                onClick={() => setViewMode("flat")}
+                className={`px-3 py-1.5 transition ${
+                  viewMode === "flat"
+                    ? "bg-slate-700 text-slate-100"
+                    : "text-muted hover:text-slate-300"
+                }`}
+              >
+                Per Purchase
+              </button>
+            </div>
+          )}
+          <button
+            onClick={() => setShowModal(true)}
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-slate-950 transition hover:brightness-110"
+          >
+            + Add Position
+          </button>
+        </div>
       </div>
 
-      {positions.length > 0 && (
+      {positions.length > 0 && viewMode === "aggregated" && (
+        <ul className="space-y-3">
+          {aggregateByTicker(positions).map((agg) => (
+            <AggregatedPositionRow
+              key={agg.ticker}
+              agg={agg}
+              currentPrice={currentPrices[agg.ticker]}
+              onDelete={handleDelete}
+              deleting={deleting}
+              pricesLoading={pricesLoading}
+            />
+          ))}
+        </ul>
+      )}
+
+      {positions.length > 0 && viewMode === "flat" && (
         <ul className="space-y-3">
           {positions.map((pos) => {
             const cp = currentPrices[pos.ticker];

@@ -27,6 +27,8 @@
 
 - Added **Portfolio Tracker** — new `/portfolio` section to track real stock purchases with live P&L. Add positions (ticker, shares, purchase price, currency, date) and see per-position gain/loss in real time. Supports EUR, USD, GBP, CHF, JPY, CAD, AUD, SEK, NOK, DKK with automatic FX conversion to EUR for the aggregate summary bar (powered by [Frankfurter API](https://api.frankfurter.app)).
 
+- Added **DCA / average cost view** in the Portfolio — positions for the same ticker are now grouped into a single aggregated row showing the Weighted Average Cost (WAC), total shares, and combined P&L. Click to expand and see each individual purchase with its date and price. A toggle switches between the aggregated view (default) and the original per-purchase list.
+
 - Added **analysis performance tracking** — analyses list now shows `$priceAtSave → $priceNow +/-X%` and an "Under FV" / "Above FV" badge for each saved report. Prices are fetched once at page load for all unique tickers; the badge is silently absent for older analyses without a snapshot.
 
 - Added **Re-run Analysis** button in the analyses list and detail page — one click redirects to the dashboard with the ticker pre-filled and the data fetch triggered automatically.

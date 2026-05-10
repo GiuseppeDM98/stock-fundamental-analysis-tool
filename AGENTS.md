@@ -252,12 +252,33 @@ getRecommendedMethod(sector: Sector): ValuationMethodInfo  // returns { label, i
 ## Portfolio Tracker
 
 - `Position` model: `id, userId, ticker, companyName, purchasePrice, shares, currency, purchasedAt, notes`
+- Types: `Position`, `CreatePositionRequest`, `AggregatedPosition` — all in `types/portfolio.ts`
 - Client helpers in `lib/portfolio.ts` — same pattern as `lib/analyses.ts`
 - Live prices fetched client-side via `/api/quote/[ticker]` in parallel for all unique tickers
 - FX conversion via `frankfurter.app` (free, no API key): `GET https://api.frankfurter.app/latest?base=EUR&symbols=USD,GBP,...`
   - Response: `{ rates: { USD: 1.08, GBP: 0.85 } }` — 1 EUR = X units of currency
   - To convert amount in USD to EUR: `usdAmount / rates.USD`
 - Summary bar only renders when at least one live price + FX rate is resolved — fails silently otherwise
+
+### WAC/DCA Aggregation Pattern
+
+Client-side aggregation of flat `Position[]` by ticker — no DB involvement:
+
+```typescript
+// aggregateByTicker: pure function, called on each render, no extra state
+function aggregateByTicker(positions: Position[]): AggregatedPosition[] {
+  // groups by ticker, sorts purchases oldest→newest, computes:
+  //   totalShares = Σ shares
+  //   totalCost   = Σ purchasePrice × shares
+  //   weightedAvgCost = totalCost / totalShares  (WAC)
+}
+```
+
+Key invariants:
+- `SummaryBar` receives the flat `Position[]` — math is identical (Σ cost / Σ value), no need to pass aggregated data
+- Deleting a purchase from drill-down triggers a re-render; `aggregateByTicker` re-derives WAC automatically with no extra state
+- Single-purchase tickers render identically to the old flat row (no expand toggle)
+- P&L on the aggregated row: `(currentPrice − WAC) × totalShares`
 
 ---
 
@@ -318,7 +339,7 @@ import { QuoteResponse } from "@/types/market";
 import { FundamentalsResponse } from "@/types/fundamentals";
 import { ScenarioInput, AnalystEstimates, ValuationResponse, DdmScenariosInput, EvEbitdaScenariosInput } from "@/types/valuation";
 import { SavedAnalysis, SaveAnalysisRequest } from "@/types/analysis";
-import { Position, CreatePositionRequest } from "@/types/portfolio";
+import { Position, CreatePositionRequest, AggregatedPosition } from "@/types/portfolio";
 ```
 
 ### Lib Imports

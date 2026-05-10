@@ -21,3 +21,14 @@ export type CreatePositionRequest = {
   purchasedAt: string; // ISO date string YYYY-MM-DD
   notes?: string;
 };
+
+/** Purchases for a single ticker grouped client-side, with WAC computed. */
+export type AggregatedPosition = {
+  ticker: string;
+  companyName: string;
+  currency: string;
+  totalShares: number;
+  weightedAvgCost: number;
+  totalCost: number;
+  purchases: Position[]; // sorted oldest→newest
+};

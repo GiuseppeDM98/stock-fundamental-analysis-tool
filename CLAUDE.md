@@ -6,9 +6,9 @@ Current project state and context for AI assistants.
 
 ## Version & Status
 
-**Version**: `0.6.1`
+**Version**: `0.7.0`
 **Status**: Active Development
-**Last Updated**: May 10, 2026 (UI Design System Consistency Pass)
+**Last Updated**: May 10, 2026 (Portfolio WAC/DCA Aggregation)
 
 ---
 
@@ -86,14 +86,18 @@ Current project state and context for AI assistants.
 - **Re-run button** in analyses list and detail page — redirects to dashboard with `?ticker=` URL param, triggers auto-fetch
 
 ### Portfolio Tracker
-- New section at `/portfolio` — track real stock purchases with live P&L
+- Section at `/portfolio` — track real stock purchases with live P&L
 - `Position` model: `ticker`, `companyName`, `purchasePrice`, `shares`, `currency`, `purchasedAt`, `notes`
-- Per-position P&L: cost basis, current value, gain/loss in currency and %
+- **WAC/DCA aggregation**: positions grouped by ticker in "Aggregated" view (default); shows `AggregatedPosition` with `weightedAvgCost`, `totalShares`, `totalCost`, expandable drill-down for individual purchases
+  - Toggle "Aggregated / Per Purchase" switches between WAC view and flat per-purchase list
+  - WAC P&L: `(currentPrice − WAC) × totalShares`
+  - Delete from drill-down removes single purchase; WAC re-derives on next render automatically
 - Multi-currency support — currency stored per position (EUR/USD/GBP/CHF/JPY/CAD/AUD/SEK/NOK/DKK)
 - Aggregate summary bar with total cost, total value, total P&L — all converted to EUR via Frankfurter API (`api.frankfurter.app/latest?base=EUR`)
 - Summary bar only renders when at least one live price and FX rate are resolved
 - Add position modal (ReactDOM.createPortal), delete with confirmation
 - Live prices via `/api/quote/[ticker]` — parallel fetch for all unique tickers at mount
+- Types: `Position`, `CreatePositionRequest`, `AggregatedPosition` in `types/portfolio.ts`
 
 ### Valuation Metrics Cards
 - 4 quick-glance cards above historical charts: **Anni di Utili** (P/E), **Anni di FCF** (P/FCF), **FCF Yield**, **Earnings Yield**
@@ -161,7 +165,7 @@ components/            # dashboard-client, scenario-panel, ddm-scenario-panel,
                        # register-form, session-provider, valuation-metrics-cards
 prisma/                # schema.prisma + migrations
 generated/prisma/      # Prisma 7 generated client (gitignored)
-docs/                  # Feature specs (1-position-average-cost, 2-position-analysis-link, 3-portfolio-pnl-history)
+docs/                  # Feature specs (2-position-analysis-link, 3-portfolio-pnl-history)
 __tests__/             # 17 tests across 4 files
 ```
 
@@ -199,12 +203,11 @@ See `.env.example` for full template.
 
 ## Next Priorities
 
-1. Position average cost (WAC/DCA) — see `docs/1-position-average-cost.md`
-2. Portfolio ↔ analyses link — see `docs/2-position-analysis-link.md`
-3. Portfolio P&L history with snapshots — see `docs/3-portfolio-pnl-history.md`
-4. Caching layer for Yahoo API calls
-5. Sensitivity analysis table (WACC vs growth matrix)
-6. P/B for Financial sector (currently shows DCF + disclaimer)
+1. Portfolio ↔ analyses link — see `docs/2-position-analysis-link.md`
+2. Portfolio P&L history with snapshots — see `docs/3-portfolio-pnl-history.md`
+3. Caching layer for Yahoo API calls
+4. Sensitivity analysis table (WACC vs growth matrix)
+5. P/B for Financial sector (currently shows DCF + disclaimer)
 
 ---
 
