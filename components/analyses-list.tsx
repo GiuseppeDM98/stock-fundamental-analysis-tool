@@ -42,19 +42,23 @@ function PerformanceBadge({
 
   return (
     <div className="flex items-center gap-2 mt-1 flex-wrap">
-      <span className="text-xs text-slate-500">
+      <span className="text-xs text-muted">
         {formatPrice(priceAtAnalysis)} → {formatPrice(currentPrice)}
       </span>
       <span
-        className={`text-xs font-semibold ${isPositive ? "text-emerald-400" : "text-red-400"}`}
+        className={`rounded px-1.5 py-0.5 text-xs font-semibold ${
+          isPositive
+            ? "bg-emerald-500/15 text-success"
+            : "bg-red-500/15 text-danger"
+        }`}
       >
         {sign}{delta.toFixed(1)}%
       </span>
       {fairValueBase != null && (
         <span
-          className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
+          className={`rounded px-1.5 py-0.5 text-xs font-medium ${
             belowFairValue
-              ? "bg-emerald-500/15 text-emerald-400"
+              ? "bg-emerald-500/15 text-success"
               : "bg-slate-700/60 text-slate-400"
           }`}
         >
@@ -129,7 +133,7 @@ export default function AnalysesList() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-16 text-slate-400">
+      <div className="flex items-center justify-center py-16 text-muted">
         Loading…
       </div>
     );
@@ -137,7 +141,7 @@ export default function AnalysesList() {
 
   if (error) {
     return (
-      <div className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-400">
+      <div className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-danger">
         {error}
       </div>
     );
@@ -145,14 +149,14 @@ export default function AnalysesList() {
 
   if (analyses.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-slate-700 py-16 text-center text-slate-500">
+      <div className="rounded-xl border border-dashed border-slate-700 py-16 text-center text-muted">
         <p className="text-lg">No saved analyses yet.</p>
         <p className="mt-1 text-sm">
           Generate an AI analysis from the dashboard and save it here.
         </p>
         <button
           onClick={() => router.push("/")}
-          className="mt-4 rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-400"
+          className="mt-4 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-slate-950 transition hover:brightness-110"
         >
           Go to Dashboard
         </button>
@@ -175,13 +179,13 @@ export default function AnalysesList() {
               onClick={() => router.push(`/analyses/${analysis.id}`)}
             >
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-mono text-sm font-bold text-sky-400">
+                <span className="font-mono text-sm font-bold text-accent">
                   {analysis.ticker}
                 </span>
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-muted">
                   {analysis.companyName}
                 </span>
-                <span className="ml-auto text-xs text-slate-500">
+                <span className="ml-auto text-xs text-muted">
                   MoS {analysis.mosPercent}%
                 </span>
               </div>
@@ -210,7 +214,7 @@ export default function AnalysesList() {
                 onClick={() => {
                   window.location.href = `/?ticker=${encodeURIComponent(analysis.ticker)}`;
                 }}
-                className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-sky-400 transition hover:border-sky-500/50 hover:text-sky-300"
+                className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-accent transition hover:border-sky-400/40 hover:text-sky-300"
                 title="Re-run analysis with this ticker"
               >
                 Re-run
@@ -218,7 +222,7 @@ export default function AnalysesList() {
               <button
                 onClick={() => handleDelete(analysis.id)}
                 disabled={deleting === analysis.id}
-                className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-red-500/50 hover:text-red-400 disabled:opacity-50"
+                className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-muted transition hover:border-red-500/50 hover:text-danger disabled:opacity-50"
               >
                 {deleting === analysis.id ? "…" : "Delete"}
               </button>

@@ -53,6 +53,11 @@
 
 ## 🔧 Improvements
 
+- Portfolio positions now display in a cleaner format: `shares × buy price → current price` with an inline colored P&L badge, replacing the previous hard-to-read dot-separated line
+- Performance and P&L deltas now appear as colored pill badges with a tinted background — easier to spot at a glance when scanning multiple positions or analyses
+- Navigation bar now highlights the current page so it's always clear which section you're in
+- Input fields in scenario panels and the Add Position form now show a visible focus ring when selected — clearer keyboard navigation
+- WACC and cost-of-equity reference badges (showing the US 10-Year rate) are now styled as informational labels rather than interactive buttons — no longer visually ambiguous
 - WACC is now computed from the company's actual beta and the live US 10-Year Treasury yield using CAPM (`Ke = Rf + β × ERP`), instead of a fixed 9.5% for all companies — discount rates now reflect each company's real risk profile
 - Smart scenario defaults now use a 5-year historical average for operating margin instead of the trailing 12-month figure — significantly improves accuracy for cyclical companies (e.g. oil & gas, materials) where a single year can be anomalous
 - Historical financial data now fetches up to 10 years (previously 5) — more historical context for trend analysis and more stable scenario defaults
@@ -76,3 +81,4 @@
 - Migrated database from local SQLite to Turso (hosted libSQL) — saved analyses and user accounts now persist across Vercel deployments
 - Local SQLite (`dev.db`) is now used only for schema development via `prisma migrate dev` and is excluded from git
 - Fixed Vercel deployment build failure — `prisma generate` now runs automatically as part of the build step
+- Removed deprecated `baseUrl` from `tsconfig.json` (TypeScript 6.0+ deprecation; aliases continue to work via `paths`)

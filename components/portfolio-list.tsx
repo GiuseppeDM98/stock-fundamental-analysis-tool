@@ -38,6 +38,11 @@ function formatDate(iso: string): string {
   });
 }
 
+// ─── Shared input class ───────────────────────────────────────────────────────
+
+const inputClass =
+  "w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-accent focus:outline-none focus:ring-1 focus:ring-sky-400/30";
+
 // ─── Add Position Modal ───────────────────────────────────────────────────────
 
 type AddPositionModalProps = {
@@ -95,47 +100,47 @@ function AddPositionModal({ onClose, onSave }: AddPositionModalProps) {
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs text-slate-400">Ticker *</label>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Ticker *</label>
               <input
                 type="text"
                 placeholder="ENI.MI"
                 value={form.ticker}
                 onChange={(e) => handleChange("ticker", e.target.value)}
-                className="w-full rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
+                className={inputClass}
                 required
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-slate-400">Date *</label>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Date *</label>
               <input
                 type="date"
                 value={form.purchasedAt}
                 onChange={(e) => handleChange("purchasedAt", e.target.value)}
-                className="w-full rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
+                className={inputClass}
                 required
               />
             </div>
           </div>
 
           <div>
-            <label className="mb-1 block text-xs text-slate-400">Company Name *</label>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Company Name *</label>
             <input
               type="text"
               placeholder="ENI S.p.A."
               value={form.companyName}
               onChange={(e) => handleChange("companyName", e.target.value)}
-              className="w-full rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
+              className={inputClass}
               required
             />
           </div>
 
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-1">
-              <label className="mb-1 block text-xs text-slate-400">Currency *</label>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Currency *</label>
               <select
                 value={form.currency}
                 onChange={(e) => handleChange("currency", e.target.value)}
-                className="w-full rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
+                className={inputClass}
               >
                 {CURRENCIES.map((c) => (
                   <option key={c} value={c}>{c}</option>
@@ -143,7 +148,7 @@ function AddPositionModal({ onClose, onSave }: AddPositionModalProps) {
               </select>
             </div>
             <div className="col-span-1">
-              <label className="mb-1 block text-xs text-slate-400">Price *</label>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Price *</label>
               <input
                 type="number"
                 placeholder="22.5850"
@@ -151,12 +156,12 @@ function AddPositionModal({ onClose, onSave }: AddPositionModalProps) {
                 step="0.0001"
                 value={form.purchasePrice || ""}
                 onChange={(e) => handleChange("purchasePrice", parseFloat(e.target.value) || 0)}
-                className="w-full rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
+                className={inputClass}
                 required
               />
             </div>
             <div className="col-span-1">
-              <label className="mb-1 block text-xs text-slate-400">Shares *</label>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Shares *</label>
               <input
                 type="number"
                 placeholder="100"
@@ -164,39 +169,39 @@ function AddPositionModal({ onClose, onSave }: AddPositionModalProps) {
                 step="0.001"
                 value={form.shares || ""}
                 onChange={(e) => handleChange("shares", parseFloat(e.target.value) || 0)}
-                className="w-full rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
+                className={inputClass}
                 required
               />
             </div>
           </div>
 
           <div>
-            <label className="mb-1 block text-xs text-slate-400">Notes</label>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Notes</label>
             <input
               type="text"
               placeholder="Optional notes…"
               value={form.notes ?? ""}
               onChange={(e) => handleChange("notes", e.target.value)}
-              className="w-full rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
+              className={inputClass}
             />
           </div>
 
           {error && (
-            <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">{error}</p>
+            <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-danger">{error}</p>
           )}
 
           <div className="flex gap-3 pt-1">
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 rounded-lg bg-sky-500 py-2 text-sm font-semibold text-white transition hover:bg-sky-400 disabled:opacity-50"
+              className="flex-1 rounded-lg bg-accent py-2 text-sm font-semibold text-slate-950 transition hover:brightness-110 disabled:opacity-50"
             >
               {saving ? "Saving…" : "Save Position"}
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 transition hover:border-slate-500"
+              className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-muted transition hover:border-slate-500 hover:text-slate-100"
             >
               Cancel
             </button>
@@ -250,16 +255,16 @@ function SummaryBar({
   return (
     <div className="card mb-4 grid grid-cols-3 gap-4 text-center">
       <div>
-        <p className="text-xs text-slate-500 mb-1">Total Cost</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-1">Total Cost</p>
         <p className="text-lg font-semibold text-slate-100">{formatAmount(totalCostEur, "EUR")}</p>
       </div>
       <div>
-        <p className="text-xs text-slate-500 mb-1">Current Value</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-1">Current Value</p>
         <p className="text-lg font-semibold text-slate-100">{formatAmount(totalValueEur, "EUR")}</p>
       </div>
       <div>
-        <p className="text-xs text-slate-500 mb-1">Total P&amp;L</p>
-        <p className={`text-lg font-semibold ${isPositive ? "text-emerald-400" : "text-red-400"}`}>
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-1">Total P&amp;L</p>
+        <p className={`text-lg font-semibold ${isPositive ? "text-success" : "text-danger"}`}>
           {isPositive ? "+" : ""}{formatAmount(pnlEur, "EUR")}{" "}
           <span className="text-sm">
             ({isPositive ? "+" : ""}{totalReturn.toFixed(1)}%)
@@ -350,13 +355,13 @@ export default function PortfolioList() {
   }
 
   if (loading) {
-    return <div className="flex items-center justify-center py-16 text-slate-400">Loading…</div>;
+    return <div className="flex items-center justify-center py-16 text-muted">Loading…</div>;
   }
 
   return (
     <div>
       {error && (
-        <div className="mb-4 rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</div>
+        <div className="mb-4 rounded-lg bg-red-500/10 px-4 py-3 text-sm text-danger">{error}</div>
       )}
 
       {positions.length > 0 && (
@@ -364,15 +369,15 @@ export default function PortfolioList() {
       )}
 
       <div className="mb-4 flex items-center justify-between">
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-muted">
           {positions.length === 0
             ? "No positions yet — add your first purchase."
             : `${positions.length} position${positions.length !== 1 ? "s" : ""}`}
-          {pricesLoading && <span className="ml-2 text-xs text-slate-500">Loading prices…</span>}
+          {pricesLoading && <span className="ml-2 text-xs text-slate-600">Loading prices…</span>}
         </p>
         <button
           onClick={() => setShowModal(true)}
-          className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-400"
+          className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-slate-950 transition hover:brightness-110"
         >
           + Add Position
         </button>
@@ -391,59 +396,67 @@ export default function PortfolioList() {
             return (
               <li key={pos.id} className="card flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
+                  {/* Header: ticker, company, currency badge, date */}
                   <div className="flex items-center gap-2 flex-wrap">
                     <a
                       href={`/?ticker=${encodeURIComponent(pos.ticker)}`}
-                      className="font-mono text-sm font-bold text-sky-400 hover:text-sky-300"
+                      className="font-mono text-sm font-bold text-accent hover:text-sky-300"
                     >
                       {pos.ticker}
                     </a>
-                    <span className="text-xs text-slate-500">{pos.companyName}</span>
+                    <span className="text-xs text-muted">{pos.companyName}</span>
                     <span className="rounded bg-slate-700/60 px-1.5 py-0.5 text-[11px] text-slate-400">
                       {pos.currency}
                     </span>
-                    <span className="ml-auto text-xs text-slate-500">{formatDate(pos.purchasedAt)}</span>
+                    <span className="ml-auto text-xs text-muted">{formatDate(pos.purchasedAt)}</span>
                   </div>
 
-                  <div className="mt-1 flex items-center gap-3 text-xs text-slate-400 flex-wrap">
-                    <span>{pos.shares} shares @ {formatPrice(pos.purchasePrice, pos.currency)}</span>
-                    <span className="text-slate-600">·</span>
-                    <span>Cost {formatAmount(costBasis, pos.currency)}</span>
-                    {cp != null && (
+                  {/* Financials: shares × buy price → current price, P&L badge */}
+                  <div className="mt-1.5 flex items-center gap-2 flex-wrap text-xs">
+                    <span className="text-muted">
+                      {pos.shares} × {formatPrice(pos.purchasePrice, pos.currency)}
+                    </span>
+                    {cp != null ? (
                       <>
-                        <span className="text-slate-600">·</span>
-                        <span>Now {formatPrice(cp, pos.currency)}</span>
-                        <span className="text-slate-600">·</span>
-                        <span>Value {formatAmount(currentValue!, pos.currency)}</span>
+                        <span className="text-slate-600">→</span>
+                        <span className="text-slate-200">{formatPrice(cp, pos.currency)}</span>
                       </>
-                    )}
-                  </div>
-
-                  {pnl != null && (
-                    <div className="mt-1 text-xs">
-                      <span className={`font-semibold ${isPositive ? "text-emerald-400" : "text-red-400"}`}>
+                    ) : pricesLoading ? (
+                      <>
+                        <span className="text-slate-600">→</span>
+                        <span className="text-slate-600">loading…</span>
+                      </>
+                    ) : null}
+                    {pnl != null && (
+                      <span
+                        className={`rounded px-1.5 py-0.5 font-semibold ${
+                          isPositive
+                            ? "bg-emerald-500/15 text-success"
+                            : "bg-red-500/15 text-danger"
+                        }`}
+                      >
                         {isPositive ? "+" : ""}{formatAmount(pnl, pos.currency)}{" "}
                         ({isPositive ? "+" : ""}{returnPct!.toFixed(1)}%)
                       </span>
-                    </div>
-                  )}
+                    )}
+                  </div>
 
                   {pos.notes && (
-                    <p className="mt-1 text-xs text-slate-500 italic">{pos.notes}</p>
+                    <p className="mt-1 text-xs text-slate-600 italic">{pos.notes}</p>
                   )}
                 </div>
 
                 <div className="flex shrink-0 flex-col items-end gap-1.5">
                   <a
                     href={`/?ticker=${encodeURIComponent(pos.ticker)}`}
-                    className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-sky-400 transition hover:border-sky-500/50 hover:text-sky-300"
+                    className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-accent transition hover:border-sky-400/40 hover:text-sky-300"
                   >
                     Analyze
                   </a>
                   <button
                     onClick={() => handleDelete(pos.id)}
                     disabled={deleting === pos.id}
-                    className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-red-500/50 hover:text-red-400 disabled:opacity-50"
+                    className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-muted transition hover:border-red-500/50 hover:text-danger disabled:opacity-50"
                   >
                     {deleting === pos.id ? "…" : "Delete"}
                   </button>

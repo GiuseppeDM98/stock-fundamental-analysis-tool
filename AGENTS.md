@@ -279,6 +279,24 @@ getRecommendedMethod(sector: Sector): ValuationMethodInfo  // returns { label, i
 
 ---
 
+## Design System
+
+### Token Usage Rules
+- **Semantic text/border colors**: always use tokens (`text-accent`, `text-muted`, `text-success`, `text-danger`, `text-warning`), never raw Tailwind palette classes like `text-sky-400` or `text-emerald-400`
+- **Primary buttons**: `bg-accent text-slate-950 hover:brightness-110` — not `bg-sky-500 text-white`
+- **Active nav link**: `usePathname()` from `next/navigation`; compare `pathname === href` to apply `font-medium text-slate-100`
+
+### Tailwind Opacity Modifiers on CSS Vars — DO NOT USE
+`text-accent/80`, `bg-success/15`, `border-accent/40` **silently fail**. CSS custom properties (`var(--accent)`) resolve to hex strings at runtime; Tailwind cannot extract RGB channels for opacity math.
+
+Use Tailwind built-in equivalents instead:
+- Hover on accent text → `hover:text-sky-300`
+- Success background tint → `bg-emerald-500/15`
+- Danger background tint → `bg-red-500/15`
+- Focus ring on accent border → `focus:ring-sky-400/30`
+
+---
+
 ## Common Gotchas
 
 1. **Next.js 15 async params**: Always `await context.params`
@@ -288,6 +306,7 @@ getRecommendedMethod(sector: Sector): ValuationMethodInfo  // returns { label, i
 5. **CSS variable naming**: Only `--bg`, `--card`, `--accent`, `--muted`, `--success`, `--warning`, `--danger` exist. No `--surface`. Use `bg-[var(--card)]` for modals.
 6. **`remarkGfm` missing**: Easy to forget in server-rendered pages. All pages rendering saved markdown need it explicitly — it's not inherited from the streaming panels.
 7. **Turso migration gap**: Local `prisma migrate dev` applies to `dev.db` only. App always hits Turso. Adding a column without applying the migration to Turso causes `no such column` in production/dev-with-Turso.
+8. **`baseUrl` removed from tsconfig**: deprecated in TypeScript 6.0+. With `moduleResolution: "Bundler"`, `paths` handles `@/` aliases without it — removing `baseUrl` is safe and eliminates the TS warning.
 
 ---
 

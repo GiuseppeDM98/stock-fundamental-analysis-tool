@@ -1,6 +1,7 @@
 "use client";
 
 import { useSession, signOut } from "next-auth/react";
+import { usePathname } from "next/navigation";
 import Link from "next/link";
 
 /**
@@ -11,13 +12,21 @@ import Link from "next/link";
  */
 export default function NavBar() {
   const { data: session, status } = useSession();
+  const pathname = usePathname();
+
+  function navLinkClass(href: string) {
+    const isActive = pathname === href;
+    return isActive
+      ? "font-medium text-slate-100"
+      : "text-muted transition hover:text-slate-100";
+  }
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-800/60 bg-[#070d19]/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
         <Link
           href="/"
-          className="text-sm font-semibold text-sky-400 hover:text-sky-300"
+          className="text-sm font-semibold text-accent hover:text-sky-300"
         >
           Stock Analysis
         </Link>
@@ -25,22 +34,16 @@ export default function NavBar() {
         <nav className="flex items-center gap-4 text-sm">
           {status === "loading" ? null : session ? (
             <>
-              <Link
-                href="/analyses"
-                className="text-slate-300 hover:text-slate-100"
-              >
+              <Link href="/analyses" className={navLinkClass("/analyses")}>
                 Saved Analyses
               </Link>
-              <Link
-                href="/portfolio"
-                className="text-slate-300 hover:text-slate-100"
-              >
+              <Link href="/portfolio" className={navLinkClass("/portfolio")}>
                 Portfolio
               </Link>
-              <span className="text-slate-500">{session.user?.email}</span>
+              <span className="text-muted">{session.user?.email}</span>
               <button
                 onClick={() => signOut({ callbackUrl: "/" })}
-                className="rounded-lg border border-slate-700 px-3 py-1 text-slate-300 transition hover:border-slate-500 hover:text-slate-100"
+                className="rounded-lg border border-slate-700 px-3 py-1 text-muted transition hover:border-slate-500 hover:text-slate-100"
               >
                 Sign out
               </button>
@@ -49,7 +52,7 @@ export default function NavBar() {
             <>
               <Link
                 href="/login"
-                className="text-slate-300 hover:text-slate-100"
+                className="text-muted transition hover:text-slate-100"
               >
                 Sign in
               </Link>

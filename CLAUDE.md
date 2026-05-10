@@ -6,9 +6,9 @@ Current project state and context for AI assistants.
 
 ## Version & Status
 
-**Version**: `0.6.0`
+**Version**: `0.6.1`
 **Status**: Active Development
-**Last Updated**: May 8, 2026 (Portfolio Tracker + Analysis Performance Tracking)
+**Last Updated**: May 10, 2026 (UI Design System Consistency Pass)
 
 ---
 
@@ -106,8 +106,11 @@ Current project state and context for AI assistants.
 - Analyst estimates reference banner
 - Historical charts with compact number formatting (Revenue, FCF, Net Income, Margins)
 - LocalStorage persistence for ticker, scenarios, margin of safety
-- US 10Y Treasury yield badge next to WACC field
-- Auth-aware NavBar on all pages (Dashboard / Saved Analyses / Portfolio / user info)
+- US 10Y Treasury yield badge next to WACC field (styled as informational, not interactive)
+- Auth-aware NavBar on all pages — active route highlighted (`font-medium text-white`)
+- P&L and performance deltas shown as pill badges with colored background (`bg-emerald-500/15` / `bg-red-500/15`) — not plain colored text
+- Portfolio position rows: `N × buy_price → current_price [P&L badge]` — compact two-element layout
+- Input focus states (accent ring) on all scenario panel fields and Add Position modal
 
 ---
 

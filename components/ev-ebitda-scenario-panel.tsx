@@ -108,7 +108,7 @@ export function EvEbitdaScenarioPanel({
                 onChange={(event) => {
                   onScenarioChange(scenarioName, "targetMultiple", Number(event.target.value));
                 }}
-                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm"
+                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-sky-400/30"
               />
             </label>
           </div>

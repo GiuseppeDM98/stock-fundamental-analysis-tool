@@ -119,7 +119,7 @@ export function DdmScenarioPanel({
                     <span className="flex items-center gap-1.5">
                       {labels[key]}
                       {key === "costOfEquity" && riskFreeRate !== null && (
-                        <span className="rounded-full border border-sky-800 bg-sky-950 px-1.5 py-0.5 text-[10px] font-semibold text-sky-400">
+                        <span className="rounded-full border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[10px] font-semibold text-muted">
                           US 10Y: {(riskFreeRate * 100).toFixed(2)}%
                         </span>
                       )}
@@ -133,7 +133,7 @@ export function DdmScenarioPanel({
                       onChange={(event) => {
                         onScenarioChange(scenarioName, key, Number(event.target.value) / 100);
                       }}
-                      className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm"
+                      className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-sky-400/30"
                     />
                   </label>
                 );
