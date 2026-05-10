@@ -29,12 +29,22 @@ Use web search to identify the company's sector and choose the valuation method:
 - **P/B** (price-to-book): Banks, Insurance, Financial Services
 
 ## Step 2 — Gather financial data via web search
-Search for the most recent annual financial data (last 3–5 years where available):
+Search for the most recent annual financial data (last 5 years where available, minimum 3 if data is limited):
+
+**Income & Cash Flow:**
 - Revenue, Operating Income, Net Income, Free Cash Flow (or EBITDA for EV/EBITDA)
-- Dividends per share (for DDM)
-- Net Debt (Total Debt minus Cash)
-- Shares outstanding
-- Current market cap
+- Gross Margin, Operating Margin, FCF Conversion Rate (FCF / Net Income)
+
+**Balance Sheet & Quality:**
+- Net Debt (Total Debt minus Cash), Debt/Equity Ratio, Current Ratio
+- ROIC (Return on Invested Capital), ROE (Return on Equity)
+- Dividends per share and payout ratio (even for non-DDM stocks — relevant context)
+
+**Market & Valuation Context:**
+- Shares outstanding, Current market cap
+- Historical valuation multiples: average P/E and EV/EBITDA over the past 3–5 years (to gauge if current valuation is cheap or expensive vs. history)
+
+**Cost of Capital:**
 - Local risk-free rate (10-year government bond yield of the company's home country)
 - Beta (or estimate from sector peers if not available)
 
@@ -70,13 +80,45 @@ After the JSON block, write the full Markdown report entirely in ${language}.
 
 ## Report sections (write in ${language})
 ## 1. Company Overview
-## 2. Valuation Method — Why ${language === "Italiano" ? "questo metodo" : "this method"}?
-## 3. Key Financial Data Found
-## 4. Bull Case — Fair Value: [value]
-## 5. Base Case — Fair Value: [value]
-## 6. Bear Case — Fair Value: [value]
-## 7. Key Risks
-## 8. Investment Summary
+Brief description of the business model, revenue segments, key markets, and recent developments.
+
+## 2. Competitive Moat Analysis
+Does the company have a durable competitive advantage? Analyze:
+- Network effects
+- Switching costs
+- Cost advantages / economies of scale
+- Intangible assets (brands, patents, licenses)
+- Efficient scale (niche monopoly)
+
+Rate the moat: **Wide** / **Narrow** / **None**, with justification.
+
+## 3. Valuation Method — Why ${language === "Italiano" ? "questo metodo" : "this method"}?
+Explain why the chosen method is the most appropriate for this company and sector.
+
+## 4. Key Financial Data & Quality Metrics
+Present the key data gathered in Step 2 in a structured way:
+- Income and cash flow summary (last 2–3 years)
+- Profitability and quality metrics (ROIC, ROE, margins, FCF conversion)
+- Balance sheet health (net debt, debt/equity, current ratio)
+- Historical valuation context (how current multiples compare to the 3–5 year average)
+
+## 5. Bull Case — Fair Value: [value]
+What would need to go right? Key assumptions and catalysts.
+
+## 6. Base Case — Fair Value: [value]
+The most likely scenario. Moderate growth assumptions and current trends.
+
+## 7. Bear Case — Fair Value: [value]
+What could go wrong? Key downside risks and their probability.
+
+## 8. Key Risks
+Top 3–5 risks that could derail the investment thesis.
+
+## 9. Near-term Catalysts
+Upcoming events or triggers (earnings releases, regulatory decisions, product launches, macro shifts) that could move the stock price materially in the next 6–12 months.
+
+## 10. Investment Summary
+A concise synthesis: is this stock attractively valued at the current price? Summarize the moat rating, the base case fair value, and the key risk/reward trade-off.
 
 Rules:
 - Write the entire report in ${language} — every word, header, and disclaimer

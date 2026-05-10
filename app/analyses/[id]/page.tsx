@@ -74,7 +74,7 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
 
       {/* Report content — strip any leading JSON block (from Deep Value analyses) */}
       <div className="card">
-        <div className="prose prose-invert prose-sm max-w-none prose-headings:text-slate-100 prose-p:text-slate-300 prose-strong:text-slate-100 prose-li:text-slate-300 prose-a:text-sky-400 prose-table:w-full prose-th:text-slate-200 prose-td:text-slate-300">
+        <div className="prose prose-invert prose-sm max-w-none prose-headings:text-slate-100 prose-headings:mt-6 prose-headings:mb-2 prose-p:text-slate-300 prose-p:leading-relaxed prose-p:mb-3 prose-strong:text-slate-100 prose-li:text-slate-300 prose-li:my-1 prose-a:text-sky-400 prose-table:w-full prose-th:text-slate-200 prose-td:text-slate-300 prose-hr:border-slate-700/50">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>
             {analysis.reportMd.replace(/^```json\n[\s\S]*?\n```\n?/, "")}
           </ReactMarkdown>

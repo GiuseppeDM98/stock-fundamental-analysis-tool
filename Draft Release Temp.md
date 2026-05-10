@@ -1,5 +1,9 @@
 ## ✨ New Features
 
+- **Deep Value Analysis** now includes a **Competitive Moat Analysis** section — Claude rates the company's competitive advantage as Wide, Narrow, or None, covering network effects, switching costs, cost advantages, intangible assets, and efficient scale
+- **Deep Value Analysis** now includes a **Near-term Catalysts** section — lists upcoming earnings, regulatory decisions, product launches, or macro events that could move the stock price in the next 6–12 months
+- **Deep Value Analysis** now includes a **Key Financial Data & Quality Metrics** section — presents ROIC, ROE, gross margin, FCF conversion rate, dividend yield, debt/equity ratio, and current ratio alongside income and cash flow data; also shows how current valuation multiples compare to their 3–5 year historical averages
+
 - Added **language toggle (EN / IT)** in the navigation bar — switch the entire app interface between English and Italian with one click. Your preference is saved automatically and restored on your next visit. The AI report language defaults to match your selection but can still be overridden per report.
 
 - Added **Portfolio P&L History chart** — the Portfolio page now shows a line chart with your portfolio's total value over time vs. your cost basis (purchase price). The gap between the two lines shows your unrealized gain or loss at a glance. Data is captured automatically every weekday after market close — no action required.
@@ -60,6 +64,10 @@
 - Fixed fundamental analysis failing for some European tickers (e.g. Italian small-caps) that return unknown data types from Yahoo Finance
 
 ## 🔧 Improvements
+
+- Deep Value Analysis report sections are now better spaced — headers, paragraphs, and bullet lists have more breathing room, making long multi-section reports easier to read
+- Deep Value Analysis now sources up to **5 years** of financial data (previously defaulted to 3), giving a clearer picture of long-term trends in growth, margins, and capital returns
+- Removed the standard "Generate AI Analysis" panel — the Deep Value Analysis covers everything it did and more, so there's now a single, more powerful AI analysis panel on the dashboard
 
 - All UI labels across the dashboard, portfolio, analyses, scenario controls, charts, forms, and navigation are now fully translated — switching to Italian localises the entire interface including number formatting
 - Portfolio positions now display in a cleaner format: `shares × buy price → current price` with an inline colored P&L badge, replacing the previous hard-to-read dot-separated line

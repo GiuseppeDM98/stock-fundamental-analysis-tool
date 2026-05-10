@@ -22,7 +22,6 @@ import { FundamentalsCharts } from "@/components/fundamentals-charts";
 import { PriceSummary } from "@/components/price-summary";
 import { ScenarioPanel } from "@/components/scenario-panel";
 import { TickerSearch } from "@/components/ticker-search";
-import AiAnalysisPanel from "@/components/ai-analysis-panel";
 import DeepValuePanel from "@/components/deep-value-panel";
 import { ValuationMetricsCards } from "@/components/valuation-metrics-cards";
 import { useLanguage } from "@/context/language-context";
@@ -528,14 +527,6 @@ export function DashboardClient() {
             <ValuationMetricsCards quote={quote} fundamentals={fundamentals} />
 
             <FundamentalsCharts fundamentals={fundamentals} />
-
-            <AiAnalysisPanel
-              ticker={ticker}
-              mosPercent={mosPercent}
-              scenarios={scenarios}
-              companyName={quote.shortName}
-              valuation={valuation}
-            />
 
             <DeepValuePanel
               ticker={ticker}

@@ -2,7 +2,7 @@
 
 A Next.js web application for stock valuation using Discounted Cash Flow (DCF) analysis with scenario modeling. Fetch real-time financial data from Yahoo Finance and run bull/base/bear scenario valuations with interactive charts.
 
-![Version](https://img.shields.io/badge/version-0.8.0-blue)
+![Version](https://img.shields.io/badge/version-0.9.1-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-green)
 ![Next.js](https://img.shields.io/badge/Next.js-15.5.12-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7.3-blue)
@@ -22,8 +22,7 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **Interactive visualizations** comparing fair value vs. current price
 - **Margin of safety** adjustment (0-80%) for conservative valuations
 - **Client-side persistence** with localStorage for scenario configurations
-- **AI investment analysis** — Claude Sonnet 4.6 generates full research reports with web search
-- **Deep Value Analysis** — Claude autonomously picks the valuation method and sources all financial data via web search; works for any global ticker
+- **Deep Value Analysis** — Claude autonomously picks the valuation method and sources all financial data via web search; works for any global ticker; includes MOAT analysis, quality metrics, and near-term catalysts
 - **User accounts** with saved reports — revisit your analyses anytime
 - **Portfolio tracker** — track real purchases with live P&L, multi-currency FX conversion, DCA aggregation (Weighted Average Cost per ticker), and cross-links to saved analyses per ticker
 - **Portfolio P&L history** — line chart showing portfolio value vs. cost basis over time, updated automatically every weekday after market close
@@ -56,8 +55,7 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - 🔒 **Input Validation**: Hard constraints prevent mathematically invalid scenarios (e.g., WACC must exceed terminal growth)
 - 📈 **Live Risk-Free Rate**: US 10Y Treasury yield displayed next to WACC as a real-time reference
 - 💾 **State Persistence**: LocalStorage saves ticker history and scenario overrides
-- 🤖 **AI Analysis**: Claude Sonnet 4.6 generates full investment reports with live web search
-- 🔍 **Deep Value Analysis**: Fully autonomous AI valuation — Claude picks the method and finds all data via web search, works for any global ticker
+- 🔍 **Deep Value Analysis**: Fully autonomous AI valuation — Claude picks the method, sources all data via web search, includes MOAT analysis, quality metrics (ROIC, ROE, FCF conversion), and near-term catalysts; works for any global ticker
 - 👤 **User Accounts**: Save and revisit AI-generated reports with email/password auth
 - 🧮 **Valuation Metrics**: P/E, P/FCF, FCF Yield, Earnings Yield cards with YoY trend and educational tooltips
 - 💼 **Portfolio Tracker**: Track real purchases with live P&L per position + DCA aggregation (Weighted Average Cost per ticker) + multi-currency aggregate summary (EUR conversion via Frankfurter) + cross-links to saved analyses per ticker

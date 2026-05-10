@@ -18,7 +18,7 @@ Next.js 15 stock fundamental analysis tool with multi-method valuation (DCF, DDM
 types/             # fundamentals.ts, market.ts, valuation.ts, analysis.ts, auth.ts, ai.ts, portfolio.ts
 lib/               # Business logic and utilities
   valuation/       # DCF, DDM, EV-EBITDA engines + sector routing + presets + metrics
-  ai/              # prompts.ts, deep-value-prompts.ts
+  ai/              # deep-value-prompts.ts
   yahoo-client.ts  # Yahoo Finance API adapter
   auth.ts          # Auth.js v5 config
   db.ts            # Prisma singleton client
@@ -56,7 +56,7 @@ __tests__/         # Vitest tests
 - Data fetchers: `getQuote()`, `getFundamentals()`, `getAnalystEstimates()`, `getRiskFreeRate()`
 - Client helpers: `fetchAnalyses()`, `saveAnalysis()`, `fetchPositions()`, `createPosition()`, `deletePosition()`, `fetchSnapshots()`
 - Factories: `getDefaultScenarios()`, `getCompanyScenarios()`, `getDefaultDdmScenarios()`, `getCompanyDdmScenarios()`, `getDefaultEvEbitdaScenarios()`, `getCompanyEvEbitdaScenarios()`
-- Prompt builders: `buildSystemPrompt()`, `buildUserPrompt()` in `lib/ai/prompts.ts`; `buildDeepValueSystemPrompt()`, `buildDeepValueUserPrompt()` in `lib/ai/deep-value-prompts.ts`
+- Prompt builders: `buildDeepValueSystemPrompt()`, `buildDeepValueUserPrompt()` in `lib/ai/deep-value-prompts.ts`
 
 ### LocalStorage Keys
 All prefixed with `sfa:`: `sfa:lastTicker`, `sfa:mosPercent`, `sfa:scenarioOverrides`, `sfa:ddmScenarioOverrides`, `sfa:evEbitdaScenarioOverrides`, `sfa:language`
@@ -82,7 +82,7 @@ if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 
 // Use session.user.id — typed via declaration merge in types/auth.ts
 ```
 
-**Endpoints:** `/api/quote`, `/api/fundamentals`, `/api/valuation` (POST), `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/DELETE), `/api/positions` (GET/POST), `/api/positions/[id]` (DELETE), `/api/ai/analyze` (POST, streaming), `/api/ai/deep-value` (POST, streaming), `/api/portfolio/snapshots` (GET), `/api/cron/portfolio-snapshot` (POST, Vercel Cron)
+**Endpoints:** `/api/quote`, `/api/fundamentals`, `/api/valuation` (POST), `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/DELETE), `/api/positions` (GET/POST), `/api/positions/[id]` (DELETE), `/api/ai/deep-value` (POST, streaming), `/api/portfolio/snapshots` (GET), `/api/cron/portfolio-snapshot` (GET, Vercel Cron)
 
 ---
 
@@ -146,7 +146,7 @@ Pattern also used for `ddmScenariosRef` and `evEbitdaScenariosRef` — any state
 
 ### Streaming AI Response
 ```typescript
-const res = await fetch("/api/ai/analyze", { method: "POST", body: JSON.stringify(payload) });
+const res = await fetch("/api/ai/deep-value", { method: "POST", body: JSON.stringify(payload) });
 const reader = res.body!.getReader();
 const decoder = new TextDecoder();
 let done = false;
@@ -165,6 +165,15 @@ Use `react-markdown` with `remark-gfm` plugin — required in **every** page/com
 ```typescript
 import remarkGfm from "remark-gfm";
 <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+```
+Standard prose classes for all AI report panels (ensures breathing room in long multi-section reports):
+```
+prose prose-invert prose-sm max-w-none
+prose-headings:text-slate-100 prose-headings:mt-6 prose-headings:mb-2
+prose-p:text-slate-300 prose-p:leading-relaxed prose-p:mb-3
+prose-strong:text-slate-100 prose-li:text-slate-300 prose-li:my-1
+prose-a:text-violet-400 prose-table:w-full prose-th:text-slate-200
+prose-td:text-slate-300 prose-hr:border-slate-700/50
 ```
 Also strip the Deep Value JSON block before rendering saved reports:
 ```typescript

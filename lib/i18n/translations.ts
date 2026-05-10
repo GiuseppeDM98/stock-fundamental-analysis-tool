@@ -86,11 +86,7 @@ export type Translations = {
   errorUnexpected: string;
 
   // ─── AI panels ──────────────────────────────────────────────────────────────
-  aiAnalysisTitle: string;
-  aiAnalysisDesc: string;
-  generateAnalysis: string;
   startingState: string;
-  generatingState: string;
   analyzingState: string;
   signInToAnalyze: string;
   deepValueTitle: string;
@@ -261,11 +257,7 @@ const en: Translations = {
   errorUnexpected: "Unexpected error.",
 
   // AI panels
-  aiAnalysisTitle: "AI Analysis",
-  aiAnalysisDesc: "Claude Sonnet 4.6 with web search — comprehensive investment report",
-  generateAnalysis: "Generate AI Analysis",
   startingState: "Starting…",
-  generatingState: "Generating…",
   analyzingState: "Analyzing…",
   signInToAnalyze: "to generate AI analyses and save your reports.",
   deepValueTitle: "Deep Value Analysis",
@@ -436,11 +428,7 @@ const it: Translations = {
   errorUnexpected: "Errore imprevisto.",
 
   // AI panels
-  aiAnalysisTitle: "Analisi AI",
-  aiAnalysisDesc: "Claude Sonnet 4.6 con web search — report d'investimento completo",
-  generateAnalysis: "Genera Analisi AI",
   startingState: "Avvio…",
-  generatingState: "Generazione…",
   analyzingState: "Analisi…",
   signInToAnalyze: "per generare analisi AI e salvare i report.",
   deepValueTitle: "Analisi Deep Value",

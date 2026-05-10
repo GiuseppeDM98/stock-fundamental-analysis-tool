@@ -6,9 +6,9 @@ Current project state and context for AI assistants.
 
 ## Version & Status
 
-**Version**: `0.9.0`
+**Version**: `0.9.1`
 **Status**: Active Development
-**Last Updated**: May 10, 2026 (App-wide EN/IT i18n)
+**Last Updated**: May 10, 2026 (Deep Analysis improvements, remove standard AI panel)
 
 ---
 
@@ -29,8 +29,8 @@ Current project state and context for AI assistants.
 **Pattern**: Next.js App Router with client-side interactivity and server-side API routes.
 
 - **Frontend**: Single-page dashboard + auth pages + saved analyses pages + portfolio page
-- **API Layer**: `/api/quote`, `/api/fundamentals`, `/api/valuation`, `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses`, `/api/analyses/[id]`, `/api/positions`, `/api/positions/[id]`, `/api/ai/analyze`, `/api/ai/deep-value`, `/api/portfolio/snapshots`, `/api/cron/portfolio-snapshot`
-- **Business Logic**: Pure TypeScript in `lib/` (DCF/DDM/EV-EBITDA engines, sector routing, scenario presets, Yahoo adapter, AI prompts, snapshot logic, formatters)
+- **API Layer**: `/api/quote`, `/api/fundamentals`, `/api/valuation`, `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses`, `/api/analyses/[id]`, `/api/positions`, `/api/positions/[id]`, `/api/ai/deep-value`, `/api/portfolio/snapshots`, `/api/cron/portfolio-snapshot`
+- **Business Logic**: Pure TypeScript in `lib/` (DCF/DDM/EV-EBITDA engines, sector routing, scenario presets, Yahoo adapter, deep-value AI prompts, snapshot logic, formatters)
 - **Database**: SQLite via Prisma 7 — `User` + `Analysis` + `Position` + `PortfolioSnapshot` models
 - **Auth**: Auth.js v5 credentials provider, JWT sessions
 - **Types**: Centralized in `types/` (fundamentals, market, valuation, analysis, auth, ai, portfolio)
@@ -58,21 +58,15 @@ Current project state and context for AI assistants.
 - EV/EBITDA: smart multiple based on current market EV/EBITDA (clamped [2,20])
 - Source indicator badge: "Smart defaults (Yahoo)" / "Generic defaults" / "Custom"
 
-### AI Investment Analysis
-- "Generate AI Analysis" panel below historical charts
-- Claude Sonnet 4.6 with web search (`web_search_20250305`) — finds recent news, earnings, competitive developments
-- Structured Markdown report: Company Overview, MOAT Analysis, Bull/Base/Bear cases, Key Risks, Investment Summary
-- Live streaming — report appears word by word as Claude generates it
-- Language selector (8 languages: EN, IT, ES, FR, DE, PT, ZH, JA)
-- Respects user's margin of safety setting — price targets are MoS-adjusted
-- DCF re-computed server-side (not from client) to prevent prompt injection
-
 ### Deep Value Analysis (AI-Autonomous)
-- "Deep Analysis (AI)" panel (violet) below the standard AI Analysis panel
+- Single AI panel (violet) — the only AI analysis mode. Standard AI panel was removed (redundant).
 - Claude autonomously picks the valuation method (DCF/DDM/EV/EBITDA/P/B) and sources all financial data via web search — no Yahoo Finance fundamentals dependency
 - Works for any global ticker regardless of Yahoo Finance data coverage or missing fields
-- Outputs a JSON block (method + sector + bull/base/bear fair values) followed by a full Markdown report
+- Gathers last 5 years of data (min 3 if limited): revenue, operating income, net income, FCF/EBITDA, gross margin, ROIC, ROE, FCF conversion, dividend yield/payout, debt/equity, current ratio, net debt, shares, market cap, risk-free rate, beta, historical valuation multiples (P/E, EV/EBITDA 3-5yr avg)
+- Outputs a JSON block (method + sector + bull/base/bear fair values) followed by a 10-section Markdown report
+- **Report sections**: Company Overview → Competitive Moat Analysis (Wide/Narrow/None) → Valuation Method → Key Financial Data & Quality Metrics → Bull/Base/Bear Cases → Key Risks → Near-term Catalysts → Investment Summary
 - Fair value cards and method badge appear after streaming completes
+- Language selector (8 languages: EN, IT, ES, FR, DE, PT, ZH, JA); respects user's MoS setting
 - Prompt builders in `lib/ai/deep-value-prompts.ts`; endpoint at `/api/ai/deep-value`
 - **Date injection**: route computes `currentDate` from `new Date()` and passes it to both prompt builders — prevents Claude from anchoring analysis to its training year (Aug 2025)
 - **Stream suppression**: server buffers all text until the ` ```json ` marker appears; intermediate reasoning text emitted between tool calls is silently discarded before reaching the client
@@ -155,7 +149,6 @@ lib/
   valuation/sector.ts      # Sector detection + method routing
   valuation/scenario-presets.ts
   valuation/valuation-metrics.ts  # P/E, P/FCF, FCF Yield, Earnings Yield computation
-  ai/prompts.ts            # Prompt builders for AI analysis
   ai/deep-value-prompts.ts # Prompt builders for deep value AI analysis
   yahoo-client.ts          # Yahoo adapter
   auth.ts                  # Auth.js v5 config
@@ -171,14 +164,13 @@ app/api/
   analyses/            analyses/[id]/
   positions/           positions/[id]/
   portfolio/snapshots/     # GET last 90 days of snapshots
-  cron/portfolio-snapshot/ # POST — Vercel Cron endpoint
-  ai/analyze/          # Streaming AI analysis
-  ai/deep-value/       # Autonomous deep value AI analysis
+  cron/portfolio-snapshot/ # GET — Vercel Cron endpoint
+  ai/deep-value/       # Autonomous deep value AI analysis (streaming)
 app/login/ app/register/ app/analyses/ app/analyses/[id]/ app/portfolio/
 components/            # dashboard-client, scenario-panel, ddm-scenario-panel,
                        # ev-ebitda-scenario-panel, sector-badge, fair-value-card,
                        # ticker-search, fundamentals-charts, price-summary,
-                       # disclaimer-banner, ai-analysis-panel, deep-value-panel,
+                       # disclaimer-banner, deep-value-panel,
                        # analyses-list, portfolio-list, portfolio-history-chart,
                        # open-position-banner, nav-bar, login-form, register-form,
                        # session-provider, valuation-metrics-cards, page-header
