@@ -12,6 +12,7 @@ import { buildDeepValueSystemPrompt, buildDeepValueUserPrompt } from "@/lib/ai/d
 const requestSchema = z.object({
   ticker: z.string().min(1).max(20),
   language: z.string().min(1).max(30).default("English"),
+  mosPercent: z.number().min(0).max(80).default(0),
 });
 
 export async function POST(request: Request) {
@@ -42,8 +43,8 @@ export async function POST(request: Request) {
       day: "numeric",
     });
 
-    const systemPrompt = buildDeepValueSystemPrompt(body.language, currentDate);
-    const userPrompt = buildDeepValueUserPrompt(body.ticker, currentPrice, currency, body.language, currentDate);
+    const systemPrompt = buildDeepValueSystemPrompt(body.language, currentDate, body.mosPercent);
+    const userPrompt = buildDeepValueUserPrompt(body.ticker, currentPrice, currency, body.language, currentDate, body.mosPercent);
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 

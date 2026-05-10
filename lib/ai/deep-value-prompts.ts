@@ -14,7 +14,7 @@
  * @param language - Report language (e.g. "English", "Italiano")
  * @param currentDate - Today's date string injected from the server (e.g. "May 7, 2026")
  */
-export function buildDeepValueSystemPrompt(language = "English", currentDate = ""): string {
+export function buildDeepValueSystemPrompt(language = "English", currentDate = "", mosPercent = 0): string {
   const dateClause = currentDate
     ? `\n**Today's date: ${currentDate}.** Use this to determine what counts as "most recent" data. Financial data from 2025 is historical — fiscal year 2025 results may or may not have been published yet; verify via web search. Do NOT assume the current year is 2025.\n`
     : "";
@@ -52,8 +52,9 @@ Do not fabricate numbers. If a data point is unavailable after searching, state 
 
 ## Step 3 — Compute 3 scenarios (Bull / Base / Bear)
 Apply the chosen method with three scenario sets. For each scenario compute:
-- Intrinsic fair value per share (before margin of safety)
-- Upside/downside vs current price (%)
+- Intrinsic fair value per share
+- Apply a **margin of safety of ${mosPercent}%**: buy target = intrinsic value × (1 − ${mosPercent}/100)
+- Upside/downside of the **buy target** vs current price (%)
 
 **DCF**: Project 10 years of FCF, apply WACC discount, add Gordon Growth terminal value.
 **DDM**: 2-stage — 10 explicit dividend years + Gordon Growth terminal. Cost of equity via CAPM.
@@ -70,9 +71,9 @@ The JSON block MUST be the very first thing you output, before any other text:
   "method": "<DCF|DDM|EV/EBITDA|P/B>",
   "sector": "<sector name>",
   "currency": "<ISO currency code, e.g. USD, EUR>",
-  "bull": { "fairValue": <number>, "upside": <number> },
-  "base": { "fairValue": <number>, "upside": <number> },
-  "bear": { "fairValue": <number>, "upside": <number> }
+  "bull": { "fairValue": <buy target after ${mosPercent}% MoS>, "upside": <upside of buy target vs current price> },
+  "base": { "fairValue": <buy target after ${mosPercent}% MoS>, "upside": <upside of buy target vs current price> },
+  "bear": { "fairValue": <buy target after ${mosPercent}% MoS>, "upside": <upside of buy target vs current price> }
 }
 \`\`\`
 
@@ -118,7 +119,7 @@ Top 3–5 risks that could derail the investment thesis.
 Upcoming events or triggers (earnings releases, regulatory decisions, product launches, macro shifts) that could move the stock price materially in the next 6–12 months.
 
 ## 10. Investment Summary
-A concise synthesis: is this stock attractively valued at the current price? Summarize the moat rating, the base case fair value, and the key risk/reward trade-off.
+A concise synthesis: is this stock attractively valued at the current price? Summarize the moat rating, the base case intrinsic value, and the buy target after applying the ${mosPercent}% margin of safety. State clearly whether the current price is above or below the buy target.
 
 Rules:
 - Write the entire report in ${language} — every word, header, and disclaimer
@@ -138,9 +139,13 @@ export function buildDeepValueUserPrompt(
   currency: string,
   language: string,
   currentDate = "",
+  mosPercent = 0,
 ): string {
   const dateClause = currentDate ? ` Today's date: ${currentDate}.` : "";
-  return `Analyze ${ticker}. Current price: ${currentPrice.toFixed(2)} ${currency}.${dateClause}
+  const mosClause = mosPercent > 0
+    ? ` Apply a margin of safety of ${mosPercent}% to all fair values (buy target = intrinsic value × ${(1 - mosPercent / 100).toFixed(2)}).`
+    : "";
+  return `Analyze ${ticker}. Current price: ${currentPrice.toFixed(2)} ${currency}.${dateClause}${mosClause}
 
 Use web search to find the financial data, choose the appropriate valuation method, compute the fair values for bull/base/bear scenarios, and produce the report in ${language} following the required format.`;
 }

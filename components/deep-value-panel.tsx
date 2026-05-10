@@ -116,7 +116,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0 }: 
       const res = await fetch("/api/ai/deep-value", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ticker, language }),
+        body: JSON.stringify({ ticker, language, mosPercent }),
         signal: controller.signal,
       });
 
