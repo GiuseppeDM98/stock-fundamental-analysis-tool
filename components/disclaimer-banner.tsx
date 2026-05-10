@@ -1,16 +1,13 @@
-/**
- * Renders a warning banner informing users that the tool is for educational purposes only.
- *
- * Emphasizes that fair value estimates are model-driven and not financial advice.
- */
+"use client";
+
+import { useLanguage } from "@/context/language-context";
+
 export function DisclaimerBanner() {
+  const { t } = useLanguage();
   return (
     <div className="card border-warning/40 bg-warning/10 text-sm text-amber-100">
-      <p className="font-semibold">Informational use only</p>
-      <p className="mt-1 text-amber-200/90">
-        This tool is for educational analysis and not financial advice. Fair value estimates depend on assumptions and
-        incomplete market data can affect outputs.
-      </p>
+      <p className="font-semibold">{t("disclaimerTitle")}</p>
+      <p className="mt-1 text-amber-200/90">{t("disclaimerText")}</p>
     </div>
   );
 }

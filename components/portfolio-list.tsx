@@ -9,6 +9,7 @@ import { fetchPositions, createPosition, deletePosition } from "@/lib/portfolio"
 import { fetchAnalyses } from "@/lib/analyses";
 import type { Position, CreatePositionRequest, AggregatedPosition } from "@/types/portfolio";
 import type { SavedAnalysis } from "@/types/analysis";
+import { useLanguage } from "@/context/language-context";
 
 const CURRENCIES = ["EUR", "USD", "GBP", "CHF", "JPY", "CAD", "AUD", "SEK", "NOK", "DKK"];
 
@@ -75,6 +76,7 @@ const inputClass =
 // Collapsible list of saved analyses for a ticker, shown inside each portfolio row.
 function TickerAnalysesInline({ analyses }: { analyses: SavedAnalysis[] }) {
   const [open, setOpen] = useState(false);
+  const { t } = useLanguage();
   if (analyses.length === 0) return null;
 
   return (
@@ -83,7 +85,7 @@ function TickerAnalysesInline({ analyses }: { analyses: SavedAnalysis[] }) {
         onClick={() => setOpen((o) => !o)}
         className="text-xs text-sky-400 hover:text-sky-300 transition"
       >
-        {analyses.length} {analyses.length === 1 ? "analisi salvata" : "analisi salvate"}{" "}
+        {analyses.length} {analyses.length === 1 ? t("savedAnalysisSingular") : t("savedAnalysisPlural")}{" "}
         {open ? "▲" : "▼"}
       </button>
       {open && (
@@ -125,6 +127,7 @@ function AggregatedPositionRow({
   tickerAnalyses,
 }: AggregatedPositionRowProps) {
   const [expanded, setExpanded] = useState(false);
+  const { t } = useLanguage();
   const currentValue = currentPrice != null ? currentPrice * agg.totalShares : null;
   const pnl = currentValue != null ? currentValue - agg.totalCost : null;
   const returnPct = pnl != null ? (currentValue! / agg.totalCost - 1) * 100 : null;
@@ -152,7 +155,7 @@ function AggregatedPositionRow({
                 onClick={() => setExpanded((e) => !e)}
                 className="ml-auto text-xs text-slate-500 hover:text-slate-300 transition"
               >
-                {expanded ? "▲" : "▼"} {agg.purchases.length} acquisti
+                {expanded ? "▲" : "▼"} {agg.purchases.length} {t("purchases")}
               </button>
             )}
             {!hasMultiple && (
@@ -164,7 +167,7 @@ function AggregatedPositionRow({
 
           <div className="mt-1.5 flex items-center gap-2 flex-wrap text-xs">
             <span className="text-muted">
-              {agg.totalShares} shares · WAC {formatPrice(agg.weightedAvgCost, agg.currency)}
+              {agg.totalShares} {t("sharesUnit")} · WAC {formatPrice(agg.weightedAvgCost, agg.currency)}
             </span>
             {currentPrice != null ? (
               <>
@@ -174,7 +177,7 @@ function AggregatedPositionRow({
             ) : pricesLoading ? (
               <>
                 <span className="text-slate-600">→</span>
-                <span className="text-slate-600">loading…</span>
+                <span className="text-slate-600">{t("loadingState")}</span>
               </>
             ) : null}
             {pnl != null && (
@@ -199,7 +202,7 @@ function AggregatedPositionRow({
             href={`/?ticker=${encodeURIComponent(agg.ticker)}`}
             className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-accent transition hover:border-sky-400/40 hover:text-sky-300"
           >
-            Analyze
+            {t("analyzeBtn")}
           </a>
           {/* Delete only shown for single-purchase tickers; multi-purchase uses drill-down */}
           {!hasMultiple && (
@@ -208,7 +211,7 @@ function AggregatedPositionRow({
               disabled={deleting === agg.purchases[0].id}
               className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-muted transition hover:border-red-500/50 hover:text-danger disabled:opacity-50"
             >
-              {deleting === agg.purchases[0].id ? "…" : "Delete"}
+              {deleting === agg.purchases[0].id ? "…" : t("deleteBtn")}
             </button>
           )}
         </div>
@@ -245,6 +248,7 @@ type AddPositionModalProps = {
 };
 
 function AddPositionModal({ onClose, onSave }: AddPositionModalProps) {
+  const { t } = useLanguage();
   const [form, setForm] = useState<CreatePositionRequest>({
     ticker: "",
     companyName: "",
@@ -264,7 +268,7 @@ function AddPositionModal({ onClose, onSave }: AddPositionModalProps) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.ticker || !form.companyName || form.purchasePrice <= 0 || form.shares <= 0) {
-      setError("Please fill in all required fields.");
+      setError(t("errorFillFields"));
       return;
     }
     setSaving(true);
@@ -277,7 +281,7 @@ function AddPositionModal({ onClose, onSave }: AddPositionModalProps) {
       });
       onSave(created);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save.");
+      setError(err instanceof Error ? err.message : t("errorFailedSave"));
     } finally {
       setSaving(false);
     }
@@ -289,7 +293,7 @@ function AddPositionModal({ onClose, onSave }: AddPositionModalProps) {
         className="w-full max-w-md rounded-2xl bg-[var(--card)] border border-slate-700/60 p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-semibold text-slate-100 mb-4">Add Position</h2>
+        <h2 className="text-lg font-semibold text-slate-100 mb-4">{t("addPositionTitle")}</h2>
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -305,7 +309,7 @@ function AddPositionModal({ onClose, onSave }: AddPositionModalProps) {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Date *</label>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">{t("fieldDate")} *</label>
               <input
                 type="date"
                 value={form.purchasedAt}
@@ -317,7 +321,7 @@ function AddPositionModal({ onClose, onSave }: AddPositionModalProps) {
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Company Name *</label>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">{t("fieldCompanyName")} *</label>
             <input
               type="text"
               placeholder="ENI S.p.A."
@@ -330,7 +334,7 @@ function AddPositionModal({ onClose, onSave }: AddPositionModalProps) {
 
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-1">
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Currency *</label>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">{t("fieldCurrency")} *</label>
               <select
                 value={form.currency}
                 onChange={(e) => handleChange("currency", e.target.value)}
@@ -342,7 +346,7 @@ function AddPositionModal({ onClose, onSave }: AddPositionModalProps) {
               </select>
             </div>
             <div className="col-span-1">
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Price *</label>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">{t("fieldPrice")} *</label>
               <input
                 type="number"
                 placeholder="22.5850"
@@ -355,7 +359,7 @@ function AddPositionModal({ onClose, onSave }: AddPositionModalProps) {
               />
             </div>
             <div className="col-span-1">
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Shares *</label>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">{t("fieldShares")} *</label>
               <input
                 type="number"
                 placeholder="100"
@@ -370,10 +374,10 @@ function AddPositionModal({ onClose, onSave }: AddPositionModalProps) {
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Notes</label>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">{t("fieldNotes")}</label>
             <input
               type="text"
-              placeholder="Optional notes…"
+              placeholder={t("fieldNotesPlaceholder")}
               value={form.notes ?? ""}
               onChange={(e) => handleChange("notes", e.target.value)}
               className={inputClass}
@@ -390,14 +394,14 @@ function AddPositionModal({ onClose, onSave }: AddPositionModalProps) {
               disabled={saving}
               className="flex-1 rounded-lg bg-accent py-2 text-sm font-semibold text-slate-950 transition hover:brightness-110 disabled:opacity-50"
             >
-              {saving ? "Saving…" : "Save Position"}
+              {saving ? t("savingState") : t("savePosition")}
             </button>
             <button
               type="button"
               onClick={onClose}
               className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-muted transition hover:border-slate-500 hover:text-slate-100"
             >
-              Cancel
+              {t("cancelBtn")}
             </button>
           </div>
         </form>
@@ -421,6 +425,7 @@ function SummaryBar({
   // Map currency → rate vs EUR (e.g. USD: 1.08 means 1 EUR = 1.08 USD)
   fxRates: Record<string, number>;
 }) {
+  const { t } = useLanguage();
   let totalCostEur = 0;
   let totalValueEur = 0;
   let resolved = 0;
@@ -449,22 +454,22 @@ function SummaryBar({
   return (
     <div className="card mb-4 grid grid-cols-3 gap-4 text-center">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-1">Total Cost</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-1">{t("totalCost")}</p>
         <p className="text-lg font-semibold text-slate-100">{formatAmount(totalCostEur, "EUR")}</p>
       </div>
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-1">Current Value</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-1">{t("currentValue")}</p>
         <p className="text-lg font-semibold text-slate-100">{formatAmount(totalValueEur, "EUR")}</p>
       </div>
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-1">Total P&amp;L</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-1">{t("totalPnL")}</p>
         <p className={`text-lg font-semibold ${isPositive ? "text-success" : "text-danger"}`}>
           {isPositive ? "+" : ""}{formatAmount(pnlEur, "EUR")}{" "}
           <span className="text-sm">
             ({isPositive ? "+" : ""}{totalReturn.toFixed(1)}%)
           </span>
         </p>
-        <p className="text-[10px] text-slate-600 mt-0.5">converted to EUR · frankfurter.app</p>
+        <p className="text-[10px] text-slate-600 mt-0.5">{t("convertedToEur")}</p>
       </div>
     </div>
   );
@@ -473,6 +478,7 @@ function SummaryBar({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function PortfolioList() {
+  const { t } = useLanguage();
   const [positions, setPositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -552,14 +558,14 @@ export default function PortfolioList() {
       await deletePosition(id);
       setPositions((prev) => prev.filter((p) => p.id !== id));
     } catch {
-      setError("Failed to delete. Please try again.");
+      setError(t("errorFailedDelete"));
     } finally {
       setDeleting(null);
     }
   }
 
   if (loading) {
-    return <div className="flex items-center justify-center py-16 text-muted">Loading…</div>;
+    return <div className="flex items-center justify-center py-16 text-muted">{t("loadingState")}</div>;
   }
 
   return (
@@ -575,14 +581,14 @@ export default function PortfolioList() {
       <div className="mb-4 flex items-center justify-between gap-3">
         <p className="text-sm text-muted">
           {positions.length === 0
-            ? "No positions yet — add your first purchase."
+            ? t("noPositionsYet")
             : viewMode === "aggregated"
             ? (() => {
                 const tickers = new Set(positions.map((p) => p.ticker)).size;
                 return `${tickers} ticker${tickers !== 1 ? "s" : ""}, ${positions.length} purchase${positions.length !== 1 ? "s" : ""}`;
               })()
             : `${positions.length} position${positions.length !== 1 ? "s" : ""}`}
-          {pricesLoading && <span className="ml-2 text-xs text-slate-600">Loading prices…</span>}
+          {pricesLoading && <span className="ml-2 text-xs text-slate-600">{t("loadingPrices")}</span>}
         </p>
         <div className="flex items-center gap-2">
           {positions.length > 0 && (
@@ -595,7 +601,7 @@ export default function PortfolioList() {
                     : "text-muted hover:text-slate-300"
                 }`}
               >
-                Aggregated
+                {t("aggregatedView")}
               </button>
               <button
                 onClick={() => setViewMode("flat")}
@@ -605,7 +611,7 @@ export default function PortfolioList() {
                     : "text-muted hover:text-slate-300"
                 }`}
               >
-                Per Purchase
+                {t("perPurchaseView")}
               </button>
             </div>
           )}
@@ -613,7 +619,7 @@ export default function PortfolioList() {
             onClick={() => setShowModal(true)}
             className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-slate-950 transition hover:brightness-110"
           >
-            + Add Position
+            {t("addPositionBtn")}
           </button>
         </div>
       </div>
@@ -675,7 +681,7 @@ export default function PortfolioList() {
                     ) : pricesLoading ? (
                       <>
                         <span className="text-slate-600">→</span>
-                        <span className="text-slate-600">loading…</span>
+                        <span className="text-slate-600">{t("loadingState")}</span>
                       </>
                     ) : null}
                     {pnl != null && (
@@ -704,14 +710,14 @@ export default function PortfolioList() {
                     href={`/?ticker=${encodeURIComponent(pos.ticker)}`}
                     className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-accent transition hover:border-sky-400/40 hover:text-sky-300"
                   >
-                    Analyze
+                    {t("analyzeBtn")}
                   </a>
                   <button
                     onClick={() => handleDelete(pos.id)}
                     disabled={deleting === pos.id}
                     className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-muted transition hover:border-red-500/50 hover:text-danger disabled:opacity-50"
                   >
-                    {deleting === pos.id ? "…" : "Delete"}
+                    {deleting === pos.id ? "…" : t("deleteBtn")}
                   </button>
                 </div>
               </li>

@@ -25,6 +25,7 @@ import { TickerSearch } from "@/components/ticker-search";
 import AiAnalysisPanel from "@/components/ai-analysis-panel";
 import DeepValuePanel from "@/components/deep-value-panel";
 import { ValuationMetricsCards } from "@/components/valuation-metrics-cards";
+import { useLanguage } from "@/context/language-context";
 import { getDefaultDdmScenarios, getCompanyDdmScenarios, getDefaultEvEbitdaScenarios, getCompanyEvEbitdaScenarios, getDefaultScenarios } from "@/lib/valuation/scenario-presets";
 import { detectSector, getRecommendedMethod } from "@/lib/valuation/sector";
 import { FundamentalsResponse } from "@/types/fundamentals";
@@ -117,6 +118,7 @@ function getStorageItem<T>(key: string, parser: (value: unknown) => T, fallback:
  * when reading from localStorage.
  */
 export function DashboardClient() {
+  const { t } = useLanguage();
   const [ticker, setTicker] = useState("AAPL");
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
@@ -368,10 +370,8 @@ export function DashboardClient() {
     <main className="mx-auto max-w-7xl p-4 pb-10 sm:p-6 lg:p-8">
       {/* Page header */}
       <motion.header initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} className="mb-5">
-        <h1 className="font-display text-3xl font-bold sm:text-4xl">Stock Fundamental Analysis Tool</h1>
-        <p className="mt-2 max-w-3xl text-sm text-muted">
-          Deep dive one ticker with fundamentals, scenario-based DCF, and margin-of-safety adjusted fair values.
-        </p>
+        <h1 className="font-display text-3xl font-bold sm:text-4xl">{t("appTitle")}</h1>
+        <p className="mt-2 max-w-3xl text-sm text-muted">{t("appSubtitle")}</p>
       </motion.header>
 
       <div className="space-y-4">
@@ -474,12 +474,12 @@ export function DashboardClient() {
         )}
 
         {/* Loading state */}
-        {loadState === "loading" && <div className="card text-sm text-muted">Loading market and valuation data...</div>}
+        {loadState === "loading" && <div className="card text-sm text-muted">{t("loadingAnalysis")}</div>}
 
         {/* Error state */}
         {loadState === "error" && (
           <div className="card border-danger/50 bg-danger/10 text-sm text-red-100">
-            <p className="font-semibold">Unable to complete analysis</p>
+            <p className="font-semibold">{t("errorUnableAnalysis")}</p>
             <p className="mt-1">{errorMessage}</p>
           </div>
         )}
@@ -502,12 +502,13 @@ export function DashboardClient() {
 
             {valuation.valuationMethod === "dcf" && fundamentals.sector && !getRecommendedMethod(detectSector(fundamentals.sector)).isDcfAppropriate && (
               <div className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-yellow-200">
-                <span className="font-semibold">Nota:</span> Per il settore <strong>{fundamentals.sector}</strong>, il DCF potrebbe non essere il metodo di valutazione più appropriato. Metodo consigliato: <strong>{getRecommendedMethod(detectSector(fundamentals.sector)).label}</strong>.
+                <span className="font-semibold">{t("dcfWarningNote")}</span>{" "}
+                {t("dcfWarningBeforeSector")}<strong>{fundamentals.sector}</strong>{t("dcfWarningAfterSector")}<strong>{getRecommendedMethod(detectSector(fundamentals.sector)).label}</strong>.
               </div>
             )}
 
             <div className="card">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">Scenario fair value vs current price</p>
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">{t("chartScenarioTitle")}</p>
               <div className="h-[320px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={valuationChartData}>
@@ -521,9 +522,7 @@ export function DashboardClient() {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-              <p className="mt-2 text-xs text-muted">
-                Scenario note: each fair value includes the global margin of safety slider.
-              </p>
+              <p className="mt-2 text-xs text-muted">{t("chartScenarioNote")}</p>
             </div>
 
             <ValuationMetricsCards quote={quote} fundamentals={fundamentals} />

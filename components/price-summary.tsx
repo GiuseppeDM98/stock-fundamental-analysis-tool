@@ -1,6 +1,9 @@
+"use client";
+
 import { QuoteResponse } from "@/types/market";
 import { formatCompactNumber, formatCurrency } from "@/lib/format";
 import { SectorBadge } from "@/components/sector-badge";
+import { useLanguage } from "@/context/language-context";
 
 type PriceSummaryProps = {
   quote: QuoteResponse;
@@ -8,18 +11,11 @@ type PriceSummaryProps = {
   industry?: string | null;
 };
 
-/**
- * Displays current market snapshot for a given ticker.
- *
- * Shows company name, ticker symbol, exchange, current price, and market capitalization
- * with currency-aware formatting.
- *
- * @param quote - Market data including price, market cap, and exchange info
- */
 export function PriceSummary({ quote, sector, industry }: PriceSummaryProps) {
+  const { t } = useLanguage();
   return (
     <div className="card">
-      <p className="text-xs font-semibold uppercase tracking-wider text-muted">Market snapshot</p>
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted">{t("marketSnapshot")}</p>
       <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="font-display text-2xl font-bold">{quote.shortName}</h2>
@@ -35,7 +31,7 @@ export function PriceSummary({ quote, sector, industry }: PriceSummaryProps) {
             {formatCurrency(quote.regularMarketPrice, quote.currency)}
           </p>
           <p className="text-sm text-muted">
-            Market cap: {quote.marketCap ? formatCompactNumber(quote.marketCap) : "n/a"}
+            {t("marketCap")} {quote.marketCap ? formatCompactNumber(quote.marketCap) : "n/a"}
           </p>
         </div>
       </div>

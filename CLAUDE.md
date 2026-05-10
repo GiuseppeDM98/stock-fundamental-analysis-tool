@@ -6,9 +6,9 @@ Current project state and context for AI assistants.
 
 ## Version & Status
 
-**Version**: `0.8.0`
+**Version**: `0.9.0`
 **Status**: Active Development
-**Last Updated**: May 10, 2026 (Portfolio P&L History)
+**Last Updated**: May 10, 2026 (App-wide EN/IT i18n)
 
 ---
 
@@ -101,7 +101,7 @@ Current project state and context for AI assistants.
 - Add position modal (ReactDOM.createPortal), delete with confirmation
 - Live prices via `/api/quote/[ticker]` — parallel fetch for all unique tickers at mount
 - Types: `Position`, `CreatePositionRequest`, `AggregatedPosition`, `SnapshotPoint` in `types/portfolio.ts`
-- **Portfolio ↔ Analyses link**: each position row shows "N analisi salvate ▼" (collapsible) if saved analyses exist for that ticker — date, MoS%, FV base, link to detail page. Implemented via `Promise.all([fetchPositions(), fetchAnalyses()])` on mount, no extra API calls.
+- **Portfolio ↔ Analyses link**: each position row shows "N saved analyses ▼" (collapsible) if saved analyses exist for that ticker — date, MoS%, FV base, link to detail page. Implemented via `Promise.all([fetchPositions(), fetchAnalyses()])` on mount, no extra API calls.
 - **P&L History chart**: Recharts LineChart in `/portfolio` showing portfolio value vs cost basis over time. Data sourced from `PortfolioSnapshot` rows created by the daily cron. Shows placeholder if < 2 snapshots exist.
 
 ### Portfolio P&L History (Snapshots)
@@ -114,21 +114,22 @@ Current project state and context for AI assistants.
 - `lib/portfolio-snapshots.ts` is server-only (`import "server-only"`); `fetchSnapshots()` client helper lives in `lib/portfolio.ts`
 
 ### Valuation Metrics Cards
-- 4 quick-glance cards above historical charts: **Anni di Utili** (P/E), **Anni di FCF** (P/FCF), **FCF Yield**, **Earnings Yield**
-- Trend badge per card: Migliorato / Peggiorato / Stabile (compares latest vs prior annual fundamental)
-- Each card has a `?` button opening an educational modal (via `ReactDOM.createPortal`) with "Cos'è?" and "Come si legge?" sections
+- 4 quick-glance cards above historical charts: **Years of Earnings** (P/E), **Years of FCF** (P/FCF), **FCF Yield**, **Earnings Yield**
+- Trend badge per card: Improved / Worsened / Stable (compares latest vs prior annual fundamental)
+- Each card has a `?` button opening an educational modal (via `ReactDOM.createPortal`) with "What is it?" and "How to read?" sections
 - Logic in `lib/valuation/valuation-metrics.ts`; component in `components/valuation-metrics-cards.tsx`
 
 ### Interactive UI
 - Scenario parameters displayed as percentages, stored as decimals
 - Analyst estimates reference banner
 - Historical charts with compact number formatting (Revenue, FCF, Net Income, Margins)
-- LocalStorage persistence for ticker, scenarios, margin of safety
+- LocalStorage persistence for ticker, scenarios, margin of safety, language (`sfa:language`)
 - US 10Y Treasury yield badge next to WACC field (styled as informational, not interactive)
 - Auth-aware NavBar on all pages — active route highlighted (`font-medium text-white`)
 - P&L and performance deltas shown as pill badges with colored background (`bg-emerald-500/15` / `bg-red-500/15`) — not plain colored text
 - Portfolio position rows: `N × buy_price → current_price [P&L badge]` — compact two-element layout
 - Input focus states (accent ring) on all scenario panel fields and Add Position modal
+- **Language toggle (EN/IT)** in NavBar — switches entire app UI; preference persisted in `sfa:language` localStorage. AI report panels default to the global language but allow per-report override. System: `lib/i18n/translations.ts` (type-safe ~120 key dictionary) + `context/language-context.tsx` (React context + `useLanguage()` hook)
 
 ---
 
@@ -180,7 +181,9 @@ components/            # dashboard-client, scenario-panel, ddm-scenario-panel,
                        # disclaimer-banner, ai-analysis-panel, deep-value-panel,
                        # analyses-list, portfolio-list, portfolio-history-chart,
                        # open-position-banner, nav-bar, login-form, register-form,
-                       # session-provider, valuation-metrics-cards
+                       # session-provider, valuation-metrics-cards, page-header
+lib/i18n/translations.ts   # EN/IT translation dictionary (~120 keys)
+context/language-context.tsx  # LanguageProvider + useLanguage() hook
 prisma/                # schema.prisma + migrations
 generated/prisma/      # Prisma 7 generated client (gitignored)
 vercel.json            # Vercel Cron Job schedule

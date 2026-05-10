@@ -12,18 +12,19 @@ import {
 } from "recharts";
 import { fetchSnapshots } from "@/lib/portfolio";
 import type { SnapshotPoint } from "@/types/portfolio";
+import { useLanguage } from "@/context/language-context";
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
-function formatXAxisDate(isoString: string): string {
-  return new Date(isoString).toLocaleDateString("it-IT", {
+function formatXAxisDate(isoString: string, locale: string): string {
+  return new Date(isoString).toLocaleDateString(locale, {
     day: "numeric",
     month: "short",
   });
 }
 
-function formatEurCompact(value: number): string {
-  return new Intl.NumberFormat("it-IT", {
+function formatEurCompact(value: number, locale: string): string {
+  return new Intl.NumberFormat(locale, {
     style: "currency",
     currency: "EUR",
     notation: "compact",
@@ -31,8 +32,8 @@ function formatEurCompact(value: number): string {
   }).format(value);
 }
 
-function formatEurFull(value: number): string {
-  return new Intl.NumberFormat("it-IT", {
+function formatEurFull(value: number, locale: string): string {
+  return new Intl.NumberFormat(locale, {
     style: "currency",
     currency: "EUR",
     minimumFractionDigits: 2,
@@ -48,22 +49,24 @@ function ChartTooltip({
   active,
   payload,
   label,
+  locale,
 }: {
   active?: boolean;
   payload?: TooltipEntry[];
   label?: string;
+  locale: string;
 }) {
   if (!active || !payload?.length) return null;
 
   return (
     <div className="rounded-xl border border-slate-700/60 bg-[var(--card)] px-3 py-2 shadow-lg text-xs">
       <p className="mb-1.5 font-semibold text-slate-300">
-        {label ? formatXAxisDate(label) : ""}
+        {label ? formatXAxisDate(label, locale) : ""}
       </p>
       {payload.map((entry) => (
         <p key={entry.name} style={{ color: entry.stroke }}>
           {entry.name}:{" "}
-          <span className="font-semibold">{formatEurFull(entry.value)}</span>
+          <span className="font-semibold">{formatEurFull(entry.value, locale)}</span>
         </p>
       ))}
     </div>
@@ -86,6 +89,7 @@ function ChartSkeleton() {
 export default function PortfolioHistoryChart() {
   const [snapshots, setSnapshots] = useState<SnapshotPoint[]>([]);
   const [loading, setLoading] = useState(true);
+  const { t, locale } = useLanguage();
 
   useEffect(() => {
     fetchSnapshots()
@@ -102,7 +106,7 @@ export default function PortfolioHistoryChart() {
     return (
       <div className="card mb-6 flex h-28 items-center justify-center">
         <p className="text-sm text-muted text-center">
-          Il grafico apparirà dopo qualche giorno di utilizzo
+          {t("chartEmptyState")}
         </p>
       </div>
     );
@@ -111,7 +115,7 @@ export default function PortfolioHistoryChart() {
   return (
     <div className="card mb-6" style={{ height: 272 }}>
       <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">
-        Valore portafoglio nel tempo
+        {t("portfolioValueOverTime")}
       </p>
       <ResponsiveContainer width="100%" height="88%">
         <LineChart
@@ -123,21 +127,21 @@ export default function PortfolioHistoryChart() {
             dataKey="takenAt"
             stroke="#7b8ba9"
             tick={{ fontSize: 11 }}
-            tickFormatter={formatXAxisDate}
+            tickFormatter={(v) => formatXAxisDate(v, locale)}
             interval="preserveStartEnd"
           />
           <YAxis
             stroke="#7b8ba9"
             tick={{ fontSize: 11 }}
-            tickFormatter={formatEurCompact}
+            tickFormatter={(v) => formatEurCompact(v, locale)}
             width={68}
           />
-          <Tooltip content={<ChartTooltip />} />
+          <Tooltip content={<ChartTooltip locale={locale} />} />
           {/* Market value of the portfolio */}
           <Line
             type="monotone"
             dataKey="totalEur"
-            name="Valore"
+            name={t("valueLabel")}
             stroke="#38bdf8"
             strokeWidth={2}
             dot={false}
@@ -147,7 +151,7 @@ export default function PortfolioHistoryChart() {
           <Line
             type="monotone"
             dataKey="costEur"
-            name="Costo"
+            name={t("costLabel")}
             stroke="#64748b"
             strokeWidth={1.5}
             strokeDasharray="4 2"

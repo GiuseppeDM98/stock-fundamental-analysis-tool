@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import SessionProvider from "@/components/session-provider";
 import NavBar from "@/components/nav-bar";
+import { LanguageProvider } from "@/context/language-context";
 
 export const metadata: Metadata = {
   title: "Stock Fundamental Analysis Tool",
@@ -23,10 +24,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className="font-body bg-bg text-slate-100 antialiased">
-        <SessionProvider>
-          <NavBar />
-          {children}
-        </SessionProvider>
+        <LanguageProvider>
+          <SessionProvider>
+            <NavBar />
+            {children}
+          </SessionProvider>
+        </LanguageProvider>
       </body>
     </html>
   );

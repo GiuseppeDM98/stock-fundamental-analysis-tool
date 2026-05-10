@@ -4,13 +4,15 @@
 // Shows a "Generate AI Analysis" button. On click, POSTs to /api/ai/analyze
 // and reads the response as a text stream, rendering Markdown in real-time.
 // After completion, lets the user save the report to their account.
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { saveAnalysis } from "@/lib/analyses";
 import type { ScenariosInput, ValuationResponse } from "@/types/valuation";
+import { useLanguage } from "@/context/language-context";
+import { APP_TO_AI_LANGUAGE } from "@/lib/i18n/translations";
 
 type Props = {
   ticker: string | null;
@@ -46,8 +48,23 @@ const LANGUAGES = [
 export default function AiAnalysisPanel({ ticker, mosPercent, scenarios, companyName, valuation }: Props) {
   const { data: session } = useSession();
   const router = useRouter();
+  const { language: globalLanguage, t } = useLanguage();
 
-  const [language, setLanguage] = useState("English");
+  // Track whether the user has manually overridden the language for this panel.
+  // While unoverridden, the panel language follows the global app language.
+  const userOverrideRef = useRef(false);
+  const [language, setAiLanguage] = useState(() => APP_TO_AI_LANGUAGE[globalLanguage] ?? "English");
+
+  useEffect(() => {
+    if (!userOverrideRef.current) {
+      setAiLanguage(APP_TO_AI_LANGUAGE[globalLanguage] ?? "English");
+    }
+  }, [globalLanguage]);
+
+  function setLanguage(lang: string) {
+    userOverrideRef.current = true;
+    setAiLanguage(lang);
+  }
   const [report, setReport] = useState<string>("");
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -152,10 +169,8 @@ export default function AiAnalysisPanel({ ticker, mosPercent, scenarios, company
       {/* Header row */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-100">AI Analysis</h2>
-          <p className="text-sm text-slate-400">
-            Claude Sonnet 4.6 with web search — comprehensive investment report
-          </p>
+          <h2 className="text-lg font-semibold text-slate-100">{t("aiAnalysisTitle")}</h2>
+          <p className="text-sm text-slate-400">{t("aiAnalysisDesc")}</p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -182,10 +197,10 @@ export default function AiAnalysisPanel({ ticker, mosPercent, scenarios, company
             {isStreaming ? (
               <span className="flex items-center gap-2">
                 <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                {status === "loading" ? "Starting…" : "Generating…"}
+                {status === "loading" ? t("startingState") : t("generatingState")}
               </span>
             ) : (
-              "Generate AI Analysis"
+              t("generateAnalysis")
             )}
           </button>
         </div>
@@ -195,9 +210,9 @@ export default function AiAnalysisPanel({ ticker, mosPercent, scenarios, company
       {!session && ticker && (
         <p className="rounded-lg bg-sky-500/10 px-3 py-2 text-sm text-sky-300">
           <button onClick={() => router.push("/login")} className="underline hover:no-underline">
-            Sign in
+            {t("navSignIn")}
           </button>{" "}
-          to generate AI analyses and save your reports.
+          {t("signInToAnalyze")}
         </p>
       )}
 
@@ -230,10 +245,10 @@ export default function AiAnalysisPanel({ ticker, mosPercent, scenarios, company
             disabled={saveStatus === "saving" || saveStatus === "saved"}
             className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-400 hover:text-slate-100 disabled:opacity-50"
           >
-            {saveStatus === "saving" && "Saving…"}
-            {saveStatus === "saved" && "✓ Saved"}
-            {saveStatus === "error" && "Retry save"}
-            {saveStatus === "idle" && "Save Report"}
+            {saveStatus === "saving" && t("savingState")}
+            {saveStatus === "saved" && t("savedState")}
+            {saveStatus === "error" && t("retrySave")}
+            {saveStatus === "idle" && t("saveReport")}
           </button>
 
           {saveStatus === "saved" && (
@@ -241,12 +256,12 @@ export default function AiAnalysisPanel({ ticker, mosPercent, scenarios, company
               onClick={() => router.push("/analyses")}
               className="text-sm text-sky-400 hover:text-sky-300"
             >
-              View Saved Analyses →
+              {t("viewSavedAnalyses")}
             </button>
           )}
 
           {saveStatus === "error" && (
-            <p className="text-sm text-red-400">Failed to save. Please try again.</p>
+            <p className="text-sm text-red-400">{t("errorFailedSaveReport")}</p>
           )}
         </div>
       )}

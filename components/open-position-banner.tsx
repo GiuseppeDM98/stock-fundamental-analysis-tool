@@ -5,6 +5,7 @@
 // mounted guard: Intl.NumberFormat without a fixed locale produces different output
 // between Node.js (SSR) and the browser, causing hydration mismatches.
 import { useState, useEffect } from "react";
+import { useLanguage } from "@/context/language-context";
 
 type OpenPositionBannerProps = {
   ticker: string;
@@ -21,6 +22,7 @@ export default function OpenPositionBanner({
 }: OpenPositionBannerProps) {
   const [mounted, setMounted] = useState(false);
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
+  const { t } = useLanguage();
 
   useEffect(() => {
     setMounted(true);
@@ -51,7 +53,7 @@ export default function OpenPositionBanner({
   return (
     <div className="mb-4 rounded-lg border border-slate-700/60 bg-slate-800/40 px-4 py-3 flex items-center gap-3 flex-wrap text-sm">
       <span className="text-slate-400">
-        Posizione aperta:{" "}
+        {t("openPosition")}{" "}
         <span className="text-slate-200 font-medium">
           {totalShares} shares @ {formatPrice(wac)}
         </span>
@@ -67,7 +69,7 @@ export default function OpenPositionBanner({
           ({isPositive ? "+" : ""}{returnPct!.toFixed(1)}%)
         </span>
       ) : (
-        <span className="text-xs text-slate-600">Caricamento P&L…</span>
+        <span className="text-xs text-slate-600">{t("loadingPnL")}</span>
       )}
     </div>
   );

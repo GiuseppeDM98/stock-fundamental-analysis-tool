@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { AnalystEstimates, ScenariosInput, ScenarioName } from "@/types/valuation";
+import { useLanguage } from "@/context/language-context";
 
 type ScenarioSource = "smart" | "generic" | "custom";
 
@@ -18,16 +19,6 @@ type ScenarioPanelProps = {
   loading?: boolean;
 };
 
-// User-friendly labels with percentage indicator
-const labels: Record<string, string> = {
-  revenueGrowthYears1to5: "Revenue growth Y1-5 (%)",
-  revenueGrowthYears6to10: "Revenue growth Y6-10 (%)",
-  operatingMarginTarget: "Operating margin target (%)",
-  taxRate: "Tax rate (%)",
-  reinvestmentRate: "Reinvestment rate (%)",
-  wacc: "WACC (%)",
-  terminalGrowth: "Terminal growth (%)"
-};
 
 // Input constraints per field (in percentage space, matching API validation bounds)
 const fieldBounds: Record<string, { min: number; max: number; step: number }> = {
@@ -69,12 +60,6 @@ function formatGrowthPercent(value: number | null): string | null {
  * @param onRecalculate - Callback to trigger new valuation API call
  * @param loading - Disables recalculate button during API request
  */
-const sourceBadge: Record<ScenarioSource, { label: string; color: string }> = {
-  smart: { label: "Smart defaults (Yahoo)", color: "border-emerald-600 text-emerald-400" },
-  generic: { label: "Generic defaults", color: "border-slate-600 text-slate-400" },
-  custom: { label: "Custom", color: "border-amber-600 text-amber-400" },
-};
-
 export function ScenarioPanel({
   scenarios,
   mosPercent,
@@ -87,6 +72,24 @@ export function ScenarioPanel({
   onRecalculate,
   loading = false
 }: ScenarioPanelProps) {
+  const { t } = useLanguage();
+
+  const labels: Record<string, string> = {
+    revenueGrowthYears1to5: t("fieldRevenueGrowthY15"),
+    revenueGrowthYears6to10: t("fieldRevenueGrowthY610"),
+    operatingMarginTarget: t("fieldOperatingMargin"),
+    taxRate: t("fieldTaxRate"),
+    reinvestmentRate: t("fieldReinvestmentRate"),
+    wacc: t("fieldWacc"),
+    terminalGrowth: t("fieldTerminalGrowth"),
+  };
+
+  const sourceBadge: Record<ScenarioSource, { label: string; color: string }> = {
+    smart: { label: t("smartDefaultsYahoo"), color: "border-emerald-600 text-emerald-400" },
+    generic: { label: t("genericDefaults"), color: "border-slate-600 text-slate-400" },
+    custom: { label: t("customSource"), color: "border-amber-600 text-amber-400" },
+  };
+
   // Risk-free rate (US 10Y Treasury yield) fetched once on mount.
   // Informational only — does not affect DCF calculations. Helps users
   // set a sensible WACC (should exceed Rf by the equity risk premium).
@@ -105,7 +108,7 @@ export function ScenarioPanel({
     <div className="card">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted">Scenario controls</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted">{t("scenarioControls")}</p>
           <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${sourceBadge[scenarioSource].color}`}>
             {sourceBadge[scenarioSource].label}
           </span>
@@ -115,20 +118,20 @@ export function ScenarioPanel({
             onClick={onResetSmart}
             className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-800"
           >
-            Smart defaults
+            {t("smartDefaults")}
           </button>
           <button
             onClick={onResetGeneric}
             className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-800"
           >
-            Generic defaults
+            {t("genericDefaults")}
           </button>
           <button
             onClick={onRecalculate}
             disabled={loading}
             className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {loading ? "Running..." : "Recalculate"}
+            {loading ? t("runningState") : t("recalculate")}
           </button>
         </div>
       </div>
@@ -138,26 +141,26 @@ export function ScenarioPanel({
         <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs text-muted">
           {analystEstimates.numberOfAnalysts ? (
             <span>
-              Analyst estimates ({analystEstimates.numberOfAnalysts} analysts):{" "}
+              {t("analystEstimatesLabel")} ({analystEstimates.numberOfAnalysts} {t("analystsUnit")}):{" "}
               {formatGrowthPercent(analystEstimates.revenueGrowth5Year) && (
-                <span>Rev. growth 5yr: <span className="text-slate-200">{formatGrowthPercent(analystEstimates.revenueGrowth5Year)}</span></span>
+                <span>{t("revGrowth5yr")} <span className="text-slate-200">{formatGrowthPercent(analystEstimates.revenueGrowth5Year)}</span></span>
               )}
               {analystEstimates.operatingMargins !== null && (
-                <span> | Op. margin: <span className="text-slate-200">{(analystEstimates.operatingMargins * 100).toFixed(1)}%</span></span>
+                <span> | {t("opMarginLabel")} <span className="text-slate-200">{(analystEstimates.operatingMargins * 100).toFixed(1)}%</span></span>
               )}
               {analystEstimates.targetMeanPrice !== null && (
-                <span> | Target price: <span className="text-slate-200">${analystEstimates.targetMeanPrice.toFixed(0)}</span></span>
+                <span> | {t("targetPriceLabel")} <span className="text-slate-200">${analystEstimates.targetMeanPrice.toFixed(0)}</span></span>
               )}
             </span>
           ) : (
-            <span>No analyst coverage available — using historical data for smart defaults</span>
+            <span>{t("noAnalystCoverage")}</span>
           )}
         </div>
       )}
 
       <div className="mt-4">
         <label htmlFor="mos" className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">
-          Margin of safety: {mosPercent}%
+          {t("marginOfSafety")} {mosPercent}%
         </label>
         <input
           id="mos"

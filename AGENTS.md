@@ -59,7 +59,7 @@ __tests__/         # Vitest tests
 - Prompt builders: `buildSystemPrompt()`, `buildUserPrompt()` in `lib/ai/prompts.ts`; `buildDeepValueSystemPrompt()`, `buildDeepValueUserPrompt()` in `lib/ai/deep-value-prompts.ts`
 
 ### LocalStorage Keys
-All prefixed with `sfa:`: `sfa:lastTicker`, `sfa:mosPercent`, `sfa:scenarioOverrides`, `sfa:ddmScenarioOverrides`, `sfa:evEbitdaScenarioOverrides`
+All prefixed with `sfa:`: `sfa:lastTicker`, `sfa:mosPercent`, `sfa:scenarioOverrides`, `sfa:ddmScenarioOverrides`, `sfa:evEbitdaScenarioOverrides`, `sfa:language`
 
 ---
 
@@ -341,11 +341,44 @@ Key invariants:
 
 ---
 
+## Internationalisation (i18n)
+
+App supports EN and IT via `context/language-context.tsx` + `lib/i18n/translations.ts`.
+
+### Key rules
+
+- **`useLanguage()` hook** returns `{ language, setLanguage, t, locale }`. `t(key)` looks up the active language's translation. `locale` is `"en-US"` or `"it-IT"` for `Intl` formatting.
+- **Every component** that renders user-visible text must call `const { t } = useLanguage()` and use `t("key")` — never hardcode strings.
+- **Module-level label objects** (like `const labels = { wacc: "WACC (%)" }`) become stale when the language changes. **Move them inside the component function** so they are re-evaluated on each render using the current `t()`.
+- **Server Components** cannot call `useLanguage()`. For page titles in RSC layouts, use the `PageHeader` client component (`components/page-header.tsx`) and pass translation key names as props.
+- **AI panel language** follows global language by default. Use a `userOverrideRef = useRef(false)` to track manual overrides — if `!userOverrideRef.current`, sync `aiLanguage` via `useEffect` when `globalLanguage` changes. Set `userOverrideRef.current = true` inside the manual setter.
+- **Hydration**: `LanguageProvider` starts with `"en"` on the server, reads `sfa:language` from localStorage in `useEffect`. This prevents SSR mismatch.
+- **Stale closure**: do not call `t()` inside `useCallback` with a limited dep array — the captured `t` won't update when language changes. Use static English strings for async-only fallback messages.
+
+### Vitest setup for context mocks
+
+`vitest.config.ts` must declare the `@/` alias (Next.js uses it but Vitest doesn't inherit it):
+```typescript
+import path from "path";
+resolve: { alias: { "@": path.resolve(__dirname, ".") } }
+```
+
+`vitest.setup.ts` mocks the context globally so components render without a provider:
+```typescript
+vi.mock("@/context/language-context", () => ({
+  useLanguage: () => ({ language: "en", setLanguage: vi.fn(), t: (key) => translations.en[key] ?? key, locale: "en-US" }),
+  LanguageProvider: ({ children }) => children,
+}));
+```
+
+---
+
 ## Testing
 
 - **Framework**: Vitest with jsdom, Testing Library for components
 - **Run**: `npm run test` (once) or `npm run test:watch`
 - **Build check**: `npm run build` for type-checking (don't use `npm run lint` — interactive/deprecated)
+- **Path alias**: `vitest.config.ts` must declare `resolve.alias { "@": path.resolve(__dirname, ".") }` — Next.js aliases are not inherited by Vitest
 
 ---
 

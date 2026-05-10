@@ -3,15 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useLanguage } from "@/context/language-context";
 
-/**
- * Registration form component.
- * POSTs to /api/auth/register.
- * Handles 403 (registration disabled) and 409 (email taken) explicitly.
- * On success, redirects to /login.
- */
 export default function RegisterForm() {
   const router = useRouter();
+  const { t } = useLanguage();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -37,23 +33,21 @@ export default function RegisterForm() {
     }
 
     const data = await res.json().catch(() => ({}));
-    setError(data.error ?? "Registration failed. Please try again.");
+    setError(data.error ?? t("errorFailedSave"));
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="card w-full max-w-sm space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-100">Create account</h1>
-          <p className="mt-1 text-sm text-slate-400">
-            Save and revisit your AI stock analyses
-          </p>
+          <h1 className="text-2xl font-bold text-slate-100">{t("registerTitle")}</h1>
+          <p className="mt-1 text-sm text-slate-400">{t("registerSubtitle")}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1">
             <label className="text-sm text-slate-300" htmlFor="email">
-              Email
+              {t("emailLabel")}
             </label>
             <input
               id="email"
@@ -68,7 +62,7 @@ export default function RegisterForm() {
 
           <div className="space-y-1">
             <label className="text-sm text-slate-300" htmlFor="password">
-              Password
+              {t("passwordLabel")}
             </label>
             <input
               id="password"
@@ -78,7 +72,7 @@ export default function RegisterForm() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:outline-none"
-              placeholder="Min. 8 characters"
+              placeholder={t("passwordPlaceholder")}
             />
           </div>
 
@@ -93,14 +87,14 @@ export default function RegisterForm() {
             disabled={loading}
             className="w-full rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-400 disabled:opacity-50"
           >
-            {loading ? "Creating account…" : "Create account"}
+            {loading ? t("creatingAccountState") : t("registerTitle")}
           </button>
         </form>
 
         <p className="text-center text-sm text-slate-400">
-          Already have an account?{" "}
+          {t("alreadyHaveAccount")}{" "}
           <Link href="/login" className="text-sky-400 hover:text-sky-300">
-            Sign in
+            {t("navSignIn")}
           </Link>
         </p>
       </div>

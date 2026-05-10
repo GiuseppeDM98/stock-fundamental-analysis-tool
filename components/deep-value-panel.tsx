@@ -3,12 +3,14 @@
 // Deep Value Panel — Claude autonomously picks the valuation method,
 // finds all financial data via web search, and streams a JSON block
 // (method + fair values) followed by a full Markdown report.
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { saveAnalysis } from "@/lib/analyses";
+import { useLanguage } from "@/context/language-context";
+import { APP_TO_AI_LANGUAGE } from "@/lib/i18n/translations";
 
 type Props = {
   ticker: string | null;
@@ -67,8 +69,23 @@ function UpsideBadge({ upside }: { upside: number }) {
 export default function DeepValuePanel({ ticker, companyName, mosPercent = 0 }: Props) {
   const { data: session } = useSession();
   const router = useRouter();
+  const { language: globalLanguage, t } = useLanguage();
 
-  const [language, setLanguage] = useState("English");
+  // Track whether the user has manually overridden the language for this panel.
+  // While unoverridden, the panel language follows the global app language.
+  const userOverrideRef = useRef(false);
+  const [language, setAiLanguage] = useState(() => APP_TO_AI_LANGUAGE[globalLanguage] ?? "English");
+
+  useEffect(() => {
+    if (!userOverrideRef.current) {
+      setAiLanguage(APP_TO_AI_LANGUAGE[globalLanguage] ?? "English");
+    }
+  }, [globalLanguage]);
+
+  function setLanguage(lang: string) {
+    userOverrideRef.current = true;
+    setAiLanguage(lang);
+  }
   const [report, setReport] = useState<string>("");
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -178,10 +195,8 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0 }: 
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-100">Deep Value Analysis</h2>
-          <p className="text-sm text-slate-400">
-            Claude picks the valuation method and sources all data via web search
-          </p>
+          <h2 className="text-lg font-semibold text-slate-100">{t("deepValueTitle")}</h2>
+          <p className="text-sm text-slate-400">{t("deepValueDesc")}</p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -207,10 +222,10 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0 }: 
             {isStreaming ? (
               <span className="flex items-center gap-2">
                 <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                {status === "loading" ? "Starting…" : "Analyzing…"}
+                {status === "loading" ? t("startingState") : t("analyzingState")}
               </span>
             ) : (
-              "Deep Analysis (AI)"
+              t("deepAnalysisBtn")
             )}
           </button>
         </div>
@@ -220,9 +235,9 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0 }: 
       {!session && ticker && (
         <p className="rounded-lg bg-violet-500/10 px-3 py-2 text-sm text-violet-300">
           <button onClick={() => router.push("/login")} className="underline hover:no-underline">
-            Sign in
+            {t("navSignIn")}
           </button>{" "}
-          to generate deep value analyses and save your reports.
+          {t("signInToAnalyze")}
         </p>
       )}
 
@@ -286,10 +301,10 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0 }: 
             disabled={saveStatus === "saving" || saveStatus === "saved"}
             className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-400 hover:text-slate-100 disabled:opacity-50"
           >
-            {saveStatus === "saving" && "Saving…"}
-            {saveStatus === "saved" && "✓ Saved"}
-            {saveStatus === "error" && "Retry save"}
-            {saveStatus === "idle" && "Save Report"}
+            {saveStatus === "saving" && t("savingState")}
+            {saveStatus === "saved" && t("savedState")}
+            {saveStatus === "error" && t("retrySave")}
+            {saveStatus === "idle" && t("saveReport")}
           </button>
 
           {saveStatus === "saved" && (
@@ -297,12 +312,12 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0 }: 
               onClick={() => router.push("/analyses")}
               className="text-sm text-violet-400 hover:text-violet-300"
             >
-              View Saved Analyses →
+              {t("viewSavedAnalyses")}
             </button>
           )}
 
           {saveStatus === "error" && (
-            <p className="text-sm text-red-400">Failed to save. Please try again.</p>
+            <p className="text-sm text-red-400">{t("errorFailedSaveReport")}</p>
           )}
         </div>
       )}

@@ -1,5 +1,7 @@
 ## ✨ New Features
 
+- Added **language toggle (EN / IT)** in the navigation bar — switch the entire app interface between English and Italian with one click. Your preference is saved automatically and restored on your next visit. The AI report language defaults to match your selection but can still be overridden per report.
+
 - Added **Portfolio P&L History chart** — the Portfolio page now shows a line chart with your portfolio's total value over time vs. your cost basis (purchase price). The gap between the two lines shows your unrealized gain or loss at a glance. Data is captured automatically every weekday after market close — no action required.
 
 - Added **Deep Value Analysis** — a new AI-powered panel that works for any stock worldwide, including tickers where Yahoo Finance data is incomplete or missing. Claude autonomously picks the valuation method (DCF, DDM, EV/EBITDA, or P/B) based on the company's sector, sources all financial data from the web, and produces bull/base/bear fair value estimates alongside a full research report. Available in all 8 supported languages.
@@ -59,6 +61,7 @@
 
 ## 🔧 Improvements
 
+- All UI labels across the dashboard, portfolio, analyses, scenario controls, charts, forms, and navigation are now fully translated — switching to Italian localises the entire interface including number formatting
 - Portfolio positions now display in a cleaner format: `shares × buy price → current price` with an inline colored P&L badge, replacing the previous hard-to-read dot-separated line
 - Performance and P&L deltas now appear as colored pill badges with a tinted background — easier to spot at a glance when scanning multiple positions or analyses
 - Navigation bar now highlights the current page so it's always clear which section you're in

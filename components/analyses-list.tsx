@@ -8,6 +8,7 @@ import { fetchAnalyses, deleteAnalysis } from "@/lib/analyses";
 import { fetchPositions } from "@/lib/portfolio";
 import type { SavedAnalysis } from "@/types/analysis";
 import type { Position } from "@/types/portfolio";
+import { useLanguage } from "@/context/language-context";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, {
@@ -79,6 +80,7 @@ function OpenPositionBadge({
   positions: Position[];
   currentPrice?: number;
 }) {
+  const { t } = useLanguage();
   if (positions.length === 0) return null;
 
   const totalShares = positions.reduce((s, p) => s + p.shares, 0);
@@ -101,7 +103,7 @@ function OpenPositionBadge({
   return (
     <div className="mt-1 flex items-center gap-2 flex-wrap">
       <span className="text-xs text-slate-500">
-        Posizione: {totalShares} shares @ {formatPrice(wac)}
+        {t("positionLabel")} {totalShares} shares @ {formatPrice(wac)}
       </span>
       {pnl != null && (
         <span
@@ -120,6 +122,7 @@ function OpenPositionBadge({
 
 export default function AnalysesList() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [analyses, setAnalyses] = useState<SavedAnalysis[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -183,7 +186,7 @@ export default function AnalysesList() {
       await deleteAnalysis(id);
       setAnalyses((prev) => prev.filter((a) => a.id !== id));
     } catch {
-      setError("Failed to delete. Please try again.");
+      setError(t("errorFailedDelete"));
     } finally {
       setDeleting(null);
     }
@@ -192,7 +195,7 @@ export default function AnalysesList() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16 text-muted">
-        Loading…
+        {t("loadingState")}
       </div>
     );
   }
@@ -208,15 +211,13 @@ export default function AnalysesList() {
   if (analyses.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-slate-700 py-16 text-center text-muted">
-        <p className="text-lg">No saved analyses yet.</p>
-        <p className="mt-1 text-sm">
-          Generate an AI analysis from the dashboard and save it here.
-        </p>
+        <p className="text-lg">{t("noAnalysesYet")}</p>
+        <p className="mt-1 text-sm">{t("noAnalysesDesc")}</p>
         <button
           onClick={() => router.push("/")}
           className="mt-4 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-slate-950 transition hover:brightness-110"
         >
-          Go to Dashboard
+          {t("goToDashboard")}
         </button>
       </div>
     );
@@ -281,14 +282,14 @@ export default function AnalysesList() {
                 className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-accent transition hover:border-sky-400/40 hover:text-sky-300"
                 title="Re-run analysis with this ticker"
               >
-                Re-run
+                {t("rerun")}
               </button>
               <button
                 onClick={() => handleDelete(analysis.id)}
                 disabled={deleting === analysis.id}
                 className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-muted transition hover:border-red-500/50 hover:text-danger disabled:opacity-50"
               >
-                {deleting === analysis.id ? "…" : "Delete"}
+                {deleting === analysis.id ? "…" : t("deleteBtn")}
               </button>
             </div>
           </li>

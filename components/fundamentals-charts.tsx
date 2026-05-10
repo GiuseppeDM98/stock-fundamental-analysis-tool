@@ -15,6 +15,7 @@ import {
 
 import { FundamentalsResponse } from "@/types/fundamentals";
 import { formatCompactNumber } from "@/lib/format";
+import { useLanguage } from "@/context/language-context";
 
 type FundamentalsChartsProps = {
   fundamentals: FundamentalsResponse;
@@ -30,6 +31,7 @@ type FundamentalsChartsProps = {
  * @param fundamentals - Historical annual financial data
  */
 export function FundamentalsCharts({ fundamentals }: FundamentalsChartsProps) {
+  const { t } = useLanguage();
   // Sort by year ascending to ensure chronological display on X-axis
   // Convert margin decimals (0.15) to percentages (15) for readability
   const chartData = [...fundamentals.annual]
@@ -47,7 +49,7 @@ export function FundamentalsCharts({ fundamentals }: FundamentalsChartsProps) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <div className="card h-[320px]">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">Revenue, Net Income & FCF</p>
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">{t("chartRevenueTitle")}</p>
         <ResponsiveContainer width="100%" height="90%">
           <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#23314f" />
@@ -63,7 +65,7 @@ export function FundamentalsCharts({ fundamentals }: FundamentalsChartsProps) {
         </ResponsiveContainer>
       </div>
       <div className="card h-[320px]">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">Margins (%)</p>
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">{t("chartMarginsTitle")}</p>
         <ResponsiveContainer width="100%" height="90%">
           <BarChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#23314f" />

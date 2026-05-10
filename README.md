@@ -28,6 +28,7 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **Portfolio tracker** — track real purchases with live P&L, multi-currency FX conversion, DCA aggregation (Weighted Average Cost per ticker), and cross-links to saved analyses per ticker
 - **Portfolio P&L history** — line chart showing portfolio value vs. cost basis over time, updated automatically every weekday after market close
 - **Analysis performance tracking** — see how the stock price moved since you saved each analysis vs. fair value
+- **English / Italian UI** — switch the entire interface language from the navigation bar; preference is saved automatically
 
 ### What Problem Does It Solve?
 
@@ -62,6 +63,7 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - 💼 **Portfolio Tracker**: Track real purchases with live P&L per position + DCA aggregation (Weighted Average Cost per ticker) + multi-currency aggregate summary (EUR conversion via Frankfurter) + cross-links to saved analyses per ticker
 - 📉 **Portfolio P&L History**: Line chart showing total portfolio value vs. cost basis over time — updated automatically every weekday after market close via Vercel Cron
 - 📈 **Analysis Performance**: See how price moved since saving vs. fair value — "Under FV" / "Above FV" badge per report
+- 🌐 **EN / IT UI**: Switch the entire interface language from the navbar; preference saved automatically
 - 🧪 **Fully Tested**: Vitest + Testing Library coverage for calculations and UI
 
 ---

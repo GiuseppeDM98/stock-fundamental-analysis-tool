@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { DdmScenariosInput, ScenarioName } from "@/types/valuation";
+import { useLanguage } from "@/context/language-context";
 
 type ScenarioSource = "smart" | "generic" | "custom";
 
@@ -18,22 +19,10 @@ type DdmScenarioPanelProps = {
   onRecalculate: () => void;
 };
 
-const labels: Record<string, string> = {
-  dividendGrowthRate: "Dividend growth (%)",
-  costOfEquity: "Cost of equity / Ke (%)",
-  terminalGrowthRate: "Terminal growth (%)",
-};
-
 const fieldBounds: Record<string, { min: number; max: number; step: number }> = {
   dividendGrowthRate: { min: -2, max: 15, step: 0.1 },
   costOfEquity:       { min: 3,  max: 25, step: 0.1 },
   terminalGrowthRate: { min: -1, max: 5,  step: 0.1 },
-};
-
-const sourceBadge: Record<ScenarioSource, { label: string; color: string }> = {
-  smart:   { label: "Smart defaults (Yahoo)", color: "border-emerald-600 text-emerald-400" },
-  generic: { label: "Generic defaults",       color: "border-slate-600 text-slate-400"    },
-  custom:  { label: "Custom",                 color: "border-amber-600 text-amber-400"    },
 };
 
 export function DdmScenarioPanel({
@@ -48,6 +37,20 @@ export function DdmScenarioPanel({
   onResetGeneric,
   onRecalculate,
 }: DdmScenarioPanelProps) {
+  const { t } = useLanguage();
+
+  const labels: Record<string, string> = {
+    dividendGrowthRate: t("fieldDividendGrowth"),
+    costOfEquity: t("fieldCostOfEquity"),
+    terminalGrowthRate: t("fieldTerminalGrowth"),
+  };
+
+  const sourceBadge: Record<ScenarioSource, { label: string; color: string }> = {
+    smart:   { label: t("smartDefaultsYahoo"), color: "border-emerald-600 text-emerald-400" },
+    generic: { label: t("genericDefaults"),    color: "border-slate-600 text-slate-400"    },
+    custom:  { label: t("customSource"),       color: "border-amber-600 text-amber-400"    },
+  };
+
   const [riskFreeRate, setRiskFreeRate] = useState<number | null>(null);
 
   useEffect(() => {
@@ -61,40 +64,40 @@ export function DdmScenarioPanel({
     <div className="card">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted">Scenario controls · DDM</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted">{t("scenarioControlsDdm")}</p>
           <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${sourceBadge[scenarioSource].color}`}>
             {sourceBadge[scenarioSource].label}
           </span>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={onResetSmart} className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-800">
-            Smart defaults
+            {t("smartDefaults")}
           </button>
           <button onClick={onResetGeneric} className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-800">
-            Generic defaults
+            {t("genericDefaults")}
           </button>
           <button
             onClick={onRecalculate}
             disabled={loading}
             className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {loading ? "Running..." : "Recalculate"}
+            {loading ? t("runningState") : t("recalculate")}
           </button>
         </div>
       </div>
 
       {dividendRate !== null && (
         <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs text-muted">
-          Dividendo annuale per azione (D₀): <span className="text-slate-200 font-semibold">{dividendRate.toFixed(2)}</span>
+          {t("fieldAnnualDividend")} <span className="text-slate-200 font-semibold">{dividendRate.toFixed(2)}</span>
           {riskFreeRate !== null && (
-            <span> · Tasso risk-free (US 10Y): <span className="text-slate-200 font-semibold">{(riskFreeRate * 100).toFixed(2)}%</span></span>
+            <span> · {t("fieldRiskFreeRate")} <span className="text-slate-200 font-semibold">{(riskFreeRate * 100).toFixed(2)}%</span></span>
           )}
         </div>
       )}
 
       <div className="mt-4">
         <label htmlFor="mos-ddm" className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">
-          Margin of safety: {mosPercent}%
+          {t("marginOfSafety")} {mosPercent}%
         </label>
         <input
           id="mos-ddm"

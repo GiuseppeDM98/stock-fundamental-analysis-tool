@@ -4,16 +4,13 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { useLanguage } from "@/context/language-context";
 
-/**
- * Login form component.
- * Submits credentials to Auth.js v5 via signIn("credentials", ...).
- * On success, redirects to the app root (or the callbackUrl if set by middleware).
- */
 export default function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/";
+  const { t } = useLanguage();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -34,10 +31,8 @@ export default function LoginForm() {
     setLoading(false);
 
     if (result?.error) {
-      setError("Invalid email or password.");
+      setError(t("errorInvalidCredentials"));
     } else {
-      // Use window.location for the callbackUrl redirect because Next.js typed routes
-      // don't allow dynamic strings in router.push without a type assertion.
       window.location.href = callbackUrl;
     }
   }
@@ -46,16 +41,14 @@ export default function LoginForm() {
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="card w-full max-w-sm space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-100">Sign in</h1>
-          <p className="mt-1 text-sm text-slate-400">
-            Access your AI stock analyses
-          </p>
+          <h1 className="text-2xl font-bold text-slate-100">{t("loginTitle")}</h1>
+          <p className="mt-1 text-sm text-slate-400">{t("loginSubtitle")}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1">
             <label className="text-sm text-slate-300" htmlFor="email">
-              Email
+              {t("emailLabel")}
             </label>
             <input
               id="email"
@@ -70,7 +63,7 @@ export default function LoginForm() {
 
           <div className="space-y-1">
             <label className="text-sm text-slate-300" htmlFor="password">
-              Password
+              {t("passwordLabel")}
             </label>
             <input
               id="password"
@@ -94,14 +87,14 @@ export default function LoginForm() {
             disabled={loading}
             className="w-full rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-400 disabled:opacity-50"
           >
-            {loading ? "Signing in…" : "Sign in"}
+            {loading ? t("signingInState") : t("loginTitle")}
           </button>
         </form>
 
         <p className="text-center text-sm text-slate-400">
-          No account?{" "}
+          {t("noAccount")}{" "}
           <Link href="/register" className="text-sky-400 hover:text-sky-300">
-            Create one
+            {t("createOne")}
           </Link>
         </p>
       </div>
