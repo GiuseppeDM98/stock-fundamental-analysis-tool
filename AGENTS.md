@@ -25,6 +25,7 @@ lib/               # Business logic and utilities
   analyses.ts              # Client-side fetch helpers for saved analyses
   portfolio.ts             # Client-side fetch helpers for positions + snapshots (fetchSnapshots)
   portfolio-snapshots.ts   # Server-only snapshot logic (import "server-only") — createSnapshotForUser, createSnapshotsForAllUsers
+  dividends.ts             # Server-only: fetch + parse Borsa Italiana dividend table (fetchDividendPaidToday)
   format.ts                # Formatting utilities
 components/        # React components (all client-side, all "use client")
 app/api/           # API route handlers
@@ -309,14 +310,29 @@ Never export server-only functions from the same file as client helpers — Next
 
 ## Portfolio Tracker
 
-- `Position` model: `id, userId, ticker, companyName, purchasePrice, shares, currency, purchasedAt, notes`
-- Types: `Position`, `CreatePositionRequest`, `AggregatedPosition`, `SnapshotPoint` — all in `types/portfolio.ts`
+- `Position` model: `id, userId, ticker, isin, companyName, purchasePrice, shares, currency, purchasedAt, notes` — `isin` is optional, used for dividend tracking via Borsa Italiana
+- Types: `Position`, `CreatePositionRequest`, `AggregatedPosition`, `SnapshotPoint`, `SnapshotEntry`, `SnapshotData` — all in `types/portfolio.ts`
 - Client helpers in `lib/portfolio.ts` — same pattern as `lib/analyses.ts`; includes `fetchSnapshots()` for chart data
 - Live prices fetched client-side via `/api/quote/[ticker]` in parallel for all unique tickers
 - FX conversion via `frankfurter.app` (free, no API key): `GET https://api.frankfurter.app/latest?base=EUR&symbols=USD,GBP,...`
   - Response: `{ rates: { USD: 1.08, GBP: 0.85 } }` — 1 EUR = X units of currency
   - To convert amount in USD to EUR: `usdAmount / rates.USD`
 - Summary bar only renders when at least one live price + FX rate is resolved — fails silently otherwise
+
+### Dividend Tracking (Borsa Italiana)
+
+`lib/dividends.ts` (server-only) fetches and parses the Borsa Italiana dividend page for a given ISIN. Called during snapshot creation for positions with a non-null `isin`.
+
+**Real HTML structure** (verified 2026-05-11) — columns differ from what the site documents:
+```
+Headers: Azioni | Div. Cda | Div. Ass. | Divisa | Stacco | Pagamento | Tipo Dividendo
+                  idx=1       idx=2       idx=3    idx=4    idx=5
+```
+- Dates are in **DD/MM/YY** (2-digit year) — not DD/MM/YYYY. Use `year.slice(2)` when building the target date.
+- **Div. Ass.** (assembly-approved) is preferred over **Div. Cda** (board proposal); fall back to Div. Cda when Ass. is empty.
+- Currency is `"EURO"` not `"EUR"` — normalize via map before storing.
+- We check the **Pagamento** column (payment date), never Stacco (ex-div date).
+- Failures (network, parse error, structure change) return `null` silently — snapshot must never be blocked by a dividend check failure.
 
 ### WAC/DCA Aggregation Pattern
 
@@ -428,7 +444,7 @@ Use Tailwind built-in equivalents instead:
 4. **WACC vs terminal growth**: DCF blows up if `wacc <= terminalGrowth`
 5. **CSS variable naming**: Only `--bg`, `--card`, `--accent`, `--muted`, `--success`, `--warning`, `--danger` exist. No `--surface`. Use `bg-[var(--card)]` for modals.
 6. **`remarkGfm` missing**: Easy to forget in server-rendered pages. All pages rendering saved markdown need it explicitly — it's not inherited from the streaming panels.
-7. **Turso migration gap**: Local `prisma migrate dev` applies to `dev.db` only. App always hits Turso. Adding a column without applying the migration to Turso causes `no such column` in production/dev-with-Turso.
+7. **Turso migration gap**: Local `prisma migrate dev` applies to `dev.db` only. App always hits Turso. Adding a column without applying the migration to Turso causes `no such column` in production/dev-with-Turso. Also: **restart the dev server** after applying the migration — the running process holds a stale Prisma client that doesn't know about the new column.
 8. **`baseUrl` removed from tsconfig**: deprecated in TypeScript 6.0+. With `moduleResolution: "Bundler"`, `paths` handles `@/` aliases without it — removing `baseUrl` is safe and eliminates the TS warning.
 9. **`ring-inset` on `<tr>` elements**: Tailwind `ring-*` classes don't apply visually to table rows in all browsers. Use a background tint on the cells instead (e.g. `bg-violet-900/20`) for row highlights in `<table>` layouts.
 
@@ -442,7 +458,7 @@ import { QuoteResponse } from "@/types/market";
 import { FundamentalsResponse } from "@/types/fundamentals";
 import { ScenarioInput, AnalystEstimates, ValuationResponse, DdmScenariosInput, EvEbitdaScenariosInput } from "@/types/valuation";
 import { SavedAnalysis, SaveAnalysisRequest } from "@/types/analysis";
-import { Position, CreatePositionRequest, AggregatedPosition, SnapshotPoint } from "@/types/portfolio";
+import { Position, CreatePositionRequest, AggregatedPosition, SnapshotPoint, SnapshotEntry, SnapshotData } from "@/types/portfolio";
 ```
 
 ### Lib Imports
@@ -456,6 +472,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { fetchPositions, createPosition, deletePosition, fetchSnapshots } from "@/lib/portfolio";
 import { createSnapshotForUser, createSnapshotsForAllUsers } from "@/lib/portfolio-snapshots"; // server-only
+import { fetchDividendPaidToday } from "@/lib/dividends"; // server-only
 ```
 
 ---

@@ -3,9 +3,9 @@
 // Portfolio tracker — shows user's stock positions with live P&L.
 // Fetches current prices for all unique tickers on mount.
 // Summary bar converts all positions to EUR via frankfurter.app (free, no key needed).
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import ReactDOM from "react-dom";
-import { fetchPositions, createPosition, deletePosition } from "@/lib/portfolio";
+import { fetchPositions, createPosition, deletePosition, fetchSnapshots } from "@/lib/portfolio";
 import { fetchAnalyses } from "@/lib/analyses";
 import type { Position, CreatePositionRequest, AggregatedPosition } from "@/types/portfolio";
 import type { SavedAnalysis } from "@/types/analysis";
@@ -245,12 +245,14 @@ function AggregatedPositionRow({
 type AddPositionModalProps = {
   onClose: () => void;
   onSave: (pos: Position) => void;
+  existingPositions: Position[];
 };
 
-function AddPositionModal({ onClose, onSave }: AddPositionModalProps) {
+function AddPositionModal({ onClose, onSave, existingPositions }: AddPositionModalProps) {
   const { t } = useLanguage();
   const [form, setForm] = useState<CreatePositionRequest>({
     ticker: "",
+    isin: "",
     companyName: "",
     purchasePrice: 0,
     shares: 0,
@@ -260,8 +262,22 @@ function AddPositionModal({ onClose, onSave }: AddPositionModalProps) {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Track whether the user has manually edited the ISIN field to avoid overriding their input
+  const isinManuallyEdited = useRef(false);
+
+  // Auto-fill ISIN when ticker matches an existing position that already has one
+  useEffect(() => {
+    if (isinManuallyEdited.current || !form.ticker) return;
+    const match = existingPositions.find(
+      (p) => p.ticker.toUpperCase() === form.ticker.toUpperCase() && p.isin
+    );
+    if (match?.isin) {
+      setForm((prev) => ({ ...prev, isin: match.isin! }));
+    }
+  }, [form.ticker, existingPositions]);
 
   function handleChange(field: keyof CreatePositionRequest, value: string | number) {
+    if (field === "isin") isinManuallyEdited.current = true;
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
@@ -277,6 +293,7 @@ function AddPositionModal({ onClose, onSave }: AddPositionModalProps) {
       const created = await createPosition({
         ...form,
         ticker: form.ticker.toUpperCase().trim(),
+        isin: form.isin?.trim() || undefined,
         notes: form.notes || undefined,
       });
       onSave(created);
@@ -374,6 +391,19 @@ function AddPositionModal({ onClose, onSave }: AddPositionModalProps) {
           </div>
 
           <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">{t("fieldIsin")}</label>
+            <input
+              type="text"
+              placeholder="IT0003128367"
+              value={form.isin ?? ""}
+              onChange={(e) => handleChange("isin", e.target.value.toUpperCase())}
+              maxLength={12}
+              className={inputClass}
+            />
+            <p className="mt-1 text-[11px] text-slate-600">{t("fieldIsinHint")}</p>
+          </div>
+
+          <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">{t("fieldNotes")}</label>
             <input
               type="text"
@@ -415,15 +445,18 @@ function AddPositionModal({ onClose, onSave }: AddPositionModalProps) {
 // ─── Portfolio Summary Bar ────────────────────────────────────────────────────
 
 // Converts all positions to EUR using Frankfurter rates and shows aggregate P&L.
+// totalDividendsEur is summed from historical snapshots — it accumulates over time.
 function SummaryBar({
   positions,
   currentPrices,
   fxRates,
+  totalDividendsEur,
 }: {
   positions: Position[];
   currentPrices: Record<string, number>;
   // Map currency → rate vs EUR (e.g. USD: 1.08 means 1 EUR = 1.08 USD)
   fxRates: Record<string, number>;
+  totalDividendsEur: number;
 }) {
   const { t } = useLanguage();
   let totalCostEur = 0;
@@ -450,9 +483,10 @@ function SummaryBar({
   const pnlEur = totalValueEur - totalCostEur;
   const totalReturn = (totalValueEur / totalCostEur - 1) * 100;
   const isPositive = pnlEur >= 0;
+  const hasDividends = totalDividendsEur > 0;
 
   return (
-    <div className="card mb-4 grid grid-cols-3 gap-4 text-center">
+    <div className={`card mb-4 grid gap-4 text-center ${hasDividends ? "grid-cols-4" : "grid-cols-3"}`}>
       <div>
         <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-1">{t("totalCost")}</p>
         <p className="text-lg font-semibold text-slate-100">{formatAmount(totalCostEur, "EUR")}</p>
@@ -471,6 +505,13 @@ function SummaryBar({
         </p>
         <p className="text-[10px] text-slate-600 mt-0.5">{t("convertedToEur")}</p>
       </div>
+      {hasDividends && (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-1">{t("totalDividends")}</p>
+          <p className="text-lg font-semibold text-emerald-400">+{formatAmount(totalDividendsEur, "EUR")}</p>
+          <p className="text-[10px] text-slate-600 mt-0.5">Borsa Italiana · lordo</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -490,11 +531,12 @@ export default function PortfolioList() {
   // EUR-based FX rates from frankfurter.app: { USD: 1.08, GBP: 0.85, ... }
   const [fxRates, setFxRates] = useState<Record<string, number>>({});
   const [analysesByTicker, setAnalysesByTicker] = useState<Record<string, SavedAnalysis[]>>({});
+  const [totalDividendsEur, setTotalDividendsEur] = useState(0);
 
   useEffect(() => {
-    // Fetch positions and analyses in parallel — no sequential dependency between them.
-    Promise.all([fetchPositions(), fetchAnalyses()])
-      .then(([posData, analysesData]) => {
+    // Fetch positions, analyses, and snapshots in parallel — no sequential dependency.
+    Promise.all([fetchPositions(), fetchAnalyses(), fetchSnapshots()])
+      .then(([posData, analysesData, snapshots]) => {
         setPositions(posData);
 
         const map: Record<string, SavedAnalysis[]> = {};
@@ -502,6 +544,10 @@ export default function PortfolioList() {
           map[a.ticker] = [...(map[a.ticker] ?? []), a];
         }
         setAnalysesByTicker(map);
+
+        // Sum dividends received across all historical snapshots
+        const divTotal = snapshots.reduce((sum, s) => sum + (s.dividendsEur ?? 0), 0);
+        setTotalDividendsEur(divTotal);
 
         const tickers = [...new Set(posData.map((p) => p.ticker))];
         const currencies = [...new Set(posData.map((p) => p.currency).filter((c) => c !== "EUR"))];
@@ -575,7 +621,12 @@ export default function PortfolioList() {
       )}
 
       {positions.length > 0 && (
-        <SummaryBar positions={positions} currentPrices={currentPrices} fxRates={fxRates} />
+        <SummaryBar
+          positions={positions}
+          currentPrices={currentPrices}
+          fxRates={fxRates}
+          totalDividendsEur={totalDividendsEur}
+        />
       )}
 
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -727,7 +778,11 @@ export default function PortfolioList() {
       )}
 
       {showModal && (
-        <AddPositionModal onClose={() => setShowModal(false)} onSave={handlePositionSaved} />
+        <AddPositionModal
+          onClose={() => setShowModal(false)}
+          onSave={handlePositionSaved}
+          existingPositions={positions}
+        />
       )}
     </div>
   );

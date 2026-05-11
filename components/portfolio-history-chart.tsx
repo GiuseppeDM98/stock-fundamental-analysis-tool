@@ -5,6 +5,7 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -112,6 +113,9 @@ export default function PortfolioHistoryChart() {
     );
   }
 
+  // Snapshots with a dividend payment that day — shown as vertical markers on the chart
+  const dividendDays = snapshots.filter((s) => (s.dividendsEur ?? 0) > 0);
+
   return (
     <div className="card mb-6" style={{ height: 272 }}>
       <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">
@@ -137,6 +141,22 @@ export default function PortfolioHistoryChart() {
             width={68}
           />
           <Tooltip content={<ChartTooltip locale={locale} />} />
+          {/* Vertical markers for days when dividends were paid */}
+          {dividendDays.map((s) => (
+            <ReferenceLine
+              key={s.takenAt}
+              x={s.takenAt}
+              stroke="#34d399"
+              strokeWidth={1.5}
+              strokeDasharray="3 3"
+              label={{
+                value: `${t("dividendMarkerLabel")} +${formatEurFull(s.dividendsEur!, locale)}`,
+                position: "insideTopRight",
+                fill: "#34d399",
+                fontSize: 10,
+              }}
+            />
+          ))}
           {/* Market value of the portfolio */}
           <Line
             type="monotone"

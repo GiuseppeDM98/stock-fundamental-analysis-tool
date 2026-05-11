@@ -4,7 +4,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import type { SnapshotPoint } from "@/types/portfolio";
+import type { SnapshotPoint, SnapshotData } from "@/types/portfolio";
 
 export async function GET() {
   const session = await auth();
@@ -19,19 +19,30 @@ export async function GET() {
       takenAt: { gte: since },
     },
     orderBy: { takenAt: "asc" },
+    // data is included here to extract dividendsEur; it's small enough for 90 rows
     select: {
       takenAt: true,
       totalEur: true,
       costEur: true,
-      // data (heavy JSON) excluded — not needed for chart rendering
+      data: true,
     },
   });
 
-  const response: SnapshotPoint[] = snapshots.map((s) => ({
-    takenAt: s.takenAt.toISOString(),
-    totalEur: s.totalEur,
-    costEur: s.costEur,
-  }));
+  const response: SnapshotPoint[] = snapshots.map((s) => {
+    let dividendsEur = 0;
+    try {
+      const parsed = JSON.parse(s.data) as Partial<SnapshotData>;
+      dividendsEur = parsed.dividendsEur ?? 0;
+    } catch {
+      // Older snapshots without the dividendsEur field: treat as 0
+    }
+    return {
+      takenAt: s.takenAt.toISOString(),
+      totalEur: s.totalEur,
+      costEur: s.costEur,
+      dividendsEur,
+    };
+  });
 
   return NextResponse.json(response);
 }

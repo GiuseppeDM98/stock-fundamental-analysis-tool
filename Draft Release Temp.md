@@ -1,5 +1,7 @@
 ## ✨ New Features
 
+- **Dividend tracking** — add an ISIN to any portfolio position and dividends paid on Borsa Italiana are automatically recorded each day the cron runs. The portfolio summary bar shows a cumulative "Dividends Received" total, and the P&L history chart marks dividend payment days with a green vertical line. Only payment date is tracked (not ex-dividend date), so the amount reflects cash actually received. Works for stocks listed on Borsa Italiana (MTAA); other exchanges are silently skipped.
+
 - **Deep Value Analysis** now shows a **Valuation Summary table** at the end of each report — a quick-reference table listing the current price alongside Bear, Base, and Bull fair values and their upside/downside percentage vs. the current price. No more scrolling back to the top to check the numbers after reading the full report.
 
 - **Saved Analyses page redesigned** — analyses are now grouped by ticker instead of shown as a flat list. Each ticker card shows the latest Bear / Base / Bull fair values at a glance, a visual gradient bar indicating where the current price falls relative to the full fair value range, and a collapsible history of older analyses for the same stock (with their own Bear/Base/Bull values).

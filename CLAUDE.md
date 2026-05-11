@@ -6,9 +6,9 @@ Current project state and context for AI assistants.
 
 ## Version & Status
 
-**Version**: `0.9.1`
+**Version**: `0.9.2`
 **Status**: Active Development
-**Last Updated**: May 11, 2026 (Deep Value Analysis — added valuation recap table at end of report)
+**Last Updated**: May 11, 2026 (Portfolio — dividend tracking via Borsa Italiana ISIN)
 
 ---
 
@@ -19,7 +19,7 @@ Current project state and context for AI assistants.
 - **Prisma** `7.4.2` + **Turso** (libSQL) via `@prisma/adapter-libsql`
 - **Auth.js** `next-auth@5.0.0-beta.30` + **bcryptjs**
 - **Anthropic SDK** + **Claude Sonnet 4.6** (web search enabled)
-- **Tailwind CSS** `3.4.17` + **Framer Motion** `11.18.2` + **Recharts** `2.15.1` + **react-markdown** + **remark-gfm**
+- **Tailwind CSS** `3.4.17` + **Framer Motion** `11.18.2` + **Recharts** `2.15.1` + **react-markdown** + **remark-gfm** + **node-html-parser**
 - **Vitest** `3.2.4` + **Testing Library** `16.2.0`
 
 ---
@@ -91,28 +91,30 @@ Current project state and context for AI assistants.
 
 ### Portfolio Tracker
 - Section at `/portfolio` — track real stock purchases with live P&L
-- `Position` model: `ticker`, `companyName`, `purchasePrice`, `shares`, `currency`, `purchasedAt`, `notes`
+- `Position` model: `ticker`, `isin` (optional), `companyName`, `purchasePrice`, `shares`, `currency`, `purchasedAt`, `notes`
 - **WAC/DCA aggregation**: positions grouped by ticker in "Aggregated" view (default); shows `AggregatedPosition` with `weightedAvgCost`, `totalShares`, `totalCost`, expandable drill-down for individual purchases
   - Toggle "Aggregated / Per Purchase" switches between WAC view and flat per-purchase list
   - WAC P&L: `(currentPrice − WAC) × totalShares`
   - Delete from drill-down removes single purchase; WAC re-derives on next render automatically
 - Multi-currency support — currency stored per position (EUR/USD/GBP/CHF/JPY/CAD/AUD/SEK/NOK/DKK)
-- Aggregate summary bar with total cost, total value, total P&L — all converted to EUR via Frankfurter API (`api.frankfurter.app/latest?base=EUR`)
+- Aggregate summary bar: total cost, total value, total P&L, and **dividends received** (shown only when > 0) — all in EUR via Frankfurter API
 - Summary bar only renders when at least one live price and FX rate are resolved
-- Add position modal (ReactDOM.createPortal), delete with confirmation
+- Add position modal (ReactDOM.createPortal), delete with confirmation; ISIN field auto-fills from existing positions for the same ticker (DCA-friendly)
 - Live prices via `/api/quote/[ticker]` — parallel fetch for all unique tickers at mount
-- Types: `Position`, `CreatePositionRequest`, `AggregatedPosition`, `SnapshotPoint` in `types/portfolio.ts`
-- **Portfolio ↔ Analyses link**: each position row shows "N saved analyses ▼" (collapsible) if saved analyses exist for that ticker — date, MoS%, FV base, link to detail page. Implemented via `Promise.all([fetchPositions(), fetchAnalyses()])` on mount, no extra API calls.
-- **P&L History chart**: Recharts LineChart in `/portfolio` showing portfolio value vs cost basis over time. Data sourced from `PortfolioSnapshot` rows created by the daily cron. Shows placeholder if < 2 snapshots exist.
+- Types: `Position`, `CreatePositionRequest`, `AggregatedPosition`, `SnapshotPoint`, `SnapshotEntry`, `SnapshotData` in `types/portfolio.ts`
+- **Portfolio ↔ Analyses link**: each position row shows "N saved analyses ▼" (collapsible) if saved analyses exist for that ticker — date, MoS%, FV base, link to detail page. Implemented via `Promise.all([fetchPositions(), fetchAnalyses(), fetchSnapshots()])` on mount, no extra API calls.
+- **P&L History chart**: Recharts LineChart in `/portfolio` showing portfolio value vs cost basis over time. Data sourced from `PortfolioSnapshot` rows created by the daily cron. Shows placeholder if < 2 snapshots exist. **Green vertical markers** appear on days when a dividend was paid.
 
 ### Portfolio P&L History (Snapshots)
-- **`PortfolioSnapshot` model**: `totalEur`, `costEur`, `takenAt`, `data` (JSON with per-position detail + FX rates at snapshot time)
-- **Vercel Cron Job** (`0 20 * * 1-5` — weekdays, 20:00 UTC after market close) POSTs to `/api/cron/portfolio-snapshot`
+- **`PortfolioSnapshot` model**: `totalEur`, `costEur`, `takenAt`, `data` (JSON typed as `SnapshotData` with `dividendsEur` total + per-position `SnapshotEntry` array)
+- **Vercel Cron Job** (`0 20 * * 1-5` — weekdays, 20:00 UTC after market close) fires GET to `/api/cron/portfolio-snapshot`
 - Cron secured with `CRON_SECRET` env var — Vercel injects `Authorization: Bearer <secret>` automatically
 - **Idempotent**: skips users who already have a snapshot for today (UTC) — safe for Vercel retries
 - Sequential user processing to respect Yahoo Finance rate limits
 - FX rates stored in snapshot JSON — not recalculated retroactively
+- **Dividend tracking**: during snapshot, positions with `isin` are checked on Borsa Italiana (`lib/dividends.ts`) for payment date = today. Gross dividend per share × shares is accumulated as `dividendsEur` in the snapshot. Works only for Borsa Italiana (MTAA); other ISINs ignored silently.
 - `lib/portfolio-snapshots.ts` is server-only (`import "server-only"`); `fetchSnapshots()` client helper lives in `lib/portfolio.ts`
+- `SnapshotPoint.dividendsEur` is included in the `/api/portfolio/snapshots` response (parsed from data JSON); old snapshots without it return 0
 
 ### Valuation Metrics Cards
 - 4 quick-glance cards above historical charts: **Years of Earnings** (P/E), **Years of FCF** (P/FCF), **FCF Yield**, **Earnings Yield**
@@ -163,6 +165,7 @@ lib/
   analyses.ts              # Client-side fetch helpers
   portfolio.ts             # Client-side fetch helpers (positions + fetchSnapshots)
   portfolio-snapshots.ts   # Server-only: snapshot creation logic (import "server-only")
+  dividends.ts             # Server-only: Borsa Italiana dividend fetcher + HTML parser
   format.ts                # Formatting utilities
 app/api/
   quote/[ticker]/      fundamentals/[ticker]/      valuation/[ticker]/

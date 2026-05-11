@@ -59,6 +59,9 @@ model Position {
   id            String   @id @default(cuid())
   userId        String
   ticker        String
+  // Optional ISIN for dividend tracking via Borsa Italiana (elenco-completo-dividendi).
+  // Only useful for stocks listed on Borsa Italiana (MTAA). Leave blank for US/other exchanges.
+  isin          String?
   companyName   String
   purchasePrice Float
   shares        Float

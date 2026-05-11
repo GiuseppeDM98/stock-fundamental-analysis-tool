@@ -63,6 +63,10 @@ export type Translations = {
   fieldShares: string;
   fieldNotes: string;
   fieldNotesPlaceholder: string;
+  fieldIsin: string;
+  fieldIsinHint: string;
+  totalDividends: string;
+  dividendMarkerLabel: string;
   errorFillFields: string;
   errorFailedSave: string;
   errorFailedDelete: string;
@@ -251,6 +255,10 @@ const en: Translations = {
   fieldShares: "Shares",
   fieldNotes: "Notes",
   fieldNotesPlaceholder: "Optional notes…",
+  fieldIsin: "ISIN",
+  fieldIsinHint: "Optional · for dividend tracking on Borsa Italiana (e.g. IT0003128367)",
+  totalDividends: "Dividends Received",
+  dividendMarkerLabel: "Dividend",
   errorFillFields: "Please fill in all required fields.",
   errorFailedSave: "Failed to save.",
   errorFailedDelete: "Failed to delete. Please try again.",
@@ -439,6 +447,10 @@ const it: Translations = {
   fieldShares: "Azioni",
   fieldNotes: "Note",
   fieldNotesPlaceholder: "Note opzionali…",
+  fieldIsin: "ISIN",
+  fieldIsinHint: "Opzionale · per tracking dividendi su Borsa Italiana (es. IT0003128367)",
+  totalDividends: "Dividendi Incassati",
+  dividendMarkerLabel: "Dividendo",
   errorFillFields: "Compilare tutti i campi obbligatori.",
   errorFailedSave: "Salvataggio fallito.",
   errorFailedDelete: "Eliminazione fallita. Riprova.",

@@ -7,6 +7,8 @@ import { db } from "@/lib/db";
 
 const createSchema = z.object({
   ticker: z.string().min(1).max(10),
+  // ISIN format: 2-letter country code + 9 alphanumeric + 1 check digit (e.g. IT0003128367)
+  isin: z.string().regex(/^[A-Z]{2}[A-Z0-9]{9}[0-9]$/, "Expected ISIN format (e.g. IT0003128367)").optional(),
   companyName: z.string().min(1),
   purchasePrice: z.number().positive(),
   shares: z.number().positive(),
@@ -45,6 +47,7 @@ export async function POST(request: Request) {
     data: {
       userId: session.user.id,
       ticker: body.ticker,
+      isin: body.isin,
       companyName: body.companyName,
       purchasePrice: body.purchasePrice,
       shares: body.shares,

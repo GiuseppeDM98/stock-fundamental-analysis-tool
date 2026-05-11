@@ -3,7 +3,8 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { getQuote } from "@/lib/yahoo-client";
-import type { Position } from "@/types/portfolio";
+import { fetchDividendPaidToday } from "@/lib/dividends";
+import type { Position, SnapshotData } from "@/types/portfolio";
 
 // ─── FX helpers ───────────────────────────────────────────────────────────────
 
@@ -44,6 +45,7 @@ async function snapshotExistsToday(userId: string): Promise<boolean> {
  * Idempotent: silently returns if today's snapshot already exists (UTC).
  * Positions with unresolvable price or FX rate are excluded from totals
  * but recorded in data JSON with null fields for auditability.
+ * Positions with an ISIN are checked on Borsa Italiana for dividend payments today.
  */
 export async function createSnapshotForUser(
   userId: string,
@@ -52,18 +54,30 @@ export async function createSnapshotForUser(
   if (positions.length === 0) return;
   if (await snapshotExistsToday(userId)) return;
 
+  const today = new Date().toISOString().slice(0, 10);
   const foreignCurrencies = [
     ...new Set(positions.map((p) => p.currency).filter((c) => c !== "EUR")),
   ];
 
-  // Fetch FX rates and all unique ticker prices in parallel
+  // Collect unique ISINs for dividend lookups
+  const uniqueIsins = [
+    ...new Set(positions.map((p) => p.isin).filter((isin): isin is string => !!isin)),
+  ];
+
+  // Fetch FX rates, ticker prices, and today's dividends in parallel
   const uniqueTickers = [...new Set(positions.map((p) => p.ticker))];
-  const [fxRates, priceResults] = await Promise.all([
+  const [fxRates, priceResults, dividendResults] = await Promise.all([
     fetchFxRates(foreignCurrencies),
     Promise.allSettled(
       uniqueTickers.map(async (ticker) => {
         const quote = await getQuote(ticker);
         return { ticker, price: quote.regularMarketPrice };
+      })
+    ),
+    Promise.allSettled(
+      uniqueIsins.map(async (isin) => {
+        const payment = await fetchDividendPaidToday(isin, today);
+        return { isin, payment };
       })
     ),
   ]);
@@ -75,10 +89,19 @@ export async function createSnapshotForUser(
     }
   }
 
+  // Map ISIN → gross dividend payment for today (if any)
+  const dividendByIsin: Record<string, { amount: number; currency: string }> = {};
+  for (const result of dividendResults) {
+    if (result.status === "fulfilled" && result.value.payment) {
+      dividendByIsin[result.value.isin] = result.value.payment;
+    }
+  }
+
   let totalEur = 0;
   let costEur = 0;
+  let dividendsEur = 0;
 
-  const dataEntries = positions.map((p) => {
+  const entries = positions.map((p) => {
     const currentPrice = prices[p.ticker] ?? null;
     // EUR positions use rate 1; foreign positions need the Frankfurter rate
     const fxRate = p.currency === "EUR" ? 1 : (fxRates[p.currency] ?? null);
@@ -94,9 +117,22 @@ export async function createSnapshotForUser(
       costEur += posCostEur;
     }
 
+    // Compute dividend paid on this position today, if applicable
+    let dividendPaidEur: number | undefined;
+    if (p.isin && dividendByIsin[p.isin]) {
+      const { amount: divPerShare, currency: divCurrency } = dividendByIsin[p.isin];
+      // Use position's fxRate if currencies match, otherwise attempt EUR assumption
+      const divFxRate = divCurrency === "EUR" ? 1 : (fxRates[divCurrency] ?? null);
+      if (divFxRate !== null) {
+        dividendPaidEur = (divPerShare * p.shares) / divFxRate;
+        dividendsEur += dividendPaidEur;
+      }
+    }
+
     return {
       positionId: p.id,
       ticker: p.ticker,
+      isin: p.isin ?? undefined,
       currency: p.currency,
       shares: p.shares,
       purchasePrice: p.purchasePrice,
@@ -104,8 +140,11 @@ export async function createSnapshotForUser(
       fxRate,
       valueEur,
       costEur: posCostEur,
+      dividendPaidEur,
     };
   });
+
+  const data: SnapshotData = { dividendsEur, entries };
 
   await db.portfolioSnapshot.create({
     data: {
@@ -113,7 +152,7 @@ export async function createSnapshotForUser(
       takenAt: new Date(),
       totalEur,
       costEur,
-      data: JSON.stringify(dataEntries),
+      data: JSON.stringify(data),
     },
   });
 }
@@ -153,6 +192,7 @@ export async function createSnapshotsForAllUsers(): Promise<{
       const positions: Position[] = rows.map((p) => ({
         id: p.id,
         ticker: p.ticker,
+        isin: p.isin,
         companyName: p.companyName,
         purchasePrice: p.purchasePrice,
         shares: p.shares,

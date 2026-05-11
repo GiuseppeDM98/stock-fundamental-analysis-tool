@@ -2,6 +2,8 @@
 export type Position = {
   id: string;
   ticker: string;
+  // Optional ISIN for dividend tracking via Borsa Italiana. Only useful for MTAA-listed stocks.
+  isin?: string | null;
   companyName: string;
   purchasePrice: number;
   shares: number;
@@ -14,6 +16,7 @@ export type Position = {
 /** Payload required to create a new position. */
 export type CreatePositionRequest = {
   ticker: string;
+  isin?: string;
   companyName: string;
   purchasePrice: number;
   shares: number;
@@ -35,7 +38,29 @@ export type AggregatedPosition = {
 
 /** One daily data point for the portfolio P&L history chart. */
 export type SnapshotPoint = {
-  takenAt: string;   // ISO 8601 UTC
+  takenAt: string;      // ISO 8601 UTC
   totalEur: number;
   costEur: number;
+  dividendsEur?: number; // dividends paid on this specific day (0 or absent = no dividend)
+};
+
+/** Per-position entry stored in the PortfolioSnapshot.data JSON field. */
+export type SnapshotEntry = {
+  positionId: string;
+  ticker: string;
+  isin?: string;
+  currency: string;
+  shares: number;
+  purchasePrice: number;
+  currentPrice: number | null;
+  fxRate: number | null;
+  valueEur: number | null;
+  costEur: number | null;
+  dividendPaidEur?: number; // gross dividend received on this day for this position, in EUR
+};
+
+/** Root structure of the PortfolioSnapshot.data JSON field. */
+export type SnapshotData = {
+  dividendsEur: number; // total gross dividends received on this day, in EUR
+  entries: SnapshotEntry[];
 };
