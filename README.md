@@ -55,7 +55,7 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - 🔒 **Input Validation**: Hard constraints prevent mathematically invalid scenarios (e.g., WACC must exceed terminal growth)
 - 📈 **Live Risk-Free Rate**: US 10Y Treasury yield displayed next to WACC as a real-time reference
 - 💾 **State Persistence**: LocalStorage saves ticker history and scenario overrides
-- 🔍 **Deep Value Analysis**: Fully autonomous AI valuation — Claude picks the method, sources all data via web search, includes MOAT analysis, quality metrics (ROIC, ROE, FCF conversion), and near-term catalysts; works for any global ticker
+- 🔍 **Deep Value Analysis**: Fully autonomous AI valuation — Claude picks the method, sources all data via web search, includes MOAT analysis, quality metrics (ROIC, ROE, FCF conversion), and near-term catalysts; works for any global ticker. Ends with a **Valuation Summary table** showing Bear / Base / Bull fair values and upside/downside vs. the current price at a glance.
 - 👤 **User Accounts**: Save and revisit AI-generated reports with email/password auth
 - 📋 **Saved Analyses by Ticker**: Analyses page groups reports by stock — see Bear/Base/Bull fair values at a glance with a visual price-vs-FV bar; search, filter (Under FV), and sort across all your saved research
 - 🧮 **Valuation Metrics**: P/E, P/FCF, FCF Yield, Earnings Yield cards with YoY trend and educational tooltips

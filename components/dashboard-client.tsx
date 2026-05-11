@@ -532,6 +532,7 @@ export function DashboardClient() {
               ticker={ticker}
               companyName={quote.shortName}
               mosPercent={mosPercent}
+              currentPrice={quote.regularMarketPrice}
             />
           </motion.div>
         )}

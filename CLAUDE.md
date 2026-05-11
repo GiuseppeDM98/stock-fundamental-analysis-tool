@@ -8,7 +8,7 @@ Current project state and context for AI assistants.
 
 **Version**: `0.9.1`
 **Status**: Active Development
-**Last Updated**: May 10, 2026 (Saved Analyses page restructured — grouped by ticker with Bear/Base/Bull cards and price-vs-FV bar)
+**Last Updated**: May 11, 2026 (Deep Value Analysis — added valuation recap table at end of report)
 
 ---
 
@@ -70,6 +70,7 @@ Current project state and context for AI assistants.
 - Prompt builders in `lib/ai/deep-value-prompts.ts`; endpoint at `/api/ai/deep-value`
 - **Date injection**: route computes `currentDate` from `new Date()` and passes it to both prompt builders — prevents Claude from anchoring analysis to its training year (Aug 2025)
 - **Stream suppression**: server buffers all text until the ` ```json ` marker appears; intermediate reasoning text emitted between tool calls is silently discarded before reaching the client
+- **Valuation recap table** (`RecapTable` in `components/deep-value-panel.tsx`): shown below the Markdown report once streaming completes. Displays a reference row with the current price (passed as `currentPrice` prop from `dashboard-client`) followed by Bear / Base / Bull rows with fair value and upside/downside %. The Base row has a violet highlight. If `currentPrice` is undefined the row is silently omitted. Column headers contain the dynamic currency code and are intentionally not fully i18n-translated.
 
 ### User Accounts & Saved Analyses
 - Email + password registration/login (Auth.js v5, bcrypt)

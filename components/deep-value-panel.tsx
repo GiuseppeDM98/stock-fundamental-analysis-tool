@@ -16,6 +16,7 @@ type Props = {
   ticker: string | null;
   companyName?: string;
   mosPercent?: number;
+  currentPrice?: number;
 };
 
 type Status = "idle" | "loading" | "streaming" | "done" | "error";
@@ -66,7 +67,99 @@ function UpsideBadge({ upside }: { upside: number }) {
   );
 }
 
-export default function DeepValuePanel({ ticker, companyName, mosPercent = 0 }: Props) {
+type RecapTableProps = {
+  result: DeepValueResult;
+  currentPrice?: number;
+  title: string;
+  currentPriceLabel: string;
+  bearLabel: string;
+  baseLabel: string;
+  bullLabel: string;
+};
+
+// Recap table shown at the bottom of the report — gives a quick at-a-glance summary
+// of all three scenarios vs. the live price without having to scroll back up.
+function RecapTable({
+  result,
+  currentPrice,
+  title,
+  currentPriceLabel,
+  bearLabel,
+  baseLabel,
+  bullLabel,
+}: RecapTableProps) {
+  const rows: { label: string; value: number | null; upside: number | null; highlight?: "base" }[] = [
+    // Current price row — neutral anchor, no upside column
+    ...(currentPrice != null
+      ? [{ label: currentPriceLabel, value: currentPrice, upside: null as null }]
+      : []),
+    { label: bearLabel, value: result.bear.fairValue, upside: result.bear.upside },
+    { label: baseLabel, value: result.base.fairValue, upside: result.base.upside, highlight: "base" as const },
+    { label: bullLabel, value: result.bull.fairValue, upside: result.bull.upside },
+  ];
+
+  return (
+    <div className="rounded-xl border border-slate-700/60 bg-slate-900/50 p-5">
+      <h3 className="mb-3 text-sm font-semibold text-slate-200">{title}</h3>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-slate-700/60">
+            <th className="pb-2 text-left font-medium text-slate-400">Scenario</th>
+            <th className="pb-2 text-right font-medium text-slate-400">
+              {result.currency} Fair Value
+            </th>
+            <th className="pb-2 text-right font-medium text-slate-400">vs. Price</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const isBase = row.highlight === "base";
+            const isCurrentPrice = row.upside === null;
+            return (
+              <tr
+                key={row.label}
+                className={`border-b border-slate-700/30 last:border-0 ${
+                  isBase ? "ring-1 ring-inset ring-violet-500/30 rounded" : ""
+                }`}
+              >
+                <td
+                  className={`py-2.5 pr-4 font-medium ${
+                    isCurrentPrice
+                      ? "text-slate-400"
+                      : isBase
+                        ? "text-violet-300"
+                        : "text-slate-300"
+                  }`}
+                >
+                  {row.label}
+                </td>
+                <td className="py-2.5 text-right text-slate-200">
+                  {row.value != null ? row.value.toFixed(2) : "—"}
+                </td>
+                <td className="py-2.5 pl-4 text-right">
+                  {row.upside != null ? (
+                    <span
+                      className={`font-semibold ${
+                        row.upside >= 0 ? "text-emerald-400" : "text-red-400"
+                      }`}
+                    >
+                      {row.upside >= 0 ? "+" : ""}
+                      {row.upside.toFixed(1)}%
+                    </span>
+                  ) : (
+                    <span className="text-slate-500">—</span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, currentPrice }: Props) {
   const { data: session } = useSession();
   const router = useRouter();
   const { language: globalLanguage, t } = useLanguage();
@@ -291,6 +384,19 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0 }: 
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdownContent}</ReactMarkdown>
           </div>
         </div>
+      )}
+
+      {/* Recap table — scenario summary vs. current price, shown after report completes */}
+      {status === "done" && result && (
+        <RecapTable
+          result={result}
+          currentPrice={currentPrice}
+          title={t("recapTableTitle")}
+          currentPriceLabel={t("recapCurrentPrice")}
+          bearLabel={t("bearLabel")}
+          baseLabel={t("baseLabel")}
+          bullLabel={t("bullLabel")}
+        />
       )}
 
       {/* Save controls */}

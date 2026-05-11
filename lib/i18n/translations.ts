@@ -147,6 +147,10 @@ export type Translations = {
   fairValueMosLabel: string;
   upsideLabel: string;
 
+  // ─── Deep value recap table ─────────────────────────────────────────────────
+  recapTableTitle: string;
+  recapCurrentPrice: string;
+
   // ─── Price summary ──────────────────────────────────────────────────────────
   marketSnapshot: string;
   marketCap: string;
@@ -331,6 +335,10 @@ const en: Translations = {
   fairValueMosLabel: "Fair value (MoS):",
   upsideLabel: "Upside vs price:",
 
+  // Deep value recap table
+  recapTableTitle: "Valuation Summary",
+  recapCurrentPrice: "Current Price",
+
   // Price summary
   marketSnapshot: "Market snapshot",
   marketCap: "Market cap:",
@@ -514,6 +522,10 @@ const it: Translations = {
   fairValueLabel: "Fair value:",
   fairValueMosLabel: "Fair value (MoS):",
   upsideLabel: "Upside vs prezzo:",
+
+  // Deep value recap table
+  recapTableTitle: "Riepilogo Valutazione",
+  recapCurrentPrice: "Prezzo Attuale",
 
   // Price summary
   marketSnapshot: "Dati di mercato",
