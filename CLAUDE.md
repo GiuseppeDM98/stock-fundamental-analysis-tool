@@ -8,7 +8,7 @@ Current project state and context for AI assistants.
 
 **Version**: `0.9.2`
 **Status**: Active Development
-**Last Updated**: May 11, 2026 (Portfolio — dividend tracking via Borsa Italiana ISIN)
+**Last Updated**: May 12, 2026 (PWA — installable on mobile via manifest + service worker)
 
 ---
 
@@ -134,6 +134,14 @@ Current project state and context for AI assistants.
 - Input focus states (accent ring) on all scenario panel fields and Add Position modal
 - **Language toggle (EN/IT)** in NavBar — switches entire app UI; preference persisted in `sfa:language` localStorage. AI report panels default to the global language but allow per-report override. System: `lib/i18n/translations.ts` (type-safe ~136 key dictionary) + `context/language-context.tsx` (React context + `useLanguage()` hook)
 
+### PWA / Installability
+- Full PWA support — browsers show "Install App" prompt (Android Chrome) instead of plain "Add to Home Screen"
+- **Manifest**: `app/manifest.ts` exports `MetadataRoute.Manifest`; served automatically at `/manifest.webmanifest`. Fields: `name`, `short_name`, `display: standalone`, `start_url`, `background_color`, `theme_color`, `icons`
+- **Service Worker**: `public/sw.js` — network-only strategy (never caches API responses or AI data). Registered after hydration by `components/pwa-register.tsx`
+- **Icons**: `public/icons/icon-192.svg` (regular, rounded corners) + `public/icons/icon-512.svg` (maskable, full bleed). Both replicate the favicon design (`app/icon.tsx`): gradient `#0a101f → #1a2540`, trend line in `#38bdf8`, magnifying glass in white
+- **Metadata** in `app/layout.tsx`: `manifest`, `appleWebApp` (capable, statusBarStyle, title), `icons.apple`. `themeColor` lives in the separate `viewport: Viewport` export (Next.js 15+ requirement)
+- **iOS**: no auto-prompt — user must Share → Add to Home Screen. Apple-touch-icon and `appleWebApp` metadata ensure the icon appears correctly
+
 ---
 
 ## Known Issues
@@ -177,15 +185,21 @@ app/api/
   cron/portfolio-snapshot/ # GET — Vercel Cron endpoint
   ai/deep-value/       # Autonomous deep value AI analysis (streaming)
 app/login/ app/register/ app/analyses/ app/analyses/[id]/ app/portfolio/
+app/manifest.ts        # PWA Web App Manifest → /manifest.webmanifest
+app/icon.tsx           # Favicon (32×32, dynamic SVG via next/og)
 components/            # dashboard-client, scenario-panel, ddm-scenario-panel,
                        # ev-ebitda-scenario-panel, sector-badge, fair-value-card,
                        # ticker-search, fundamentals-charts, price-summary,
                        # disclaimer-banner, deep-value-panel,
                        # analyses-list, portfolio-list, portfolio-history-chart,
                        # open-position-banner, nav-bar, login-form, register-form,
-                       # session-provider, valuation-metrics-cards, page-header
+                       # session-provider, valuation-metrics-cards, page-header,
+                       # pwa-register
 lib/i18n/translations.ts   # EN/IT translation dictionary (~120 keys)
 context/language-context.tsx  # LanguageProvider + useLanguage() hook
+public/
+  sw.js                # Service Worker (network-only — required for PWA install prompt)
+  icons/               # icon-192.svg (regular), icon-512.svg (maskable)
 prisma/                # schema.prisma + migrations
 generated/prisma/      # Prisma 7 generated client (gitignored)
 vercel.json            # Vercel Cron Job schedule

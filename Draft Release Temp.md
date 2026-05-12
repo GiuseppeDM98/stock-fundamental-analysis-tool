@@ -1,5 +1,7 @@
 ## ✨ New Features
 
+- **Installable app (PWA)** — the app can now be installed directly on your device. On Android, Chrome shows an "Install" banner automatically. On iOS, use Share → Add to Home Screen in Safari. Once installed, the app opens in standalone mode (no browser chrome) with its own icon on your home screen — exactly like a native app.
+
 - **Dividend tracking** — add an ISIN to any portfolio position and dividends paid on Borsa Italiana are automatically recorded each day the cron runs. The portfolio summary bar shows a cumulative "Dividends Received" total, and the P&L history chart marks dividend payment days with a green vertical line. Only payment date is tracked (not ex-dividend date), so the amount reflects cash actually received. Works for stocks listed on Borsa Italiana (MTAA); other exchanges are silently skipped.
 
 - **Deep Value Analysis** now shows a **Valuation Summary table** at the end of each report — a quick-reference table listing the current price alongside Bear, Base, and Bull fair values and their upside/downside percentage vs. the current price. No more scrolling back to the top to check the numbers after reading the full report.

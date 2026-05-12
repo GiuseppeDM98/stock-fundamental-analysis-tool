@@ -356,13 +356,21 @@ Key invariants:
 
 ---
 
-## DCF Valuation Model
+## PWA
 
-- **10-year projection** with Gordon Growth terminal value
-- **NOPAT-based FCF**: `fcf = ebit * (1 - taxRate) * (1 - reinvestmentRate)`
-- **Critical constraint**: `wacc > terminalGrowth` (enforced by `validateScenarioInput()`)
-- **WACC via CAPM**: `computeWacc(beta, riskFreeRate, erp=0.055)` — clamped [6%, 18%]
-- **Operating margin**: 5yr historical average (not TTM) for cyclical companies
+The app is a full PWA. The three browser requirements for the "Install App" prompt are all met:
+1. **Manifest** — `app/manifest.ts` exports `MetadataRoute.Manifest`; Next.js serves it at `/manifest.webmanifest` automatically. No package needed.
+2. **Service Worker** — `public/sw.js` (network-only strategy). Registered client-side by `components/pwa-register.tsx` after hydration.
+3. **HTTPS** — provided by Vercel in production.
+
+**Icon rules:**
+- `public/icons/icon-192.svg` — regular icon (has rounded corners to match the favicon style)
+- `public/icons/icon-512.svg` — `purpose: "maskable"`, full bleed background with no `rx` (browser crops to any shape)
+- Both replicate the favicon design from `app/icon.tsx` (gradient + trend line + magnifying glass)
+
+**Service worker caching policy**: network-only for everything — never cache API routes or AI responses. If static asset caching is added later, scope it only to `/icons/`, `/_next/static/`, etc., never to `/api/*`.
+
+**iOS note**: iOS Safari does not auto-prompt installation. User must manually use Share → Add to Home Screen. The `appleWebApp` metadata and apple-touch-icon are set in `app/layout.tsx` to make that experience work correctly.
 
 ---
 
@@ -447,33 +455,11 @@ Use Tailwind built-in equivalents instead:
 7. **Turso migration gap**: Local `prisma migrate dev` applies to `dev.db` only. App always hits Turso. Adding a column without applying the migration to Turso causes `no such column` in production/dev-with-Turso. Also: **restart the dev server** after applying the migration — the running process holds a stale Prisma client that doesn't know about the new column.
 8. **`baseUrl` removed from tsconfig**: deprecated in TypeScript 6.0+. With `moduleResolution: "Bundler"`, `paths` handles `@/` aliases without it — removing `baseUrl` is safe and eliminates the TS warning.
 9. **`ring-inset` on `<tr>` elements**: Tailwind `ring-*` classes don't apply visually to table rows in all browsers. Use a background tint on the cells instead (e.g. `bg-violet-900/20`) for row highlights in `<table>` layouts.
-
----
-
-## Quick Reference
-
-### Type Imports
-```typescript
-import { QuoteResponse } from "@/types/market";
-import { FundamentalsResponse } from "@/types/fundamentals";
-import { ScenarioInput, AnalystEstimates, ValuationResponse, DdmScenariosInput, EvEbitdaScenariosInput } from "@/types/valuation";
-import { SavedAnalysis, SaveAnalysisRequest } from "@/types/analysis";
-import { Position, CreatePositionRequest, AggregatedPosition, SnapshotPoint, SnapshotEntry, SnapshotData } from "@/types/portfolio";
-```
-
-### Lib Imports
-```typescript
-import { runDcf, validateScenarioInput } from "@/lib/valuation/dcf";
-import { detectSector, getRecommendedMethod } from "@/lib/valuation/sector";
-import { getDefaultScenarios, getCompanyScenarios } from "@/lib/valuation/scenario-presets";
-import { getQuote, getFundamentals, getAnalystEstimates } from "@/lib/yahoo-client";
-import { formatCurrency, formatPercent, formatCompactNumber } from "@/lib/format";
-import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { fetchPositions, createPosition, deletePosition, fetchSnapshots } from "@/lib/portfolio";
-import { createSnapshotForUser, createSnapshotsForAllUsers } from "@/lib/portfolio-snapshots"; // server-only
-import { fetchDividendPaidToday } from "@/lib/dividends"; // server-only
-```
+10. **`themeColor` in Next.js 15+**: Must be exported from `viewport: Viewport`, not from `metadata`. Putting it in `metadata` builds fine but logs a warning on every page at build time. Pattern:
+    ```typescript
+    import type { Viewport } from "next";
+    export const viewport: Viewport = { themeColor: "#0f172a" };
+    ```
 
 ---
 

@@ -65,6 +65,7 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - 📉 **Portfolio P&L History**: Line chart showing total portfolio value vs. cost basis over time — updated automatically every weekday after market close via Vercel Cron
 - 📈 **Analysis Performance**: See how price moved since saving vs. fair value — "Under FV" / "Above FV" badge per report
 - 🌐 **EN / IT UI**: Switch the entire interface language from the navbar; preference saved automatically
+- 📱 **Installable PWA**: Install the app on Android or iOS for a native-like experience — standalone mode, home screen icon, no browser chrome
 - 🧪 **Fully Tested**: Vitest + Testing Library coverage for calculations and UI
 
 ---
@@ -476,7 +477,7 @@ turso db shell <your-db-name> < prisma/migrations/<latest>/migration.sql
 ### Phase 3: Features
 - [ ] Multi-ticker comparison (side-by-side)
 - [ ] PDF export for valuation reports
-- [ ] Mobile-responsive design
+- [x] Mobile installable (PWA)
 
 ### Phase 4: Advanced
 - [ ] Custom scenario presets with sharing
