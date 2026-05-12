@@ -91,15 +91,17 @@ Current project state and context for AI assistants.
 
 ### Portfolio Tracker
 - Section at `/portfolio` — track real stock purchases with live P&L
-- `Position` model: `ticker`, `isin` (optional), `companyName`, `purchasePrice`, `shares`, `currency`, `purchasedAt`, `notes`
+- `Position` model: `ticker`, `isin` (optional), `companyName`, `purchasePrice`, `shares`, `currency`, `purchasedAt`, `notes`, `capitalGainsTaxRate` (optional %)
 - **WAC/DCA aggregation**: positions grouped by ticker in "Aggregated" view (default); shows `AggregatedPosition` with `weightedAvgCost`, `totalShares`, `totalCost`, expandable drill-down for individual purchases
   - Toggle "Aggregated / Per Purchase" switches between WAC view and flat per-purchase list
   - WAC P&L: `(currentPrice − WAC) × totalShares`
   - Delete from drill-down removes single purchase; WAC re-derives on next render automatically
 - Multi-currency support — currency stored per position (EUR/USD/GBP/CHF/JPY/CAD/AUD/SEK/NOK/DKK)
-- Aggregate summary bar: total cost, total value, total P&L, and **dividends received** (shown only when > 0) — all in EUR via Frankfurter API
+- Aggregate summary bar: total cost, total value, total P&L (gross + estimated taxes + net P&L when tax rate is set), and **dividends received** (gross + net when tax rate is set, shown only when > 0) — all in EUR via Frankfurter API
 - Summary bar only renders when at least one live price and FX rate are resolved
-- Add position modal (ReactDOM.createPortal), delete with confirmation; ISIN field auto-fills from existing positions for the same ticker (DCA-friendly)
+- **Daily price change**: each position row shows today's % and absolute change vs previous close inline after the current price (green/red). Sourced from `regularMarketChange` / `regularMarketChangePercent` in `/api/quote/[ticker]`.
+- **Capital gains tax display**: when `capitalGainsTaxRate` is set and the position has unrealized gains, shows estimated tax amount and net P&L below the P&L badge. Tax on losses is never shown.
+- Add position modal (ReactDOM.createPortal), delete with confirmation; ISIN and capital gains tax fields; ISIN auto-fills from existing positions for the same ticker (DCA-friendly)
 - Live prices via `/api/quote/[ticker]` — parallel fetch for all unique tickers at mount
 - Types: `Position`, `CreatePositionRequest`, `AggregatedPosition`, `SnapshotPoint`, `SnapshotEntry`, `SnapshotData` in `types/portfolio.ts`
 - **Portfolio ↔ Analyses link**: each position row shows "N saved analyses ▼" (collapsible) if saved analyses exist for that ticker — date, MoS%, FV base, link to detail page. Implemented via `Promise.all([fetchPositions(), fetchAnalyses(), fetchSnapshots()])` on mount, no extra API calls.
@@ -139,7 +141,7 @@ Current project state and context for AI assistants.
 - **Manifest**: `app/manifest.ts` exports `MetadataRoute.Manifest`; served automatically at `/manifest.webmanifest`. Fields: `name`, `short_name`, `display: standalone`, `start_url`, `background_color`, `theme_color`, `icons`
 - **Service Worker**: `public/sw.js` — network-only strategy (never caches API responses or AI data). Registered after hydration by `components/pwa-register.tsx`
 - **Icons**: `public/icons/icon-192.svg` (regular, rounded corners) + `public/icons/icon-512.svg` (maskable, full bleed). Both replicate the favicon design (`app/icon.tsx`): gradient `#0a101f → #1a2540`, trend line in `#38bdf8`, magnifying glass in white
-- **Metadata** in `app/layout.tsx`: `manifest`, `appleWebApp` (capable, statusBarStyle, title), `icons.apple`. `themeColor` lives in the separate `viewport: Viewport` export (Next.js 15+ requirement)
+- **Metadata** in `app/layout.tsx`: `manifest`, `appleWebApp` (capable, statusBarStyle, title), `icons.icon` (explicit — auto-discovery from `app/icon.tsx` is unreliable in Next.js 15.5+), `icons.apple`. `themeColor` lives in the separate `viewport: Viewport` export (Next.js 15+ requirement)
 - **iOS**: no auto-prompt — user must Share → Add to Home Screen. Apple-touch-icon and `appleWebApp` metadata ensure the icon appears correctly
 
 ---

@@ -148,6 +148,8 @@ export async function getQuote(ticker: string): Promise<QuoteResponse> {
       exchange,
       region: detectRegion(exchange),
       regularMarketPrice: Number(quote.regularMarketPrice || 0),
+      regularMarketChange: Number(quote.regularMarketChange ?? 0),
+      regularMarketChangePercent: Number(quote.regularMarketChangePercent ?? 0),
       marketCap: Number.isFinite(quote.marketCap as number) ? Number(quote.marketCap) : null,
       sharesOutstanding: Number.isFinite(quote.sharesOutstanding as number) ? Number(quote.sharesOutstanding) : null,
       fetchedAt: new Date().toISOString()

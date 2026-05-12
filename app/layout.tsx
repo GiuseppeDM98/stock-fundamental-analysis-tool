@@ -15,6 +15,7 @@ export const metadata: Metadata = {
     title: "StockFA",
   },
   icons: {
+    icon: [{ url: "/icon", type: "image/png", sizes: "32x32" }],
     apple: "/icons/icon-192.svg",
   },
 };

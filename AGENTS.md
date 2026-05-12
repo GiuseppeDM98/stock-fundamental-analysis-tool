@@ -310,7 +310,8 @@ Never export server-only functions from the same file as client helpers — Next
 
 ## Portfolio Tracker
 
-- `Position` model: `id, userId, ticker, isin, companyName, purchasePrice, shares, currency, purchasedAt, notes` — `isin` is optional, used for dividend tracking via Borsa Italiana
+- `Position` model: `id, userId, ticker, isin, companyName, purchasePrice, shares, currency, purchasedAt, notes, capitalGainsTaxRate` — `isin` is optional (Borsa Italiana dividends); `capitalGainsTaxRate Float?` is an optional % (e.g. 26.0) used client-side to compute estimated taxes and net P&L on unrealized gains
+- Tax display rules: taxes are computed per-position, applied only to gains (pnl > 0), never to losses. SummaryBar computes total tax by looping positions — not using an average rate. In aggregated rows, `capitalGainsTaxRate` comes from `purchases[0]` (same user = same rate across DCA).
 - Types: `Position`, `CreatePositionRequest`, `AggregatedPosition`, `SnapshotPoint`, `SnapshotEntry`, `SnapshotData` — all in `types/portfolio.ts`
 - Client helpers in `lib/portfolio.ts` — same pattern as `lib/analyses.ts`; includes `fetchSnapshots()` for chart data
 - Live prices fetched client-side via `/api/quote/[ticker]` in parallel for all unique tickers
@@ -390,19 +391,7 @@ App supports EN and IT via `context/language-context.tsx` + `lib/i18n/translatio
 
 ### Vitest setup for context mocks
 
-`vitest.config.ts` must declare the `@/` alias (Next.js uses it but Vitest doesn't inherit it):
-```typescript
-import path from "path";
-resolve: { alias: { "@": path.resolve(__dirname, ".") } }
-```
-
-`vitest.setup.ts` mocks the context globally so components render without a provider:
-```typescript
-vi.mock("@/context/language-context", () => ({
-  useLanguage: () => ({ language: "en", setLanguage: vi.fn(), t: (key) => translations.en[key] ?? key, locale: "en-US" }),
-  LanguageProvider: ({ children }) => children,
-}));
-```
+`vitest.config.ts` must declare the `@/` alias (`resolve: { alias: { "@": path.resolve(__dirname, ".") } }`). `vitest.setup.ts` mocks `useLanguage` globally so components render without a provider — see existing setup files for the pattern.
 
 ---
 
@@ -459,6 +448,11 @@ Use Tailwind built-in equivalents instead:
     ```typescript
     import type { Viewport } from "next";
     export const viewport: Viewport = { themeColor: "#0f172a" };
+    ```
+11. **`regularMarketChangePercent` from yahoo-finance2 is already a percentage** (e.g. `1.23` means +1.23%), NOT a decimal (`0.0123`). Do **not** multiply by 100 when displaying. The field name is misleading — it looks like a rate but Yahoo returns it as a whole-number percentage.
+12. **Next.js `app/icon.tsx` favicon auto-discovery can silently fail** in Next.js 15.5+. The `/icon` route works (returns 200 image/png), but `<link rel="icon">` is not injected into `<head>`. Always declare it explicitly in `layout.tsx` metadata:
+    ```typescript
+    icons: { icon: [{ url: "/icon", type: "image/png", sizes: "32x32" }], apple: "/icons/icon-192.svg" }
     ```
 
 ---

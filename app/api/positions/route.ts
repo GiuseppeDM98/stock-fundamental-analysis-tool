@@ -15,6 +15,7 @@ const createSchema = z.object({
   currency: z.string().length(3).toUpperCase(),
   purchasedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD"),
   notes: z.string().optional(),
+  capitalGainsTaxRate: z.number().min(0).max(100).optional(),
 });
 
 export async function GET() {
@@ -54,6 +55,7 @@ export async function POST(request: Request) {
       currency: body.currency,
       purchasedAt: new Date(body.purchasedAt),
       notes: body.notes,
+      capitalGainsTaxRate: body.capitalGainsTaxRate ?? null,
     },
   });
 

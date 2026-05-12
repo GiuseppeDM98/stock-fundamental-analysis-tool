@@ -1,5 +1,11 @@
 ## ✨ New Features
 
+- **Daily price change in Portfolio** — each position now shows today's % change and absolute move vs. the previous close (e.g. ▲ +0.89% today / ▼ -1.63% today) directly next to the current price, in green or red. No extra clicks needed to check how your holdings are moving today.
+
+- **Capital gains tax per position** — you can now set an optional tax rate (%) on each position when adding it. The portfolio will then show estimated taxes and net P&L alongside the gross gain for every position in gain. The summary bar also shows total estimated taxes and your net P&L across the whole portfolio. Useful for the Italian market (standard 26% rate) or any other jurisdiction.
+
+- **Gross and net dividends** — when a tax rate is set, the "Dividends Received" total in the summary bar now shows both the gross amount (as before) and an estimated net amount after applying the tax rate.
+
 - **Installable app (PWA)** — the app can now be installed directly on your device. On Android, Chrome shows an "Install" banner automatically. On iOS, use Share → Add to Home Screen in Safari. Once installed, the app opens in standalone mode (no browser chrome) with its own icon on your home screen — exactly like a native app.
 
 - **Dividend tracking** — add an ISIN to any portfolio position and dividends paid on Borsa Italiana are automatically recorded each day the cron runs. The portfolio summary bar shows a cumulative "Dividends Received" total, and the P&L history chart marks dividend payment days with a green vertical line. Only payment date is tracked (not ex-dividend date), so the amount reflects cash actually received. Works for stocks listed on Borsa Italiana (MTAA); other exchanges are silently skipped.
@@ -53,6 +59,8 @@
 - Added **Re-run Analysis** button in the analyses list and detail page — one click redirects to the dashboard with the ticker pre-filled and the data fetch triggered automatically.
 
 ## 🐛 Bug Fixes
+
+- Fixed favicon not appearing in browser tabs — the app icon now shows correctly in all browsers, including incognito mode
 
 - Fixed Deep Value Analysis saving with MoS 0% — the panel was hardcoding `mosPercent: 0` instead of reading the dashboard's actual margin of safety setting
 - Fixed Deep Value Analysis not saving bull/base/bear fair values — the save call now reads them from the parsed JSON result block

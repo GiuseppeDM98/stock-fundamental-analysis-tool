@@ -62,6 +62,7 @@ function aggregateByTicker(positions: Position[]): AggregatedPosition[] {
       weightedAvgCost: totalCost / totalShares,
       totalCost,
       purchases: sorted,
+      capitalGainsTaxRate: sorted[0].capitalGainsTaxRate ?? null,
     };
   });
 }
@@ -109,9 +110,12 @@ function TickerAnalysesInline({ analyses }: { analyses: SavedAnalysis[] }) {
 
 // ─── Aggregated Position Row ──────────────────────────────────────────────────
 
+type DailyChange = { change: number; changePct: number };
+
 type AggregatedPositionRowProps = {
   agg: AggregatedPosition;
   currentPrice?: number;
+  dailyChange?: DailyChange;
   onDelete: (id: string) => void;
   deleting: string | null;
   pricesLoading: boolean;
@@ -121,6 +125,7 @@ type AggregatedPositionRowProps = {
 function AggregatedPositionRow({
   agg,
   currentPrice,
+  dailyChange,
   onDelete,
   deleting,
   pricesLoading,
@@ -133,6 +138,10 @@ function AggregatedPositionRow({
   const returnPct = pnl != null ? (currentValue! / agg.totalCost - 1) * 100 : null;
   const isPositive = pnl != null && pnl >= 0;
   const hasMultiple = agg.purchases.length > 1;
+  const taxRate = agg.capitalGainsTaxRate;
+  const hasTax = taxRate != null && taxRate > 0 && pnl != null && pnl > 0;
+  const taxAmount = hasTax ? pnl! * (taxRate! / 100) : null;
+  const netPnl = hasTax ? pnl! - taxAmount! : null;
 
   return (
     <li className="card">
@@ -173,6 +182,13 @@ function AggregatedPositionRow({
               <>
                 <span className="text-slate-600">→</span>
                 <span className="text-slate-200">{formatPrice(currentPrice, agg.currency)}</span>
+                {dailyChange != null && (
+                  <span className={`text-[11px] ${dailyChange.changePct >= 0 ? "text-success" : "text-danger"}`}>
+                    {dailyChange.changePct >= 0 ? "▲" : "▼"}{" "}
+                    {dailyChange.changePct >= 0 ? "+" : ""}{dailyChange.changePct.toFixed(2)}%{" "}
+                    {t("dailyChange")}
+                  </span>
+                )}
               </>
             ) : pricesLoading ? (
               <>
@@ -193,6 +209,13 @@ function AggregatedPositionRow({
               </span>
             )}
           </div>
+
+          {hasTax && (
+            <div className="mt-1 text-[11px] text-slate-500">
+              {t("estimatedTax")} {formatAmount(-taxAmount!, agg.currency)} · {t("netPnl")}{" "}
+              <span className="text-success">+{formatAmount(netPnl!, agg.currency)}</span>
+            </div>
+          )}
 
           <TickerAnalysesInline analyses={tickerAnalyses} />
         </div>
@@ -259,6 +282,7 @@ function AddPositionModal({ onClose, onSave, existingPositions }: AddPositionMod
     currency: "EUR",
     purchasedAt: new Date().toISOString().slice(0, 10),
     notes: "",
+    capitalGainsTaxRate: undefined,
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -276,7 +300,7 @@ function AddPositionModal({ onClose, onSave, existingPositions }: AddPositionMod
     }
   }, [form.ticker, existingPositions]);
 
-  function handleChange(field: keyof CreatePositionRequest, value: string | number) {
+  function handleChange(field: keyof CreatePositionRequest, value: string | number | undefined) {
     if (field === "isin") isinManuallyEdited.current = true;
     setForm((prev) => ({ ...prev, [field]: value }));
   }
@@ -390,17 +414,33 @@ function AddPositionModal({ onClose, onSave, existingPositions }: AddPositionMod
             </div>
           </div>
 
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">{t("fieldIsin")}</label>
-            <input
-              type="text"
-              placeholder="IT0003128367"
-              value={form.isin ?? ""}
-              onChange={(e) => handleChange("isin", e.target.value.toUpperCase())}
-              maxLength={12}
-              className={inputClass}
-            />
-            <p className="mt-1 text-[11px] text-slate-600">{t("fieldIsinHint")}</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">{t("fieldCapGainsTax")}</label>
+              <input
+                type="number"
+                placeholder="26"
+                min="0"
+                max="100"
+                step="0.1"
+                value={form.capitalGainsTaxRate ?? ""}
+                onChange={(e) => handleChange("capitalGainsTaxRate", e.target.value ? parseFloat(e.target.value) : undefined)}
+                className={inputClass}
+              />
+              <p className="mt-1 text-[11px] text-slate-600">{t("fieldCapGainsTaxHint")}</p>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">{t("fieldIsin")}</label>
+              <input
+                type="text"
+                placeholder="IT0003128367"
+                value={form.isin ?? ""}
+                onChange={(e) => handleChange("isin", e.target.value.toUpperCase())}
+                maxLength={12}
+                className={inputClass}
+              />
+              <p className="mt-1 text-[11px] text-slate-600">{t("fieldIsinHint")}</p>
+            </div>
           </div>
 
           <div>
@@ -461,6 +501,7 @@ function SummaryBar({
   const { t } = useLanguage();
   let totalCostEur = 0;
   let totalValueEur = 0;
+  let totalTaxEur = 0;
   let resolved = 0;
 
   for (const p of positions) {
@@ -475,6 +516,11 @@ function SummaryBar({
     const valueEur = (cp * p.shares) / rate;
     totalCostEur += costEur;
     totalValueEur += valueEur;
+    // Apply tax only on gains (not on losses) and only when the rate is set
+    const positionPnlEur = valueEur - costEur;
+    if (p.capitalGainsTaxRate != null && p.capitalGainsTaxRate > 0 && positionPnlEur > 0) {
+      totalTaxEur += positionPnlEur * (p.capitalGainsTaxRate / 100);
+    }
     resolved++;
   }
 
@@ -483,7 +529,16 @@ function SummaryBar({
   const pnlEur = totalValueEur - totalCostEur;
   const totalReturn = (totalValueEur / totalCostEur - 1) * 100;
   const isPositive = pnlEur >= 0;
+  const hasTaxEstimate = totalTaxEur > 0;
+  const netPnlEur = pnlEur - totalTaxEur;
   const hasDividends = totalDividendsEur > 0;
+
+  // Compute net dividends using a simple average tax rate across positions that have one set.
+  const positionsWithTax = positions.filter((p) => p.capitalGainsTaxRate != null && p.capitalGainsTaxRate > 0);
+  const avgTaxRate = positionsWithTax.length > 0
+    ? positionsWithTax.reduce((sum, p) => sum + p.capitalGainsTaxRate!, 0) / positionsWithTax.length
+    : null;
+  const netDividendsEur = avgTaxRate != null ? totalDividendsEur * (1 - avgTaxRate / 100) : null;
 
   return (
     <div className={`card mb-4 grid gap-4 text-center ${hasDividends ? "grid-cols-4" : "grid-cols-3"}`}>
@@ -503,13 +558,28 @@ function SummaryBar({
             ({isPositive ? "+" : ""}{totalReturn.toFixed(1)}%)
           </span>
         </p>
+        {hasTaxEstimate && (
+          <p className="text-[11px] text-slate-500 mt-0.5">
+            {t("estimatedTax")} {formatAmount(-totalTaxEur, "EUR")} · {t("netPnl")}{" "}
+            <span className={netPnlEur >= 0 ? "text-success" : "text-danger"}>
+              {netPnlEur >= 0 ? "+" : ""}{formatAmount(netPnlEur, "EUR")}
+            </span>
+          </p>
+        )}
         <p className="text-[10px] text-slate-600 mt-0.5">{t("convertedToEur")}</p>
       </div>
       {hasDividends && (
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-1">{t("totalDividends")}</p>
           <p className="text-lg font-semibold text-emerald-400">+{formatAmount(totalDividendsEur, "EUR")}</p>
-          <p className="text-[10px] text-slate-600 mt-0.5">Borsa Italiana · lordo</p>
+          {netDividendsEur != null ? (
+            <p className="text-[10px] text-slate-500 mt-0.5">
+              {t("dividendsGross")} · {t("dividendsNet")}: +{formatAmount(netDividendsEur, "EUR")}{" "}
+              ({t("dividendsAvgRate")} {avgTaxRate!.toFixed(0)}%)
+            </p>
+          ) : (
+            <p className="text-[10px] text-slate-600 mt-0.5">Borsa Italiana · {t("dividendsGross")}</p>
+          )}
         </div>
       )}
     </div>
@@ -527,6 +597,7 @@ export default function PortfolioList() {
   const [showModal, setShowModal] = useState(false);
   const [viewMode, setViewMode] = useState<"aggregated" | "flat">("aggregated");
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({});
+  const [dailyChanges, setDailyChanges] = useState<Record<string, DailyChange>>({});
   const [pricesLoading, setPricesLoading] = useState(false);
   // EUR-based FX rates from frankfurter.app: { USD: 1.08, GBP: 0.85, ... }
   const [fxRates, setFxRates] = useState<Record<string, number>>({});
@@ -565,14 +636,24 @@ export default function PortfolioList() {
         const res = await fetch(`/api/quote/${encodeURIComponent(t)}`);
         if (!res.ok) throw new Error("not found");
         const data = await res.json();
-        return { ticker: t, price: data.regularMarketPrice as number };
+        return {
+          ticker: t,
+          price: data.regularMarketPrice as number,
+          change: data.regularMarketChange as number,
+          changePct: data.regularMarketChangePercent as number,
+        };
       })
     );
     const prices: Record<string, number> = {};
+    const changes: Record<string, DailyChange> = {};
     for (const r of results) {
-      if (r.status === "fulfilled") prices[r.value.ticker] = r.value.price;
+      if (r.status === "fulfilled") {
+        prices[r.value.ticker] = r.value.price;
+        changes[r.value.ticker] = { change: r.value.change, changePct: r.value.changePct };
+      }
     }
     setCurrentPrices((prev) => ({ ...prev, ...prices }));
+    setDailyChanges((prev) => ({ ...prev, ...changes }));
     setPricesLoading(false);
   }
 
@@ -682,6 +763,7 @@ export default function PortfolioList() {
               key={agg.ticker}
               agg={agg}
               currentPrice={currentPrices[agg.ticker]}
+              dailyChange={dailyChanges[agg.ticker]}
               onDelete={handleDelete}
               deleting={deleting}
               pricesLoading={pricesLoading}
@@ -728,6 +810,13 @@ export default function PortfolioList() {
                       <>
                         <span className="text-slate-600">→</span>
                         <span className="text-slate-200">{formatPrice(cp, pos.currency)}</span>
+                        {dailyChanges[pos.ticker] != null && (
+                          <span className={`text-[11px] ${dailyChanges[pos.ticker].changePct >= 0 ? "text-success" : "text-danger"}`}>
+                            {dailyChanges[pos.ticker].changePct >= 0 ? "▲" : "▼"}{" "}
+                            {dailyChanges[pos.ticker].changePct >= 0 ? "+" : ""}{dailyChanges[pos.ticker].changePct.toFixed(2)}%{" "}
+                            {t("dailyChange")}
+                          </span>
+                        )}
                       </>
                     ) : pricesLoading ? (
                       <>
@@ -748,6 +837,12 @@ export default function PortfolioList() {
                       </span>
                     )}
                   </div>
+                  {pos.capitalGainsTaxRate != null && pos.capitalGainsTaxRate > 0 && pnl != null && pnl > 0 && (
+                    <div className="mt-1 text-[11px] text-slate-500">
+                      {t("estimatedTax")} {formatAmount(-(pnl * pos.capitalGainsTaxRate / 100), pos.currency)} · {t("netPnl")}{" "}
+                      <span className="text-success">+{formatAmount(pnl * (1 - pos.capitalGainsTaxRate / 100), pos.currency)}</span>
+                    </div>
+                  )}
 
                   {pos.notes && (
                     <p className="mt-1 text-xs text-slate-600 italic">{pos.notes}</p>

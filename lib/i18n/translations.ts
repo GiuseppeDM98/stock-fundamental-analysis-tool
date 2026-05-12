@@ -67,6 +67,14 @@ export type Translations = {
   fieldIsinHint: string;
   totalDividends: string;
   dividendMarkerLabel: string;
+  dividendsGross: string;
+  dividendsNet: string;
+  dividendsAvgRate: string;
+  fieldCapGainsTax: string;
+  fieldCapGainsTaxHint: string;
+  estimatedTax: string;
+  netPnl: string;
+  dailyChange: string;
   errorFillFields: string;
   errorFailedSave: string;
   errorFailedDelete: string;
@@ -259,6 +267,14 @@ const en: Translations = {
   fieldIsinHint: "Optional · for dividend tracking on Borsa Italiana (e.g. IT0003128367)",
   totalDividends: "Dividends Received",
   dividendMarkerLabel: "Dividend",
+  dividendsGross: "gross",
+  dividendsNet: "net",
+  dividendsAvgRate: "avg. rate",
+  fieldCapGainsTax: "Capital gains tax (%)",
+  fieldCapGainsTaxHint: "Optional · used to compute net P&L and net dividends",
+  estimatedTax: "Est. tax:",
+  netPnl: "Net:",
+  dailyChange: "today",
   errorFillFields: "Please fill in all required fields.",
   errorFailedSave: "Failed to save.",
   errorFailedDelete: "Failed to delete. Please try again.",
@@ -451,6 +467,14 @@ const it: Translations = {
   fieldIsinHint: "Opzionale · per tracking dividendi su Borsa Italiana (es. IT0003128367)",
   totalDividends: "Dividendi Incassati",
   dividendMarkerLabel: "Dividendo",
+  dividendsGross: "lordo",
+  dividendsNet: "netto",
+  dividendsAvgRate: "aliq. media",
+  fieldCapGainsTax: "Tassa plusvalenze (%)",
+  fieldCapGainsTaxHint: "Opzionale · per il netto su plusvalenze e dividendi",
+  estimatedTax: "Tasse stimate:",
+  netPnl: "Netto:",
+  dailyChange: "oggi",
   errorFillFields: "Compilare tutti i campi obbligatori.",
   errorFailedSave: "Salvataggio fallito.",
   errorFailedDelete: "Eliminazione fallita. Riprova.",

@@ -68,6 +68,9 @@ model Position {
   currency      String   @default("EUR")
   purchasedAt   DateTime
   notes         String?
+  // User's applicable capital gains tax rate for this position (e.g. 26.0 for Italy).
+  // Used client-side to show estimated tax on unrealized gains and net dividend amounts.
+  capitalGainsTaxRate Float?
   createdAt     DateTime @default(now())
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
