@@ -114,49 +114,10 @@ if (!mounted) return null;
 This applies to any `"use client"` component that formats currency/numbers from server-passed props.
 
 ### URL Param on Mount (Re-run pattern)
-When a page needs to read a `?param=` URL param on mount and auto-trigger a fetch, do it inside the hydration `useEffect` — not in a separate effect — to avoid a double render. Clean the URL with `replaceState` so back-navigation doesn't re-trigger.
-
-```typescript
-const urlParamRef = useRef<string | null>(null);
-
-useEffect(() => {
-  const param = new URLSearchParams(window.location.search).get("ticker");
-  if (param) {
-    urlParamRef.current = param.toUpperCase();
-    window.history.replaceState({}, "", window.location.pathname);
-  }
-  // ... rest of hydration (localStorage reads, setIsHydrated)
-}, []);
-
-// Separate effect that fires once after hydration
-useEffect(() => {
-  if (isHydrated && urlParamRef.current) {
-    void fetchDashboardData(urlParamRef.current, true);
-  }
-}, [isHydrated]);
-```
+Read `?param=` inside the hydration `useEffect` (not a separate effect) to avoid double render. Store in a ref, clean URL with `replaceState`, then fire fetch in a second effect gated on `isHydrated`. See `dashboard-client.tsx` for the full pattern.
 
 ### Refs for Async Callbacks
-```typescript
-const mosRef = useRef(mosPercent);
-useEffect(() => { mosRef.current = mosPercent; }, [mosPercent]);
-// Use mosRef.current in fetch callbacks to avoid stale closures
-```
-
-Pattern also used for `ddmScenariosRef` and `evEbitdaScenariosRef` — any state read inside async callbacks should use a ref.
-
-### Streaming AI Response
-```typescript
-const res = await fetch("/api/ai/deep-value", { method: "POST", body: JSON.stringify(payload) });
-const reader = res.body!.getReader();
-const decoder = new TextDecoder();
-let done = false;
-while (!done) {
-  const { value, done: streamDone } = await reader.read();
-  done = streamDone;
-  if (value) setReport(prev => prev + decoder.decode(value, { stream: !streamDone }));
-}
-```
+Any state read inside async callbacks must use a ref (`mosRef`, `ddmScenariosRef`, etc.) to avoid stale closures. Pattern: `const ref = useRef(val); useEffect(() => { ref.current = val; }, [val]);`
 
 ### Next.js Typed Routes (`typedRoutes: true`)
 `router.push(dynamicString)` fails type check. Use `window.location.href` for dynamic redirects after auth.
@@ -433,6 +394,44 @@ Use Tailwind built-in equivalents instead:
 
 ---
 
+## Recharts Patterns
+
+### Custom tooltip — accessing non-Line fields
+
+Recharts `Tooltip` `payload` entries only contain values for fields bound to `<Line dataKey="...">`. To show additional data (e.g. `capitalDelta`, `dividendsEur`) in a custom tooltip, **inject those fields into the chart dataset** and read them from `payload[0].payload` (the raw data object):
+
+```tsx
+type ChartPoint = SnapshotPoint & { capitalDelta?: number };
+
+// Enrich data before passing to LineChart
+const chartData: ChartPoint[] = snapshots.map((s, i) => ({
+  ...s,
+  capitalDelta: i > 0 && s.costEur - snapshots[i - 1].costEur > 50
+    ? s.costEur - snapshots[i - 1].costEur
+    : undefined,
+}));
+
+// In the custom tooltip component:
+const raw = payload[0]?.payload as ChartPoint | undefined;
+// raw.capitalDelta is now accessible even though it's not a Line dataKey
+```
+
+### ReferenceLine label clipping
+
+`<ReferenceLine label={{ position: "insideTopLeft/Right" }}>` labels are clipped by the chart SVG's clipPath when the line falls near the left or right edge of the chart area. **Do not use inline labels for data whose position relative to the edge is dynamic.** Instead, omit the label from the ReferenceLine and surface the info in the custom tooltip via `payload[0].payload` (see above).
+
+### `t` prop type when passing down from `useLanguage()`
+
+`useLanguage()` returns `t: (key: keyof Translations) => string`. When passing `t` as a prop to a sub-component, type it as `(key: keyof Translations) => string` — **not** `(key: string) => string`. Import `Translations` from `@/lib/i18n/translations`.
+
+```tsx
+import type { Translations } from "@/lib/i18n/translations";
+// In prop types:
+t: (key: keyof Translations) => string;
+```
+
+---
+
 ## Common Gotchas
 
 1. **Next.js 15 async params**: Always `await context.params`
@@ -442,18 +441,10 @@ Use Tailwind built-in equivalents instead:
 5. **CSS variable naming**: Only `--bg`, `--card`, `--accent`, `--muted`, `--success`, `--warning`, `--danger` exist. No `--surface`. Use `bg-[var(--card)]` for modals.
 6. **`remarkGfm` missing**: Easy to forget in server-rendered pages. All pages rendering saved markdown need it explicitly — it's not inherited from the streaming panels.
 7. **Turso migration gap**: Local `prisma migrate dev` applies to `dev.db` only. App always hits Turso. Adding a column without applying the migration to Turso causes `no such column` in production/dev-with-Turso. Also: **restart the dev server** after applying the migration — the running process holds a stale Prisma client that doesn't know about the new column.
-8. **`baseUrl` removed from tsconfig**: deprecated in TypeScript 6.0+. With `moduleResolution: "Bundler"`, `paths` handles `@/` aliases without it — removing `baseUrl` is safe and eliminates the TS warning.
-9. **`ring-inset` on `<tr>` elements**: Tailwind `ring-*` classes don't apply visually to table rows in all browsers. Use a background tint on the cells instead (e.g. `bg-violet-900/20`) for row highlights in `<table>` layouts.
-10. **`themeColor` in Next.js 15+**: Must be exported from `viewport: Viewport`, not from `metadata`. Putting it in `metadata` builds fine but logs a warning on every page at build time. Pattern:
-    ```typescript
-    import type { Viewport } from "next";
-    export const viewport: Viewport = { themeColor: "#0f172a" };
-    ```
-11. **`regularMarketChangePercent` from yahoo-finance2 is already a percentage** (e.g. `1.23` means +1.23%), NOT a decimal (`0.0123`). Do **not** multiply by 100 when displaying. The field name is misleading — it looks like a rate but Yahoo returns it as a whole-number percentage.
-12. **Next.js `app/icon.tsx` favicon auto-discovery can silently fail** in Next.js 15.5+. The `/icon` route works (returns 200 image/png), but `<link rel="icon">` is not injected into `<head>`. Always declare it explicitly in `layout.tsx` metadata:
-    ```typescript
-    icons: { icon: [{ url: "/icon", type: "image/png", sizes: "32x32" }], apple: "/icons/icon-192.svg" }
-    ```
+8. **`ring-inset` on `<tr>` elements**: Tailwind `ring-*` classes don't apply visually to table rows in all browsers. Use a background tint on the cells instead (e.g. `bg-violet-900/20`) for row highlights in `<table>` layouts.
+9. **`themeColor` in Next.js 15+**: Must be exported from `viewport: Viewport`, not from `metadata`. Pattern: `export const viewport: Viewport = { themeColor: "#0f172a" };`
+10. **`regularMarketChangePercent` from yahoo-finance2 is already a percentage** (e.g. `1.23` means +1.23%), NOT a decimal. Do **not** multiply by 100.
+11. **Next.js `app/icon.tsx` favicon auto-discovery can silently fail** in Next.js 15.5+. Always declare explicitly in `layout.tsx`: `icons: { icon: [{ url: "/icon", type: "image/png", sizes: "32x32" }], apple: "/icons/icon-192.svg" }`
 
 ---
 

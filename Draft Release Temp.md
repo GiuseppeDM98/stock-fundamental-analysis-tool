@@ -1,5 +1,7 @@
 ## ✨ New Features
 
+- **Capital invested markers in Portfolio chart** — the P&L history chart now shows an amber vertical line on days when you put new money into the portfolio (adding a new position or buying more of an existing one). Hover over that point to see exactly how much was invested. This makes it easy to tell apart market gains from capital you deposited yourself.
+
 - **Daily price change in Portfolio** — each position now shows today's % change and absolute move vs. the previous close (e.g. ▲ +0.89% today / ▼ -1.63% today) directly next to the current price, in green or red. No extra clicks needed to check how your holdings are moving today.
 
 - **Capital gains tax per position** — you can now set an optional tax rate (%) on each position when adding it. The portfolio will then show estimated taxes and net P&L alongside the gross gain for every position in gain. The summary bar also shows total estimated taxes and your net P&L across the whole portfolio. Useful for the Italian market (standard 26% rate) or any other jurisdiction.

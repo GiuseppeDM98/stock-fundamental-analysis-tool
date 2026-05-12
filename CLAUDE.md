@@ -105,7 +105,7 @@ Current project state and context for AI assistants.
 - Live prices via `/api/quote/[ticker]` — parallel fetch for all unique tickers at mount
 - Types: `Position`, `CreatePositionRequest`, `AggregatedPosition`, `SnapshotPoint`, `SnapshotEntry`, `SnapshotData` in `types/portfolio.ts`
 - **Portfolio ↔ Analyses link**: each position row shows "N saved analyses ▼" (collapsible) if saved analyses exist for that ticker — date, MoS%, FV base, link to detail page. Implemented via `Promise.all([fetchPositions(), fetchAnalyses(), fetchSnapshots()])` on mount, no extra API calls.
-- **P&L History chart**: Recharts LineChart in `/portfolio` showing portfolio value vs cost basis over time. Data sourced from `PortfolioSnapshot` rows created by the daily cron. Shows placeholder if < 2 snapshots exist. **Green vertical markers** appear on days when a dividend was paid.
+- **P&L History chart**: Recharts LineChart in `/portfolio` showing portfolio value vs cost basis over time. Data sourced from `PortfolioSnapshot` rows created by the daily cron. Shows placeholder if < 2 snapshots exist. **Green vertical markers** appear on days when a dividend was paid. **Amber vertical markers** appear on days when new capital was deployed (new position or DCA) — detected client-side via `costEur` delta > €50 vs previous snapshot; amount shown in tooltip (no inline label to avoid SVG edge clipping). Chart data type is `SnapshotChartPoint = SnapshotPoint & { capitalDelta?: number }` injected before passing to `<LineChart>`.
 
 ### Portfolio P&L History (Snapshots)
 - **`PortfolioSnapshot` model**: `totalEur`, `costEur`, `takenAt`, `data` (JSON typed as `SnapshotData` with `dividendsEur` total + per-position `SnapshotEntry` array)

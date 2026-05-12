@@ -67,6 +67,7 @@ export type Translations = {
   fieldIsinHint: string;
   totalDividends: string;
   dividendMarkerLabel: string;
+  capitalDeployedMarkerLabel: string;
   dividendsGross: string;
   dividendsNet: string;
   dividendsAvgRate: string;
@@ -267,6 +268,7 @@ const en: Translations = {
   fieldIsinHint: "Optional · for dividend tracking on Borsa Italiana (e.g. IT0003128367)",
   totalDividends: "Dividends Received",
   dividendMarkerLabel: "Dividend",
+  capitalDeployedMarkerLabel: "Invested",
   dividendsGross: "gross",
   dividendsNet: "net",
   dividendsAvgRate: "avg. rate",
@@ -467,6 +469,7 @@ const it: Translations = {
   fieldIsinHint: "Opzionale · per tracking dividendi su Borsa Italiana (es. IT0003128367)",
   totalDividends: "Dividendi Incassati",
   dividendMarkerLabel: "Dividendo",
+  capitalDeployedMarkerLabel: "Investito",
   dividendsGross: "lordo",
   dividendsNet: "netto",
   dividendsAvgRate: "aliq. media",
