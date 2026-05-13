@@ -6,9 +6,9 @@ Current project state and context for AI assistants.
 
 ## Version & Status
 
-**Version**: `0.9.2`
+**Version**: `0.9.3`
 **Status**: Active Development
-**Last Updated**: May 12, 2026 (PWA — installable on mobile via manifest + service worker)
+**Last Updated**: May 13, 2026 (Watchlist + email digest feature)
 
 ---
 
@@ -29,9 +29,9 @@ Current project state and context for AI assistants.
 **Pattern**: Next.js App Router with client-side interactivity and server-side API routes.
 
 - **Frontend**: Single-page dashboard + auth pages + saved analyses pages + portfolio page
-- **API Layer**: `/api/quote`, `/api/fundamentals`, `/api/valuation`, `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses`, `/api/analyses/[id]`, `/api/positions`, `/api/positions/[id]`, `/api/ai/deep-value`, `/api/portfolio/snapshots`, `/api/cron/portfolio-snapshot`
+- **API Layer**: `/api/quote`, `/api/fundamentals`, `/api/valuation`, `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses`, `/api/analyses/[id]`, `/api/positions`, `/api/positions/[id]`, `/api/ai/deep-value`, `/api/portfolio/snapshots`, `/api/cron/portfolio-snapshot`, `/api/watchlist` (GET/POST), `/api/watchlist/[id]` (DELETE/PATCH), `/api/watchlist/settings` (PATCH), `/api/watchlist/run` (POST), `/api/cron/watchlist-analysis` (GET)
 - **Business Logic**: Pure TypeScript in `lib/` (DCF/DDM/EV-EBITDA engines, sector routing, scenario presets, Yahoo adapter, deep-value AI prompts, snapshot logic, formatters)
-- **Database**: SQLite via Prisma 7 — `User` + `Analysis` + `Position` + `PortfolioSnapshot` models
+- **Database**: SQLite via Prisma 7 — `User` + `Analysis` + `Position` + `PortfolioSnapshot` + `WatchlistItem` + `WatchlistRun` models
 - **Auth**: Auth.js v5 credentials provider, JWT sessions
 - **Types**: Centralized in `types/` (fundamentals, market, valuation, analysis, auth, ai, portfolio)
 - **Cron**: Vercel Cron Job (`vercel.json`) fires POST to `/api/cron/portfolio-snapshot` weekdays at 20:00 UTC
@@ -136,6 +136,19 @@ Current project state and context for AI assistants.
 - Input focus states (accent ring) on all scenario panel fields and Add Position modal
 - **Language toggle (EN/IT)** in NavBar — switches entire app UI; preference persisted in `sfa:language` localStorage. AI report panels default to the global language but allow per-report override. System: `lib/i18n/translations.ts` (type-safe ~136 key dictionary) + `context/language-context.tsx` (React context + `useLanguage()` hook)
 
+### Watchlist + Email Digest
+- Users maintain a personal watchlist of tickers at `/watchlist`
+- `WatchlistItem`: `id, userId, ticker, companyName, mosPercent, notes, addedAt` — `@@unique([userId, ticker])`
+- `WatchlistRun`: stores per-ticker AI analysis results; retained for last-run display and future trend tracking
+- **User-level toggle** `watchlistEnabled Boolean @default(true)` — when false, the cron skips the user entirely. Useful when not actively investing.
+- **Manual trigger**: `POST /api/watchlist/run` — rate-limited to once per 24h via `lastManualWatchlistRun DateTime?` on the User model
+- **Cron**: Vercel Cron fires `GET /api/cron/watchlist-analysis` on the 1st and 15th of each month at 08:00 UTC. Monthly-frequency users are skipped on the 15th.
+- **Lite analysis**: uses `claude-sonnet-4-6` with `web_search_20250305` tool (non-streaming) — returns only a JSON block with bull/base/bear fair values, method, sector, currency. ~$0.05–0.08/ticker.
+- **Email**: sent via Resend — dark-themed HTML table with bear/base(MoS-adjusted)/bull/price/upside/status. Native currency per row.
+- `lib/watchlist-analysis.ts` — `import "server-only"`, exports `runWatchlistAnalysisForAllUsers()` and `runWatchlistAnalysisForUser(userId)`
+- `lib/email.ts` — Resend client (lazily initialized to avoid build-time throw), exports `sendWatchlistDigest()`
+- Types in `types/watchlist.ts`
+
 ### PWA / Installability
 - Full PWA support — browsers show "Install App" prompt (Android Chrome) instead of plain "Add to Home Screen"
 - **Manifest**: `app/manifest.ts` exports `MetadataRoute.Manifest`; served automatically at `/manifest.webmanifest`. Fields: `name`, `short_name`, `display: standalone`, `start_url`, `background_color`, `theme_color`, `icons`
@@ -160,7 +173,7 @@ Current project state and context for AI assistants.
 ## Project Structure
 
 ```
-types/                 # fundamentals.ts, market.ts, valuation.ts, analysis.ts, auth.ts, ai.ts, portfolio.ts
+types/                 # fundamentals.ts, market.ts, valuation.ts, analysis.ts, auth.ts, ai.ts, portfolio.ts, watchlist.ts
 lib/
   valuation/dcf.ts         # DCF engine
   valuation/ddm.ts         # DDM engine (Utilities)
@@ -176,6 +189,8 @@ lib/
   portfolio.ts             # Client-side fetch helpers (positions + fetchSnapshots)
   portfolio-snapshots.ts   # Server-only: snapshot creation logic (import "server-only")
   dividends.ts             # Server-only: Borsa Italiana dividend fetcher + HTML parser
+  watchlist-analysis.ts    # Server-only: lite AI analysis + per-user/all-users cron runner
+  email.ts                 # Resend email sender — sendWatchlistDigest()
   format.ts                # Formatting utilities
 app/api/
   quote/[ticker]/      fundamentals/[ticker]/      valuation/[ticker]/
@@ -185,8 +200,13 @@ app/api/
   positions/           positions/[id]/
   portfolio/snapshots/     # GET last 90 days of snapshots
   cron/portfolio-snapshot/ # GET — Vercel Cron endpoint
+  cron/watchlist-analysis/ # GET — Vercel Cron endpoint (1st + 15th monthly)
+  watchlist/               # GET + POST
+  watchlist/[id]/          # DELETE + PATCH
+  watchlist/settings/      # PATCH
+  watchlist/run/           # POST — manual trigger (rate-limited)
   ai/deep-value/       # Autonomous deep value AI analysis (streaming)
-app/login/ app/register/ app/analyses/ app/analyses/[id]/ app/portfolio/
+app/login/ app/register/ app/analyses/ app/analyses/[id]/ app/portfolio/ app/watchlist/
 app/manifest.ts        # PWA Web App Manifest → /manifest.webmanifest
 app/icon.tsx           # Favicon (32×32, dynamic SVG via next/og)
 components/            # dashboard-client, scenario-panel, ddm-scenario-panel,
@@ -195,6 +215,7 @@ components/            # dashboard-client, scenario-panel, ddm-scenario-panel,
                        # disclaimer-banner, deep-value-panel,
                        # analyses-list, portfolio-list, portfolio-history-chart,
                        # open-position-banner, nav-bar, login-form, register-form,
+                       # watchlist-client,
                        # session-provider, valuation-metrics-cards, page-header,
                        # pwa-register
 lib/i18n/translations.ts   # EN/IT translation dictionary (~120 keys)
@@ -240,6 +261,8 @@ NEXTAUTH_URL="http://localhost:3000"   # production: https://your-domain.vercel.
 ANTHROPIC_API_KEY="sk-ant-..."
 DISABLE_REGISTRATION="false"
 CRON_SECRET="..."                      # openssl rand -hex 32 — must also be set in Vercel project settings
+RESEND_API_KEY="re_..."               # Resend.com API key — used for watchlist email digest
+RESEND_FROM_EMAIL="watchlist@yourdomain.com"  # Verified sending domain in Resend; use onboarding@resend.dev for dev
 ```
 
 See `.env.example` for full template.

@@ -11,13 +11,23 @@ datasource db {
 }
 
 model User {
-  id           String              @id @default(cuid())
-  email        String              @unique
-  passwordHash String
-  createdAt    DateTime            @default(now())
-  analyses     Analysis[]
-  positions    Position[]
-  snapshots    PortfolioSnapshot[]
+  id                      String              @id @default(cuid())
+  email                   String              @unique
+  passwordHash            String
+  createdAt               DateTime            @default(now())
+  analyses                Analysis[]
+  positions               Position[]
+  snapshots               PortfolioSnapshot[]
+  watchlistItems          WatchlistItem[]
+  watchlistRuns           WatchlistRun[]
+  // null = use account email
+  watchlistEmail          String?
+  // "biweekly" | "monthly"
+  watchlistFreq           String              @default("biweekly")
+  // When false the cron skips this user entirely — useful when not actively investing
+  watchlistEnabled        Boolean             @default(true)
+  // Rate-limit manual trigger to once per 24h
+  lastManualWatchlistRun  DateTime?
 }
 
 model Analysis {
@@ -52,6 +62,40 @@ model PortfolioSnapshot {
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, takenAt])
+}
+
+// Ticker the user wants to monitor periodically via the AI cron digest.
+model WatchlistItem {
+  id          String   @id @default(cuid())
+  userId      String
+  ticker      String
+  companyName String
+  mosPercent  Float    @default(0.20)
+  notes       String?
+  addedAt     DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, ticker])
+  @@index([userId])
+}
+
+// Result of each cron/manual analysis run per ticker per user.
+// Retained for last-run display in the UI and future trend tracking.
+model WatchlistRun {
+  id            String   @id @default(cuid())
+  userId        String
+  ticker        String
+  runAt         DateTime @default(now())
+  fairValueBull Float?
+  fairValueBase Float?
+  fairValueBear Float?
+  method        String?
+  sector        String?
+  currency      String?
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, runAt])
+  @@index([userId, ticker])
 }
 
 // Tracks real purchases made by the user for long-term P&L tracking.

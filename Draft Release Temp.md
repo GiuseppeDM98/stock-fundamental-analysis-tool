@@ -1,5 +1,13 @@
 ## ✨ New Features
 
+- **Watchlist with AI email digest** — add any ticker to your personal watchlist and receive an automatic email every two weeks (or monthly) with AI-generated fair value estimates for each stock. Each digest shows Bear / Base / Bull fair values, the current price, upside vs. your margin-of-safety target, and an "Under FV" / "Over FV" status badge.
+
+- **Per-ticker margin of safety on watchlist** — each watchlist entry has its own MoS% slider. The "Base −MoS%" column in the table shows the exact price you should aim to buy at, already discounted by your safety margin.
+
+- **Pause watchlist analysis** — a toggle in Watchlist Settings lets you disable analysis emails without deleting your watchlist. Useful when you're not actively looking to invest and don't want emails cluttering your inbox.
+
+- **Manual watchlist trigger** — click "Update now" in Watchlist Settings to run the AI analysis immediately, without waiting for the next scheduled run. Rate-limited to once every 24 hours.
+
 - **Capital invested markers in Portfolio chart** — the P&L history chart now shows an amber vertical line on days when you put new money into the portfolio (adding a new position or buying more of an existing one). Hover over that point to see exactly how much was invested. This makes it easy to tell apart market gains from capital you deposited yourself.
 
 - **Daily price change in Portfolio** — each position now shows today's % change and absolute move vs. the previous close (e.g. ▲ +0.89% today / ▼ -1.63% today) directly next to the current price, in green or red. No extra clicks needed to check how your holdings are moving today.

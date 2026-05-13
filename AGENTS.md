@@ -83,7 +83,7 @@ if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 
 // Use session.user.id — typed via declaration merge in types/auth.ts
 ```
 
-**Endpoints:** `/api/quote`, `/api/fundamentals`, `/api/valuation` (POST), `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/DELETE), `/api/positions` (GET/POST), `/api/positions/[id]` (DELETE), `/api/ai/deep-value` (POST, streaming), `/api/portfolio/snapshots` (GET), `/api/cron/portfolio-snapshot` (GET, Vercel Cron)
+**Endpoints:** `/api/quote`, `/api/fundamentals`, `/api/valuation` (POST), `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/DELETE), `/api/positions` (GET/POST), `/api/positions/[id]` (DELETE), `/api/ai/deep-value` (POST, streaming), `/api/portfolio/snapshots` (GET), `/api/cron/portfolio-snapshot` (GET, Vercel Cron), `/api/watchlist` (GET/POST), `/api/watchlist/[id]` (DELETE/PATCH), `/api/watchlist/settings` (PATCH), `/api/watchlist/run` (POST), `/api/cron/watchlist-analysis` (GET, Vercel Cron)
 
 ---
 
@@ -445,6 +445,20 @@ t: (key: keyof Translations) => string;
 9. **`themeColor` in Next.js 15+**: Must be exported from `viewport: Viewport`, not from `metadata`. Pattern: `export const viewport: Viewport = { themeColor: "#0f172a" };`
 10. **`regularMarketChangePercent` from yahoo-finance2 is already a percentage** (e.g. `1.23` means +1.23%), NOT a decimal. Do **not** multiply by 100.
 11. **Next.js `app/icon.tsx` favicon auto-discovery can silently fail** in Next.js 15.5+. Always declare explicitly in `layout.tsx`: `icons: { icon: [{ url: "/icon", type: "image/png", sizes: "32x32" }], apple: "/icons/icon-192.svg" }`
+12. **`/api/quote` response field is `regularMarketPrice`, not `price`**. Reading `data.price` silently returns `undefined` — price and upside columns show `—` with no error. Always use `data.regularMarketPrice`.
+13. **Claude non-streaming multi-text blocks**: When using `client.messages.create()` with `web_search`, the response `content` array often contains multiple `text` blocks — intermediate reasoning emitted between tool calls appears as an early text block, and the final JSON is in the last text block. `response.content.find(b => b.type === "text")` returns the **first** (wrong). Always concatenate **all** text blocks and run your regex on the joined string:
+    ```typescript
+    const allText = response.content
+      .filter(b => b.type === "text")
+      .map(b => (b as { type: "text"; text: string }).text)
+      .join("\n");
+    const match = allText.match(/```json\n([\s\S]*?)\n```/);
+    ```
+14. **Third-party SDK module-level init throws at build time**: Clients initialized at module level (e.g. `new Resend(key)`) throw during Next.js static page collection if the env var is absent. Always initialize lazily:
+    ```typescript
+    let _client: Resend | null = null;
+    function getClient() { return (_client ??= new Resend(process.env.KEY)); }
+    ```
 
 ---
 

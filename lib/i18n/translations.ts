@@ -199,6 +199,34 @@ export type Translations = {
   portfolioPageDesc: string;
   analysesPageTitle: string;
   analysesPageDesc: string;
+
+  // ─── Watchlist ───────────────────────────────────────────────────────────────
+  navWatchlist: string;
+  watchlistPageTitle: string;
+  watchlistPageDesc: string;
+  watchlistEmpty: string;
+  watchlistEmptyHint: string;
+  watchlistAddTicker: string;
+  watchlistMosPercent: string;
+  watchlistNotes: string;
+  watchlistLastRun: string;
+  watchlistFreqBiweekly: string;
+  watchlistFreqMonthly: string;
+  watchlistNotifEmail: string;
+  watchlistSaveSettings: string;
+  watchlistManualRun: string;
+  watchlistRunning: string;
+  watchlistStatusUnder: string;
+  watchlistStatusOver: string;
+  watchlistUpside: string;
+  watchlistEnabled: string;
+  watchlistEnabledHint: string;
+  watchlistSettingsTitle: string;
+  watchlistNoLastRun: string;
+  watchlistConfirmDelete: string;
+  watchlistEditItem: string;
+  watchlistSaveItem: string;
+  watchlistCooldownMsg: string;
 };
 
 const en: Translations = {
@@ -400,6 +428,34 @@ const en: Translations = {
   portfolioPageDesc: "Track your stock positions and monitor P&L against live prices",
   analysesPageTitle: "Saved Analyses",
   analysesPageDesc: "Your AI-generated investment research reports",
+
+  // Watchlist
+  navWatchlist: "Watchlist",
+  watchlistPageTitle: "Watchlist",
+  watchlistPageDesc: "AI-powered periodic fair value digest for your monitored tickers",
+  watchlistEmpty: "No tickers in watchlist.",
+  watchlistEmptyHint: "Add your first ticker to start automatic monitoring.",
+  watchlistAddTicker: "+ Add ticker",
+  watchlistMosPercent: "Margin of safety",
+  watchlistNotes: "Notes",
+  watchlistLastRun: "Last update",
+  watchlistFreqBiweekly: "Every 2 weeks",
+  watchlistFreqMonthly: "Monthly",
+  watchlistNotifEmail: "Notification email",
+  watchlistSaveSettings: "Save settings",
+  watchlistManualRun: "Update now",
+  watchlistRunning: "Analyzing…",
+  watchlistStatusUnder: "Under FV",
+  watchlistStatusOver: "Over FV",
+  watchlistUpside: "Upside",
+  watchlistEnabled: "Enable analysis",
+  watchlistEnabledHint: "When disabled, the cron will not analyze your watchlist and no emails will be sent.",
+  watchlistSettingsTitle: "Settings",
+  watchlistNoLastRun: "Not yet analyzed",
+  watchlistConfirmDelete: "Remove from watchlist?",
+  watchlistEditItem: "Edit",
+  watchlistSaveItem: "Save",
+  watchlistCooldownMsg: "Manual run available again in {hours}h {minutes}m",
 };
 
 const it: Translations = {
@@ -601,6 +657,34 @@ const it: Translations = {
   portfolioPageDesc: "Monitora le tue posizioni azionarie e il P&L in tempo reale",
   analysesPageTitle: "Analisi Salvate",
   analysesPageDesc: "I tuoi report di analisi degli investimenti generati dall'AI",
+
+  // Watchlist
+  navWatchlist: "Watchlist",
+  watchlistPageTitle: "Watchlist",
+  watchlistPageDesc: "Digest periodico AI del fair value per i tuoi ticker monitorati",
+  watchlistEmpty: "Nessun titolo in watchlist.",
+  watchlistEmptyHint: "Aggiungi il primo ticker per iniziare il monitoraggio automatico.",
+  watchlistAddTicker: "+ Aggiungi ticker",
+  watchlistMosPercent: "Margine di sicurezza",
+  watchlistNotes: "Note",
+  watchlistLastRun: "Ultimo aggiornamento",
+  watchlistFreqBiweekly: "Ogni 2 settimane",
+  watchlistFreqMonthly: "Mensile",
+  watchlistNotifEmail: "Email notifiche",
+  watchlistSaveSettings: "Salva impostazioni",
+  watchlistManualRun: "Aggiorna ora",
+  watchlistRunning: "Analisi in corso…",
+  watchlistStatusUnder: "Sotto FV",
+  watchlistStatusOver: "Sopra FV",
+  watchlistUpside: "Upside",
+  watchlistEnabled: "Abilita analisi",
+  watchlistEnabledHint: "Se disabilitato, il cron non analizzerà la tua watchlist e non verranno inviate email.",
+  watchlistSettingsTitle: "Impostazioni",
+  watchlistNoLastRun: "Non ancora analizzato",
+  watchlistConfirmDelete: "Rimuovere dalla watchlist?",
+  watchlistEditItem: "Modifica",
+  watchlistSaveItem: "Salva",
+  watchlistCooldownMsg: "Aggiornamento manuale disponibile tra {hours}h {minutes}m",
 };
 
 export const translations: Record<Language, Translations> = { en, it };
