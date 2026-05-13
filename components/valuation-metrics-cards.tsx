@@ -117,24 +117,25 @@ function InfoModal({
  * the metric and how to interpret its value.
  */
 export function ValuationMetricsCards({ quote, fundamentals }: Props) {
-  const metrics = computeValuationMetrics(quote, fundamentals);
   const { t } = useLanguage();
-  // Tracks which card's info modal is open (by label), null = all closed
+  // Pass t so labels, tooltips and modal texts re-evaluate on every language change
+  const metrics = computeValuationMetrics(quote, fundamentals, t);
+  // Tracks which card's info modal is open (by stable key, not translated label)
   const [openInfo, setOpenInfo] = useState<string | null>(null);
-  const openMetric = metrics.find((m) => m.label === openInfo) ?? null;
+  const openMetric = metrics.find((m) => m.key === openInfo) ?? null;
 
   return (
     <>
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         {metrics.map((metric) => (
-          <div key={metric.label} className="card">
+          <div key={metric.key} className="card">
             {/* Header row: label + info button */}
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted">
                 {metric.label}
               </p>
               <button
-                onClick={() => setOpenInfo(metric.label)}
+                onClick={() => setOpenInfo(metric.key)}
                 aria-label={t("infoAbout").replace("{label}", metric.label)}
                 className="flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold text-muted hover:text-white hover:bg-white/10 transition-colors"
               >

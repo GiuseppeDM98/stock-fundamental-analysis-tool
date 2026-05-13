@@ -6,9 +6,9 @@ Current project state and context for AI assistants.
 
 ## Version & Status
 
-**Version**: `0.9.3`
+**Version**: `0.9.4`
 **Status**: Active Development
-**Last Updated**: May 13, 2026 (Watchlist + email digest feature)
+**Last Updated**: May 13, 2026 (Reverse DCF + i18n fixes)
 
 ---
 
@@ -50,6 +50,7 @@ Current project state and context for AI assistants.
 - **Sector badge** `[Sector · Method]` in dashboard header
 - Disclaimer under fair value cards when sector suggests a non-DCF method (DCF only)
 - Margin of safety adjustment (0-80%)
+- **Reverse DCF** (`components/reverse-dcf-card.tsx`): given the current market price, computes the implied annual FCF growth rate via binary search [-5%, 60%] on the DCF engine. Shows a 4yr historical FCF CAGR for context and a semantic badge (conservative / reasonable / optimistic). Only rendered for DCF-eligible sectors with positive FCF. Solver in `computeImpliedGrowthRate` + `computeFcfCagr` in `lib/valuation/dcf.ts`. CAGR uses 4yr default (not 5yr) because Yahoo typically returns 4-5 annual data points — 6 required for 5yr CAGR would always be null.
 
 ### Smart Scenario Defaults
 - Company-specific scenarios auto-populated from analyst estimates + historical data
@@ -123,6 +124,7 @@ Current project state and context for AI assistants.
 - Trend badge per card: Improved / Worsened / Stable (compares latest vs prior annual fundamental)
 - Each card has a `?` button opening an educational modal (via `ReactDOM.createPortal`) with "What is it?" and "How to read?" sections
 - Logic in `lib/valuation/valuation-metrics.ts`; component in `components/valuation-metrics-cards.tsx`
+- **i18n**: `computeValuationMetrics` accepts `t` as a parameter — all labels, tooltips, and modal texts are translated. Each metric has a stable `key` field used for modal state (not the translated `label`, which changes on language switch).
 
 ### Interactive UI
 - Scenario parameters displayed as percentages, stored as decimals
@@ -217,8 +219,8 @@ components/            # dashboard-client, scenario-panel, ddm-scenario-panel,
                        # open-position-banner, nav-bar, login-form, register-form,
                        # watchlist-client,
                        # session-provider, valuation-metrics-cards, page-header,
-                       # pwa-register
-lib/i18n/translations.ts   # EN/IT translation dictionary (~120 keys)
+                       # pwa-register, reverse-dcf-card
+lib/i18n/translations.ts   # EN/IT translation dictionary (~160 keys)
 context/language-context.tsx  # LanguageProvider + useLanguage() hook
 public/
   sw.js                # Service Worker (network-only — required for PWA install prompt)
@@ -227,7 +229,7 @@ prisma/                # schema.prisma + migrations
 generated/prisma/      # Prisma 7 generated client (gitignored)
 vercel.json            # Vercel Cron Job schedule
 docs/                  # Feature specs
-__tests__/             # 17 tests across 4 files
+__tests__/             # 31 tests across 5 files (incl. reverse-dcf.test.ts)
 ```
 
 ---

@@ -20,12 +20,14 @@ import { EvEbitdaScenarioPanel } from "@/components/ev-ebitda-scenario-panel";
 import { FairValueCard } from "@/components/fair-value-card";
 import { FundamentalsCharts } from "@/components/fundamentals-charts";
 import { PriceSummary } from "@/components/price-summary";
+import { ReverseDcfCard } from "@/components/reverse-dcf-card";
 import { ScenarioPanel } from "@/components/scenario-panel";
 import { TickerSearch } from "@/components/ticker-search";
 import DeepValuePanel from "@/components/deep-value-panel";
 import { ValuationMetricsCards } from "@/components/valuation-metrics-cards";
 import { useLanguage } from "@/context/language-context";
 import { getDefaultDdmScenarios, getCompanyDdmScenarios, getDefaultEvEbitdaScenarios, getCompanyEvEbitdaScenarios, getDefaultScenarios } from "@/lib/valuation/scenario-presets";
+import { computeFcfCagr } from "@/lib/valuation/dcf";
 import { detectSector, getRecommendedMethod } from "@/lib/valuation/sector";
 import { FundamentalsResponse } from "@/types/fundamentals";
 import { QuoteResponse } from "@/types/market";
@@ -523,6 +525,31 @@ export function DashboardClient() {
               </div>
               <p className="mt-2 text-xs text-muted">{t("chartScenarioNote")}</p>
             </div>
+
+            {/* Reverse DCF — shown only for DCF-eligible sectors with positive FCF */}
+            {valuation.valuationMethod === "dcf" &&
+              fundamentals.sector !== null &&
+              getRecommendedMethod(detectSector(fundamentals.sector)).isDcfAppropriate &&
+              quote.sharesOutstanding != null &&
+              quote.sharesOutstanding > 0 &&
+              fundamentals.annual.length > 0 &&
+              fundamentals.annual[0].fcf > 0 && (
+                <section>
+                  <ReverseDcfCard
+                    currentPrice={quote.regularMarketPrice}
+                    sharesOutstanding={quote.sharesOutstanding}
+                    wacc={scenarios.base.wacc}
+                    terminalGrowthRate={scenarios.base.terminalGrowth}
+                    operatingMarginTarget={scenarios.base.operatingMarginTarget}
+                    taxRate={scenarios.base.taxRate}
+                    reinvestmentRate={scenarios.base.reinvestmentRate}
+                    baseFcf={fundamentals.annual[0].fcf}
+                    baseRevenue={fundamentals.annual[0].revenue}
+                    historicalFcfCagr5yr={computeFcfCagr(fundamentals.annual.map((p) => p.fcf))}
+                    currency={quote.currency}
+                  />
+                </section>
+              )}
 
             <ValuationMetricsCards quote={quote} fundamentals={fundamentals} />
 

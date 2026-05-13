@@ -1,6 +1,27 @@
 import { ScenarioInput, ScenarioResult } from "@/types/valuation";
 
 /**
+ * Input for the reverse DCF solver.
+ *
+ * Given the current market price, computeImpliedGrowthRate finds the annual
+ * FCF growth rate the market is implicitly pricing over 10 years.
+ * baseFcf is used only as a feasibility guard (must be positive); the DCF
+ * projection itself starts from baseRevenue, consistent with how the forward
+ * DCF engine works (revenue → margin → NOPAT → FCF).
+ */
+export interface ReverseDcfInput {
+  currentPrice: number;
+  sharesOutstanding: number;
+  wacc: number;
+  terminalGrowthRate: number;
+  operatingMarginTarget: number;
+  taxRate: number;
+  reinvestmentRate: number;
+  baseFcf: number;       // most recent annual FCF — must be > 0
+  baseRevenue: number;   // most recent annual revenue — starting point for projection
+}
+
+/**
  * DCF Engine (10-year + Gordon Growth terminal value)
  *
  * Design notes:
@@ -12,6 +33,7 @@ import { ScenarioInput, ScenarioResult } from "@/types/valuation";
  *   missing/inconsistent fields across regions.
  */
 
+// DcfInput stays unchanged below — ReverseDcfInput is the new public interface above.
 export type DcfInput = {
   currentRevenue: number;
   netDebt: number;
@@ -125,4 +147,98 @@ export function runDcf(input: DcfInput): ScenarioResult {
     fairValueAfterMos,
     upsideVsPricePercent
   };
+}
+
+/**
+ * Build a DcfInput from ReverseDcfInput with a given trial growth rate.
+ *
+ * Both Y1-5 and Y6-10 receive the same rate, capped at 0.40 for Y6-10 to
+ * respect the DCF validation bound. The binary search remains monotonic
+ * because Y1-5 growth still increases with each iteration.
+ * netDebt is omitted from ReverseDcfInput (solving for equity value directly);
+ * mosPercent is 0 so we compare raw fairValuePerShare to the market price.
+ */
+function buildDcfInputForRate(input: ReverseDcfInput, growthRate: number): DcfInput {
+  return {
+    currentRevenue: input.baseRevenue,
+    netDebt: 0,
+    sharesOutstanding: input.sharesOutstanding,
+    currentPrice: input.currentPrice,
+    mosPercent: 0,
+    scenario: {
+      revenueGrowthYears1to5: growthRate,
+      revenueGrowthYears6to10: Math.min(growthRate, 0.40),
+      operatingMarginTarget: input.operatingMarginTarget,
+      taxRate: input.taxRate,
+      reinvestmentRate: input.reinvestmentRate,
+      wacc: input.wacc,
+      terminalGrowth: input.terminalGrowthRate,
+    },
+  };
+}
+
+/**
+ * Solve for the implied annual FCF growth rate the market is pricing in.
+ *
+ * Uses binary search on [-5%, 60%]. Returns null when:
+ * - currentPrice ≤ 0 or baseFcf ≤ 0 (loss-making or free)
+ * - currentPrice is outside the range the model can produce at [-5%, 60%]
+ *
+ * @param input - Market price, shares outstanding, and DCF parameters
+ * @returns Decimal implied growth rate (e.g. 0.142 = 14.2%), or null
+ */
+export function computeImpliedGrowthRate(input: ReverseDcfInput): number | null {
+  if (input.currentPrice <= 0 || input.baseFcf <= 0) return null;
+
+  const MAX_ITERATIONS = 60;
+  const TOLERANCE = 0.01;
+
+  let lo = -0.05;
+  let hi = 0.60;
+
+  // Check whether the market price falls within the model's solvable range
+  const loValue = runDcf(buildDcfInputForRate(input, lo)).fairValuePerShare;
+  const hiValue = runDcf(buildDcfInputForRate(input, hi)).fairValuePerShare;
+
+  if (input.currentPrice < loValue || input.currentPrice > hiValue) return null;
+
+  for (let i = 0; i < MAX_ITERATIONS; i++) {
+    const mid = (lo + hi) / 2;
+    const value = runDcf(buildDcfInputForRate(input, mid)).fairValuePerShare;
+
+    if (Math.abs(value - input.currentPrice) < TOLERANCE) {
+      return mid;
+    }
+
+    // Higher growth → higher value; narrow the bracket toward currentPrice
+    if (value > input.currentPrice) {
+      hi = mid;
+    } else {
+      lo = mid;
+    }
+  }
+
+  return (lo + hi) / 2;
+}
+
+/**
+ * Compute the annualised FCF growth rate (CAGR) over a historical period.
+ *
+ * Expects annualFcf sorted newest-first (matching how fundamentalsTimeSeries
+ * data is ordered by yahoo-client). Returns null if there is insufficient
+ * data or if either endpoint is negative (CAGR undefined for sign changes).
+ *
+ * Default lookback is 4 years (requires 5 data points) rather than 5 because
+ * Yahoo fundamentalsTimeSeries typically returns 4-5 annual entries — not
+ * enough for a 5yr CAGR (which needs 6 points).
+ *
+ * @param annualFcf - FCF values sorted newest-first
+ * @param years - Lookback period (default 4)
+ */
+export function computeFcfCagr(annualFcf: number[], years = 4): number | null {
+  if (annualFcf.length < years + 1) return null;
+  const latest = annualFcf[0];
+  const base = annualFcf[years];
+  if (base <= 0 || latest <= 0) return null;
+  return Math.pow(latest / base, 1 / years) - 1;
 }

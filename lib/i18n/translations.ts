@@ -227,6 +227,36 @@ export type Translations = {
   watchlistEditItem: string;
   watchlistSaveItem: string;
   watchlistCooldownMsg: string;
+
+  // ─── Reverse DCF ─────────────────────────────────────────────────────────────
+  reverseDcfTitle: string;
+  reverseDcfExplainer: string;
+  reverseDcfPer10yr: string;
+  reverseDcfHistoricalCagr: string;
+  reverseDcfWacc: string;
+  reverseDcfTerminalGrowth: string;
+  reverseDcfConservative: string;
+  reverseDcfReasonable: string;
+  reverseDcfOptimistic: string;
+  reverseDcfNoHistorical: string;
+
+  // ─── Valuation metrics cards ──────────────────────────────────────────────
+  metricYearsEarnings: string;
+  metricYearsFcf: string;
+  metricFcfYield: string;
+  metricEarningsYield: string;
+  metricNaMarketCap: string;
+  metricNaNoHistory: string;
+  metricNaPositiveNI: string;
+  metricNaPositiveFcf: string;
+  metricYearsEarningsDesc: string;
+  metricYearsEarningsHow: string;
+  metricYearsFcfDesc: string;
+  metricYearsFcfHow: string;
+  metricFcfYieldDesc: string;
+  metricFcfYieldHow: string;
+  metricEarningsYieldDesc: string;
+  metricEarningsYieldHow: string;
 };
 
 const en: Translations = {
@@ -456,6 +486,36 @@ const en: Translations = {
   watchlistEditItem: "Edit",
   watchlistSaveItem: "Save",
   watchlistCooldownMsg: "Manual run available again in {hours}h {minutes}m",
+
+  // Reverse DCF
+  reverseDcfTitle: "Reverse DCF — Implied Growth",
+  reverseDcfExplainer: "The market is pricing in an FCF growth rate of",
+  reverseDcfPer10yr: "over the next 10 years at the current price of",
+  reverseDcfHistoricalCagr: "Historical FCF growth (5yr CAGR)",
+  reverseDcfWacc: "WACC used",
+  reverseDcfTerminalGrowth: "Terminal growth",
+  reverseDcfConservative: "Conservative market — potential upside",
+  reverseDcfReasonable: "Reasonable expectations",
+  reverseDcfOptimistic: "Optimistic market — priced for perfection",
+  reverseDcfNoHistorical: "No historical FCF data",
+
+  // Valuation metrics cards
+  metricYearsEarnings: "Years of Earnings",
+  metricYearsFcf: "Years of FCF",
+  metricFcfYield: "FCF Yield",
+  metricEarningsYield: "Earnings Yield",
+  metricNaMarketCap: "Market cap unavailable",
+  metricNaNoHistory: "No historical data",
+  metricNaPositiveNI: "Requires positive net income",
+  metricNaPositiveFcf: "Requires positive FCF",
+  metricYearsEarningsDesc: "How many years of net income (after tax) it would take, at the current rate, to buy back the entire market cap. This is the classic P/E (Price / Earnings) ratio expressed in plain language.",
+  metricYearsEarningsHow: "Low values (e.g. 10–15×) indicate a reasonable price relative to earnings. Very high values (>40×) imply that high future growth is already priced in. Mature sectors tend to have lower multiples than technology or high-growth companies.",
+  metricYearsFcfDesc: "How many years of Free Cash Flow (cash generated after capex) it would take to buy back the market cap. This is the Price/FCF ratio, considered more reliable than P/E because FCF is harder to manipulate than accounting earnings.",
+  metricYearsFcfHow: "Below 20× is often considered reasonable; above 30–35× implies a strong bet on future growth. If Years of FCF is much higher than Years of Earnings, the company converts little of its accounting profit into real cash (watch for high capex or working capital absorbing liquidity).",
+  metricFcfYieldDesc: "How much Free Cash Flow the company generates each year relative to its market cap, expressed as a percentage. It is the inverse of P/FCF: FCF / Market Cap × 100.",
+  metricFcfYieldHow: "Higher is better. You can benchmark it against the 10-year Treasury/BTP yield: if FCF Yield exceeds the risk-free rate, the company generates more cash than government bonds would return. An FCF Yield above 5% is often considered attractive for value investors.",
+  metricEarningsYieldDesc: "How much net income the company generates each year relative to its market cap, expressed as a percentage. It is the inverse of P/E: Net Income / Market Cap × 100.",
+  metricEarningsYieldHow: "Higher is better. Like FCF Yield, it is directly comparable to government bond yields: if it exceeds the risk-free rate, you are paying less for the company than a bond would return. Benjamin Graham used this metric to screen for undervalued stocks.",
 };
 
 const it: Translations = {
@@ -685,6 +745,36 @@ const it: Translations = {
   watchlistEditItem: "Modifica",
   watchlistSaveItem: "Salva",
   watchlistCooldownMsg: "Aggiornamento manuale disponibile tra {hours}h {minutes}m",
+
+  // Reverse DCF
+  reverseDcfTitle: "Reverse DCF — Crescita Implicita",
+  reverseDcfExplainer: "Il mercato sta scontando una crescita del FCF di",
+  reverseDcfPer10yr: "per i prossimi 10 anni al prezzo corrente di",
+  reverseDcfHistoricalCagr: "Crescita storica FCF (5yr CAGR)",
+  reverseDcfWacc: "WACC utilizzato",
+  reverseDcfTerminalGrowth: "Crescita terminale",
+  reverseDcfConservative: "Mercato conservativo — potenziale upside",
+  reverseDcfReasonable: "Aspettative ragionevoli",
+  reverseDcfOptimistic: "Mercato ottimista — prezzato per la perfezione",
+  reverseDcfNoHistorical: "Dati storici FCF non disponibili",
+
+  // Valuation metrics cards
+  metricYearsEarnings: "Anni di Utili",
+  metricYearsFcf: "Anni di FCF",
+  metricFcfYield: "FCF Yield",
+  metricEarningsYield: "Earnings Yield",
+  metricNaMarketCap: "Market cap non disponibile",
+  metricNaNoHistory: "Dati storici non disponibili",
+  metricNaPositiveNI: "Richiede utile netto positivo",
+  metricNaPositiveFcf: "Richiede FCF positivo",
+  metricYearsEarningsDesc: "Quanti anni di utile netto (dopo le tasse) servirebbero, al ritmo attuale, per ripagare l'intera capitalizzazione di mercato. È il classico rapporto P/E (Prezzo / Utile) riformulato in linguaggio naturale.",
+  metricYearsEarningsHow: "Valori bassi (es. 10–15×) indicano un prezzo contenuto rispetto agli utili. Valori molto alti (>40×) implicano aspettative di crescita elevate già prezzate. Settori maturi tendono ad avere multipli più bassi di quelli tecnologici o in forte crescita.",
+  metricYearsFcfDesc: "Quanti anni di Free Cash Flow (cassa generata dopo capex) servirebbero per ripagare la market cap. È il rapporto Prezzo / FCF, considerato più affidabile del P/E perché il FCF è più difficile da manipolare contabilmente degli utili.",
+  metricYearsFcfHow: "Sotto 20× è spesso considerato ragionevole; sopra 30–35× implica una forte scommessa sulla crescita futura. Se Anni di FCF è molto più alto di Anni di Utili, l'azienda converte poco dell'utile contabile in vera cassa (attenzione a capex elevati o working capital che assorbe liquidità).",
+  metricFcfYieldDesc: "Quanto Free Cash Flow l'azienda genera ogni anno rispetto alla sua capitalizzazione di mercato, espresso in percentuale. È l'inverso del P/FCF: FCF / Market Cap × 100.",
+  metricFcfYieldHow: "Più è alto, meglio è. Puoi confrontarlo con il rendimento del BTP/Treasury 10Y: se l'FCF Yield è superiore al tasso privo di rischio, l'azienda sta generando più cassa di quanto offrirebbero i titoli di stato. Un FCF Yield >5% è spesso considerato interessante per chi cerca valore.",
+  metricEarningsYieldDesc: "Quanto utile netto l'azienda genera ogni anno rispetto alla sua capitalizzazione di mercato, espresso in percentuale. È l'inverso del P/E: Utile Netto / Market Cap × 100.",
+  metricEarningsYieldHow: "Più è alto, meglio è. Come l'FCF Yield, è direttamente confrontabile con il rendimento dei titoli di stato: se è superiore al tasso risk-free, stai pagando l'azienda meno di quanto rende un'obbligazione governativa. Benjamin Graham usava questa metrica per filtrare le azioni sottovalutate.",
 };
 
 export const translations: Record<Language, Translations> = { en, it };

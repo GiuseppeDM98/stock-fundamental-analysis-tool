@@ -1,5 +1,7 @@
 ## ✨ New Features
 
+- **Reverse DCF — Implied Growth Rate** — after searching a DCF-eligible stock (Technology, Healthcare, Consumer, Industrials), a new card shows the annualised FCF growth rate the market is implicitly pricing in at the current stock price. Compare it against the company's 4-year historical FCF CAGR to instantly see whether market expectations are conservative, reasonable, or optimistic. A colored badge summarises the assessment (green = conservative/potential upside, amber = reasonable, red = priced for perfection). Only appears for companies with positive free cash flow.
+
 - **Watchlist with AI email digest** — add any ticker to your personal watchlist and receive an automatic email every two weeks (or monthly) with AI-generated fair value estimates for each stock. Each digest shows Bear / Base / Bull fair values, the current price, upside vs. your margin-of-safety target, and an "Under FV" / "Over FV" status badge.
 
 - **Per-ticker margin of safety on watchlist** — each watchlist entry has its own MoS% slider. The "Base −MoS%" column in the table shows the exact price you should aim to buy at, already discounted by your safety margin.
@@ -69,6 +71,8 @@
 - Added **Re-run Analysis** button in the analyses list and detail page — one click redirects to the dashboard with the ticker pre-filled and the data fetch triggered automatically.
 
 ## 🐛 Bug Fixes
+
+- Fixed valuation metric card titles ("Years of Earnings", "Years of FCF", "FCF Yield", "Earnings Yield") not translating when switching the app language — they now update immediately when switching between English and Italian, along with the modal descriptions
 
 - Fixed favicon not appearing in browser tabs — the app icon now shows correctly in all browsers, including incognito mode
 

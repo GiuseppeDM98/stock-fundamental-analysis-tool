@@ -56,6 +56,7 @@ Return ONLY this JSON block:
       if (!allText) continue;
 
       const match = allText.match(/```json\n([\s\S]*?)\n```/);
+      if (!match) continue;
 
       const parsed = JSON.parse(match[1]);
       return {
