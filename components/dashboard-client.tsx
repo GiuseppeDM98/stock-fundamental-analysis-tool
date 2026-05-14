@@ -25,6 +25,7 @@ import { ScenarioPanel } from "@/components/scenario-panel";
 import { TickerSearch } from "@/components/ticker-search";
 import DeepValuePanel from "@/components/deep-value-panel";
 import { ValuationMetricsCards } from "@/components/valuation-metrics-cards";
+import { MultiplesHistoryChart } from "@/components/multiples-history-chart";
 import { useLanguage } from "@/context/language-context";
 import { getDefaultDdmScenarios, getCompanyDdmScenarios, getDefaultEvEbitdaScenarios, getCompanyEvEbitdaScenarios, getDefaultScenarios } from "@/lib/valuation/scenario-presets";
 import { computeFcfCagr } from "@/lib/valuation/dcf";
@@ -554,6 +555,21 @@ export function DashboardClient() {
             <ValuationMetricsCards quote={quote} fundamentals={fundamentals} />
 
             <FundamentalsCharts fundamentals={fundamentals} />
+
+            <MultiplesHistoryChart
+              ticker={ticker}
+              currentPe={fundamentals.ratios.pe ?? null}
+              currentPFcf={
+                quote.marketCap != null && fundamentals.annual.length > 0 && fundamentals.annual[0].fcf > 0
+                  ? quote.marketCap / fundamentals.annual[0].fcf
+                  : null
+              }
+              currentEvEbit={
+                quote.marketCap != null && fundamentals.annual.length > 0 && fundamentals.annual[0].ebit > 0
+                  ? quote.marketCap / fundamentals.annual[0].ebit
+                  : null
+              }
+            />
 
             <DeepValuePanel
               ticker={ticker}

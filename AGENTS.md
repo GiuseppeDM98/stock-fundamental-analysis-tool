@@ -418,7 +418,11 @@ const raw = payload[0]?.payload as ChartPoint | undefined;
 
 ### ReferenceLine label clipping
 
-`<ReferenceLine label={{ position: "insideTopLeft/Right" }}>` labels are clipped by the chart SVG's clipPath when the line falls near the left or right edge of the chart area. **Do not use inline labels for data whose position relative to the edge is dynamic.** Instead, omit the label from the ReferenceLine and surface the info in the custom tooltip via `payload[0].payload` (see above).
+`<ReferenceLine label={{ position: "insideTopLeft/Right" }}>` labels are clipped by the chart SVG's clipPath when the line is near the chart edge. **Horizontal lines always clip** — their label is anchored to the right edge of the chart area by default, which is always at the boundary. Vertical lines clip when the value is near the min/max of the X-axis. In both cases, omit the inline label and surface the info in the custom tooltip via `payload[0].payload` instead.
+
+### `overflow-x-auto` on in-card tables creates a spurious scrollbar
+
+Adding `overflow-x-auto` to a `<div>` wrapping a `<table className="w-full">` inside a `.card` will render a thin horizontal scrollbar even when the table fits — because the browser measures the table's natural unconstrained width before applying `w-full`. Remove `overflow-x-auto` when the table is expected to fill the card; only add it when content genuinely overflows (verified by testing at narrow viewport).
 
 ### `t` prop type when passing down from `useLanguage()`
 

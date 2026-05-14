@@ -240,6 +240,23 @@ export type Translations = {
   reverseDcfOptimistic: string;
   reverseDcfNoHistorical: string;
 
+  // ─── Historical multiples chart ───────────────────────────────────────────
+  multiplesChartTitle: string;
+  multiplesMetricPE: string;
+  multiplesMetricPFCF: string;
+  multiplesMetricEVEBIT: string;
+  multiplesCurrent: string;
+  multiplesToday: string;
+  multiplesMedian: string;
+  multiplesMin: string;
+  multiplesMax: string;
+  multiplesPercentile: string;
+  multiplesNoData: string;
+  multiplesPrice: string;
+  multiplesPercentileCheap: string;
+  multiplesPercentileMid: string;
+  multiplesPercentileExpensive: string;
+
   // ─── Valuation metrics cards ──────────────────────────────────────────────
   metricYearsEarnings: string;
   metricYearsFcf: string;
@@ -486,6 +503,23 @@ const en: Translations = {
   watchlistEditItem: "Edit",
   watchlistSaveItem: "Save",
   watchlistCooldownMsg: "Manual run available again in {hours}h {minutes}m",
+
+  // Historical multiples chart
+  multiplesChartTitle: "Historical Multiples",
+  multiplesMetricPE: "P/E",
+  multiplesMetricPFCF: "P/FCF",
+  multiplesMetricEVEBIT: "EV/EBIT",
+  multiplesCurrent: "Current",
+  multiplesToday: "Today",
+  multiplesMedian: "Median",
+  multiplesMin: "Min",
+  multiplesMax: "Max",
+  multiplesPercentile: "Historical percentile",
+  multiplesNoData: "Historical data unavailable",
+  multiplesPrice: "Price",
+  multiplesPercentileCheap: "Historically cheap",
+  multiplesPercentileMid: "Mid-range",
+  multiplesPercentileExpensive: "Historically expensive",
 
   // Reverse DCF
   reverseDcfTitle: "Reverse DCF — Implied Growth",
@@ -745,6 +779,23 @@ const it: Translations = {
   watchlistEditItem: "Modifica",
   watchlistSaveItem: "Salva",
   watchlistCooldownMsg: "Aggiornamento manuale disponibile tra {hours}h {minutes}m",
+
+  // Historical multiples chart
+  multiplesChartTitle: "Storico Multipli",
+  multiplesMetricPE: "P/E",
+  multiplesMetricPFCF: "P/FCF",
+  multiplesMetricEVEBIT: "EV/EBIT",
+  multiplesCurrent: "Corrente",
+  multiplesToday: "Oggi",
+  multiplesMedian: "Mediana",
+  multiplesMin: "Min",
+  multiplesMax: "Max",
+  multiplesPercentile: "Percentile storico",
+  multiplesNoData: "Dati storici non disponibili",
+  multiplesPrice: "Prezzo",
+  multiplesPercentileCheap: "Storicamente economico",
+  multiplesPercentileMid: "Fascia media",
+  multiplesPercentileExpensive: "Storicamente caro",
 
   // Reverse DCF
   reverseDcfTitle: "Reverse DCF — Crescita Implicita",

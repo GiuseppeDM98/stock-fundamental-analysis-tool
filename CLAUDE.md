@@ -6,9 +6,9 @@ Current project state and context for AI assistants.
 
 ## Version & Status
 
-**Version**: `0.9.4`
+**Version**: `0.9.5`
 **Status**: Active Development
-**Last Updated**: May 13, 2026 (Reverse DCF + i18n fixes)
+**Last Updated**: May 14, 2026 (Historical Multiples Chart)
 
 ---
 
@@ -29,7 +29,7 @@ Current project state and context for AI assistants.
 **Pattern**: Next.js App Router with client-side interactivity and server-side API routes.
 
 - **Frontend**: Single-page dashboard + auth pages + saved analyses pages + portfolio page
-- **API Layer**: `/api/quote`, `/api/fundamentals`, `/api/valuation`, `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses`, `/api/analyses/[id]`, `/api/positions`, `/api/positions/[id]`, `/api/ai/deep-value`, `/api/portfolio/snapshots`, `/api/cron/portfolio-snapshot`, `/api/watchlist` (GET/POST), `/api/watchlist/[id]` (DELETE/PATCH), `/api/watchlist/settings` (PATCH), `/api/watchlist/run` (POST), `/api/cron/watchlist-analysis` (GET)
+- **API Layer**: `/api/quote`, `/api/fundamentals`, `/api/valuation`, `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses`, `/api/analyses/[id]`, `/api/positions`, `/api/positions/[id]`, `/api/ai/deep-value`, `/api/portfolio/snapshots`, `/api/cron/portfolio-snapshot`, `/api/watchlist` (GET/POST), `/api/watchlist/[id]` (DELETE/PATCH), `/api/watchlist/settings` (PATCH), `/api/watchlist/run` (POST), `/api/cron/watchlist-analysis` (GET), `/api/historical-multiples/[ticker]` (GET)
 - **Business Logic**: Pure TypeScript in `lib/` (DCF/DDM/EV-EBITDA engines, sector routing, scenario presets, Yahoo adapter, deep-value AI prompts, snapshot logic, formatters)
 - **Database**: SQLite via Prisma 7 — `User` + `Analysis` + `Position` + `PortfolioSnapshot` + `WatchlistItem` + `WatchlistRun` models
 - **Auth**: Auth.js v5 credentials provider, JWT sessions
@@ -119,6 +119,19 @@ Current project state and context for AI assistants.
 - `lib/portfolio-snapshots.ts` is server-only (`import "server-only"`); `fetchSnapshots()` client helper lives in `lib/portfolio.ts`
 - `SnapshotPoint.dividendsEur` is included in the `/api/portfolio/snapshots` response (parsed from data JSON); old snapshots without it return 0
 
+### Historical Multiples Chart
+- Line chart showing P/E, P/FCF, and EV/EBIT over the last 10 fiscal years (limited by Yahoo fundamentalsTimeSeries coverage — typically 3–8 points depending on the ticker)
+- **Metric toggle**: pill buttons switch between P/E, P/FCF, EV/EBIT
+- **Quartile band**: ReferenceArea shading the 25th–75th percentile range
+- **Median line**: dashed ReferenceLine at historical median
+- **Current multiple line**: solid ReferenceLine at today's value (passed as prop from dashboard)
+- **Summary table**: current / median / min / max / percentile rank with emerald (< 30th) / amber (30–70th) / rose (> 70th) color coding
+- **EV/EBIT proxy**: EV/EBITDA skipped because Yahoo doesn't expose D&A per fiscal year; labeled "EV/EBIT" in UI. Uses current `netDebt` as proxy for all historical years.
+- **Current multiples in dashboard**: `currentPe = ratios.pe`, `currentPFcf = marketCap / annual[0].fcf`, `currentEvEbit = marketCap / annual[0].ebit` (simplified, ignores net debt)
+- Fetch via `GET /api/historical-multiples/[ticker]` — parallel fetch of 10yr daily prices + fundamentalsTimeSeries + defaultKeyStatistics
+- Statistics helpers in `lib/valuation/statistics.ts`: `percentile()`, `quartiles()`, `percentileRank()`
+- Components: `components/multiples-history-chart.tsx`
+
 ### Valuation Metrics Cards
 - 4 quick-glance cards above historical charts: **Years of Earnings** (P/E), **Years of FCF** (P/FCF), **FCF Yield**, **Earnings Yield**
 - Trend badge per card: Improved / Worsened / Stable (compares latest vs prior annual fundamental)
@@ -183,6 +196,8 @@ lib/
   valuation/sector.ts      # Sector detection + method routing
   valuation/scenario-presets.ts
   valuation/valuation-metrics.ts  # P/E, P/FCF, FCF Yield, Earnings Yield computation
+  valuation/statistics.ts          # percentile(), quartiles(), percentileRank() — used by historical multiples
+  valuation/historical-multiples.ts # computeHistoricalMultiples() — fiscal year-end price matching + P/E, P/FCF, EV/EBIT
   ai/deep-value-prompts.ts # Prompt builders for deep value AI analysis
   yahoo-client.ts          # Yahoo adapter
   auth.ts                  # Auth.js v5 config
@@ -219,7 +234,7 @@ components/            # dashboard-client, scenario-panel, ddm-scenario-panel,
                        # open-position-banner, nav-bar, login-form, register-form,
                        # watchlist-client,
                        # session-provider, valuation-metrics-cards, page-header,
-                       # pwa-register, reverse-dcf-card
+                       # pwa-register, reverse-dcf-card, multiples-history-chart
 lib/i18n/translations.ts   # EN/IT translation dictionary (~160 keys)
 context/language-context.tsx  # LanguageProvider + useLanguage() hook
 public/
@@ -273,9 +288,10 @@ See `.env.example` for full template.
 
 ## Next Priorities
 
-1. Caching layer for Yahoo API calls
+1. Caching layer for Yahoo API calls (especially for `/api/historical-multiples` — fetches 10yr daily prices)
 2. Sensitivity analysis table (WACC vs growth matrix)
 3. P/B for Financial sector (currently shows DCF + disclaimer)
+4. EV/EBITDA upgrade in historical multiples once `balanceSheetHistory` is available (replace EV/EBIT proxy)
 
 ---
 

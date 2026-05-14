@@ -2,7 +2,7 @@
 
 A Next.js web application for stock valuation using Discounted Cash Flow (DCF) analysis with scenario modeling. Fetch real-time financial data from Yahoo Finance and run bull/base/bear scenario valuations with interactive charts.
 
-![Version](https://img.shields.io/badge/version-0.9.4-blue)
+![Version](https://img.shields.io/badge/version-0.9.5-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-green)
 ![Next.js](https://img.shields.io/badge/Next.js-15.5.12-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7.3-blue)
@@ -31,6 +31,7 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **Capital gains tax** — set an optional tax rate per position to see estimated taxes and net P&L alongside gross gains; dividend totals also show gross and estimated net amounts
 - **Analysis performance tracking** — see how the stock price moved since you saved each analysis vs. fair value
 - **Watchlist + email digest** — add tickers to a personal watchlist and receive automatic bi-weekly or monthly email digests with AI fair value estimates (Bear/Base/Bull), current price, and upside vs. your margin-of-safety target. Pause emails with a single toggle when you're not actively investing.
+- **Historical Multiples Chart** — P/E, P/FCF, and EV/EBIT over up to 10 fiscal years with quartile band, median line, and current-multiple reference; summary row shows percentile rank color-coded green/amber/red (cheap/mid/expensive relative to own history)
 - **Reverse DCF** — for any DCF-eligible stock, see the implied annual FCF growth rate the market is pricing in, compared against the company's historical FCF CAGR; colored badge signals whether expectations are conservative, reasonable, or optimistic
 - **English / Italian UI** — switch the entire interface language from the navigation bar; preference is saved automatically
 
@@ -71,6 +72,7 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - 🧾 **Capital Gains Tax**: Set an optional tax rate per position to see estimated taxes and net P&L on unrealized gains; dividend totals show gross and estimated net
 - 📈 **Analysis Performance**: See how price moved since saving vs. fair value — "Under FV" / "Above FV" badge per report
 - 🌐 **EN / IT UI**: Switch the entire interface language from the navbar; preference saved automatically
+- 📉 **Historical Multiples Chart**: P/E, P/FCF, EV/EBIT over 10 fiscal years with quartile shading, median line, current-multiple line, and percentile rank badge (green = historically cheap, red = historically expensive)
 - 🔄 **Reverse DCF**: For any DCF-eligible stock with positive FCF, see the implied FCF growth rate the market is pricing in — compare against historical CAGR with a colored interpretation badge
 - 📬 **Watchlist + AI Email Digest**: Add any ticker to your watchlist and receive automatic bi-weekly or monthly emails with AI fair value estimates (Bear/Base/Bull), current price, upside vs. MoS target, and status badges — pause with a toggle when not actively investing
 - 📱 **Installable PWA**: Install the app on Android or iOS for a native-like experience — standalone mode, home screen icon, no browser chrome
