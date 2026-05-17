@@ -176,13 +176,18 @@ Use `ReactDOM.createPortal(modal, document.body)` for any modal. The `.card` cla
 
 ### Critical: Deprecated Modules (Nov 2024)
 
-`incomeStatementHistory` and `cashflowStatementHistory` return empty. Use `fundamentalsTimeSeries` instead.
+`incomeStatementHistory`, `cashflowStatementHistory`, and **`balanceSheetHistory`** all return empty entries (only `maxAge` + `endDate`, no financial data). Use `fundamentalsTimeSeries` instead for all income, cashflow, and balance sheet data.
 
 ```typescript
 yahooFinance.fundamentalsTimeSeries(ticker, { period1, period2, type: "annual", module: "all" }, { validateResult: false });
-// Fields: totalRevenue, EBIT (uppercase!), netIncome, freeCashFlow, date (Date object)
+// Income/cashflow fields: totalRevenue, EBIT (uppercase!), netIncome, freeCashFlow, date (Date object)
+// Balance sheet fields: totalAssets, currentAssets, currentLiabilities, longTermDebt,
+//   stockholdersEquity (or commonStockEquity), retainedEarnings, cashAndCashEquivalents,
+//   grossProfit, ordinarySharesNumber
 yahooFinance.quoteSummary(ticker, { modules: ["summaryDetail", "defaultKeyStatistics", "financialData", "earningsTrend", "assetProfile"] });
 ```
+
+**`validateResult: false` on `quoteSummary` changes return type to `{}`** — requires `as Promise<any>` cast everywhere. Avoid adding it unless strictly necessary; the standard call without it works fine for all active modules.
 
 ### Key Gotchas
 - **Mixed schema**: Yahoo returns `number | { raw: number }` — always use `extractRawNumber()`

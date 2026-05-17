@@ -3,6 +3,8 @@
  *
  * Combines income statement and cash flow metrics with calculated margins.
  * Used for historical charting and DCF input (most recent year's revenue).
+ * grossProfit and sharesOutstanding are sourced from fundamentalsTimeSeries
+ * and are used by quality scorecard signals F7 (dilution) and F8 (gross margin).
  */
 export type AnnualFundamentalPoint = {
   year: number;
@@ -12,6 +14,8 @@ export type AnnualFundamentalPoint = {
   fcf: number;               // Free Cash Flow (operating cash - capex)
   operatingMargin: number;   // EBIT / revenue (decimal, e.g., 0.15 = 15%)
   netMargin: number;         // Net income / revenue (decimal)
+  grossProfit: number | null;       // Gross profit (revenue − COGS)
+  sharesOutstanding: number | null; // Ordinary shares issued (for dilution tracking)
 };
 
 /**
@@ -28,16 +32,34 @@ export type Ratios = {
 };
 
 /**
+ * One year of balance sheet data from Yahoo balanceSheetHistory.
+ *
+ * All monetary fields are nullable — Yahoo may not expose all fields for
+ * every ticker, particularly non-US companies.
+ */
+export interface BalanceSheetEntry {
+  year: number;
+  totalAssets: number | null;
+  totalCurrentAssets: number | null;
+  totalCurrentLiabilities: number | null;
+  longTermDebt: number | null;
+  totalEquity: number | null;        // totalStockholderEquity in Yahoo
+  retainedEarnings: number | null;
+  cash: number | null;
+}
+
+/**
  * Historical financial statements and valuation ratios for a ticker.
  *
- * Contains up to 5 years of annual data plus current valuation multiples.
- * Annual array may have fewer than 5 elements for newer companies or
- * tickers with incomplete Yahoo Finance data.
+ * Contains up to 10 years of annual income/cashflow data, up to 4 years of
+ * balance sheet data, and current valuation multiples. Arrays may be shorter
+ * for newer companies or tickers with incomplete Yahoo Finance data.
  */
 export type FundamentalsResponse = {
   ticker: string;
   currency: string;
   annual: AnnualFundamentalPoint[];
+  annualBalanceSheet: BalanceSheetEntry[];   // newest first, up to 4 years
   ratios: Ratios;
   sector: string | null;
   industry: string | null;

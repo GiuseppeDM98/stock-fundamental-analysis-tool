@@ -6,9 +6,9 @@ Current project state and context for AI assistants.
 
 ## Version & Status
 
-**Version**: `0.9.5`
+**Version**: `0.9.6`
 **Status**: Active Development
-**Last Updated**: May 14, 2026 (Historical Multiples Chart)
+**Last Updated**: May 17, 2026 (Quality Scorecard)
 
 ---
 
@@ -139,6 +139,15 @@ Current project state and context for AI assistants.
 - Logic in `lib/valuation/valuation-metrics.ts`; component in `components/valuation-metrics-cards.tsx`
 - **i18n**: `computeValuationMetrics` accepts `t` as a parameter — all labels, tooltips, and modal texts are translated. Each metric has a stable `key` field used for modal state (not the translated `label`, which changes on language switch).
 
+### Quality Scorecard
+- Panel rendered between Valuation Metrics Cards and Fundamentals Charts showing four quantitative quality metrics
+- **Piotroski F-Score (0–9)**: 9 binary signals for financial health: ROA > 0 (F1), CFO > 0 (F2), improving ROA (F3), accrual quality CFO/Assets > ROA (F4), lower leverage (F5), better current ratio (F6), no share dilution (F7), improving gross margin (F8), improving asset turnover (F9). All signals computed from `fundamentalsTimeSeries` — F7 uses `ordinarySharesNumber`, F8 uses `grossProfit`. Signals with unavailable data return null and are excluded from `maxScore`. Interpretation: Strong ≥ 7, Moderate ≥ 4, Weak < 4.
+- **ROIC vs WACC Spread**: NOPAT = EBIT × (1 − effectiveTaxRate); Invested Capital = totalEquity + longTermDebt; Spread = ROIC − WACC. effectiveTaxRate derived as `1 − netIncome/EBIT`, clamped to [0, 0.5]. WACC from `scenarios.base.wacc` (component state), not `ValuationResponse`.
+- **FCF Conversion**: FCF / Net Income — only computed when netIncome > 0.
+- **Altman Z-Score**: skipped for Financial Services, Financial, and Real Estate sectors (`altmanZSkipped: true`). When null due to missing data, `altmanZSkipped: false`. Zones: Safe > 2.99, Grey 1.81–2.99, Distress < 1.81.
+- Pure computation in `lib/valuation/quality-metrics.ts`; UI in `components/quality-scorecard-panel.tsx` (collapsible Piotroski signals)
+- All balance sheet data (totalAssets, currentAssets/liabilities, longTermDebt, stockholdersEquity, retainedEarnings, cash) comes from `fundamentalsTimeSeries` — `balanceSheetHistory` is deprecated since Nov 2024 and returns no data.
+
 ### Interactive UI
 - Scenario parameters displayed as percentages, stored as decimals
 - Analyst estimates reference banner
@@ -196,6 +205,7 @@ lib/
   valuation/sector.ts      # Sector detection + method routing
   valuation/scenario-presets.ts
   valuation/valuation-metrics.ts  # P/E, P/FCF, FCF Yield, Earnings Yield computation
+  valuation/quality-metrics.ts    # computeQualityScorecard() — Piotroski, ROIC/WACC, FCF Conversion, Altman Z
   valuation/statistics.ts          # percentile(), quartiles(), percentileRank() — used by historical multiples
   valuation/historical-multiples.ts # computeHistoricalMultiples() — fiscal year-end price matching + P/E, P/FCF, EV/EBIT
   ai/deep-value-prompts.ts # Prompt builders for deep value AI analysis
@@ -233,9 +243,9 @@ components/            # dashboard-client, scenario-panel, ddm-scenario-panel,
                        # analyses-list, portfolio-list, portfolio-history-chart,
                        # open-position-banner, nav-bar, login-form, register-form,
                        # watchlist-client,
-                       # session-provider, valuation-metrics-cards, page-header,
-                       # pwa-register, reverse-dcf-card, multiples-history-chart
-lib/i18n/translations.ts   # EN/IT translation dictionary (~160 keys)
+                       # session-provider, valuation-metrics-cards, quality-scorecard-panel,
+                       # page-header, pwa-register, reverse-dcf-card, multiples-history-chart
+lib/i18n/translations.ts   # EN/IT translation dictionary (~200 keys)
 context/language-context.tsx  # LanguageProvider + useLanguage() hook
 public/
   sw.js                # Service Worker (network-only — required for PWA install prompt)
@@ -244,7 +254,7 @@ prisma/                # schema.prisma + migrations
 generated/prisma/      # Prisma 7 generated client (gitignored)
 vercel.json            # Vercel Cron Job schedule
 docs/                  # Feature specs
-__tests__/             # 31 tests across 5 files (incl. reverse-dcf.test.ts)
+__tests__/             # 51 tests across 6 files (incl. quality-metrics.test.ts)
 ```
 
 ---
@@ -291,7 +301,6 @@ See `.env.example` for full template.
 1. Caching layer for Yahoo API calls (especially for `/api/historical-multiples` — fetches 10yr daily prices)
 2. Sensitivity analysis table (WACC vs growth matrix)
 3. P/B for Financial sector (currently shows DCF + disclaimer)
-4. EV/EBITDA upgrade in historical multiples once `balanceSheetHistory` is available (replace EV/EBIT proxy)
 
 ---
 

@@ -25,11 +25,13 @@ import { ScenarioPanel } from "@/components/scenario-panel";
 import { TickerSearch } from "@/components/ticker-search";
 import DeepValuePanel from "@/components/deep-value-panel";
 import { ValuationMetricsCards } from "@/components/valuation-metrics-cards";
+import { QualityScorecardPanel } from "@/components/quality-scorecard-panel";
 import { MultiplesHistoryChart } from "@/components/multiples-history-chart";
 import { useLanguage } from "@/context/language-context";
 import { getDefaultDdmScenarios, getCompanyDdmScenarios, getDefaultEvEbitdaScenarios, getCompanyEvEbitdaScenarios, getDefaultScenarios } from "@/lib/valuation/scenario-presets";
 import { computeFcfCagr } from "@/lib/valuation/dcf";
 import { detectSector, getRecommendedMethod } from "@/lib/valuation/sector";
+import { computeQualityScorecard } from "@/lib/valuation/quality-metrics";
 import { FundamentalsResponse } from "@/types/fundamentals";
 import { QuoteResponse } from "@/types/market";
 import { AnalystEstimates, AnalystEstimatesResponse, DdmScenariosInput, EvEbitdaScenariosInput, ScenariosInput, ValuationResponse } from "@/types/valuation";
@@ -368,6 +370,17 @@ export function DashboardClient() {
     }));
   }, [valuation]);
 
+  // Quality scorecard depends on fundamentals, WACC from the active base scenario, and quote
+  const scorecard = useMemo(() => {
+    if (!fundamentals || !quote) return null;
+    return computeQualityScorecard(
+      fundamentals,
+      scenarios.base.wacc,
+      quote.regularMarketPrice,
+      quote.sharesOutstanding,
+    );
+  }, [fundamentals, quote, scenarios.base.wacc]);
+
   return (
     <main className="mx-auto max-w-7xl p-4 pb-10 sm:p-6 lg:p-8">
       {/* Page header */}
@@ -553,6 +566,8 @@ export function DashboardClient() {
               )}
 
             <ValuationMetricsCards quote={quote} fundamentals={fundamentals} />
+
+            <QualityScorecardPanel scorecard={scorecard} isLoading={false} />
 
             <FundamentalsCharts fundamentals={fundamentals} />
 

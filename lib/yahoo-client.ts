@@ -1,6 +1,6 @@
 import YahooFinance from "yahoo-finance2";
 
-import { FundamentalsResponse } from "@/types/fundamentals";
+import { BalanceSheetEntry, FundamentalsResponse } from "@/types/fundamentals";
 import { QuoteResponse, Region } from "@/types/market";
 import { AnalystEstimates } from "@/types/valuation";
 
@@ -165,6 +165,10 @@ export async function getQuote(ticker: string): Promise<QuoteResponse> {
  * fundamentalsTimeSeries returns one object per fiscal year with flat field names
  * (e.g. totalRevenue, EBIT, freeCashFlow). Some entries may have undefined fields
  * if Yahoo doesn't have data for that year — we skip entries missing revenue.
+ *
+ * Balance sheet data (totalAssets, equity, debt, etc.) is extracted directly from
+ * fundamentalsTimeSeries, which supersedes the now-deprecated balanceSheetHistory
+ * quoteSummary module (returns empty data since Nov 2024).
  */
 export function mapFundamentalsFromTimeSeries(
   ticker: string,
@@ -174,19 +178,31 @@ export function mapFundamentalsFromTimeSeries(
   sector?: string | null,
   industry?: string | null,
   dividendRate?: number | null,
-  ebitda?: number | null
+  ebitda?: number | null,
 ): FundamentalsResponse {
-  const annual = entries
+  const validEntries = entries
     .filter((e: any) => e.totalRevenue != null && e.date instanceof Date)
-    .slice(-10) // keep at most 10 years, most recent last
+    .slice(-10); // keep at most 10 years, most recent last
+
+  const annual = validEntries
     .map((entry: any) => {
       const revenue = Number(entry.totalRevenue) || 0;
       const ebit = Number(entry.EBIT ?? entry.operatingIncome) || 0;
       const netIncome = Number(entry.netIncome) || 0;
       const fcfDirect = entry.freeCashFlow != null ? Number(entry.freeCashFlow) : null;
-      const operatingCash = Number(entry.operatingCashFlow) || 0;
-      const capex = Number(entry.capitalExpenditure) || 0; // negative in Yahoo data
+      const operatingCash = Number(entry.operatingCashFlow || entry.cashFlowFromContinuingOperatingActivities) || 0;
+      const capex = Number(entry.capitalExpenditure || entry.purchaseOfPPE) || 0; // negative in Yahoo data
       const fcf = fcfDirect ?? operatingCash + capex;
+
+      // grossProfit: direct field or revenue − costOfRevenue
+      const grossProfitRaw = entry.grossProfit ?? entry.reconciledCostOfRevenue;
+      const grossProfit = grossProfitRaw != null
+        ? Number(grossProfitRaw)
+        : (entry.costOfRevenue != null ? revenue - Number(entry.costOfRevenue) : null);
+
+      // Ordinary shares issued (not diluted) — used for year-over-year dilution detection
+      const sharesRaw = entry.ordinarySharesNumber ?? entry.shareIssued;
+      const sharesOutstanding = sharesRaw != null ? Number(sharesRaw) : null;
 
       return {
         year: entry.date.getUTCFullYear(),
@@ -196,12 +212,46 @@ export function mapFundamentalsFromTimeSeries(
         fcf,
         operatingMargin: revenue > 0 ? ebit / revenue : 0,
         netMargin: revenue > 0 ? netIncome / revenue : 0,
+        grossProfit: grossProfit != null && Number.isFinite(grossProfit) ? grossProfit : null,
+        sharesOutstanding: sharesOutstanding != null && Number.isFinite(sharesOutstanding) ? sharesOutstanding : null,
       };
     })
     // Sort descending (most recent first) to match existing conventions
     .sort((a: { year: number }, b: { year: number }) => b.year - a.year);
 
-  return { ticker: ticker.toUpperCase(), currency, annual, ratios, sector: sector ?? null, industry: industry ?? null, dividendRate: dividendRate ?? null, ebitda: ebitda ?? null };
+  // Build annual balance sheet from fundamentalsTimeSeries data.
+  // The balanceSheetHistory quoteSummary module is deprecated since Nov 2024 and
+  // returns empty entries. fundamentalsTimeSeries includes the same fields with
+  // full historical data.
+  const annualBalanceSheet: BalanceSheetEntry[] = validEntries
+    .map((entry: any): BalanceSheetEntry => ({
+      year: (entry.date as Date).getUTCFullYear(),
+      totalAssets: entry.totalAssets != null ? Number(entry.totalAssets) : null,
+      totalCurrentAssets: entry.currentAssets != null ? Number(entry.currentAssets) : null,
+      totalCurrentLiabilities: entry.currentLiabilities != null ? Number(entry.currentLiabilities) : null,
+      longTermDebt: entry.longTermDebt != null ? Number(entry.longTermDebt) : null,
+      // stockholdersEquity or commonStockEquity (same concept, different field names by ticker/year)
+      totalEquity: entry.stockholdersEquity != null
+        ? Number(entry.stockholdersEquity)
+        : (entry.commonStockEquity != null ? Number(entry.commonStockEquity) : null),
+      retainedEarnings: entry.retainedEarnings != null ? Number(entry.retainedEarnings) : null,
+      cash: entry.cashAndCashEquivalents != null
+        ? Number(entry.cashAndCashEquivalents)
+        : (entry.cashEquivalents != null ? Number(entry.cashEquivalents) : null),
+    }))
+    .sort((a, b) => b.year - a.year);
+
+  return {
+    ticker: ticker.toUpperCase(),
+    currency,
+    annual,
+    annualBalanceSheet,
+    ratios,
+    sector: sector ?? null,
+    industry: industry ?? null,
+    dividendRate: dividendRate ?? null,
+    ebitda: ebitda ?? null,
+  };
 }
 
 /**

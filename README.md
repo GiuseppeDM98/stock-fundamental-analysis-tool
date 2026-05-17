@@ -2,7 +2,7 @@
 
 A Next.js web application for stock valuation using Discounted Cash Flow (DCF) analysis with scenario modeling. Fetch real-time financial data from Yahoo Finance and run bull/base/bear scenario valuations with interactive charts.
 
-![Version](https://img.shields.io/badge/version-0.9.5-blue)
+![Version](https://img.shields.io/badge/version-0.9.6-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-green)
 ![Next.js](https://img.shields.io/badge/Next.js-15.5.12-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7.3-blue)
@@ -31,6 +31,7 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **Capital gains tax** — set an optional tax rate per position to see estimated taxes and net P&L alongside gross gains; dividend totals also show gross and estimated net amounts
 - **Analysis performance tracking** — see how the stock price moved since you saved each analysis vs. fair value
 - **Watchlist + email digest** — add tickers to a personal watchlist and receive automatic bi-weekly or monthly email digests with AI fair value estimates (Bear/Base/Bull), current price, and upside vs. your margin-of-safety target. Pause emails with a single toggle when you're not actively investing.
+- **Quality Scorecard** — Piotroski F-Score (0–9), ROIC vs WACC spread, FCF Conversion rate, and Altman Z-Score computed automatically from Yahoo Finance data; collapsible panel shows all nine Piotroski signals individually
 - **Historical Multiples Chart** — P/E, P/FCF, and EV/EBIT over up to 10 fiscal years with quartile band, median line, and current-multiple reference; summary row shows percentile rank color-coded green/amber/red (cheap/mid/expensive relative to own history)
 - **Reverse DCF** — for any DCF-eligible stock, see the implied annual FCF growth rate the market is pricing in, compared against the company's historical FCF CAGR; colored badge signals whether expectations are conservative, reasonable, or optimistic
 - **English / Italian UI** — switch the entire interface language from the navigation bar; preference is saved automatically

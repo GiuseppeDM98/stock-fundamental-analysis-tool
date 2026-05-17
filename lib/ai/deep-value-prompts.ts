@@ -103,13 +103,13 @@ Present the key data gathered in Step 2 in a structured way:
 - Balance sheet health (net debt, debt/equity, current ratio)
 - Historical valuation context (how current multiples compare to the 3–5 year average)
 
-## 5. Bull Case — Fair Value: [value]
+## 5. Bull Case — Intrinsic Value: [intrinsic_value] | Buy Target (−${mosPercent}% MoS): [buy_target]
 What would need to go right? Key assumptions and catalysts.
 
-## 6. Base Case — Fair Value: [value]
+## 6. Base Case — Intrinsic Value: [intrinsic_value] | Buy Target (−${mosPercent}% MoS): [buy_target]
 The most likely scenario. Moderate growth assumptions and current trends.
 
-## 7. Bear Case — Fair Value: [value]
+## 7. Bear Case — Intrinsic Value: [intrinsic_value] | Buy Target (−${mosPercent}% MoS): [buy_target]
 What could go wrong? Key downside risks and their probability.
 
 ## 8. Key Risks

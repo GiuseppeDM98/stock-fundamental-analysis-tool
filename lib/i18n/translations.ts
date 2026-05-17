@@ -257,6 +257,43 @@ export type Translations = {
   multiplesPercentileMid: string;
   multiplesPercentileExpensive: string;
 
+  // ─── Quality scorecard ────────────────────────────────────────────────────
+  qualityTitle: string;
+  qualityPiotroski: string;
+  qualityRoicSpread: string;
+  qualityFcfConversion: string;
+  qualityAltmanZ: string;
+  qualityStrong: string;
+  qualityModerate: string;
+  qualityWeak: string;
+  qualityValueCreating: string;
+  qualityValueDestroying: string;
+  qualityValueMarginal: string;
+  qualityFcfExcellent: string;
+  qualityFcfGood: string;
+  qualityFcfFair: string;
+  qualityFcfConcerning: string;
+  qualityAltmanSafe: string;
+  qualityAltmanGrey: string;
+  qualityAltmanDistress: string;
+  qualityAltmanNA: string;
+  qualityNoData: string;
+  qualityShowSignals: string;
+  qualityHideSignals: string;
+  qualitySignalPass: string;
+  qualitySignalFail: string;
+  qualitySignalNa: string;
+  // Piotroski signal labels
+  piotroskiRoa: string;
+  piotroskiCfo: string;
+  piotroskiRoaTrend: string;
+  piotroskiAccrual: string;
+  piotroskiLeverage: string;
+  piotroskiCurrentRatio: string;
+  piotroskiDilution: string;
+  piotroskiGrossMargin: string;
+  piotroskiAssetTurnover: string;
+
   // ─── Valuation metrics cards ──────────────────────────────────────────────
   metricYearsEarnings: string;
   metricYearsFcf: string;
@@ -520,6 +557,42 @@ const en: Translations = {
   multiplesPercentileCheap: "Historically cheap",
   multiplesPercentileMid: "Mid-range",
   multiplesPercentileExpensive: "Historically expensive",
+
+  // Quality scorecard
+  qualityTitle: "Quality Scorecard",
+  qualityPiotroski: "Piotroski F-Score",
+  qualityRoicSpread: "ROIC vs WACC",
+  qualityFcfConversion: "FCF Conversion",
+  qualityAltmanZ: "Altman Z-Score",
+  qualityStrong: "Strong",
+  qualityModerate: "Moderate",
+  qualityWeak: "Weak",
+  qualityValueCreating: "Value creation",
+  qualityValueDestroying: "Value destruction",
+  qualityValueMarginal: "Marginal value creation",
+  qualityFcfExcellent: "Excellent — highly cash-generative",
+  qualityFcfGood: "Good — strong cash conversion",
+  qualityFcfFair: "Fair — some accrual risk",
+  qualityFcfConcerning: "Concerning — earnings poorly backed by cash",
+  qualityAltmanSafe: "Safe zone",
+  qualityAltmanGrey: "Grey zone — monitor",
+  qualityAltmanDistress: "Distress zone",
+  qualityAltmanNA: "N/A (financial sector)",
+  qualityNoData: "Insufficient data",
+  qualityShowSignals: "Show signals",
+  qualityHideSignals: "Hide signals",
+  qualitySignalPass: "Pass",
+  qualitySignalFail: "Fail",
+  qualitySignalNa: "No data",
+  piotroskiRoa: "ROA positive",
+  piotroskiCfo: "Operating cash flow positive",
+  piotroskiRoaTrend: "ROA improving",
+  piotroskiAccrual: "High earnings quality (accrual test)",
+  piotroskiLeverage: "Leverage reduced",
+  piotroskiCurrentRatio: "Current ratio improving",
+  piotroskiDilution: "No share dilution",
+  piotroskiGrossMargin: "Gross margin improving",
+  piotroskiAssetTurnover: "Asset turnover improving",
 
   // Reverse DCF
   reverseDcfTitle: "Reverse DCF — Implied Growth",
@@ -796,6 +869,42 @@ const it: Translations = {
   multiplesPercentileCheap: "Storicamente economico",
   multiplesPercentileMid: "Fascia media",
   multiplesPercentileExpensive: "Storicamente caro",
+
+  // Quality scorecard
+  qualityTitle: "Quality Scorecard",
+  qualityPiotroski: "Piotroski F-Score",
+  qualityRoicSpread: "ROIC vs WACC",
+  qualityFcfConversion: "FCF Conversion",
+  qualityAltmanZ: "Altman Z-Score",
+  qualityStrong: "Forte",
+  qualityModerate: "Moderato",
+  qualityWeak: "Debole",
+  qualityValueCreating: "Creazione di valore",
+  qualityValueDestroying: "Distruzione di valore",
+  qualityValueMarginal: "Creazione di valore marginale",
+  qualityFcfExcellent: "Ottima — alta conversione in cassa",
+  qualityFcfGood: "Buona — forte conversione in cassa",
+  qualityFcfFair: "Discreta — rischio accrual",
+  qualityFcfConcerning: "Preoccupante — utili scarsamente supportati da cassa",
+  qualityAltmanSafe: "Zona sicura",
+  qualityAltmanGrey: "Zona grigia — monitorare",
+  qualityAltmanDistress: "Zona di rischio",
+  qualityAltmanNA: "N/A (settore finanziario)",
+  qualityNoData: "Dati insufficienti",
+  qualityShowSignals: "Mostra segnali",
+  qualityHideSignals: "Nascondi segnali",
+  qualitySignalPass: "Positivo",
+  qualitySignalFail: "Negativo",
+  qualitySignalNa: "Dati n/d",
+  piotroskiRoa: "ROA positivo",
+  piotroskiCfo: "Cash flow operativo positivo",
+  piotroskiRoaTrend: "ROA in miglioramento",
+  piotroskiAccrual: "Alta qualità degli utili (accrual test)",
+  piotroskiLeverage: "Leva finanziaria ridotta",
+  piotroskiCurrentRatio: "Current ratio in miglioramento",
+  piotroskiDilution: "Nessuna diluizione azionaria",
+  piotroskiGrossMargin: "Gross margin in miglioramento",
+  piotroskiAssetTurnover: "Asset turnover in miglioramento",
 
   // Reverse DCF
   reverseDcfTitle: "Reverse DCF — Crescita Implicita",
