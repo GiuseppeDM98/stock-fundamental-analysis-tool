@@ -6,9 +6,9 @@ Current project state and context for AI assistants.
 
 ## Version & Status
 
-**Version**: `0.9.6`
+**Version**: `0.9.7`
 **Status**: Active Development
-**Last Updated**: May 17, 2026 (Quality Scorecard)
+**Last Updated**: May 17, 2026 (Ticker Comparison)
 
 ---
 
@@ -28,10 +28,10 @@ Current project state and context for AI assistants.
 
 **Pattern**: Next.js App Router with client-side interactivity and server-side API routes.
 
-- **Frontend**: Single-page dashboard + auth pages + saved analyses pages + portfolio page
-- **API Layer**: `/api/quote`, `/api/fundamentals`, `/api/valuation`, `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses`, `/api/analyses/[id]`, `/api/positions`, `/api/positions/[id]`, `/api/ai/deep-value`, `/api/portfolio/snapshots`, `/api/cron/portfolio-snapshot`, `/api/watchlist` (GET/POST), `/api/watchlist/[id]` (DELETE/PATCH), `/api/watchlist/settings` (PATCH), `/api/watchlist/run` (POST), `/api/cron/watchlist-analysis` (GET), `/api/historical-multiples/[ticker]` (GET)
-- **Business Logic**: Pure TypeScript in `lib/` (DCF/DDM/EV-EBITDA engines, sector routing, scenario presets, Yahoo adapter, deep-value AI prompts, snapshot logic, formatters)
-- **Database**: SQLite via Prisma 7 — `User` + `Analysis` + `Position` + `PortfolioSnapshot` + `WatchlistItem` + `WatchlistRun` models
+- **Frontend**: Single-page dashboard + auth pages + saved analyses pages + portfolio page + compare page
+- **API Layer**: `/api/quote`, `/api/fundamentals`, `/api/valuation`, `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses`, `/api/analyses/[id]`, `/api/positions`, `/api/positions/[id]`, `/api/ai/deep-value`, `/api/portfolio/snapshots`, `/api/cron/portfolio-snapshot`, `/api/watchlist` (GET/POST), `/api/watchlist/[id]` (DELETE/PATCH), `/api/watchlist/settings` (PATCH), `/api/watchlist/run` (POST), `/api/cron/watchlist-analysis` (GET), `/api/historical-multiples/[ticker]` (GET), `/api/compare/analyze` (POST), `/api/compare/results` (GET)
+- **Business Logic**: Pure TypeScript in `lib/` (DCF/DDM/EV-EBITDA engines, sector routing, scenario presets, Yahoo adapter, deep-value AI prompts, lite AI analysis, snapshot logic, formatters)
+- **Database**: SQLite via Prisma 7 — `User` + `Analysis` + `Position` + `PortfolioSnapshot` + `WatchlistItem` + `WatchlistRun` + `CompareResult` models
 - **Auth**: Auth.js v5 credentials provider, JWT sessions
 - **Types**: Centralized in `types/` (fundamentals, market, valuation, analysis, auth, ai, portfolio)
 - **Cron**: Vercel Cron Job (`vercel.json`) fires POST to `/api/cron/portfolio-snapshot` weekdays at 20:00 UTC
@@ -160,14 +160,26 @@ Current project state and context for AI assistants.
 - Input focus states (accent ring) on all scenario panel fields and Add Position modal
 - **Language toggle (EN/IT)** in NavBar — switches entire app UI; preference persisted in `sfa:language` localStorage. AI report panels default to the global language but allow per-report override. System: `lib/i18n/translations.ts` (type-safe ~136 key dictionary) + `context/language-context.tsx` (React context + `useLanguage()` hook)
 
+### Ticker Comparison (`/compare`)
+- Side-by-side AI fair value comparison for up to 5 tickers
+- `CompareResult` DB model: `@@unique([userId, ticker])` — one row per user per ticker, upserted on each run. Fields: `fairValueBull`, `fairValueBase`, `fairValueBear`, `method`, `sector`, `currency`, `analyzedAt`
+- **Flow**: user adds tickers → clicks "Run Analysis" → `POST /api/compare/analyze` runs `analyzeTickerLite` in parallel for all tickers → results upserted to DB → client fetches live prices separately
+- **DB persistence**: `GET /api/compare/results?tickers=A,B` restores previous results across sessions/devices
+- **MoS slider**: 0–40% (step 5%) applied client-side to FV Base display; raw values stored in DB unchanged
+- **Inline upside/downside**: `±X%` shown next to each FV scenario (bear/base/bull) vs current price
+- **Freshness badge**: green "oggi" / grey ≤3d / amber >3d based on `analyzedAt`
+- **Best-in-class ★**: ticker with highest MoS-adjusted base upside highlighted (≥2 ready tickers required)
+- **URL persistence**: `?tickers=AAPL,MSFT` updated via `window.history.replaceState`
+- Components: `compare-client.tsx`, `compare-table.tsx`, `compare-ticker-input.tsx`
+
 ### Watchlist + Email Digest
 - Users maintain a personal watchlist of tickers at `/watchlist`
 - `WatchlistItem`: `id, userId, ticker, companyName, mosPercent, notes, addedAt` — `@@unique([userId, ticker])`
 - `WatchlistRun`: stores per-ticker AI analysis results; retained for last-run display and future trend tracking
-- **User-level toggle** `watchlistEnabled Boolean @default(true)` — when false, the cron skips the user entirely. Useful when not actively investing.
+- **User-level toggle** `watchlistEnabled Boolean @default(true)` — when false, the cron skips the user entirely.
 - **Manual trigger**: `POST /api/watchlist/run` — rate-limited to once per 24h via `lastManualWatchlistRun DateTime?` on the User model
 - **Cron**: Vercel Cron fires `GET /api/cron/watchlist-analysis` on the 1st and 15th of each month at 08:00 UTC. Monthly-frequency users are skipped on the 15th.
-- **Lite analysis**: uses `claude-sonnet-4-6` with `web_search_20250305` tool (non-streaming) — returns only a JSON block with bull/base/bear fair values, method, sector, currency. ~$0.05–0.08/ticker.
+- **Lite analysis**: `analyzeTickerLite()` from `lib/ai/lite-analysis.ts` — shared with compare endpoint. ~$0.05–0.08/ticker.
 - **Email**: sent via Resend — dark-themed HTML table with bear/base(MoS-adjusted)/bull/price/upside/status. Native currency per row.
 - `lib/watchlist-analysis.ts` — `import "server-only"`, exports `runWatchlistAnalysisForAllUsers()` and `runWatchlistAnalysisForUser(userId)`
 - `lib/email.ts` — Resend client (lazily initialized to avoid build-time throw), exports `sendWatchlistDigest()`
@@ -209,6 +221,7 @@ lib/
   valuation/statistics.ts          # percentile(), quartiles(), percentileRank() — used by historical multiples
   valuation/historical-multiples.ts # computeHistoricalMultiples() — fiscal year-end price matching + P/E, P/FCF, EV/EBIT
   ai/deep-value-prompts.ts # Prompt builders for deep value AI analysis
+  ai/lite-analysis.ts      # analyzeTickerLite() — non-streaming, shared by watchlist cron + compare endpoint
   yahoo-client.ts          # Yahoo adapter
   auth.ts                  # Auth.js v5 config
   db.ts                    # Prisma singleton
@@ -233,7 +246,9 @@ app/api/
   watchlist/settings/      # PATCH
   watchlist/run/           # POST — manual trigger (rate-limited)
   ai/deep-value/       # Autonomous deep value AI analysis (streaming)
-app/login/ app/register/ app/analyses/ app/analyses/[id]/ app/portfolio/ app/watchlist/
+  compare/analyze/     # POST — runs analyzeTickerLite in parallel, upserts CompareResult
+  compare/results/     # GET — returns saved CompareResult rows for given tickers
+app/login/ app/register/ app/analyses/ app/analyses/[id]/ app/portfolio/ app/watchlist/ app/compare/
 app/manifest.ts        # PWA Web App Manifest → /manifest.webmanifest
 app/icon.tsx           # Favicon (32×32, dynamic SVG via next/og)
 components/            # dashboard-client, scenario-panel, ddm-scenario-panel,
@@ -242,7 +257,7 @@ components/            # dashboard-client, scenario-panel, ddm-scenario-panel,
                        # disclaimer-banner, deep-value-panel,
                        # analyses-list, portfolio-list, portfolio-history-chart,
                        # open-position-banner, nav-bar, login-form, register-form,
-                       # watchlist-client,
+                       # watchlist-client, compare-client, compare-table, compare-ticker-input,
                        # session-provider, valuation-metrics-cards, quality-scorecard-panel,
                        # page-header, pwa-register, reverse-dcf-card, multiples-history-chart
 lib/i18n/translations.ts   # EN/IT translation dictionary (~200 keys)

@@ -389,7 +389,9 @@ function SettingsPanel({ settings, onSave, onManualRun, manualRunLoading, cooldo
 
           {/* Frequency */}
           <div>
-            <span className="mb-2 block text-xs text-muted">{t("watchlistFreqBiweekly")}</span>
+            <span className="mb-2 block text-xs text-muted">
+              {freq === "monthly" ? t("watchlistFreqMonthly") : t("watchlistFreqBiweekly")}
+            </span>
             <div className="flex gap-2">
               <button
                 onClick={() => setFreq("biweekly")}

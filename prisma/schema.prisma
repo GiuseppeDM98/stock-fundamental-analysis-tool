@@ -20,6 +20,7 @@ model User {
   snapshots               PortfolioSnapshot[]
   watchlistItems          WatchlistItem[]
   watchlistRuns           WatchlistRun[]
+  compareResults          CompareResult[]
   // null = use account email
   watchlistEmail          String?
   // "biweekly" | "monthly"
@@ -120,4 +121,23 @@ model Position {
 
   @@index([userId])
   @@index([userId, ticker])
+}
+
+// Latest AI fair value estimate per user per ticker, saved from the compare page.
+// One row per user+ticker — upserted on each new analysis run.
+model CompareResult {
+  id            String   @id @default(cuid())
+  userId        String
+  ticker        String
+  fairValueBull Float
+  fairValueBase Float
+  fairValueBear Float
+  method        String
+  sector        String
+  currency      String
+  analyzedAt    DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, ticker])
+  @@index([userId])
 }

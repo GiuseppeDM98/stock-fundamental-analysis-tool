@@ -311,6 +311,30 @@ export type Translations = {
   metricFcfYieldHow: string;
   metricEarningsYieldDesc: string;
   metricEarningsYieldHow: string;
+
+  // ─── Compare page ─────────────────────────────────────────────────────────
+  navCompare: string;
+  comparePageTitle: string;
+  comparePageDesc: string;
+  compareAddTicker: string;
+  compareMaxTickers: string;
+  compareEmpty: string;
+  compareEmptyHint: string;
+  compareRunAnalysis: string;
+  compareRunning: string;
+  compareAnalyzingTicker: string;
+  compareFairValueBase: string;
+  compareFairValueBull: string;
+  compareFairValueBear: string;
+  compareCurrentPrice: string;
+  compareUpside: string;
+  compareMethod: string;
+  compareSector: string;
+  compareNoData: string;
+  compareAiNote: string;
+  compareBestUpside: string;
+  compareDeepAnalysis: string;
+  compareRefreshAll: string;
 };
 
 const en: Translations = {
@@ -623,6 +647,30 @@ const en: Translations = {
   metricFcfYieldHow: "Higher is better. You can benchmark it against the 10-year Treasury/BTP yield: if FCF Yield exceeds the risk-free rate, the company generates more cash than government bonds would return. An FCF Yield above 5% is often considered attractive for value investors.",
   metricEarningsYieldDesc: "How much net income the company generates each year relative to its market cap, expressed as a percentage. It is the inverse of P/E: Net Income / Market Cap × 100.",
   metricEarningsYieldHow: "Higher is better. Like FCF Yield, it is directly comparable to government bond yields: if it exceeds the risk-free rate, you are paying less for the company than a bond would return. Benjamin Graham used this metric to screen for undervalued stocks.",
+
+  // Compare page
+  navCompare: "Compare",
+  comparePageTitle: "Compare Tickers",
+  comparePageDesc: "AI-powered fair value comparison across multiple stocks",
+  compareAddTicker: "+ Add ticker",
+  compareMaxTickers: "Max 5 tickers",
+  compareEmpty: "No tickers selected.",
+  compareEmptyHint: "Add up to 5 tickers to compare their AI fair value estimates side by side.",
+  compareRunAnalysis: "Run AI Analysis",
+  compareRunning: "Analysing…",
+  compareAnalyzingTicker: "Analysing {ticker}…",
+  compareFairValueBase: "Base FV",
+  compareFairValueBull: "Bull FV",
+  compareFairValueBear: "Bear FV",
+  compareCurrentPrice: "Current Price",
+  compareUpside: "Upside (Base)",
+  compareMethod: "Method",
+  compareSector: "Sector",
+  compareNoData: "—",
+  compareAiNote: "Fair values estimated by Claude AI with live web search.",
+  compareBestUpside: "Best upside",
+  compareDeepAnalysis: "Deep Analysis →",
+  compareRefreshAll: "Refresh All",
 };
 
 const it: Translations = {
@@ -935,6 +983,30 @@ const it: Translations = {
   metricFcfYieldHow: "Più è alto, meglio è. Puoi confrontarlo con il rendimento del BTP/Treasury 10Y: se l'FCF Yield è superiore al tasso privo di rischio, l'azienda sta generando più cassa di quanto offrirebbero i titoli di stato. Un FCF Yield >5% è spesso considerato interessante per chi cerca valore.",
   metricEarningsYieldDesc: "Quanto utile netto l'azienda genera ogni anno rispetto alla sua capitalizzazione di mercato, espresso in percentuale. È l'inverso del P/E: Utile Netto / Market Cap × 100.",
   metricEarningsYieldHow: "Più è alto, meglio è. Come l'FCF Yield, è direttamente confrontabile con il rendimento dei titoli di stato: se è superiore al tasso risk-free, stai pagando l'azienda meno di quanto rende un'obbligazione governativa. Benjamin Graham usava questa metrica per filtrare le azioni sottovalutate.",
+
+  // Compare page
+  navCompare: "Confronta",
+  comparePageTitle: "Confronta Titoli",
+  comparePageDesc: "Confronto fair value AI su più azioni in parallelo",
+  compareAddTicker: "+ Aggiungi ticker",
+  compareMaxTickers: "Massimo 5 ticker",
+  compareEmpty: "Nessun ticker selezionato.",
+  compareEmptyHint: "Aggiungi fino a 5 ticker per confrontare le stime AI fianco a fianco.",
+  compareRunAnalysis: "Analisi AI rapida",
+  compareRunning: "Analisi in corso…",
+  compareAnalyzingTicker: "Analisi {ticker}…",
+  compareFairValueBase: "FV Base",
+  compareFairValueBull: "FV Bull",
+  compareFairValueBear: "FV Bear",
+  compareCurrentPrice: "Prezzo",
+  compareUpside: "Upside (Base)",
+  compareMethod: "Metodo",
+  compareSector: "Settore",
+  compareNoData: "—",
+  compareAiNote: "Fair value stimati da Claude AI con ricerca web in tempo reale.",
+  compareBestUpside: "Miglior upside",
+  compareDeepAnalysis: "Analisi Deep →",
+  compareRefreshAll: "Aggiorna tutti",
 };
 
 export const translations: Record<Language, Translations> = { en, it };

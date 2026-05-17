@@ -1,79 +1,8 @@
 import "server-only";
 
-import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/lib/db";
 import { sendWatchlistDigest, type DigestItem } from "@/lib/email";
-import type { LiteAnalysisResult } from "@/types/watchlist";
-
-const client = new Anthropic();
-
-// ─── Lite analysis ───────────────────────────────────────────────────────────
-
-/**
- * Calls Claude with web_search to produce a JSON-only fair value estimate.
- * Returns null on parse failure — never blocks the rest of the cron run.
- * Retries once on transient failures.
- */
-async function analyzeTickerLite(ticker: string): Promise<LiteAnalysisResult | null> {
-  const currentDate = new Date().toISOString().slice(0, 10);
-
-  const systemPrompt = `You are a precise financial analyst. Your ONLY task is to determine the fair value of a stock.
-You must return EXCLUSIVELY a JSON code block — no preamble, no explanation, no markdown outside the block.
-Current date: ${currentDate}`;
-
-  const userPrompt = `Analyze ${ticker}. Search for its current financials (revenue, FCF or EBITDA, net income, balance sheet).
-Choose the appropriate valuation method (DCF for most companies, DDM for utilities, EV/EBITDA for energy/materials, P/B for financials).
-Return ONLY this JSON block:
-\`\`\`json
-{
-  "method": "DCF",
-  "sector": "Technology",
-  "currency": "USD",
-  "fairValues": {
-    "bull": 220.0,
-    "base": 180.0,
-    "bear": 140.0
-  }
-}
-\`\`\``;
-
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const response = await client.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 1000,
-        tools: [{ type: "web_search_20250305" as const, name: "web_search" }],
-        system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
-      });
-
-      // Search all text blocks for the JSON — Claude may emit intermediate reasoning
-      // text before the final JSON block when tool calls interleave with text.
-      const allText = response.content
-        .filter((b) => b.type === "text")
-        .map((b) => (b as { type: "text"; text: string }).text)
-        .join("\n");
-      if (!allText) continue;
-
-      const match = allText.match(/```json\n([\s\S]*?)\n```/);
-      if (!match) continue;
-
-      const parsed = JSON.parse(match[1]);
-      return {
-        fairValueBull: parsed.fairValues.bull,
-        fairValueBase: parsed.fairValues.base,
-        fairValueBear: parsed.fairValues.bear,
-        method: parsed.method,
-        sector: parsed.sector,
-        currency: parsed.currency,
-      };
-    } catch {
-      // Retry once, then return null to avoid blocking the full run
-      if (attempt === 1) return null;
-    }
-  }
-  return null;
-}
+import { analyzeTickerLite } from "@/lib/ai/lite-analysis";
 
 // ─── Current price helper ─────────────────────────────────────────────────────
 

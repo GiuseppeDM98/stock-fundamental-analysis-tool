@@ -1,5 +1,7 @@
 ## ✨ New Features
 
+- **Ticker Comparison** — a new `/compare` page lets you analyze up to 5 stocks side-by-side in seconds. Add any ticker, click "Run Analysis", and Claude fetches live fair values (Bear / Base / Bull) for all of them in parallel via web search. Results are saved to your account so you can leave and come back without re-running the analysis. A global **Margin of Safety slider** (0–40%) adjusts the Base fair value in real-time across all columns. Each fair value shows the **upside or downside % vs. the current price** inline, colored green or red. A **freshness badge** tells you how old each result is (green = today, amber = stale). When comparing 2+ tickers, a ★ star marks the one with the best MoS-adjusted upside. A "Deep Analysis →" link opens the full AI report for any ticker in a new tab.
+
 - **Quality Scorecard** — a new panel on the dashboard gives you four quantitative signals to assess a company's financial quality at a glance: **Piotroski F-Score** (0–9 signals covering profitability, cash flow quality, leverage, and efficiency — each signal shown individually in a collapsible list), **ROIC vs WACC Spread** (is the company creating or destroying value?), **FCF Conversion** (are reported earnings backed by real cash?), and **Altman Z-Score** (bankruptcy risk indicator, skipped automatically for banks and real estate). All data comes directly from Yahoo Finance — no extra input required. The panel appears between the valuation metrics cards and the historical charts.
 
 - **Historical Multiples Chart** — a new chart below the fundamental data shows P/E, P/FCF, and EV/EBIT over the last 10 fiscal years. Toggle between the three metrics using pill buttons. A shaded band marks the historical cheap/expensive range (25th–75th percentile), a dashed line marks the median, and a solid line shows where the stock trades today. A summary row below the chart shows current / median / min / max values and a color-coded percentile badge: green means historically cheap (< 30th percentile), amber is mid-range, red means historically expensive (> 70th percentile). Instantly answers the question: "Is this stock cheap or expensive relative to its own history?"
@@ -75,6 +77,8 @@
 - Added **Re-run Analysis** button in the analyses list and detail page — one click redirects to the dashboard with the ticker pre-filled and the data fetch triggered automatically.
 
 ## 🐛 Bug Fixes
+
+- Fixed watchlist frequency label always showing "Every 2 weeks" even when "Monthly" was selected — the label now reflects the actual saved setting.
 
 - Fixed valuation metric card titles ("Years of Earnings", "Years of FCF", "FCF Yield", "Earnings Yield") not translating when switching the app language — they now update immediately when switching between English and Italian, along with the modal descriptions
 

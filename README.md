@@ -2,7 +2,7 @@
 
 A Next.js web application for stock valuation using Discounted Cash Flow (DCF) analysis with scenario modeling. Fetch real-time financial data from Yahoo Finance and run bull/base/bear scenario valuations with interactive charts.
 
-![Version](https://img.shields.io/badge/version-0.9.6-blue)
+![Version](https://img.shields.io/badge/version-0.9.7-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-green)
 ![Next.js](https://img.shields.io/badge/Next.js-15.5.12-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7.3-blue)
@@ -30,6 +30,7 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **Daily price change** — each portfolio position shows today's % move vs. the previous close, inline next to the current price
 - **Capital gains tax** — set an optional tax rate per position to see estimated taxes and net P&L alongside gross gains; dividend totals also show gross and estimated net amounts
 - **Analysis performance tracking** — see how the stock price moved since you saved each analysis vs. fair value
+- **Ticker Comparison** — compare up to 5 stocks side-by-side on the `/compare` page. Claude fetches AI fair values (Bear/Base/Bull) for all tickers in parallel via web search. Results are saved to your account, so you can leave and return without re-running. A global MoS slider adjusts the Base fair value across all columns instantly. Each fair value shows upside/downside % vs. current price; a ★ marks the best opportunity when comparing 2+ stocks.
 - **Watchlist + email digest** — add tickers to a personal watchlist and receive automatic bi-weekly or monthly email digests with AI fair value estimates (Bear/Base/Bull), current price, and upside vs. your margin-of-safety target. Pause emails with a single toggle when you're not actively investing.
 - **Quality Scorecard** — Piotroski F-Score (0–9), ROIC vs WACC spread, FCF Conversion rate, and Altman Z-Score computed automatically from Yahoo Finance data; collapsible panel shows all nine Piotroski signals individually
 - **Historical Multiples Chart** — P/E, P/FCF, and EV/EBIT over up to 10 fiscal years with quartile band, median line, and current-multiple reference; summary row shows percentile rank color-coded green/amber/red (cheap/mid/expensive relative to own history)
@@ -75,6 +76,7 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - 🌐 **EN / IT UI**: Switch the entire interface language from the navbar; preference saved automatically
 - 📉 **Historical Multiples Chart**: P/E, P/FCF, EV/EBIT over 10 fiscal years with quartile shading, median line, current-multiple line, and percentile rank badge (green = historically cheap, red = historically expensive)
 - 🔄 **Reverse DCF**: For any DCF-eligible stock with positive FCF, see the implied FCF growth rate the market is pricing in — compare against historical CAGR with a colored interpretation badge
+- ⚖️ **Ticker Comparison**: Compare up to 5 stocks side-by-side at `/compare` — AI fetches Bear/Base/Bull fair values in parallel, results saved to DB, global MoS slider, inline upside/downside %, freshness badges, and a ★ marking the best opportunity
 - 📬 **Watchlist + AI Email Digest**: Add any ticker to your watchlist and receive automatic bi-weekly or monthly emails with AI fair value estimates (Bear/Base/Bull), current price, upside vs. MoS target, and status badges — pause with a toggle when not actively investing
 - 📱 **Installable PWA**: Install the app on Android or iOS for a native-like experience — standalone mode, home screen icon, no browser chrome
 - 🧪 **Fully Tested**: Vitest + Testing Library coverage for calculations and UI

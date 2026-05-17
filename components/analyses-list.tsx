@@ -125,10 +125,14 @@ function PriceVsFVBar({
   const basePct = pricePosition(base, bear, bull) * 100;
   const belowBase = currentPrice < base;
 
+  // When price and base are within 8 pct-points, move the price label below the
+  // bar so the two labels don't overlap — Base stays above, Prezzo goes below.
+  const tooClose = Math.abs(pct - basePct) < 8;
+
   return (
     <div className="mt-3">
-      {/* Labels floating above the bar: current price (white) and base FV (yellow) */}
-      <div className="relative mb-1" style={{ height: "2.5rem" }}>
+      {/* Labels above the bar: always Base, plus Prezzo when not too close */}
+      <div className="relative mb-1" style={{ height: tooClose ? "1.5rem" : "2.5rem" }}>
         {/* Base FV label */}
         <div
           className="absolute -translate-x-1/2 flex flex-col items-center pointer-events-none"
@@ -141,20 +145,22 @@ function PriceVsFVBar({
           <span className="text-[8px] text-yellow-500/60 leading-none">▼</span>
         </div>
 
-        {/* Current price label */}
-        <div
-          className="absolute bottom-0 -translate-x-1/2 flex flex-col items-center pointer-events-none"
-          style={{ left: `clamp(12px, ${pct}%, calc(100% - 12px))` }}
-        >
-          <span className="text-[9px] text-slate-400 whitespace-nowrap leading-none">Prezzo</span>
-          <span className="text-[10px] font-semibold text-slate-200 whitespace-nowrap leading-none">
-            {formatPrice(currentPrice)}
-          </span>
-          <span className="text-[8px] text-slate-500 leading-none">▼</span>
-        </div>
+        {/* Current price label — above bar only when labels won't overlap */}
+        {!tooClose && (
+          <div
+            className="absolute bottom-0 -translate-x-1/2 flex flex-col items-center pointer-events-none"
+            style={{ left: `clamp(12px, ${pct}%, calc(100% - 12px))` }}
+          >
+            <span className="text-[9px] text-slate-400 whitespace-nowrap leading-none">Prezzo</span>
+            <span className="text-[10px] font-semibold text-slate-200 whitespace-nowrap leading-none">
+              {formatPrice(currentPrice)}
+            </span>
+            <span className="text-[8px] text-slate-500 leading-none">▼</span>
+          </div>
+        )}
       </div>
 
-      {/* Gradient track with two markers: base FV (diamond) and current price (circle) */}
+      {/* Gradient track with two markers: base FV (tick) and current price (dot) */}
       <div className="relative h-2 rounded-full overflow-visible bg-gradient-to-r from-red-500/70 via-yellow-500/60 to-emerald-500/70">
         {/* Base FV tick mark */}
         <div
@@ -167,6 +173,22 @@ function PriceVsFVBar({
           style={{ left: `${pct}%` }}
         />
       </div>
+
+      {/* Price label below bar — only when it would overlap the Base label above */}
+      {tooClose && (
+        <div className="relative mt-0.5" style={{ height: "1.5rem" }}>
+          <div
+            className="absolute -translate-x-1/2 flex flex-col items-center pointer-events-none"
+            style={{ left: `clamp(12px, ${pct}%, calc(100% - 12px))` }}
+          >
+            <span className="text-[8px] text-slate-500 leading-none">▲</span>
+            <span className="text-[10px] font-semibold text-slate-200 whitespace-nowrap leading-none">
+              {formatPrice(currentPrice)}
+            </span>
+            <span className="text-[9px] text-slate-400 whitespace-nowrap leading-none">Prezzo</span>
+          </div>
+        </div>
+      )}
 
       {/* Bear / Under-Above FV / Bull footer */}
       <div className="flex justify-between items-center mt-1.5">
@@ -483,9 +505,15 @@ export default function AnalysesList() {
         }
         setPositionsByTicker(posMap);
 
-        // Fetch live prices for tickers that have a snapshot or an open position.
+        // Fetch live prices for all tickers that need a current price:
+        // - full FV data available → PriceVsFVBar
+        // - priceAtAnalysis saved → PerformanceBadge
+        // - open position → OpenPositionBadge
         const tickers = [
           ...new Set([
+            ...data
+              .filter((a) => a.fairValueBear != null && a.fairValueBase != null && a.fairValueBull != null)
+              .map((a) => a.ticker),
             ...data.filter((a) => a.priceAtAnalysis != null).map((a) => a.ticker),
             ...posData.map((p) => p.ticker),
           ]),

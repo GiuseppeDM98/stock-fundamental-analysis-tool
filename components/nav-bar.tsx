@@ -58,6 +58,9 @@ export default function NavBar() {
               <Link href="/watchlist" className={navLinkClass("/watchlist")}>
                 {t("navWatchlist")}
               </Link>
+              <Link href="/compare" className={navLinkClass("/compare")}>
+                {t("navCompare")}
+              </Link>
               <span className="text-muted">{session.user?.email}</span>
               <button
                 onClick={() => signOut({ callbackUrl: "/" })}

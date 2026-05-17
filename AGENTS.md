@@ -15,23 +15,28 @@ Next.js 15 stock fundamental analysis tool with multi-method valuation (DCF, DDM
 ## Directory Structure
 
 ```
-types/             # fundamentals.ts, market.ts, valuation.ts, analysis.ts, auth.ts, ai.ts, portfolio.ts
+types/             # fundamentals.ts, market.ts, valuation.ts, analysis.ts, auth.ts, ai.ts, portfolio.ts, watchlist.ts
 lib/               # Business logic and utilities
   valuation/       # DCF, DDM, EV-EBITDA engines + sector routing + presets + metrics
-  ai/              # deep-value-prompts.ts
+  ai/
+    deep-value-prompts.ts   # Prompt builders for streaming deep value analysis
+    lite-analysis.ts        # analyzeTickerLite() — server-only, shared by watchlist cron + compare endpoint
   yahoo-client.ts  # Yahoo Finance API adapter
   auth.ts          # Auth.js v5 config
   db.ts            # Prisma singleton client
   analyses.ts              # Client-side fetch helpers for saved analyses
   portfolio.ts             # Client-side fetch helpers for positions + snapshots (fetchSnapshots)
-  portfolio-snapshots.ts   # Server-only snapshot logic (import "server-only") — createSnapshotForUser, createSnapshotsForAllUsers
-  dividends.ts             # Server-only: fetch + parse Borsa Italiana dividend table (fetchDividendPaidToday)
+  portfolio-snapshots.ts   # Server-only snapshot logic (import "server-only")
+  dividends.ts             # Server-only: fetch + parse Borsa Italiana dividend table
+  watchlist-analysis.ts    # Server-only: per-user/all-users watchlist cron runner
+  email.ts                 # Resend email sender
   format.ts                # Formatting utilities
 components/        # React components (all client-side, all "use client")
 app/api/           # API route handlers
 app/analyses/      # Saved analyses list + detail pages
 app/portfolio/     # Portfolio tracker page
-docs/              # Feature specs (ordered 1-, 2-, 3- by implementation priority)
+app/compare/       # Ticker comparison page
+app/watchlist/     # Watchlist page
 generated/prisma/  # Prisma 7 generated client (gitignored)
 prisma/            # Schema + migrations
 __tests__/         # Vitest tests
@@ -83,7 +88,7 @@ if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 
 // Use session.user.id — typed via declaration merge in types/auth.ts
 ```
 
-**Endpoints:** `/api/quote`, `/api/fundamentals`, `/api/valuation` (POST), `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/DELETE), `/api/positions` (GET/POST), `/api/positions/[id]` (DELETE), `/api/ai/deep-value` (POST, streaming), `/api/portfolio/snapshots` (GET), `/api/cron/portfolio-snapshot` (GET, Vercel Cron), `/api/watchlist` (GET/POST), `/api/watchlist/[id]` (DELETE/PATCH), `/api/watchlist/settings` (PATCH), `/api/watchlist/run` (POST), `/api/cron/watchlist-analysis` (GET, Vercel Cron)
+**Endpoints:** `/api/quote`, `/api/fundamentals`, `/api/valuation` (POST), `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/DELETE), `/api/positions` (GET/POST), `/api/positions/[id]` (DELETE), `/api/ai/deep-value` (POST, streaming), `/api/portfolio/snapshots` (GET), `/api/cron/portfolio-snapshot` (GET, Vercel Cron), `/api/watchlist` (GET/POST), `/api/watchlist/[id]` (DELETE/PATCH), `/api/watchlist/settings` (PATCH), `/api/watchlist/run` (POST), `/api/cron/watchlist-analysis` (GET, Vercel Cron), `/api/compare/analyze` (POST, runs lite AI for 1–5 tickers in parallel + upserts to DB), `/api/compare/results` (GET, returns saved CompareResult rows for given tickers)
 
 ---
 
@@ -118,6 +123,24 @@ Read `?param=` inside the hydration `useEffect` (not a separate effect) to avoid
 
 ### Refs for Async Callbacks
 Any state read inside async callbacks must use a ref (`mosRef`, `ddmScenariosRef`, etc.) to avoid stale closures. Pattern: `const ref = useRef(val); useEffect(() => { ref.current = val; }, [val]);`
+
+### `useSession` re-render bug — stable userId guard
+
+`useSession()` from next-auth creates a **new session object reference** on every render cycle. Using `session` or `session?.user` as a `useEffect` dependency causes infinite re-fetch loops. Always extract the stable primitive:
+
+```typescript
+const userId = session?.user?.id ?? null;               // stable string, not object ref
+const loadedForUser = useRef<string | null>(null);       // guard: run once per userId
+
+useEffect(() => {
+  if (!userId) return;
+  if (loadedForUser.current === userId) return;          // already loaded — skip
+  loadedForUser.current = userId;
+  // fetch from DB...
+}, [userId, ...]);                                        // depend on userId string, not session
+```
+
+This pattern is used in `compare-client.tsx` and should be used anywhere a component loads user-specific data once at mount.
 
 ### Next.js Typed Routes (`typedRoutes: true`)
 `router.push(dynamicString)` fails type check. Use `window.location.href` for dynamic redirects after auth.
@@ -221,6 +244,21 @@ getRecommendedMethod(sector: Sector): ValuationMethodInfo  // returns { label, i
 - Web search: `tools: [{ type: "web_search_20250305" as const, name: "web_search" }]`
 - Stream via `client.messages.stream()` — listen for `content_block_delta` + `text_delta` events
 - Always inject language in both system + user prompt
+
+### Lite analysis pattern (non-streaming, shared between cron + compare)
+
+`lib/ai/lite-analysis.ts` exports `analyzeTickerLite(ticker)` — non-streaming `messages.create()` call used by both the watchlist cron and the compare endpoint. Key invariants:
+- `temperature: 0` — makes sector→method selection fully deterministic regardless of which web results are retrieved
+- Sector→method rules are in the **system prompt** (not user prompt) as explicit mandatory rules with no exceptions:
+  ```
+  Financial / Banking / Insurance → P/B
+  Utilities / Water / Regulated infrastructure → DDM
+  Energy / Oil & Gas / Materials / Mining / Chemicals → EV/EBITDA
+  All other sectors → DCF
+  ```
+- `response.content` contains multiple `text` blocks (see gotcha #13) — always concatenate all before running the JSON regex
+- Returns `null` after 2 attempts — never throws, safe in `Promise.all()` parallel loops
+- `import "server-only"` — never import in client components
 
 ### Deep Value pattern (autonomous valuation)
 
