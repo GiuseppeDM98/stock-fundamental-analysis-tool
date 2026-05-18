@@ -312,6 +312,21 @@ export type Translations = {
   metricEarningsYieldDesc: string;
   metricEarningsYieldHow: string;
 
+  // ─── AI Advisor ───────────────────────────────────────────────────────────
+  navAdvisor: string;
+  advisorPageTitle: string;
+  advisorPageDesc: string;
+  advisorInputPlaceholder: string;
+  advisorEmptyTitle: string;
+  advisorEmptyHint: string;
+  advisorRunDeepValue: string;
+  advisorThinking: string;
+  advisorErrorFailed: string;
+  advisorSend: string;
+  advisorExampleItalian: string;
+  advisorExampleUndervalued: string;
+  advisorExamplePortfolio: string;
+
   // ─── Compare page ─────────────────────────────────────────────────────────
   navCompare: string;
   comparePageTitle: string;
@@ -648,6 +663,21 @@ const en: Translations = {
   metricEarningsYieldDesc: "How much net income the company generates each year relative to its market cap, expressed as a percentage. It is the inverse of P/E: Net Income / Market Cap × 100.",
   metricEarningsYieldHow: "Higher is better. Like FCF Yield, it is directly comparable to government bond yields: if it exceeds the risk-free rate, you are paying less for the company than a bond would return. Benjamin Graham used this metric to screen for undervalued stocks.",
 
+  // AI Advisor
+  navAdvisor: "AI Advisor",
+  advisorPageTitle: "AI Portfolio Advisor",
+  advisorPageDesc: "Ask about your portfolio and get personalized stock ideas backed by your saved analyses",
+  advisorInputPlaceholder: "Ask anything about your portfolio or request stock ideas…",
+  advisorEmptyTitle: "What would you like to know?",
+  advisorEmptyHint: "The AI has full context of your portfolio positions and saved analyses.",
+  advisorRunDeepValue: "Run Deep Value ↗",
+  advisorThinking: "Thinking…",
+  advisorErrorFailed: "Failed to get a response. Please try again.",
+  advisorSend: "Send",
+  advisorExampleItalian: "Which Italian stocks are attractive from a value perspective?",
+  advisorExampleUndervalued: "Which positions in my portfolio have the most upside?",
+  advisorExamplePortfolio: "Given my portfolio, what sectors am I missing exposure to?",
+
   // Compare page
   navCompare: "Compare",
   comparePageTitle: "Compare Tickers",
@@ -983,6 +1013,21 @@ const it: Translations = {
   metricFcfYieldHow: "Più è alto, meglio è. Puoi confrontarlo con il rendimento del BTP/Treasury 10Y: se l'FCF Yield è superiore al tasso privo di rischio, l'azienda sta generando più cassa di quanto offrirebbero i titoli di stato. Un FCF Yield >5% è spesso considerato interessante per chi cerca valore.",
   metricEarningsYieldDesc: "Quanto utile netto l'azienda genera ogni anno rispetto alla sua capitalizzazione di mercato, espresso in percentuale. È l'inverso del P/E: Utile Netto / Market Cap × 100.",
   metricEarningsYieldHow: "Più è alto, meglio è. Come l'FCF Yield, è direttamente confrontabile con il rendimento dei titoli di stato: se è superiore al tasso risk-free, stai pagando l'azienda meno di quanto rende un'obbligazione governativa. Benjamin Graham usava questa metrica per filtrare le azioni sottovalutate.",
+
+  // AI Advisor
+  navAdvisor: "AI Advisor",
+  advisorPageTitle: "Consulente AI del Portafoglio",
+  advisorPageDesc: "Chiedi del tuo portafoglio e ricevi idee di investimento personalizzate basate sulle tue analisi salvate",
+  advisorInputPlaceholder: "Chiedi qualcosa sul tuo portafoglio o richiedi idee di investimento…",
+  advisorEmptyTitle: "Cosa vorresti sapere?",
+  advisorEmptyHint: "L'AI ha il contesto completo delle tue posizioni e delle analisi salvate.",
+  advisorRunDeepValue: "Analisi Deep Value ↗",
+  advisorThinking: "Elaborazione in corso…",
+  advisorErrorFailed: "Impossibile ottenere una risposta. Riprova.",
+  advisorSend: "Invia",
+  advisorExampleItalian: "Quali azioni italiane sono interessanti dal punto di vista del value investing?",
+  advisorExampleUndervalued: "Quali posizioni nel mio portafoglio hanno il maggior upside?",
+  advisorExamplePortfolio: "Dato il mio portafoglio, a quali settori sono sottoesposto?",
 
   // Compare page
   navCompare: "Confronta",

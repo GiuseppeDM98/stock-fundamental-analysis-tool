@@ -21,6 +21,7 @@ model User {
   watchlistItems          WatchlistItem[]
   watchlistRuns           WatchlistRun[]
   compareResults          CompareResult[]
+  advisorSessions         AdvisorSession[]
   // null = use account email
   watchlistEmail          String?
   // "biweekly" | "monthly"
@@ -121,6 +122,33 @@ model Position {
 
   @@index([userId])
   @@index([userId, ticker])
+}
+
+// AI Portfolio Advisor chat sessions.
+// Each session has a title derived from the first user message.
+model AdvisorSession {
+  id        String           @id @default(cuid())
+  userId    String
+  title     String
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  messages  AdvisorMessage[]
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Individual messages within an advisor chat session.
+model AdvisorMessage {
+  id        String         @id @default(cuid())
+  sessionId String
+  // "user" | "assistant"
+  role      String
+  content   String
+  createdAt DateTime       @default(now())
+  session   AdvisorSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
 }
 
 // Latest AI fair value estimate per user per ticker, saved from the compare page.

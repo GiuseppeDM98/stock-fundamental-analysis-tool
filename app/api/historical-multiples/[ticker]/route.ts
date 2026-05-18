@@ -5,7 +5,7 @@ import { computeHistoricalMultiples } from "@/lib/valuation/historical-multiples
 import { extractRawNumber } from "@/lib/yahoo-client";
 
 // Suppress Yahoo Finance survey notices to keep server logs clean
-const yahooFinance = new YahooFinance({ suppressNotices: ["yahooSurvey"] });
+const yahooFinance = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 
 type RouteContext = { params: Promise<{ ticker: string }> };
 
@@ -25,13 +25,14 @@ export async function GET(_request: Request, context: RouteContext) {
     const tenYearsAgo = new Date();
     tenYearsAgo.setFullYear(tenYearsAgo.getFullYear() - 10);
 
-    // Parallel fetch: 10yr daily prices + annual fundamentals + current stats
-    const [historicalPrices, fundamentals, summary] = await Promise.all([
-      yahooFinance.historical(
-        ticker,
-        { period1: tenYearsAgo, period2: new Date(), interval: "1d" },
-        { validateResult: false }
-      ),
+    // Parallel fetch: 10yr daily prices + annual fundamentals + current stats.
+    // chart() replaces the deprecated historical() — map adjclose (lowercase) to adjClose.
+    const [chartResult, fundamentals, summary] = await Promise.all([
+      yahooFinance.chart(ticker, {
+        period1: tenYearsAgo,
+        period2: new Date(),
+        interval: "1d",
+      }),
       yahooFinance.fundamentalsTimeSeries(
         ticker,
         {
@@ -52,6 +53,12 @@ export async function GET(_request: Request, context: RouteContext) {
       extractRawNumber(summary.defaultKeyStatistics?.sharesOutstanding) ?? 0;
     const netDebt =
       extractRawNumber(summary.defaultKeyStatistics?.netDebt) ?? 0;
+
+    const historicalPrices = (chartResult.quotes ?? []).map((q) => ({
+      date: q.date,
+      adjClose: q.adjclose ?? null,
+      close: q.close ?? null,
+    }));
 
     const dataPoints = computeHistoricalMultiples(
       fundamentals,

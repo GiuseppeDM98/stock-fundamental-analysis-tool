@@ -6,9 +6,9 @@ Current project state and context for AI assistants.
 
 ## Version & Status
 
-**Version**: `0.9.7`
+**Version**: `0.9.8`
 **Status**: Active Development
-**Last Updated**: May 18, 2026 (Portfolio EUR label fix)
+**Last Updated**: May 18, 2026 (AI Portfolio Advisor + session persistence)
 
 ---
 
@@ -28,10 +28,10 @@ Current project state and context for AI assistants.
 
 **Pattern**: Next.js App Router with client-side interactivity and server-side API routes.
 
-- **Frontend**: Single-page dashboard + auth pages + saved analyses pages + portfolio page + compare page
-- **API Layer**: `/api/quote`, `/api/fundamentals`, `/api/valuation`, `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses`, `/api/analyses/[id]`, `/api/positions`, `/api/positions/[id]`, `/api/ai/deep-value`, `/api/portfolio/snapshots`, `/api/cron/portfolio-snapshot`, `/api/watchlist` (GET/POST), `/api/watchlist/[id]` (DELETE/PATCH), `/api/watchlist/settings` (PATCH), `/api/watchlist/run` (POST), `/api/cron/watchlist-analysis` (GET), `/api/historical-multiples/[ticker]` (GET), `/api/compare/analyze` (POST), `/api/compare/results` (GET)
-- **Business Logic**: Pure TypeScript in `lib/` (DCF/DDM/EV-EBITDA engines, sector routing, scenario presets, Yahoo adapter, deep-value AI prompts, lite AI analysis, snapshot logic, formatters)
-- **Database**: SQLite via Prisma 7 — `User` + `Analysis` + `Position` + `PortfolioSnapshot` + `WatchlistItem` + `WatchlistRun` + `CompareResult` models
+- **Frontend**: Single-page dashboard + auth pages + saved analyses pages + portfolio page + compare page + advisor page
+- **API Layer**: `/api/quote`, `/api/fundamentals`, `/api/valuation`, `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses`, `/api/analyses/[id]`, `/api/positions`, `/api/positions/[id]`, `/api/ai/deep-value`, `/api/ai/advisor` (POST, streaming), `/api/advisor/sessions` (GET/POST), `/api/advisor/sessions/[id]` (GET/DELETE), `/api/advisor/sessions/[id]/messages` (POST), `/api/portfolio/snapshots`, `/api/cron/portfolio-snapshot`, `/api/watchlist` (GET/POST), `/api/watchlist/[id]` (DELETE/PATCH), `/api/watchlist/settings` (PATCH), `/api/watchlist/run` (POST), `/api/cron/watchlist-analysis` (GET), `/api/historical-multiples/[ticker]` (GET), `/api/compare/analyze` (POST), `/api/compare/results` (GET)
+- **Business Logic**: Pure TypeScript in `lib/` (DCF/DDM/EV-EBITDA engines, sector routing, scenario presets, Yahoo adapter, deep-value AI prompts, advisor prompts, lite AI analysis, snapshot logic, formatters)
+- **Database**: SQLite via Prisma 7 — `User` + `Analysis` + `Position` + `PortfolioSnapshot` + `WatchlistItem` + `WatchlistRun` + `CompareResult` + `AdvisorSession` + `AdvisorMessage` models
 - **Auth**: Auth.js v5 credentials provider, JWT sessions
 - **Types**: Centralized in `types/` (fundamentals, market, valuation, analysis, auth, ai, portfolio)
 - **Cron**: Vercel Cron Job (`vercel.json`) fires POST to `/api/cron/portfolio-snapshot` weekdays at 20:00 UTC
@@ -161,6 +161,18 @@ Current project state and context for AI assistants.
 - Input focus states (accent ring) on all scenario panel fields and Add Position modal
 - **Language toggle (EN/IT)** in NavBar — switches entire app UI; preference persisted in `sfa:language` localStorage. AI report panels default to the global language but allow per-report override. System: `lib/i18n/translations.ts` (type-safe ~136 key dictionary) + `context/language-context.tsx` (React context + `useLanguage()` hook)
 
+### AI Portfolio Advisor (`/advisor`)
+- Conversational chat page where the AI has full context of the user's portfolio and saved analyses
+- **Context injection**: on each request, two parallel DB queries fetch positions + analyses (no `reportMd`); injected as compact markdown in the system prompt alongside portfolio P&L snapshot
+- **`[[TICKER]]` marker pattern**: Claude wraps recommended tickers in double-brackets → `preprocessMarkdown()` converts to `/?ticker=XXX` relative URL → ReactMarkdown custom `a` component intercepts pattern with regex → rendered as sky-blue chip button
+- **Chip navigation**: uses `window.location.href` (not `router.push`) to bypass Next.js Router Cache — `router.push('/')` restores the cached dashboard without remounting `DashboardClient`, so `?ticker=` URL param is never read
+- **Session persistence**: `AdvisorSession` + `AdvisorMessage` Prisma models. Session title derived from first user message (max 80 chars). Full message sync after each AI response: `DELETE + createMany` in a `$transaction` — idempotent, safe for retries
+- **Session sidebar**: lists all past conversations ordered by `updatedAt desc`; auto-loads most recent on mount; delete on hover; "New chat" creates a new session on first message
+- **Streaming**: direct text streaming (`content_block_delta`), no pre-JSON buffering (conversational, not structured output). `max_tokens: 4096`, `temperature` omitted (default 1.0)
+- **Language**: respects global `APP_TO_AI_LANGUAGE` mapping
+- Prompt builders in `lib/ai/advisor-prompts.ts`; endpoint at `/api/ai/advisor`
+- Types: `PositionSnippet` + `AnalysisSnippet` (minimal — avoids importing full Prisma shapes); defined locally in `advisor-prompts.ts`
+
 ### Ticker Comparison (`/compare`)
 - Side-by-side AI fair value comparison for up to 5 tickers
 - `CompareResult` DB model: `@@unique([userId, ticker])` — one row per user per ticker, upserted on each run. Fields: `fairValueBull`, `fairValueBase`, `fairValueBear`, `method`, `sector`, `currency`, `analyzedAt`
@@ -223,6 +235,7 @@ lib/
   valuation/historical-multiples.ts # computeHistoricalMultiples() — fiscal year-end price matching + P/E, P/FCF, EV/EBIT
   ai/deep-value-prompts.ts # Prompt builders for deep value AI analysis
   ai/lite-analysis.ts      # analyzeTickerLite() — non-streaming, shared by watchlist cron + compare endpoint
+  ai/advisor-prompts.ts    # buildAdvisorSystemPrompt() — injects portfolio + analyses context
   yahoo-client.ts          # Yahoo adapter
   auth.ts                  # Auth.js v5 config
   db.ts                    # Prisma singleton
@@ -247,9 +260,13 @@ app/api/
   watchlist/settings/      # PATCH
   watchlist/run/           # POST — manual trigger (rate-limited)
   ai/deep-value/       # Autonomous deep value AI analysis (streaming)
+  ai/advisor/          # POST — conversational advisor streaming endpoint
+  advisor/sessions/    # GET + POST — list + create advisor sessions
+  advisor/sessions/[id]/          # GET + DELETE — fetch session with messages / delete
+  advisor/sessions/[id]/messages/ # POST — full message sync (delete + createMany)
   compare/analyze/     # POST — runs analyzeTickerLite in parallel, upserts CompareResult
   compare/results/     # GET — returns saved CompareResult rows for given tickers
-app/login/ app/register/ app/analyses/ app/analyses/[id]/ app/portfolio/ app/watchlist/ app/compare/
+app/login/ app/register/ app/analyses/ app/analyses/[id]/ app/portfolio/ app/watchlist/ app/compare/ app/advisor/
 app/manifest.ts        # PWA Web App Manifest → /manifest.webmanifest
 app/icon.tsx           # Favicon (32×32, dynamic SVG via next/og)
 components/            # dashboard-client, scenario-panel, ddm-scenario-panel,
@@ -260,7 +277,8 @@ components/            # dashboard-client, scenario-panel, ddm-scenario-panel,
                        # open-position-banner, nav-bar, login-form, register-form,
                        # watchlist-client, compare-client, compare-table, compare-ticker-input,
                        # session-provider, valuation-metrics-cards, quality-scorecard-panel,
-                       # page-header, pwa-register, reverse-dcf-card, multiples-history-chart
+                       # page-header, pwa-register, reverse-dcf-card, multiples-history-chart,
+                       # advisor-client
 lib/i18n/translations.ts   # EN/IT translation dictionary (~200 keys)
 context/language-context.tsx  # LanguageProvider + useLanguage() hook
 public/

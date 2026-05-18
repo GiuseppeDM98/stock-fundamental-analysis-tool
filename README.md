@@ -2,7 +2,7 @@
 
 A Next.js web application for stock valuation using Discounted Cash Flow (DCF) analysis with scenario modeling. Fetch real-time financial data from Yahoo Finance and run bull/base/bear scenario valuations with interactive charts.
 
-![Version](https://img.shields.io/badge/version-0.9.7-blue)
+![Version](https://img.shields.io/badge/version-0.9.8-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-green)
 ![Next.js](https://img.shields.io/badge/Next.js-15.5.12-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7.3-blue)
@@ -36,6 +36,7 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **Historical Multiples Chart** — P/E, P/FCF, and EV/EBIT over up to 10 fiscal years with quartile band, median line, and current-multiple reference; summary row shows percentile rank color-coded green/amber/red (cheap/mid/expensive relative to own history)
 - **Reverse DCF** — for any DCF-eligible stock, see the implied annual FCF growth rate the market is pricing in, compared against the company's historical FCF CAGR; colored badge signals whether expectations are conservative, reasonable, or optimistic
 - **English / Italian UI** — switch the entire interface language from the navigation bar; preference is saved automatically
+- **AI Portfolio Advisor** — conversational AI at `/advisor` with full context of your portfolio and saved analyses; ask free-form questions, get stock ideas as clickable chips that launch Deep Value analysis; conversations saved to your account
 
 ### What Problem Does It Solve?
 
@@ -79,6 +80,7 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - ⚖️ **Ticker Comparison**: Compare up to 5 stocks side-by-side at `/compare` — AI fetches Bear/Base/Bull fair values in parallel, results saved to DB, global MoS slider, inline upside/downside %, freshness badges, and a ★ marking the best opportunity
 - 📬 **Watchlist + AI Email Digest**: Add any ticker to your watchlist and receive automatic bi-weekly or monthly emails with AI fair value estimates (Bear/Base/Bull), current price, upside vs. MoS target, and status badges — pause with a toggle when not actively investing
 - 📱 **Installable PWA**: Install the app on Android or iOS for a native-like experience — standalone mode, home screen icon, no browser chrome
+- 💬 **AI Portfolio Advisor**: Conversational AI at `/advisor` that knows your portfolio and saved analyses — ask free-form questions, receive stock recommendations as one-click Deep Value chips, with full conversation history saved to your account
 - 🧪 **Fully Tested**: Vitest + Testing Library coverage for calculations and UI
 
 ---
@@ -488,7 +490,8 @@ turso db shell <your-db-name> < prisma/migrations/<latest>/migration.sql
 - [ ] Sensitivity analysis matrix (WACC vs growth)
 
 ### Phase 3: Features
-- [ ] Multi-ticker comparison (side-by-side)
+- [x] Multi-ticker comparison (side-by-side)
+- [x] AI Portfolio Advisor (conversational with portfolio context)
 - [ ] PDF export for valuation reports
 - [x] Mobile installable (PWA)
 

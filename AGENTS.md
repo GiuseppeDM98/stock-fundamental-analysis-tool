@@ -21,6 +21,7 @@ lib/               # Business logic and utilities
   ai/
     deep-value-prompts.ts   # Prompt builders for streaming deep value analysis
     lite-analysis.ts        # analyzeTickerLite() — server-only, shared by watchlist cron + compare endpoint
+    advisor-prompts.ts      # buildAdvisorSystemPrompt() — injects portfolio + analyses context
   yahoo-client.ts  # Yahoo Finance API adapter
   auth.ts          # Auth.js v5 config
   db.ts            # Prisma singleton client
@@ -62,7 +63,7 @@ __tests__/         # Vitest tests
 - Data fetchers: `getQuote()`, `getFundamentals()`, `getAnalystEstimates()`, `getRiskFreeRate()`
 - Client helpers: `fetchAnalyses()`, `saveAnalysis()`, `fetchPositions()`, `createPosition()`, `deletePosition()`, `fetchSnapshots()`
 - Factories: `getDefaultScenarios()`, `getCompanyScenarios()`, `getDefaultDdmScenarios()`, `getCompanyDdmScenarios()`, `getDefaultEvEbitdaScenarios()`, `getCompanyEvEbitdaScenarios()`
-- Prompt builders: `buildDeepValueSystemPrompt()`, `buildDeepValueUserPrompt()` in `lib/ai/deep-value-prompts.ts`
+- Prompt builders: `buildDeepValueSystemPrompt()`, `buildDeepValueUserPrompt()` in `lib/ai/deep-value-prompts.ts`; `buildAdvisorSystemPrompt()` in `lib/ai/advisor-prompts.ts`
 
 ### LocalStorage Keys
 All prefixed with `sfa:`: `sfa:lastTicker`, `sfa:mosPercent`, `sfa:scenarioOverrides`, `sfa:ddmScenarioOverrides`, `sfa:evEbitdaScenarioOverrides`, `sfa:language`
@@ -88,7 +89,7 @@ if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 
 // Use session.user.id — typed via declaration merge in types/auth.ts
 ```
 
-**Endpoints:** `/api/quote`, `/api/fundamentals`, `/api/valuation` (POST), `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/DELETE), `/api/positions` (GET/POST), `/api/positions/[id]` (DELETE), `/api/ai/deep-value` (POST, streaming), `/api/portfolio/snapshots` (GET), `/api/cron/portfolio-snapshot` (GET, Vercel Cron), `/api/watchlist` (GET/POST), `/api/watchlist/[id]` (DELETE/PATCH), `/api/watchlist/settings` (PATCH), `/api/watchlist/run` (POST), `/api/cron/watchlist-analysis` (GET, Vercel Cron), `/api/compare/analyze` (POST, runs lite AI for 1–5 tickers in parallel + upserts to DB), `/api/compare/results` (GET, returns saved CompareResult rows for given tickers)
+**Endpoints:** `/api/quote`, `/api/fundamentals`, `/api/valuation` (POST), `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/DELETE), `/api/positions` (GET/POST), `/api/positions/[id]` (DELETE), `/api/ai/deep-value` (POST, streaming), `/api/ai/advisor` (POST, streaming conversational), `/api/advisor/sessions` (GET/POST), `/api/advisor/sessions/[id]` (GET/DELETE), `/api/advisor/sessions/[id]/messages` (POST, full replace), `/api/portfolio/snapshots` (GET), `/api/cron/portfolio-snapshot` (GET, Vercel Cron), `/api/watchlist` (GET/POST), `/api/watchlist/[id]` (DELETE/PATCH), `/api/watchlist/settings` (PATCH), `/api/watchlist/run` (POST), `/api/cron/watchlist-analysis` (GET, Vercel Cron), `/api/compare/analyze` (POST, runs lite AI for 1–5 tickers in parallel + upserts to DB), `/api/compare/results` (GET, returns saved CompareResult rows for given tickers)
 
 ---
 
@@ -506,6 +507,11 @@ t: (key: keyof Translations) => string;
     let _client: Resend | null = null;
     function getClient() { return (_client ??= new Resend(process.env.KEY)); }
     ```
+15. **Next.js Router Cache blocks `?ticker=` on re-navigation**: `router.push('/')` from `/advisor` (or any other page) restores the cached `/` without remounting `DashboardClient` — the `useEffect` that reads `?ticker=` never fires, so the dashboard shows the default ticker (AAPL). Fix: use `window.location.href = '/?ticker=XXX'` for full page navigation. This applies to any pattern where a second page needs to pass a URL param to a page that caches in the Router Cache.
+16. **Multiple `YahooFinance` instances each need `suppressNotices`**: If a route creates its own `new YahooFinance({ suppressNotices: [...] })` instead of importing the shared instance from `lib/yahoo-client.ts`, it gets a separate instance that still emits notices. Fix: add `suppressNotices` to each instance, or import the shared one. Symptom: warning persists after fixing `lib/yahoo-client.ts` and restarting the dev server.
+17. **ReactMarkdown filters non-standard URL protocols**: Custom protocol links like `ticker://AAPL` are silently stripped — the `href` received by the custom `a` component is `undefined` or empty. Always use a relative URL pattern (`/?ticker=AAPL`) and match with a regex in the `a` component: `href?.match(/^\/\?ticker=([A-Z0-9.]+)$/)`. This avoids protocol filtering and works correctly in both development and production.
+18. **`messages.findLast()` not available in configured TS lib**: The `Array.prototype.findLast` method requires `ES2023` lib target. Use `[...arr].reverse().find(predicate)` as a drop-in replacement.
+19. **`validateResult: false` on `chart()` widens return type to `unknown`**: Unlike `quoteSummary`, adding `{ validateResult: false }` as the third argument to `yahooFinance.chart()` makes the TypeScript return type `unknown` rather than the typed chart result. Do not add it to `chart()` calls — the default validation works correctly for price data.
 
 ---
 

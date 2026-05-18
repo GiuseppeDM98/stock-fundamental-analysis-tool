@@ -6,7 +6,7 @@ import { AnalystEstimates } from "@/types/valuation";
 
 // Suppress Yahoo Finance survey notices to keep logs clean
 const yahooFinance = new YahooFinance({
-  suppressNotices: ["yahooSurvey"]
+  suppressNotices: ["yahooSurvey", "ripHistorical"]
 });
 
 /**
