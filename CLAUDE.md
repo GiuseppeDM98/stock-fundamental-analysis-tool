@@ -8,7 +8,7 @@ Current project state and context for AI assistants.
 
 **Version**: `0.9.7`
 **Status**: Active Development
-**Last Updated**: May 17, 2026 (Ticker Comparison)
+**Last Updated**: May 18, 2026 (Portfolio EUR label fix)
 
 ---
 
@@ -100,6 +100,7 @@ Current project state and context for AI assistants.
 - Multi-currency support — currency stored per position (EUR/USD/GBP/CHF/JPY/CAD/AUD/SEK/NOK/DKK)
 - Aggregate summary bar: total cost, total value, total P&L (gross + estimated taxes + net P&L when tax rate is set), and **dividends received** (gross + net when tax rate is set, shown only when > 0) — all in EUR via Frankfurter API
 - Summary bar only renders when at least one live price and FX rate are resolved
+- "Converted to EUR · Frankfurter.app" attribution only shown when at least one position uses a non-EUR currency (`hasNonEurPositions` check in `SummaryBar`)
 - **Daily price change**: each position row shows today's % and absolute change vs previous close inline after the current price (green/red). Sourced from `regularMarketChange` / `regularMarketChangePercent` in `/api/quote/[ticker]`.
 - **Capital gains tax display**: when `capitalGainsTaxRate` is set and the position has unrealized gains, shows estimated tax amount and net P&L below the P&L badge. Tax on losses is never shown.
 - Add position modal (ReactDOM.createPortal), delete with confirmation; ISIN and capital gains tax fields; ISIN auto-fills from existing positions for the same ticker (DCA-friendly)

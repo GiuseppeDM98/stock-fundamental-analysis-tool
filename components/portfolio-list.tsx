@@ -526,6 +526,8 @@ function SummaryBar({
 
   if (resolved === 0) return null;
 
+  // Only show the Frankfurter attribution when conversion actually happened
+  const hasNonEurPositions = positions.some((p) => p.currency !== "EUR");
   const pnlEur = totalValueEur - totalCostEur;
   const totalReturn = (totalValueEur / totalCostEur - 1) * 100;
   const isPositive = pnlEur >= 0;
@@ -566,7 +568,9 @@ function SummaryBar({
             </span>
           </p>
         )}
-        <p className="text-[10px] text-slate-600 mt-0.5">{t("convertedToEur")}</p>
+        {hasNonEurPositions && (
+          <p className="text-[10px] text-slate-600 mt-0.5">{t("convertedToEur")}</p>
+        )}
       </div>
       {hasDividends && (
         <div>

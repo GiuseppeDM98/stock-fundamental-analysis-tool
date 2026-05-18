@@ -78,6 +78,8 @@
 
 ## 🐛 Bug Fixes
 
+- Fixed portfolio summary bar showing "converted to EUR · Frankfurter.app" even when all positions are already in EUR — the attribution now only appears when at least one position uses a non-EUR currency and FX conversion actually took place.
+
 - Fixed watchlist frequency label always showing "Every 2 weeks" even when "Monthly" was selected — the label now reflects the actual saved setting.
 
 - Fixed valuation metric card titles ("Years of Earnings", "Years of FCF", "FCF Yield", "Earnings Yield") not translating when switching the app language — they now update immediately when switching between English and Italian, along with the modal descriptions
