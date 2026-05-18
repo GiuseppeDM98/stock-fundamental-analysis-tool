@@ -80,6 +80,9 @@ export type Translations = {
   errorFailedSave: string;
   errorFailedDelete: string;
   sharesUnit: string;
+  exitSignalBadge: string;
+  exitSignalReview: string;
+  exitSignalCta: string;
 
   // ─── Analyses ───────────────────────────────────────────────────────────────
   noAnalysesYet: string;
@@ -118,6 +121,8 @@ export type Translations = {
   deepValueTitle: string;
   deepValueDesc: string;
   deepAnalysisBtn: string;
+  reviewPositionBtn: string;
+  reviewPositionBtnHint: string;
 
   // ─── Scenario panels ────────────────────────────────────────────────────────
   scenarioControls: string;
@@ -432,6 +437,9 @@ const en: Translations = {
   errorFailedSave: "Failed to save.",
   errorFailedDelete: "Failed to delete. Please try again.",
   sharesUnit: "shares",
+  exitSignalBadge: "At Fair Value",
+  exitSignalReview: "Price has reached the base fair value. Consider whether the investment thesis still holds.",
+  exitSignalCta: "Re-analyze",
 
   // Analyses
   noAnalysesYet: "No saved analyses yet.",
@@ -470,6 +478,8 @@ const en: Translations = {
   deepValueTitle: "Deep Value Analysis",
   deepValueDesc: "Claude picks the valuation method and sources all data via web search",
   deepAnalysisBtn: "Deep Analysis (AI)",
+  reviewPositionBtn: "Review Position (AI)",
+  reviewPositionBtnHint: "Hold, add, or exit? Re-analyze with your position context",
 
   // Scenario panels
   scenarioControls: "Scenario controls",
@@ -783,6 +793,9 @@ const it: Translations = {
   errorFailedSave: "Salvataggio fallito.",
   errorFailedDelete: "Eliminazione fallita. Riprova.",
   sharesUnit: "az.",
+  exitSignalBadge: "A Fair Value",
+  exitSignalReview: "Il prezzo ha raggiunto il fair value base. Valuta se la tesi d'investimento è ancora valida.",
+  exitSignalCta: "Ri-analizza",
 
   // Analyses
   noAnalysesYet: "Nessuna analisi salvata.",
@@ -821,6 +834,8 @@ const it: Translations = {
   deepValueTitle: "Analisi Deep Value",
   deepValueDesc: "Claude sceglie il metodo di valutazione e raccoglie i dati via web search",
   deepAnalysisBtn: "Analisi Profonda (AI)",
+  reviewPositionBtn: "Rivedi Posizione (AI)",
+  reviewPositionBtnHint: "Tenere, aggiungere o uscire? Rianalizza con il contesto della tua posizione",
 
   // Scenario panels
   scenarioControls: "Parametri scenario",

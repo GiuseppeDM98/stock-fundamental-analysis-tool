@@ -67,6 +67,22 @@ function aggregateByTicker(positions: Position[]): AggregatedPosition[] {
   });
 }
 
+// ─── Exit signal detection ────────────────────────────────────────────────────
+
+// A value investor's margin of safety is exhausted when price reaches fair value base.
+// Returns the signal state based on the most recent analysis with a fairValueBase.
+function getExitSignal(
+  currentPrice: number | undefined,
+  analyses: SavedAnalysis[]
+): { triggered: boolean; fairValueBase: number | null } {
+  const latest = analyses.find((a) => a.fairValueBase != null);
+  if (!latest || currentPrice == null) return { triggered: false, fairValueBase: null };
+  return {
+    triggered: currentPrice >= latest.fairValueBase!,
+    fairValueBase: latest.fairValueBase!,
+  };
+}
+
 // ─── Shared input class ───────────────────────────────────────────────────────
 
 const inputClass =
@@ -75,10 +91,24 @@ const inputClass =
 // ─── Ticker Analyses Inline ───────────────────────────────────────────────────
 
 // Collapsible list of saved analyses for a ticker, shown inside each portfolio row.
-function TickerAnalysesInline({ analyses }: { analyses: SavedAnalysis[] }) {
+// When the current price has reached the base fair value of the most recent analysis,
+// an exit signal banner is shown inside the collapse prompting a review.
+function TickerAnalysesInline({
+  analyses,
+  ticker,
+  currentPrice,
+  wac,
+}: {
+  analyses: SavedAnalysis[];
+  ticker: string;
+  currentPrice?: number;
+  wac?: number;
+}) {
   const [open, setOpen] = useState(false);
   const { t } = useLanguage();
   if (analyses.length === 0) return null;
+
+  const exitSignal = getExitSignal(currentPrice, analyses);
 
   return (
     <div className="mt-1.5">
@@ -90,19 +120,44 @@ function TickerAnalysesInline({ analyses }: { analyses: SavedAnalysis[] }) {
         {open ? "▲" : "▼"}
       </button>
       {open && (
-        <ul className="mt-1 space-y-1 pl-2 border-l border-slate-700">
-          {analyses.map((a) => (
-            <li key={a.id} className="text-xs text-slate-400">
-              <a
-                href={`/analyses/${a.id}`}
-                className="hover:text-slate-200 transition"
+        <div className="mt-1">
+          {exitSignal.triggered && (
+            <div className="mb-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+              <p className="text-xs text-amber-300">
+                {t("exitSignalReview")}
+                {exitSignal.fairValueBase != null && (
+                  <span className="ml-1 font-mono">({exitSignal.fairValueBase.toFixed(2)})</span>
+                )}
+              </p>
+              <button
+                onClick={() => {
+                  const url = new URL("/", window.location.origin);
+                  url.searchParams.set("ticker", ticker);
+                  url.searchParams.set("exitReview", "1");
+                  if (exitSignal.fairValueBase != null) url.searchParams.set("prevFv", exitSignal.fairValueBase.toFixed(4));
+                  if (wac != null) url.searchParams.set("wac", wac.toFixed(4));
+                  window.location.href = url.toString();
+                }}
+                className="mt-1.5 rounded border border-amber-500/40 px-2 py-0.5 text-xs text-amber-400 transition hover:border-amber-400 hover:text-amber-300"
               >
-                {formatDate(a.createdAt)} · MoS {a.mosPercent}%
-                {a.fairValueBase != null && ` · FV base ${a.fairValueBase.toFixed(2)}`}
-              </a>
-            </li>
-          ))}
-        </ul>
+                {t("exitSignalCta")} →
+              </button>
+            </div>
+          )}
+          <ul className="space-y-1 pl-2 border-l border-slate-700">
+            {analyses.map((a) => (
+              <li key={a.id} className="text-xs text-slate-400">
+                <a
+                  href={`/analyses/${a.id}`}
+                  className="hover:text-slate-200 transition"
+                >
+                  {formatDate(a.createdAt)} · MoS {a.mosPercent}%
+                  {a.fairValueBase != null && ` · FV base ${a.fairValueBase.toFixed(2)}`}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );
@@ -142,6 +197,7 @@ function AggregatedPositionRow({
   const hasTax = taxRate != null && taxRate > 0 && pnl != null && pnl > 0;
   const taxAmount = hasTax ? pnl! * (taxRate! / 100) : null;
   const netPnl = hasTax ? pnl! - taxAmount! : null;
+  const exitSignal = getExitSignal(currentPrice, tickerAnalyses);
 
   return (
     <li className="card">
@@ -208,6 +264,26 @@ function AggregatedPositionRow({
                 ({isPositive ? "+" : ""}{returnPct!.toFixed(1)}%)
               </span>
             )}
+            {exitSignal.triggered && (
+              <>
+                <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[11px] text-amber-400">
+                  ⚠ {t("exitSignalBadge")}
+                </span>
+                <button
+                  onClick={() => {
+                    const url = new URL("/", window.location.origin);
+                    url.searchParams.set("ticker", agg.ticker);
+                    url.searchParams.set("exitReview", "1");
+                    url.searchParams.set("wac", agg.weightedAvgCost.toFixed(4));
+                    if (exitSignal.fairValueBase != null) url.searchParams.set("prevFv", exitSignal.fairValueBase.toFixed(4));
+                    window.location.href = url.toString();
+                  }}
+                  className="rounded border border-amber-500/30 px-1.5 py-0.5 text-[11px] text-amber-400 transition hover:border-amber-400 hover:text-amber-300"
+                >
+                  {t("exitSignalCta")} →
+                </button>
+              </>
+            )}
           </div>
 
           {hasTax && (
@@ -217,7 +293,12 @@ function AggregatedPositionRow({
             </div>
           )}
 
-          <TickerAnalysesInline analyses={tickerAnalyses} />
+          <TickerAnalysesInline
+            analyses={tickerAnalyses}
+            ticker={agg.ticker}
+            currentPrice={currentPrice}
+            wac={agg.weightedAvgCost}
+          />
         </div>
 
         <div className="flex shrink-0 flex-col items-end gap-1.5">
@@ -852,7 +933,12 @@ export default function PortfolioList() {
                     <p className="mt-1 text-xs text-slate-600 italic">{pos.notes}</p>
                   )}
 
-                  <TickerAnalysesInline analyses={analysesByTicker[pos.ticker] ?? []} />
+                  <TickerAnalysesInline
+                    analyses={analysesByTicker[pos.ticker] ?? []}
+                    ticker={pos.ticker}
+                    currentPrice={currentPrices[pos.ticker]}
+                    wac={pos.purchasePrice}
+                  />
                 </div>
 
                 <div className="flex shrink-0 flex-col items-end gap-1.5">

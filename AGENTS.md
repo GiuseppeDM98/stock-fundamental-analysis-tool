@@ -122,6 +122,18 @@ This applies to any `"use client"` component that formats currency/numbers from 
 ### URL Param on Mount (Re-run pattern)
 Read `?param=` inside the hydration `useEffect` (not a separate effect) to avoid double render. Store in a ref, clean URL with `replaceState`, then fire fetch in a second effect gated on `isHydrated`. See `dashboard-client.tsx` for the full pattern.
 
+**Critical — read ALL params before `replaceState`:** `window.history.replaceState` wipes the entire query string. Any param not yet extracted is permanently lost. Always build one `URLSearchParams` object, pull every param you care about from it, then call `replaceState` once:
+```typescript
+const searchParams = new URLSearchParams(window.location.search);
+const tickerParam = searchParams.get("ticker");
+const exitReviewFlag = searchParams.get("exitReview");
+const wacParam = searchParams.get("wac");
+const prevFvParam = searchParams.get("prevFv");
+// All extracted — now safe to wipe the URL
+if (tickerParam) window.history.replaceState({}, "", window.location.pathname);
+// Now act on extracted values
+```
+
 ### Refs for Async Callbacks
 Any state read inside async callbacks must use a ref (`mosRef`, `ddmScenariosRef`, etc.) to avoid stale closures. Pattern: `const ref = useRef(val); useEffect(() => { ref.current = val; }, [val]);`
 
@@ -273,6 +285,16 @@ getRecommendedMethod(sector: Sector): ValuationMethodInfo  // returns { label, i
 - Server buffers pre-JSON text — discards reasoning emitted between tool calls before the JSON block appears
 - Always inject `currentDate` from server — Claude anchors to training year (Aug 2025) without it
 - **DeepValuePanel must receive `mosPercent` as prop** — it was previously hardcoded to 0. Also save `fairValueBull/Base/Bear` from the parsed `result` object at save time.
+
+### Review Position prompt (hold / add / exit)
+
+When `reviewContext: { wac, prevFv }` is present in the POST body, `buildReviewPositionSystemPrompt` + `buildReviewPositionUserPrompt` are used instead of the standard builders. **The JSON output schema must be identical** (`method`, `sector`, `currency`, `bull/base/bear` with `fairValue` + `upside`) so the existing client parser, `FairValueCard`, `RecapTable`, and save flow work without modification. Only the report framing changes: section 10 becomes "Hold, Add, or Exit Recommendation" and the prompt injects WAC, prevFv, and computed gain/loss % into the user message.
+
+**`isReviewMode` pattern**: when two buttons can trigger the same streaming flow, track which one fired with a boolean state (`isReviewMode`) set at the top of the handler. Reset is implicit — it is overwritten on the next call to `handleGenerate()`.
+
+### Pure helper functions — module-level placement
+
+Pure functions that compute derived state from props (e.g., `getExitSignal()`) should be defined at module top-level, not inside the component. This avoids recreating them on every render and keeps the component body focused on rendering logic. Only move inside the component if the function closes over `t()` or other hook values.
 
 ---
 

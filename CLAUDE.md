@@ -8,7 +8,7 @@ Current project state and context for AI assistants.
 
 **Version**: `0.9.8`
 **Status**: Active Development
-**Last Updated**: May 18, 2026 (AI Portfolio Advisor + session persistence)
+**Last Updated**: May 18, 2026 (Exit Signal + Review Position AI)
 
 ---
 
@@ -72,6 +72,7 @@ Current project state and context for AI assistants.
 - **Date injection**: route computes `currentDate` from `new Date()` and passes it to both prompt builders — prevents Claude from anchoring analysis to its training year (Aug 2025)
 - **Stream suppression**: server buffers all text until the ` ```json ` marker appears; intermediate reasoning text emitted between tool calls is silently discarded before reaching the client
 - **Valuation recap table** (`RecapTable` in `components/deep-value-panel.tsx`): shown below the Markdown report once streaming completes. Displays a reference row with the current price (passed as `currentPrice` prop from `dashboard-client`) followed by Bear / Base / Bull rows with fair value and upside/downside %. The Base row has a violet highlight. If `currentPrice` is undefined the row is silently omitted. Column headers contain the dynamic currency code and are intentionally not fully i18n-translated.
+- **Review Position (AI)**: when the user navigates from an exit signal badge (see Portfolio Tracker) with `?exitReview=1&wac=Y&prevFv=Z`, `dashboard-client.tsx` reads all URL params before `replaceState` and stores `exitReviewContext: { wac, prevFv }` in state. `DeepValuePanel` receives this as `exitReviewContext` prop and renders an amber **"Review Position (AI)"** button above the standard violet button. Clicking it calls `buildReviewPositionSystemPrompt` + `buildReviewPositionUserPrompt` (in `lib/ai/deep-value-prompts.ts`) — same JSON output schema as deep value, different framing ("hold, add, or exit?", section 10 = "Hold, Add, or Exit Recommendation", includes WAC/prevFv/gain% in user message). `isReviewMode` boolean state tracks which button triggered streaming to show the spinner in the correct button. The amber info banner below the panel header shows WAC + previous FV.
 
 ### User Accounts & Saved Analyses
 - Email + password registration/login (Auth.js v5, bcrypt)
@@ -107,6 +108,7 @@ Current project state and context for AI assistants.
 - Live prices via `/api/quote/[ticker]` — parallel fetch for all unique tickers at mount
 - Types: `Position`, `CreatePositionRequest`, `AggregatedPosition`, `SnapshotPoint`, `SnapshotEntry`, `SnapshotData` in `types/portfolio.ts`
 - **Portfolio ↔ Analyses link**: each position row shows "N saved analyses ▼" (collapsible) if saved analyses exist for that ticker — date, MoS%, FV base, link to detail page. Implemented via `Promise.all([fetchPositions(), fetchAnalyses(), fetchSnapshots()])` on mount, no extra API calls.
+- **Exit signal ("At Fair Value")**: `getExitSignal(currentPrice, analyses)` pure function (module-level) checks whether `currentPrice >= fairValueBase` of the most recent saved analysis with a `fairValueBase`. When triggered: (1) aggregated row shows an amber `⚠ At Fair Value` pill badge + "Re-analyze →" button always visible in the price/P&L row; (2) inside the "saved analyses" collapse, an amber banner shows the FV base value and another Re-analyze CTA. Both buttons navigate to `/?ticker=X&exitReview=1&wac=Y&prevFv=Z` via `window.location.href` (not `router.push`) to bypass Next.js Router Cache. Threshold = `fairValueBase` (not Bear FV, which triggers too early; not Bull FV, which almost never triggers). WAC is `agg.weightedAvgCost` for aggregated rows; `pos.purchasePrice` in flat view.
 - **P&L History chart**: Recharts LineChart in `/portfolio` showing portfolio value vs cost basis over time. Data sourced from `PortfolioSnapshot` rows created by the daily cron. Shows placeholder if < 2 snapshots exist. **Green vertical markers** appear on days when a dividend was paid. **Amber vertical markers** appear on days when new capital was deployed (new position or DCA) — detected client-side via `costEur` delta > €50 vs previous snapshot; amount shown in tooltip (no inline label to avoid SVG edge clipping). Chart data type is `SnapshotChartPoint = SnapshotPoint & { capitalDelta?: number }` injected before passing to `<LineChart>`.
 
 ### Portfolio P&L History (Snapshots)

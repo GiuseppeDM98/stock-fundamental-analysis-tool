@@ -17,6 +17,7 @@ type Props = {
   companyName?: string;
   mosPercent?: number;
   currentPrice?: number;
+  exitReviewContext?: { wac: number; prevFv: number } | null;
 };
 
 type Status = "idle" | "loading" | "streaming" | "done" | "error";
@@ -159,7 +160,7 @@ function RecapTable({
   );
 }
 
-export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, currentPrice }: Props) {
+export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, currentPrice, exitReviewContext }: Props) {
   const { data: session } = useSession();
   const router = useRouter();
   const { language: globalLanguage, t } = useLanguage();
@@ -186,8 +187,10 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
   const [result, setResult] = useState<DeepValueResult | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
+  // Tracks which button triggered the current analysis for spinner placement
+  const [isReviewMode, setIsReviewMode] = useState(false);
 
-  async function handleGenerate() {
+  async function handleGenerate(reviewContext?: { wac: number; prevFv: number }) {
     if (!ticker) return;
 
     if (!session) {
@@ -199,6 +202,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
     const controller = new AbortController();
     abortRef.current = controller;
 
+    setIsReviewMode(!!reviewContext);
     setReport("");
     setResult(null);
     setStatus("loading");
@@ -209,7 +213,12 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
       const res = await fetch("/api/ai/deep-value", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ticker, language, mosPercent }),
+        body: JSON.stringify({
+          ticker,
+          language,
+          mosPercent,
+          ...(reviewContext ? { reviewContext } : {}),
+        }),
         signal: controller.signal,
       });
 
@@ -292,7 +301,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           <p className="text-sm text-slate-400">{t("deepValueDesc")}</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <select
             value={language}
             onChange={(e) => setLanguage(e.target.value)}
@@ -307,12 +316,29 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
             ))}
           </select>
 
+          {exitReviewContext && (
+            <button
+              onClick={() => handleGenerate(exitReviewContext)}
+              disabled={!ticker || isStreaming}
+              className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-400 transition hover:bg-amber-500/20 hover:border-amber-400 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {isStreaming && isReviewMode ? (
+                <span className="flex items-center gap-2">
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
+                  {status === "loading" ? t("startingState") : t("analyzingState")}
+                </span>
+              ) : (
+                t("reviewPositionBtn")
+              )}
+            </button>
+          )}
+
           <button
-            onClick={handleGenerate}
+            onClick={() => handleGenerate()}
             disabled={!ticker || isStreaming}
             className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {isStreaming ? (
+            {isStreaming && !isReviewMode ? (
               <span className="flex items-center gap-2">
                 <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
                 {status === "loading" ? t("startingState") : t("analyzingState")}
@@ -323,6 +349,15 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           </button>
         </div>
       </div>
+
+      {/* Position review context banner — shown when navigated from the portfolio exit signal */}
+      {exitReviewContext && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+          <span>WAC: {exitReviewContext.wac.toFixed(2)} · Prev. FV: {exitReviewContext.prevFv.toFixed(2)}</span>
+          <span className="text-amber-600">·</span>
+          <span>{t("reviewPositionBtnHint")}</span>
+        </div>
+      )}
 
       {/* Auth hint */}
       {!session && ticker && (

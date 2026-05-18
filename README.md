@@ -37,6 +37,8 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **Reverse DCF** — for any DCF-eligible stock, see the implied annual FCF growth rate the market is pricing in, compared against the company's historical FCF CAGR; colored badge signals whether expectations are conservative, reasonable, or optimistic
 - **English / Italian UI** — switch the entire interface language from the navigation bar; preference is saved automatically
 - **AI Portfolio Advisor** — conversational AI at `/advisor` with full context of your portfolio and saved analyses; ask free-form questions, get stock ideas as clickable chips that launch Deep Value analysis; conversations saved to your account
+- **Exit signal ("At Fair Value")** — when a position's current price reaches the base fair value from your most recent saved analysis, an amber ⚠ badge appears in the portfolio row (always visible). A "Re-analyze →" button navigates to the dashboard with your position context pre-loaded
+- **Review Position (AI)** — after an exit signal, a dedicated amber "Review Position (AI)" button on the dashboard runs a modified AI prompt focused on "hold, add, or exit?" — includes your weighted average cost, previous fair value, and an explicit recommendation section. Saves and renders identically to a standard Deep Value analysis
 
 ### What Problem Does It Solve?
 
@@ -81,6 +83,8 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - 📬 **Watchlist + AI Email Digest**: Add any ticker to your watchlist and receive automatic bi-weekly or monthly emails with AI fair value estimates (Bear/Base/Bull), current price, upside vs. MoS target, and status badges — pause with a toggle when not actively investing
 - 📱 **Installable PWA**: Install the app on Android or iOS for a native-like experience — standalone mode, home screen icon, no browser chrome
 - 💬 **AI Portfolio Advisor**: Conversational AI at `/advisor` that knows your portfolio and saved analyses — ask free-form questions, receive stock recommendations as one-click Deep Value chips, with full conversation history saved to your account
+- ⚠️ **Exit Signal**: Amber "At Fair Value" badge appears in the portfolio row when price ≥ base fair value from the most recent saved analysis — signals when the margin of safety is consumed; one click pre-loads context for re-analysis
+- 🔁 **Review Position (AI)**: Dedicated "hold, add, or exit?" AI analysis triggered from an exit signal — includes WAC, previous fair value, unrealized gain/loss, and an explicit Hold / Add / Exit Recommendation section
 - 🧪 **Fully Tested**: Vitest + Testing Library coverage for calculations and UI
 
 ---

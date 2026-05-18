@@ -147,6 +147,8 @@ export function DashboardClient() {
   const [evEbitdaScenarioSource, setEvEbitdaScenarioSource] = useState<ScenarioSource>("generic");
   // Tracks whether client-side hydration has completed to prevent localStorage reads during SSR
   const [isHydrated, setIsHydrated] = useState(false);
+  // Context injected when navigating from the portfolio exit signal (⚠ At Fair Value → Re-analyze)
+  const [exitReviewContext, setExitReviewContext] = useState<{ wac: number; prevFv: number } | null>(null);
 
   // Refs store latest scenario values for use in async callbacks (fetchDashboardData)
   // Without refs, fetchDashboardData would close over stale state from its creation time
@@ -161,11 +163,26 @@ export function DashboardClient() {
   // This useEffect runs once after the initial server-side render completes,
   // ensuring window.localStorage is available and preventing hydration mismatches
   useEffect(() => {
-    // ?ticker= URL param (from Re-run button) takes precedence over localStorage
-    const urlParam = new URLSearchParams(window.location.search).get("ticker");
+    // Read all URL params before clearing the URL — params are removed together by replaceState
+    const searchParams = new URLSearchParams(window.location.search);
+    const urlParam = searchParams.get("ticker");
+    const exitReviewFlag = searchParams.get("exitReview");
+    const wacParam = searchParams.get("wac");
+    const prevFvParam = searchParams.get("prevFv");
+
+    // ?ticker= URL param (from Re-run button, advisor chip, or exit signal) takes precedence over localStorage
     if (urlParam) {
       urlTickerRef.current = urlParam.toUpperCase();
       window.history.replaceState({}, "", window.location.pathname);
+    }
+
+    // Inject position context when navigating from the portfolio exit signal
+    if (exitReviewFlag === "1" && wacParam && prevFvParam) {
+      const wac = parseFloat(wacParam);
+      const prevFv = parseFloat(prevFvParam);
+      if (Number.isFinite(wac) && wac > 0 && Number.isFinite(prevFv) && prevFv > 0) {
+        setExitReviewContext({ wac, prevFv });
+      }
     }
 
     const storedTicker = urlTickerRef.current ?? getStorageItem("sfa:lastTicker", (value) => String(value), "AAPL");
@@ -591,6 +608,7 @@ export function DashboardClient() {
               companyName={quote.shortName}
               mosPercent={mosPercent}
               currentPrice={quote.regularMarketPrice}
+              exitReviewContext={exitReviewContext}
             />
           </motion.div>
         )}
