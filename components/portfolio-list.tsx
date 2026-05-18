@@ -71,15 +71,19 @@ function aggregateByTicker(positions: Position[]): AggregatedPosition[] {
 
 // A value investor's margin of safety is exhausted when price reaches fair value base.
 // Returns the signal state based on the most recent analysis with a fairValueBase.
+// Comparison is against the intrinsic base fair value (before MoS discount), not the
+// stored buy target — otherwise the alert fires at the entry price, not the exit target.
 function getExitSignal(
   currentPrice: number | undefined,
   analyses: SavedAnalysis[]
 ): { triggered: boolean; fairValueBase: number | null } {
   const latest = analyses.find((a) => a.fairValueBase != null);
   if (!latest || currentPrice == null) return { triggered: false, fairValueBase: null };
+  const mos = (latest.mosPercent ?? 0) / 100;
+  const intrinsicBase = mos > 0 ? latest.fairValueBase! / (1 - mos) : latest.fairValueBase!;
   return {
-    triggered: currentPrice >= latest.fairValueBase!,
-    fairValueBase: latest.fairValueBase!,
+    triggered: currentPrice >= intrinsicBase,
+    fairValueBase: intrinsicBase,
   };
 }
 
@@ -124,10 +128,11 @@ function TickerAnalysesInline({
           {exitSignal.triggered && (
             <div className="mb-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
               <p className="text-xs text-amber-300">
-                {t("exitSignalReview")}
+                {t("exitSignalReviewReached")}
                 {exitSignal.fairValueBase != null && (
                   <span className="ml-1 font-mono">({exitSignal.fairValueBase.toFixed(2)})</span>
                 )}
+                {". "}{t("exitSignalReviewConsider")}
               </p>
               <button
                 onClick={() => {
@@ -152,7 +157,11 @@ function TickerAnalysesInline({
                   className="hover:text-slate-200 transition"
                 >
                   {formatDate(a.createdAt)} · MoS {a.mosPercent}%
-                  {a.fairValueBase != null && ` · FV base ${a.fairValueBase.toFixed(2)}`}
+                  {a.fairValueBase != null && (
+                    a.mosPercent > 0
+                      ? ` · Buy Target ${a.fairValueBase.toFixed(2)} · FV ${(a.fairValueBase / (1 - a.mosPercent / 100)).toFixed(2)}`
+                      : ` · FV base ${a.fairValueBase.toFixed(2)}`
+                  )}
                 </a>
               </li>
             ))}

@@ -37,7 +37,7 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **Reverse DCF** — for any DCF-eligible stock, see the implied annual FCF growth rate the market is pricing in, compared against the company's historical FCF CAGR; colored badge signals whether expectations are conservative, reasonable, or optimistic
 - **English / Italian UI** — switch the entire interface language from the navigation bar; preference is saved automatically
 - **AI Portfolio Advisor** — conversational AI at `/advisor` with full context of your portfolio and saved analyses; ask free-form questions, get stock ideas as clickable chips that launch Deep Value analysis; conversations saved to your account
-- **Exit signal ("At Fair Value")** — when a position's current price reaches the base fair value from your most recent saved analysis, an amber ⚠ badge appears in the portfolio row (always visible). A "Re-analyze →" button navigates to the dashboard with your position context pre-loaded
+- **Exit signal ("At Fair Value")** — when a position's current price reaches the **intrinsic base fair value** from your most recent saved analysis (i.e. the margin of safety is fully consumed), an amber ⚠ badge appears in the portfolio row (always visible). A "Re-analyze →" button navigates to the dashboard with your position context pre-loaded
 - **Review Position (AI)** — after an exit signal, a dedicated amber "Review Position (AI)" button on the dashboard runs a modified AI prompt focused on "hold, add, or exit?" — includes your weighted average cost, previous fair value, and an explicit recommendation section. Saves and renders identically to a standard Deep Value analysis
 
 ### What Problem Does It Solve?

@@ -6,9 +6,9 @@ Current project state and context for AI assistants.
 
 ## Version & Status
 
-**Version**: `0.9.8`
+**Version**: `0.9.9`
 **Status**: Active Development
-**Last Updated**: May 18, 2026 (Exit Signal + Review Position AI)
+**Last Updated**: May 18, 2026 (Dual FV visualization + exit signal fix)
 
 ---
 
@@ -81,15 +81,17 @@ Current project state and context for AI assistants.
 - JWT sessions (no DB session table)
 - **Analysis snapshot**: each saved report stores `priceAtAnalysis`, `fairValueBull`, `fairValueBase`, `fairValueBear`, `valuationMethod` — all nullable for backward compat
 - **Analyses page** (`components/analyses-list.tsx`) groups analyses by ticker — each ticker is a card showing:
-  - Latest analysis: `FairValueTriple` (Bear/Base/Bull badges) + `PriceVsFVBar` (gradient bar with price marker, base FV tick, and Bear/Bull endpoint labels)
+  - When MoS > 0: two labeled card rows — **VALORE INTRINSECO** (violet base card, reconstructed as `stored / (1 - mos)`) above + **BUY TARGET · MoS X%** (default cards) below. When MoS = 0: single card row.
+  - `PriceVsFVBar`: when MoS > 0, renders two stacked gradient bars — violet (intrinsic) with price label, yellow (buy target) below. Each bar has its own bear–bull range. When MoS = 0: single bar, unchanged.
   - Collapsible history (`▶ N analisi precedenti`) for older saves of the same ticker
   - Controls bar: text search, "Under FV" filter toggle, sort (recent / ticker A-Z / performance)
   - Summary count: `X ticker · Y analisi`
+- **`FvBar`** primitive (extracted from `PriceVsFVBar`): accepts `variant: "violet" | "yellow"` — uses static lookup maps `VARIANT_TICK_BG` / `VARIANT_LABEL_TEXT` for Tailwind purging safety. `showPriceLabel` controls whether the price label appears above/below the track.
 - **Performance badge**: shows `$priceAtSave → $priceNow +/-X%` for analyses with snapshots
 - **Re-run button** in analyses list and detail page — redirects to dashboard with `?ticker=` URL param, triggers auto-fetch
 - **Open position badge** in analyses list: if the user holds the ticker, shows WAC, total shares, and live P&L inline
 - **Open position banner** in analyses detail page: server-side `db.position.findMany` fetches positions; `OpenPositionBanner` client component fetches live price on mount and shows P&L
-- **Note**: label `"Prezzo"` in `PriceVsFVBar` is still hardcoded in Italian — add `currentPriceShort` i18n key if internationalising
+- **Note**: label `"Prezzo"` in `FvBar` is still hardcoded in Italian — add `currentPriceShort` i18n key if internationalising
 
 ### Portfolio Tracker
 - Section at `/portfolio` — track real stock purchases with live P&L
@@ -107,8 +109,8 @@ Current project state and context for AI assistants.
 - Add position modal (ReactDOM.createPortal), delete with confirmation; ISIN and capital gains tax fields; ISIN auto-fills from existing positions for the same ticker (DCA-friendly)
 - Live prices via `/api/quote/[ticker]` — parallel fetch for all unique tickers at mount
 - Types: `Position`, `CreatePositionRequest`, `AggregatedPosition`, `SnapshotPoint`, `SnapshotEntry`, `SnapshotData` in `types/portfolio.ts`
-- **Portfolio ↔ Analyses link**: each position row shows "N saved analyses ▼" (collapsible) if saved analyses exist for that ticker — date, MoS%, FV base, link to detail page. Implemented via `Promise.all([fetchPositions(), fetchAnalyses(), fetchSnapshots()])` on mount, no extra API calls.
-- **Exit signal ("At Fair Value")**: `getExitSignal(currentPrice, analyses)` pure function (module-level) checks whether `currentPrice >= fairValueBase` of the most recent saved analysis with a `fairValueBase`. When triggered: (1) aggregated row shows an amber `⚠ At Fair Value` pill badge + "Re-analyze →" button always visible in the price/P&L row; (2) inside the "saved analyses" collapse, an amber banner shows the FV base value and another Re-analyze CTA. Both buttons navigate to `/?ticker=X&exitReview=1&wac=Y&prevFv=Z` via `window.location.href` (not `router.push`) to bypass Next.js Router Cache. Threshold = `fairValueBase` (not Bear FV, which triggers too early; not Bull FV, which almost never triggers). WAC is `agg.weightedAvgCost` for aggregated rows; `pos.purchasePrice` in flat view.
+- **Portfolio ↔ Analyses link**: each position row shows "N saved analyses ▼" (collapsible) if saved analyses exist for that ticker — date, MoS%, Buy Target + intrinsic FV (when MoS > 0), link to detail page. When MoS > 0, shows `Buy Target X.XX · FV Y.YY`; when MoS = 0, shows `FV base X.XX`. Implemented via `Promise.all([fetchPositions(), fetchAnalyses(), fetchSnapshots()])` on mount, no extra API calls.
+- **Exit signal ("At Fair Value")**: `getExitSignal(currentPrice, analyses)` pure function (module-level) checks whether `currentPrice >= intrinsicBase` (reconstructed as `fairValueBase / (1 - mosPercent/100)`) of the most recent saved analysis. When triggered: (1) aggregated row shows an amber `⚠ At Fair Value` pill badge + "Re-analyze →" button always visible in the price/P&L row; (2) inside the "saved analyses" collapse, an amber banner shows `"Il prezzo ha raggiunto il fair value base (21.57). Valuta..."` with the intrinsic value inline. Both buttons navigate to `/?ticker=X&exitReview=1&wac=Y&prevFv=Z` via `window.location.href`. `prevFv` is the **intrinsic base value** (not the stored buy target). WAC is `agg.weightedAvgCost` for aggregated rows; `pos.purchasePrice` in flat view.
 - **P&L History chart**: Recharts LineChart in `/portfolio` showing portfolio value vs cost basis over time. Data sourced from `PortfolioSnapshot` rows created by the daily cron. Shows placeholder if < 2 snapshots exist. **Green vertical markers** appear on days when a dividend was paid. **Amber vertical markers** appear on days when new capital was deployed (new position or DCA) — detected client-side via `costEur` delta > €50 vs previous snapshot; amount shown in tooltip (no inline label to avoid SVG edge clipping). Chart data type is `SnapshotChartPoint = SnapshotPoint & { capitalDelta?: number }` injected before passing to `<LineChart>`.
 
 ### Portfolio P&L History (Snapshots)

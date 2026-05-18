@@ -81,7 +81,8 @@ export type Translations = {
   errorFailedDelete: string;
   sharesUnit: string;
   exitSignalBadge: string;
-  exitSignalReview: string;
+  exitSignalReviewReached: string;
+  exitSignalReviewConsider: string;
   exitSignalCta: string;
 
   // ─── Analyses ───────────────────────────────────────────────────────────────
@@ -97,6 +98,10 @@ export type Translations = {
   bearLabel: string;
   baseLabel: string;
   bullLabel: string;
+  intrinsicBarLabel: string;
+  buyTargetBarLabel: string;
+  aboveIntrinsicFv: string;
+  underIntrinsicFv: string;
   olderAnalyses: string;
   noAnalysesMatchFilter: string;
   analysesCountLabel: string;
@@ -438,7 +443,8 @@ const en: Translations = {
   errorFailedDelete: "Failed to delete. Please try again.",
   sharesUnit: "shares",
   exitSignalBadge: "At Fair Value",
-  exitSignalReview: "Price has reached the base fair value. Consider whether the investment thesis still holds.",
+  exitSignalReviewReached: "Price has reached the base fair value",
+  exitSignalReviewConsider: "Consider whether the investment thesis still holds.",
   exitSignalCta: "Re-analyze",
 
   // Analyses
@@ -454,6 +460,10 @@ const en: Translations = {
   bearLabel: "Bear",
   baseLabel: "Base",
   bullLabel: "Bull",
+  intrinsicBarLabel: "Intrinsic Value",
+  buyTargetBarLabel: "Buy Target",
+  aboveIntrinsicFv: "Above Intrinsic FV",
+  underIntrinsicFv: "Under Intrinsic FV",
   olderAnalyses: "older analysis|older analyses",
   noAnalysesMatchFilter: "No analyses match the current filter.",
   analysesCountLabel: "analyses",
@@ -794,7 +804,8 @@ const it: Translations = {
   errorFailedDelete: "Eliminazione fallita. Riprova.",
   sharesUnit: "az.",
   exitSignalBadge: "A Fair Value",
-  exitSignalReview: "Il prezzo ha raggiunto il fair value base. Valuta se la tesi d'investimento è ancora valida.",
+  exitSignalReviewReached: "Il prezzo ha raggiunto il fair value base",
+  exitSignalReviewConsider: "Valuta se la tesi d'investimento è ancora valida.",
   exitSignalCta: "Ri-analizza",
 
   // Analyses
@@ -810,6 +821,10 @@ const it: Translations = {
   bearLabel: "Bear",
   baseLabel: "Base",
   bullLabel: "Bull",
+  intrinsicBarLabel: "Valore Intrinseco",
+  buyTargetBarLabel: "Buy Target",
+  aboveIntrinsicFv: "Sopra FV Intrinseco",
+  underIntrinsicFv: "Sotto FV Intrinseco",
   olderAnalyses: "analisi precedente|analisi precedenti",
   noAnalysesMatchFilter: "Nessuna analisi corrisponde al filtro.",
   analysesCountLabel: "analisi",

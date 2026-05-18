@@ -290,6 +290,8 @@ getRecommendedMethod(sector: Sector): ValuationMethodInfo  // returns { label, i
 
 When `reviewContext: { wac, prevFv }` is present in the POST body, `buildReviewPositionSystemPrompt` + `buildReviewPositionUserPrompt` are used instead of the standard builders. **The JSON output schema must be identical** (`method`, `sector`, `currency`, `bull/base/bear` with `fairValue` + `upside`) so the existing client parser, `FairValueCard`, `RecapTable`, and save flow work without modification. Only the report framing changes: section 10 becomes "Hold, Add, or Exit Recommendation" and the prompt injects WAC, prevFv, and computed gain/loss % into the user message.
 
+**`prevFv` must be the intrinsic base fair value, not the buy target.** The prompts describe `prevFv` as "the previous base fair value estimate" and compare the new intrinsic value against it. Passing the MoS-adjusted buy target (which is what `fairValueBase` stores) breaks this framing — the AI would compare a new intrinsic value against a discounted entry price, which is meaningless. Always pass `fairValueBase / (1 - mos)` as `prevFv`.
+
 **`isReviewMode` pattern**: when two buttons can trigger the same streaming flow, track which one fired with a boolean state (`isReviewMode`) set at the top of the handler. Reset is implicit — it is overwritten on the next call to `handleGenerate()`.
 
 ### Pure helper functions — module-level placement
@@ -448,6 +450,24 @@ style={{ left: `clamp(12px, ${pct}%, calc(100% - 12px))` }}
 ```
 
 This prevents overflow/clipping when the value is near 0% or 100% without any JS-side clamping logic.
+
+### Stored `fairValueBase` is the buy target, not the intrinsic value
+
+`Analysis.fairValueBase` (and `fairValueBear`, `fairValueBull`) stored in the DB are **MoS-adjusted buy targets**: `intrinsic × (1 − mosPercent/100)`. The intrinsic value is NOT stored separately. Reconstruct on the fly: `intrinsic = stored / (1 - mosPercent / 100)`. When `mosPercent = 0`, stored = intrinsic.
+
+This matters anywhere you display or compare against the "actual fair value" — e.g. the exit signal threshold, the `prevFv` passed to the Review Position prompt, and any visualization labeled "Fair Value" vs "Buy Target".
+
+### Tailwind dynamic classes require static strings for purging
+
+Tailwind's purging step scans source files for class strings. Classes assembled at runtime via template literals (`"bg-" + color`) are not detected and will be removed from the production bundle. When a component needs variant-based styling, use a static lookup object:
+
+```typescript
+const TICK_BG = { violet: "bg-violet-400", yellow: "bg-yellow-400" } as const;
+// ✅ Tailwind sees "bg-violet-400" and "bg-yellow-400" as static strings
+// ❌ `bg-${variant}-400` — purged in production
+```
+
+Also: `text-*` classes do not color `div` backgrounds — use `bg-*` for any element without text content.
 
 ### Tailwind Opacity Modifiers on CSS Vars — DO NOT USE
 `text-accent/80`, `bg-success/15`, `border-accent/40` **silently fail**. CSS custom properties (`var(--accent)`) resolve to hex strings at runtime; Tailwind cannot extract RGB channels for opacity math.

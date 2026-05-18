@@ -59,7 +59,7 @@ type SortMode = "recent" | "ticker" | "performance";
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-/** Three scenario badges: Bear / Base / Bull */
+/** Three scenario badges: Bear / Base / Bull. `baseVariant` tints the base card. */
 function FairValueTriple({
   bear,
   base,
@@ -67,6 +67,7 @@ function FairValueTriple({
   bearLabel,
   baseLabel,
   bullLabel,
+  baseVariant = "default",
 }: {
   bear?: number | null;
   base?: number | null;
@@ -74,8 +75,16 @@ function FairValueTriple({
   bearLabel: string;
   baseLabel: string;
   bullLabel: string;
+  baseVariant?: "default" | "violet";
 }) {
   const dash = "—";
+  const baseCard =
+    baseVariant === "violet"
+      ? "bg-violet-500/10 border-violet-500/20"
+      : "bg-slate-700/50 border-slate-600/40";
+  const baseTextLabel = baseVariant === "violet" ? "text-violet-400" : "text-slate-400";
+  const baseTextValue = baseVariant === "violet" ? "text-violet-200" : "text-slate-100";
+
   return (
     <div className="flex gap-2 flex-wrap">
       <div className="flex flex-col items-center rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2 min-w-[72px]">
@@ -86,11 +95,11 @@ function FairValueTriple({
           {bear != null ? formatPrice(bear) : dash}
         </span>
       </div>
-      <div className="flex flex-col items-center rounded-lg bg-slate-700/50 border border-slate-600/40 px-3 py-2 min-w-[72px]">
-        <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide mb-0.5">
+      <div className={`flex flex-col items-center rounded-lg border px-3 py-2 min-w-[72px] ${baseCard}`}>
+        <span className={`text-[10px] font-medium uppercase tracking-wide mb-0.5 ${baseTextLabel}`}>
           {baseLabel}
         </span>
-        <span className="text-sm font-bold text-slate-100">
+        <span className={`text-sm font-bold ${baseTextValue}`}>
           {base != null ? formatPrice(base) : dash}
         </span>
       </div>
@@ -106,47 +115,77 @@ function FairValueTriple({
   );
 }
 
+type BarVariant = "violet" | "yellow";
+
+// Separate bg-* and text-* classes per variant — Tailwind requires static strings for
+// purging. text-* colors the label spans; bg-* colors the tick mark div.
+const VARIANT_TICK_BG: Record<BarVariant, string> = {
+  violet: "bg-violet-400",
+  yellow: "bg-yellow-400",
+};
+const VARIANT_LABEL_TEXT: Record<BarVariant, string> = {
+  violet: "text-violet-400",
+  yellow: "text-yellow-400",
+};
+
 /**
- * Horizontal bar showing where the current price sits relative to the bear–bull range.
- * Only renders when all three values are available.
+ * Single horizontal gradient bar showing where `currentPrice` sits in a given
+ * bear–bull range, with a reference tick for the base FV and a dot for price.
+ * `showPriceLabel` can be set to false on a second bar where the price label
+ * would duplicate the value already visible on the bar above.
  */
-function PriceVsFVBar({
+function FvBar({
   currentPrice,
   bear,
   base,
   bull,
+  variant,
+  underLabel,
+  overLabel,
+  showPriceLabel = true,
 }: {
   currentPrice: number;
   bear: number;
   base: number;
   bull: number;
+  variant: BarVariant;
+  underLabel: string;
+  overLabel: string;
+  showPriceLabel?: boolean;
 }) {
   const pct = pricePosition(currentPrice, bear, bull) * 100;
   const basePct = pricePosition(base, bear, bull) * 100;
   const belowBase = currentPrice < base;
 
-  // When price and base are within 8 pct-points, move the price label below the
-  // bar so the two labels don't overlap — Base stays above, Prezzo goes below.
-  const tooClose = Math.abs(pct - basePct) < 8;
+  // When price and base labels are within 8 pct-points, move price label below
+  // the bar so they don't overlap — base label stays above, price goes below.
+  // tooClose only matters when we're showing the price label.
+  const tooClose = showPriceLabel && Math.abs(pct - basePct) < 8;
+
+  const tickBg = VARIANT_TICK_BG[variant];
+  const labelText = VARIANT_LABEL_TEXT[variant];
 
   return (
-    <div className="mt-3">
-      {/* Labels above the bar: always Base, plus Prezzo when not too close */}
-      <div className="relative mb-1" style={{ height: tooClose ? "1.5rem" : "2.5rem" }}>
+    <div>
+      {/* Labels above the bar */}
+      <div
+        className="relative mb-1"
+        style={{ height: !showPriceLabel || tooClose ? "1.5rem" : "2.5rem" }}
+      >
         {/* Base FV label */}
         <div
           className="absolute -translate-x-1/2 flex flex-col items-center pointer-events-none"
           style={{ left: `clamp(12px, ${basePct}%, calc(100% - 12px))` }}
         >
-          <span className="text-[9px] text-yellow-400/70 whitespace-nowrap leading-none">Base</span>
-          <span className="text-[10px] font-medium text-yellow-300/80 whitespace-nowrap leading-none">
+          <span className={`text-[9px] whitespace-nowrap leading-none ${labelText} opacity-70`}>Base</span>
+          <span className={`text-[10px] font-medium whitespace-nowrap leading-none ${labelText}`}>
             {formatPrice(base)}
           </span>
-          <span className="text-[8px] text-yellow-500/60 leading-none">▼</span>
+          <span className={`text-[8px] leading-none ${labelText} opacity-60`}>▼</span>
         </div>
 
-        {/* Current price label — above bar only when labels won't overlap */}
-        {!tooClose && (
+        {/* Current price label — above bar, only when shown and labels won't overlap */}
+        {showPriceLabel && !tooClose && (
           <div
             className="absolute bottom-0 -translate-x-1/2 flex flex-col items-center pointer-events-none"
             style={{ left: `clamp(12px, ${pct}%, calc(100% - 12px))` }}
@@ -160,11 +199,11 @@ function PriceVsFVBar({
         )}
       </div>
 
-      {/* Gradient track with two markers: base FV (tick) and current price (dot) */}
+      {/* Gradient track */}
       <div className="relative h-2 rounded-full overflow-visible bg-gradient-to-r from-red-500/70 via-yellow-500/60 to-emerald-500/70">
-        {/* Base FV tick mark */}
+        {/* Base FV tick — uses bg-* so the div itself is colored */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-0.5 h-4 bg-yellow-400/50 rounded-full"
+          className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-0.5 h-4 rounded-full opacity-60 ${tickBg}`}
           style={{ left: `${basePct}%` }}
         />
         {/* Current price dot */}
@@ -174,7 +213,7 @@ function PriceVsFVBar({
         />
       </div>
 
-      {/* Price label below bar — only when it would overlap the Base label above */}
+      {/* Price label below — only when shown and it would overlap the base label above */}
       {tooClose && (
         <div className="relative mt-0.5" style={{ height: "1.5rem" }}>
           <div
@@ -190,7 +229,7 @@ function PriceVsFVBar({
         </div>
       )}
 
-      {/* Bear / Under-Above FV / Bull footer */}
+      {/* Bear / status badge / Bull footer */}
       <div className="flex justify-between items-center mt-1.5">
         <span className="text-[10px] text-red-400 font-medium">{formatPrice(bear)}</span>
         <span
@@ -200,10 +239,101 @@ function PriceVsFVBar({
               : "bg-slate-700/60 text-slate-400"
           }`}
         >
-          {belowBase ? "Under FV" : "Above FV"}
+          {belowBase ? underLabel : overLabel}
         </span>
         <span className="text-[10px] text-emerald-400 font-medium">{formatPrice(bull)}</span>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Horizontal bar(s) showing where the current price sits relative to fair values.
+ * When mosPercent > 0, renders two stacked bars: intrinsic value (top) and
+ * MoS-adjusted buy target (bottom). When MoS is 0 or no intrinsic values are
+ * provided, renders a single bar using the stored (buy target) values.
+ */
+function PriceVsFVBar({
+  currentPrice,
+  bear,
+  base,
+  bull,
+  intrinsicBear,
+  intrinsicBase,
+  intrinsicBull,
+  mosPercent,
+  intrinsicBarLabel,
+  buyTargetBarLabel,
+  aboveIntrinsicFv,
+  underIntrinsicFv,
+}: {
+  currentPrice: number;
+  bear: number;
+  base: number;
+  bull: number;
+  intrinsicBear?: number;
+  intrinsicBase?: number;
+  intrinsicBull?: number;
+  mosPercent?: number;
+  intrinsicBarLabel: string;
+  buyTargetBarLabel: string;
+  aboveIntrinsicFv: string;
+  underIntrinsicFv: string;
+}) {
+  const showDual =
+    mosPercent != null && mosPercent > 0 &&
+    intrinsicBear != null && intrinsicBase != null && intrinsicBull != null;
+
+  if (showDual) {
+    return (
+      <div className="mt-3">
+        {/* Intrinsic value bar — shows price label and value */}
+        <p className="mb-1.5 text-[10px] font-semibold text-violet-400/70 uppercase tracking-wider">
+          {intrinsicBarLabel}
+        </p>
+        <FvBar
+          currentPrice={currentPrice}
+          bear={intrinsicBear!}
+          base={intrinsicBase!}
+          bull={intrinsicBull!}
+          variant="violet"
+          underLabel={underIntrinsicFv}
+          overLabel={aboveIntrinsicFv}
+          showPriceLabel={true}
+        />
+
+        {/* Thin rule separating the two bar contexts */}
+        <div className="my-3 border-t border-slate-800/60" />
+
+        {/* Buy target bar — price dot visible, label suppressed (same value shown above) */}
+        <p className="mb-1.5 text-[10px] font-semibold text-yellow-400/70 uppercase tracking-wider">
+          {buyTargetBarLabel} · MoS {mosPercent}%
+        </p>
+        <FvBar
+          currentPrice={currentPrice}
+          bear={bear}
+          base={base}
+          bull={bull}
+          variant="yellow"
+          underLabel="Under FV"
+          overLabel="Above FV"
+          showPriceLabel={true}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3">
+      <FvBar
+        currentPrice={currentPrice}
+        bear={bear}
+        base={base}
+        bull={bull}
+        variant="yellow"
+        underLabel="Under FV"
+        overLabel="Above FV"
+      />
     </div>
   );
 }
@@ -342,6 +472,10 @@ function TickerGroup({
   bullLabel,
   deleteLabel,
   olderLabel,
+  intrinsicBarLabel,
+  buyTargetBarLabel,
+  aboveIntrinsicFv,
+  underIntrinsicFv,
 }: {
   ticker: string;
   analyses: SavedAnalysis[];
@@ -354,6 +488,10 @@ function TickerGroup({
   bullLabel: string;
   deleteLabel: string;
   olderLabel: (n: number) => string;
+  intrinsicBarLabel: string;
+  buyTargetBarLabel: string;
+  aboveIntrinsicFv: string;
+  underIntrinsicFv: string;
 }) {
   const router = useRouter();
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -368,6 +506,13 @@ function TickerGroup({
     latest.fairValueBear != null &&
     latest.fairValueBase != null &&
     latest.fairValueBull != null;
+
+  // Reconstruct intrinsic values from buy targets when MoS > 0.
+  // Stored fairValues are already buy targets: intrinsic = stored / (1 - mos).
+  const mos = (latest.mosPercent ?? 0) / 100;
+  const intrinsicBear = mos > 0 && latest.fairValueBear != null ? latest.fairValueBear / (1 - mos) : undefined;
+  const intrinsicBase = mos > 0 && latest.fairValueBase != null ? latest.fairValueBase / (1 - mos) : undefined;
+  const intrinsicBull = mos > 0 && latest.fairValueBull != null ? latest.fairValueBull / (1 - mos) : undefined;
 
   return (
     <div className="card">
@@ -396,16 +541,49 @@ function TickerGroup({
         {latest.mosPercent > 0 && ` · MoS ${latest.mosPercent}%`}
       </p>
 
-      {/* Fair value triple */}
+      {/* Fair value cards — dual section when MoS > 0 */}
       <div className="mt-3">
-        <FairValueTriple
-          bear={latest.fairValueBear}
-          base={latest.fairValueBase}
-          bull={latest.fairValueBull}
-          bearLabel={bearLabel}
-          baseLabel={baseLabel}
-          bullLabel={bullLabel}
-        />
+        {mos > 0 && intrinsicBear != null && intrinsicBase != null && intrinsicBull != null ? (
+          <div className="space-y-2.5">
+            <div>
+              <p className="mb-1.5 text-[10px] font-semibold text-violet-400/70 uppercase tracking-wider">
+                {intrinsicBarLabel}
+              </p>
+              <FairValueTriple
+                bear={intrinsicBear}
+                base={intrinsicBase}
+                bull={intrinsicBull}
+                bearLabel={bearLabel}
+                baseLabel={baseLabel}
+                bullLabel={bullLabel}
+                baseVariant="violet"
+              />
+            </div>
+            <div className="border-t border-slate-800/60" />
+            <div>
+              <p className="mb-1.5 text-[10px] font-semibold text-yellow-400/70 uppercase tracking-wider">
+                {buyTargetBarLabel} · MoS {latest.mosPercent}%
+              </p>
+              <FairValueTriple
+                bear={latest.fairValueBear}
+                base={latest.fairValueBase}
+                bull={latest.fairValueBull}
+                bearLabel={bearLabel}
+                baseLabel={baseLabel}
+                bullLabel={bullLabel}
+              />
+            </div>
+          </div>
+        ) : (
+          <FairValueTriple
+            bear={latest.fairValueBear}
+            base={latest.fairValueBase}
+            bull={latest.fairValueBull}
+            bearLabel={bearLabel}
+            baseLabel={baseLabel}
+            bullLabel={bullLabel}
+          />
+        )}
       </div>
 
       {/* Price-vs-FV bar */}
@@ -415,6 +593,14 @@ function TickerGroup({
           bear={latest.fairValueBear!}
           base={latest.fairValueBase!}
           bull={latest.fairValueBull!}
+          intrinsicBear={intrinsicBear}
+          intrinsicBase={intrinsicBase}
+          intrinsicBull={intrinsicBull}
+          mosPercent={latest.mosPercent}
+          intrinsicBarLabel={intrinsicBarLabel}
+          buyTargetBarLabel={buyTargetBarLabel}
+          aboveIntrinsicFv={aboveIntrinsicFv}
+          underIntrinsicFv={underIntrinsicFv}
         />
       )}
 
@@ -702,6 +888,10 @@ export default function AnalysesList() {
               bullLabel={t("bullLabel")}
               deleteLabel={t("deleteBtn")}
               olderLabel={olderLabel}
+              intrinsicBarLabel={t("intrinsicBarLabel")}
+              buyTargetBarLabel={t("buyTargetBarLabel")}
+              aboveIntrinsicFv={t("aboveIntrinsicFv")}
+              underIntrinsicFv={t("underIntrinsicFv")}
             />
           ))}
         </div>
