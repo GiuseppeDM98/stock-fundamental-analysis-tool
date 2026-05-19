@@ -6,9 +6,9 @@ Current project state and context for AI assistants.
 
 ## Version & Status
 
-**Version**: `0.9.9`
+**Version**: `1.0.0`
 **Status**: Active Development
-**Last Updated**: May 18, 2026 (Dual FV visualization + exit signal fix)
+**Last Updated**: May 19, 2026 (Investment pipeline connective tissue — Decision Panel, Watchlist quick-actions, Compare Watch button, Advisor Discovery Mode + chip split-action)
 
 ---
 
@@ -73,6 +73,7 @@ Current project state and context for AI assistants.
 - **Stream suppression**: server buffers all text until the ` ```json ` marker appears; intermediate reasoning text emitted between tool calls is silently discarded before reaching the client
 - **Valuation recap table** (`RecapTable` in `components/deep-value-panel.tsx`): shown below the Markdown report once streaming completes. Displays a reference row with the current price (passed as `currentPrice` prop from `dashboard-client`) followed by Bear / Base / Bull rows with fair value and upside/downside %. The Base row has a violet highlight. If `currentPrice` is undefined the row is silently omitted. Column headers contain the dynamic currency code and are intentionally not fully i18n-translated.
 - **Review Position (AI)**: when the user navigates from an exit signal badge (see Portfolio Tracker) with `?exitReview=1&wac=Y&prevFv=Z`, `dashboard-client.tsx` reads all URL params before `replaceState` and stores `exitReviewContext: { wac, prevFv }` in state. `DeepValuePanel` receives this as `exitReviewContext` prop and renders an amber **"Review Position (AI)"** button above the standard violet button. Clicking it calls `buildReviewPositionSystemPrompt` + `buildReviewPositionUserPrompt` (in `lib/ai/deep-value-prompts.ts`) — same JSON output schema as deep value, different framing ("hold, add, or exit?", section 10 = "Hold, Add, or Exit Recommendation", includes WAC/prevFv/gain% in user message). `isReviewMode` boolean state tracks which button triggered streaming to show the spinner in the correct button. The amber info banner below the panel header shows WAC + previous FV.
+- **Decision Panel**: after streaming completes (`status === "done" && result && ticker`), a row of action buttons appears below "Save Report". Amber **"Add to Watchlist"** button (`WatchlistStatus = "idle" | "loading" | "saved" | "already"`) POSTs to `/api/watchlist`; 409 shows "In Watchlist" chip. Sky **"Add to Compare"** navigates to `/compare?tickers=${ticker}` via `window.location.href`. Both buttons reset on each new `handleGenerate()` call.
 
 ### User Accounts & Saved Analyses
 - Email + password registration/login (Auth.js v5, bcrypt)
@@ -163,19 +164,20 @@ Current project state and context for AI assistants.
 - P&L and performance deltas shown as pill badges with colored background (`bg-emerald-500/15` / `bg-red-500/15`) — not plain colored text
 - Portfolio position rows: `N × buy_price → current_price [P&L badge]` — compact two-element layout
 - Input focus states (accent ring) on all scenario panel fields and Add Position modal
-- **Language toggle (EN/IT)** in NavBar — switches entire app UI; preference persisted in `sfa:language` localStorage. AI report panels default to the global language but allow per-report override. System: `lib/i18n/translations.ts` (type-safe ~136 key dictionary) + `context/language-context.tsx` (React context + `useLanguage()` hook)
+- **Language toggle (EN/IT)** in NavBar — switches entire app UI; preference persisted in `sfa:language` localStorage. AI report panels default to the global language but allow per-report override. System: `lib/i18n/translations.ts` (type-safe ~215 key dictionary) + `context/language-context.tsx` (React context + `useLanguage()` hook)
+- **LocalStorage keys**: `sfa:lastTicker`, `sfa:mosPercent`, `sfa:scenarioOverrides`, `sfa:ddmScenarioOverrides`, `sfa:evEbitdaScenarioOverrides`, `sfa:language`, `sfa:advisor-mode` (`"portfolio" | "discovery"`), `sfa:compareQueue` (JSON array of ticker strings, max 5)
 
 ### AI Portfolio Advisor (`/advisor`)
 - Conversational chat page where the AI has full context of the user's portfolio and saved analyses
-- **Context injection**: on each request, two parallel DB queries fetch positions + analyses (no `reportMd`); injected as compact markdown in the system prompt alongside portfolio P&L snapshot
-- **`[[TICKER]]` marker pattern**: Claude wraps recommended tickers in double-brackets → `preprocessMarkdown()` converts to `/?ticker=XXX` relative URL → ReactMarkdown custom `a` component intercepts pattern with regex → rendered as sky-blue chip button
-- **Chip navigation**: uses `window.location.href` (not `router.push`) to bypass Next.js Router Cache — `router.push('/')` restores the cached dashboard without remounting `DashboardClient`, so `?ticker=` URL param is never read
-- **Session persistence**: `AdvisorSession` + `AdvisorMessage` Prisma models. Session title derived from first user message (max 80 chars). Full message sync after each AI response: `DELETE + createMany` in a `$transaction` — idempotent, safe for retries
-- **Session sidebar**: lists all past conversations ordered by `updatedAt desc`; auto-loads most recent on mount; delete on hover; "New chat" creates a new session on first message
-- **Streaming**: direct text streaming (`content_block_delta`), no pre-JSON buffering (conversational, not structured output). `max_tokens: 4096`, `temperature` omitted (default 1.0)
-- **Language**: respects global `APP_TO_AI_LANGUAGE` mapping
-- Prompt builders in `lib/ai/advisor-prompts.ts`; endpoint at `/api/ai/advisor`
-- Types: `PositionSnippet` + `AnalysisSnippet` (minimal — avoids importing full Prisma shapes); defined locally in `advisor-prompts.ts`
+- **Dual mode**: **Portfolio** (default) has full portfolio/analyses context; **Discovery** uses `buildDiscoverySystemPrompt()` — no portfolio context, focused on surfacing 3–5 investment candidates with thesis, ROIC, valuation setup, and risk. Mode toggled via a `Portfolio | Discovery` pill toggle, persisted in `localStorage["sfa:advisor-mode"]`. API route checks `body.mode` and skips the DB fetch for positions/analyses when `mode === "discovery"`.
+- **Context injection** (Portfolio mode): two parallel DB queries fetch positions + analyses (no `reportMd`); injected as compact markdown in the system prompt
+- **`[[TICKER]]` split-action chips**: Claude wraps tickers in `[[TICKER]]` → `preprocessMarkdown()` converts to `/?ticker=XXX` → ReactMarkdown custom `a` component renders a two-zone chip: left zone navigates to dashboard via `window.location.href`; right zone (`+`) adds to `compareQueue` (localStorage `sfa:compareQueue`, max 5, deduped). `onAddToCompare` callback threaded via `AssistantBubble` → `MessageContent` props.
+- **Compare Queue bar**: visible above the input when `compareQueue.length > 0`. Shows ticker badges, a `✕` clear button, and a "Compare (N) →" button that navigates to `/compare?tickers=...` and clears the queue.
+- **Session persistence**: `AdvisorSession` + `AdvisorMessage` Prisma models. Full message sync after each response via `DELETE + createMany` in `$transaction`.
+- **Session sidebar**: lists past conversations ordered by `updatedAt desc`; auto-loads most recent on mount; delete on hover; "New chat" button.
+- **Streaming**: direct text streaming (`content_block_delta`). `max_tokens: 4096`, `temperature` default.
+- Prompt builders in `lib/ai/advisor-prompts.ts` (`buildAdvisorSystemPrompt`, `buildDiscoverySystemPrompt`); endpoint at `/api/ai/advisor`
+- Request schema: `{ messages, language, mode: "portfolio" | "discovery" = "portfolio" }`
 
 ### Ticker Comparison (`/compare`)
 - Side-by-side AI fair value comparison for up to 5 tickers
@@ -186,11 +188,14 @@ Current project state and context for AI assistants.
 - **Inline upside/downside**: `±X%` shown next to each FV scenario (bear/base/bull) vs current price
 - **Freshness badge**: green "oggi" / grey ≤3d / amber >3d based on `analyzedAt`
 - **Best-in-class ★**: ticker with highest MoS-adjusted base upside highlighted (≥2 ready tickers required)
+- **Watch button**: actions row has a "Watch" button per column (below "Deep Analysis →"). `compare-client.tsx` fetches `GET /api/watchlist` at mount to populate `watchedTickers: string[]`; `handleWatch()` POSTs to `/api/watchlist` with `companyName: ticker` as fallback (LiteAnalysisResult has no company name). Button hidden when not logged in. Shows "In Watchlist" chip once saved or if already in watchlist. Per-column `WatchStatus` tracked in `watchStatuses: Record<string, WatchStatus>` state inside `CompareTable`.
 - **URL persistence**: `?tickers=AAPL,MSFT` updated via `window.history.replaceState`
 - Components: `compare-client.tsx`, `compare-table.tsx`, `compare-ticker-input.tsx`
 
 ### Watchlist + Email Digest
 - Users maintain a personal watchlist of tickers at `/watchlist`
+- **Price Proximity Badge**: shown in each row's Ticker cell. `priceDist = (currentPrice − adjustedBase) / adjustedBase × 100`. `>= 0` → emerald "AT TARGET"; `|dist| ≤ 10%` → amber "+X% to target"; `> 10%` → slate "+X% to target". Omitted when `adjustedBase` or `currentPrice` is null.
+- **Quick-action buttons**: each row has "Analyze" → `window.location.href = '/?ticker=X'` and "Add to Compare" → `window.location.href = '/compare?tickers=X'`, styled as `Quick-Action Buttons` (see DESIGN.md §6). Rendered above Edit/Delete in the Actions column.
 - `WatchlistItem`: `id, userId, ticker, companyName, mosPercent, notes, addedAt` — `@@unique([userId, ticker])`
 - `WatchlistRun`: stores per-ticker AI analysis results; retained for last-run display and future trend tracking
 - **User-level toggle** `watchlistEnabled Boolean @default(true)` — when false, the cron skips the user entirely.

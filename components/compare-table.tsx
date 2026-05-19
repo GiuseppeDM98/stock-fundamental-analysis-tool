@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/context/language-context";
 import type { LiteAnalysisResult } from "@/types/watchlist";
@@ -12,9 +13,13 @@ export type TickerCompareState = {
   analyzedAt: string | null;
 };
 
+type WatchStatus = "idle" | "loading" | "saved" | "already";
+
 type CompareTableProps = {
   items: TickerCompareState[];
   mosPercent: number;
+  watchedTickers?: string[];
+  onWatch?: (ticker: string) => Promise<void>;
 };
 
 function fmt(value: number, currency: string): string {
@@ -86,8 +91,20 @@ function InlineUpside({ fairValue, currentPrice }: { fairValue: number; currentP
 
 type RowKey = "currentPrice" | "bear" | "base" | "bull" | "method" | "sector";
 
-export function CompareTable({ items, mosPercent }: CompareTableProps) {
+export function CompareTable({ items, mosPercent, watchedTickers = [], onWatch }: CompareTableProps) {
   const { t } = useLanguage();
+  const [watchStatuses, setWatchStatuses] = useState<Record<string, WatchStatus>>({});
+
+  async function handleWatch(ticker: string) {
+    if (!onWatch) return;
+    setWatchStatuses((prev) => ({ ...prev, [ticker]: "loading" }));
+    try {
+      await onWatch(ticker);
+      setWatchStatuses((prev) => ({ ...prev, [ticker]: "saved" }));
+    } catch {
+      setWatchStatuses((prev) => ({ ...prev, [ticker]: "idle" }));
+    }
+  }
   const mosMultiplier = 1 - mosPercent / 100;
 
   if (items.length === 0) return null;
@@ -223,18 +240,44 @@ export function CompareTable({ items, mosPercent }: CompareTableProps) {
           {/* Actions row */}
           <tr className="border-t border-slate-700/60 bg-slate-900/50">
             <td className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted" />
-            {items.map((item) => (
-              <td key={item.ticker} className="px-4 py-3 text-center">
-                <Link
-                  href={`/?ticker=${item.ticker}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-lg border border-sky-800 px-3 py-1.5 text-xs font-semibold text-sky-400 transition hover:border-sky-500 hover:bg-sky-500/10 hover:text-sky-300"
-                >
-                  {t("compareDeepAnalysis")}
-                </Link>
-              </td>
-            ))}
+            {items.map((item) => {
+              const watchStatus = watchStatuses[item.ticker] ?? "idle";
+              const alreadyWatched = watchedTickers.includes(item.ticker) || watchStatus === "saved" || watchStatus === "already";
+              return (
+                <td key={item.ticker} className="px-4 py-3 text-center">
+                  <div className="flex flex-col items-center gap-2">
+                    <Link
+                      href={`/?ticker=${item.ticker}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-lg border border-sky-800 px-3 py-1.5 text-xs font-semibold text-sky-400 transition hover:border-sky-500 hover:bg-sky-500/10 hover:text-sky-300"
+                    >
+                      {t("compareDeepAnalysis")}
+                    </Link>
+                    {onWatch && (
+                      alreadyWatched ? (
+                        <span className="rounded-full bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-500">
+                          {t("inWatchlist")}
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleWatch(item.ticker)}
+                          disabled={watchStatus === "loading"}
+                          className="inline-flex items-center gap-1 rounded-md border border-slate-700/60 px-2.5 py-1 text-xs font-medium text-slate-400 transition hover:border-slate-500 hover:text-slate-200 disabled:opacity-60"
+                        >
+                          {watchStatus === "loading" ? (
+                            <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-600 border-t-slate-300" />
+                          ) : (
+                            <span>👁</span>
+                          )}
+                          {t("compareWatch")}
+                        </button>
+                      )
+                    )}
+                  </div>
+                </td>
+              );
+            })}
           </tr>
         </tbody>
       </table>

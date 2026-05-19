@@ -1,5 +1,19 @@
 ## ✨ New Features
 
+- **Investment pipeline — connected workflow** — the app now guides you through the full stock-picking process without dead ends. Every major page now has direct routes to the next step, so you never have to manually re-enter a ticker or copy-paste between tabs.
+
+- **Decision Panel after Deep Value Analysis** — once a Deep Value analysis finishes streaming, two action buttons appear below "Save Report": an amber **Add to Watchlist** button (pre-filled with the ticker and your current margin of safety) and a sky **Add to Compare** button. If the ticker is already on your watchlist, the button shows "In Watchlist" instead of re-adding it. This turns every completed analysis into a deliberate decision point.
+
+- **Advisor Discovery Mode** — the AI Advisor now has two modes, switchable via a toggle above the chat. **Portfolio mode** (the original) has full context of your holdings and saved analyses. **Discovery mode** starts clean — no portfolio context — and is purpose-built for finding new investment ideas. Ask for quality compounders, undervalued dividend growers, or sector opportunities and get 3–5 concrete ticker suggestions with a thesis, ROIC, valuation setup, and key risk for each. Your selected mode is remembered across sessions.
+
+- **Compare queue from Advisor** — ticker chips in Advisor responses now have two zones: click the ticker name to launch a Deep Value analysis as before, or click the small **+** on the right to add the ticker to a compare queue. Once you've queued 2+ tickers, a bar appears above the chat input showing all queued tickers and a **Compare (N) →** button that takes you directly to the comparison page with all of them pre-loaded. The queue persists if you leave the page.
+
+- **Watchlist quick-actions** — each watchlist row now has two inline action buttons: **Analyze** (launches a Deep Value analysis for that ticker) and **Compare** (opens the comparison page with that ticker). No more manually typing tickers to continue your research.
+
+- **Price proximity badge on Watchlist** — each watchlist row now shows how close the current price is to your buy target (fair value base discounted by your MoS%). The badge turns emerald when the price has reached or exceeded the target ("AT TARGET"), amber when within 10% below the target, and grey when further away. Only shown when an AI analysis has been run for that ticker.
+
+- **Watch from Compare** — the Compare page now has a **Watch** button in each ticker's column (below the existing "Deep Analysis" link). Click it to add the ticker directly to your watchlist without leaving the comparison. The button shows "In Watchlist" once saved or if the ticker was already being tracked.
+
 - **Dual fair value visualization in Saved Analyses** — when a saved analysis was run with a Margin of Safety > 0%, the Saved Analyses page now shows two separate sets of Bear/Base/Bull cards and two stacked gradient bars instead of one. The top row (violet) shows the **intrinsic fair value** — what the AI determined the stock is fundamentally worth. The bottom row (yellow) shows the **buy target** — the same values discounted by your MoS%. This makes it clear at a glance what the stock is worth vs. at what price it becomes a buy, without having to do the mental math yourself.
 
 - **Exit signal now triggers at intrinsic fair value** — the amber ⚠ "At Fair Value" badge in the Portfolio now fires when the current price reaches the **intrinsic base fair value**, not the buy target. Previously, the alert was triggering at the original entry price (the MoS-discounted buy target), which meant the signal fired too early — as soon as the stock recovered to your purchase price, not when it actually reached fair value. The new threshold correctly signals when the original margin of safety has been fully consumed.

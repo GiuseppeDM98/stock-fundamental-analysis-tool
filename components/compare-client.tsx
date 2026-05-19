@@ -79,9 +79,21 @@ export function CompareClient({ initialTickers }: Props) {
     initialTickers.length > 0
   );
   const [mosPercent, setMosPercent] = useState(0);
+  const [watchedTickers, setWatchedTickers] = useState<string[]>([]);
 
   // Guard so the initial DB load runs exactly once after userId is known
   const loadedForUser = useRef<string | null>(null);
+
+  // Fetch watched tickers once session is known
+  useEffect(() => {
+    if (!userId) return;
+    fetch("/api/watchlist")
+      .then((r) => (r.ok ? r.json() : { items: [] }))
+      .then((data: { items: { ticker: string }[] }) => {
+        setWatchedTickers(data.items.map((i) => i.ticker));
+      })
+      .catch(() => {});
+  }, [userId]);
 
   // Keep URL in sync whenever tickers list changes
   useEffect(() => {
@@ -236,6 +248,19 @@ export function CompareClient({ initialTickers }: Props) {
     setIsRunning(false);
   }
 
+  async function handleWatch(ticker: string) {
+    const res = await fetch("/api/watchlist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ticker, companyName: ticker, mosPercent: 0.2 }),
+    });
+    if (res.ok || res.status === 409) {
+      setWatchedTickers((prev) => prev.includes(ticker) ? prev : [...prev, ticker]);
+    } else {
+      throw new Error("Failed to add to watchlist");
+    }
+  }
+
   const isEmpty = tickers.length === 0;
   const hasAnyResult = items.some((i) => i.result !== null);
   const canRun = tickers.length > 0 && !isRunning && !!session;
@@ -317,7 +342,12 @@ export function CompareClient({ initialTickers }: Props) {
       )}
 
       {!isEmpty && !isLoadingSaved && (
-        <CompareTable items={items} mosPercent={mosPercent} />
+        <CompareTable
+          items={items}
+          mosPercent={mosPercent}
+          watchedTickers={watchedTickers}
+          onWatch={session ? handleWatch : undefined}
+        />
       )}
 
       {!isEmpty && (

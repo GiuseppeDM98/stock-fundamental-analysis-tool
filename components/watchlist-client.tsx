@@ -160,6 +160,12 @@ function WatchlistRow({ item, currentPrice, onDelete, onSave, t }: RowProps) {
       ? (adjustedBase - currentPrice) / currentPrice
       : null;
 
+  // Price proximity to buy target: negative = below target (good), positive = above target
+  const priceDist =
+    adjustedBase != null && currentPrice != null
+      ? (currentPrice - adjustedBase) / adjustedBase * 100
+      : null;
+
   async function handleSave() {
     setSaving(true);
     try {
@@ -184,6 +190,21 @@ function WatchlistRow({ item, currentPrice, onDelete, onSave, t }: RowProps) {
           <span className="text-xs text-slate-600">
             {run ? formatDate(run.runAt) : t("watchlistNoLastRun")}
           </span>
+          {priceDist != null && (
+            priceDist >= 0 ? (
+              <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-400">
+                {t("priceAtTarget")}
+              </span>
+            ) : Math.abs(priceDist) <= 10 ? (
+              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-400">
+                +{Math.abs(priceDist).toFixed(1)}% to target
+              </span>
+            ) : (
+              <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-medium text-slate-500">
+                +{Math.abs(priceDist).toFixed(1)}% to target
+              </span>
+            )
+          )}
         </div>
         {item.notes && !editing && (
           <p className="mt-1 text-xs italic text-muted">{item.notes}</p>
@@ -292,19 +313,35 @@ function WatchlistRow({ item, currentPrice, onDelete, onSave, t }: RowProps) {
             </button>
           </div>
         ) : (
-          <div className="flex items-center gap-2 justify-end">
-            <button
-              onClick={() => setEditing(true)}
-              className="rounded-lg border border-slate-700 px-3 py-1 text-xs text-muted transition hover:text-slate-100"
-            >
-              {t("watchlistEditItem")}
-            </button>
-            <button
-              onClick={() => setConfirmDelete(true)}
-              className="rounded-lg border border-red-800/50 px-3 py-1 text-xs text-red-400 transition hover:border-red-600 hover:text-red-300"
-            >
-              {t("deleteBtn")}
-            </button>
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { window.location.href = `/?ticker=${item.ticker}`; }}
+                className="rounded-md border border-slate-700/60 px-2.5 py-1 text-xs font-medium text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
+              >
+                {t("analyzeBtn")}
+              </button>
+              <button
+                onClick={() => { window.location.href = `/compare?tickers=${item.ticker}`; }}
+                className="rounded-md border border-slate-700/60 px-2.5 py-1 text-xs font-medium text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
+              >
+                {t("addToCompare")}
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setEditing(true)}
+                className="rounded-lg border border-slate-700 px-3 py-1 text-xs text-muted transition hover:text-slate-100"
+              >
+                {t("watchlistEditItem")}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="rounded-lg border border-red-800/50 px-3 py-1 text-xs text-red-400 transition hover:border-red-600 hover:text-red-300"
+              >
+                {t("deleteBtn")}
+              </button>
+            </div>
           </div>
         )}
       </td>

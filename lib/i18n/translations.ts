@@ -360,6 +360,23 @@ export type Translations = {
   compareBestUpside: string;
   compareDeepAnalysis: string;
   compareRefreshAll: string;
+
+  // ─── Pipeline actions ─────────────────────────────────────────────────────
+  addToWatchlist: string;
+  addToCompare: string;
+  inWatchlist: string;
+  compareWatch: string;
+  priceAtTarget: string;
+  advisorModePortfolio: string;
+  advisorModeDiscovery: string;
+  advisorDiscoveryEmptyTitle: string;
+  advisorDiscoveryEmptyHint: string;
+  advisorDiscoveryExample1: string;
+  advisorDiscoveryExample2: string;
+  advisorDiscoveryExample3: string;
+  advisorDiscoveryExample4: string;
+  advisorCompareQueue: string;
+  advisorAddToCompare: string;
 };
 
 const en: Translations = {
@@ -721,6 +738,23 @@ const en: Translations = {
   compareBestUpside: "Best upside",
   compareDeepAnalysis: "Deep Analysis →",
   compareRefreshAll: "Refresh All",
+
+  // Pipeline actions
+  addToWatchlist: "Add to Watchlist",
+  addToCompare: "Add to Compare",
+  inWatchlist: "In Watchlist",
+  compareWatch: "Watch",
+  priceAtTarget: "AT TARGET",
+  advisorModePortfolio: "Portfolio",
+  advisorModeDiscovery: "Discovery",
+  advisorDiscoveryEmptyTitle: "What would you like to research?",
+  advisorDiscoveryEmptyHint: "Ask me to find quality compounders, undervalued stocks, or sector opportunities.",
+  advisorDiscoveryExample1: "Find quality compounders in Europe with ROIC > 15%",
+  advisorDiscoveryExample2: "Dividend growers with wide moat and sustainable payout",
+  advisorDiscoveryExample3: "Undervalued small caps in the tech sector",
+  advisorDiscoveryExample4: "Best risk/reward setup in industrials right now",
+  advisorCompareQueue: "Compare ({n}) →",
+  advisorAddToCompare: "Add to Compare",
 };
 
 const it: Translations = {
@@ -1082,6 +1116,23 @@ const it: Translations = {
   compareBestUpside: "Miglior upside",
   compareDeepAnalysis: "Analisi Deep →",
   compareRefreshAll: "Aggiorna tutti",
+
+  // Pipeline actions
+  addToWatchlist: "Aggiungi alla Watchlist",
+  addToCompare: "Aggiungi al Confronto",
+  inWatchlist: "In Watchlist",
+  compareWatch: "Segui",
+  priceAtTarget: "A TARGET",
+  advisorModePortfolio: "Portfolio",
+  advisorModeDiscovery: "Discovery",
+  advisorDiscoveryEmptyTitle: "Cosa vorresti ricercare?",
+  advisorDiscoveryEmptyHint: "Chiedi di trovare quality compounders, azioni sottovalutate o opportunità di settore.",
+  advisorDiscoveryExample1: "Trova quality compounders europei con ROIC > 15%",
+  advisorDiscoveryExample2: "Dividend growers con moat ampio e payout sostenibile",
+  advisorDiscoveryExample3: "Small cap sottovalutate nel settore tech",
+  advisorDiscoveryExample4: "Miglior rapporto rischio/rendimento negli industriali ora",
+  advisorCompareQueue: "Confronta ({n}) →",
+  advisorAddToCompare: "Aggiungi al Confronto",
 };
 
 export const translations: Record<Language, Translations> = { en, it };

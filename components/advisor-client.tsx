@@ -19,7 +19,7 @@ function preprocessMarkdown(content: string): string {
   return content.replace(/\[\[([A-Z0-9.]+)\]\]/g, "[$1](/?ticker=$1)");
 }
 
-function MessageContent({ content }: { content: string }) {
+function MessageContent({ content, onAddToCompare }: { content: string; onAddToCompare?: (ticker: string) => void }) {
   const { t } = useLanguage();
   return (
     <div className="prose prose-invert prose-sm max-w-none prose-headings:text-slate-100 prose-headings:mt-4 prose-headings:mb-1.5 prose-p:text-slate-300 prose-p:leading-relaxed prose-p:my-1.5 prose-strong:text-slate-100 prose-li:text-slate-300 prose-li:my-0.5 prose-a:text-sky-400 prose-table:w-full prose-th:text-slate-200 prose-td:text-slate-300 prose-hr:border-slate-700/50 prose-code:text-sky-300 prose-code:bg-slate-800 prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
@@ -31,15 +31,29 @@ function MessageContent({ content }: { content: string }) {
             if (tickerMatch) {
               const ticker = tickerMatch[1];
               return (
-                <button
-                  // Full navigation to bypass Next.js Router Cache — router.push would
-                  // restore the cached dashboard without remounting.
-                  onClick={() => { window.location.href = `/?ticker=${encodeURIComponent(ticker)}`; }}
-                  className="mx-0.5 inline-flex items-center gap-1 rounded-md bg-sky-500/15 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-inset ring-sky-500/30 transition hover:bg-sky-500/25 hover:text-sky-200"
-                >
-                  {children}
-                  <span className="text-[10px] opacity-60">{t("advisorRunDeepValue")}</span>
-                </button>
+                <span className="mx-0.5 inline-flex items-stretch rounded-md ring-1 ring-inset ring-sky-500/30">
+                  <button
+                    // Full navigation to bypass Next.js Router Cache — router.push would
+                    // restore the cached dashboard without remounting.
+                    onClick={() => { window.location.href = `/?ticker=${encodeURIComponent(ticker)}`; }}
+                    className="inline-flex items-center gap-1 bg-sky-500/15 px-2 py-0.5 text-xs font-semibold text-sky-300 transition hover:bg-sky-500/25 hover:text-sky-200 rounded-l-md"
+                  >
+                    {children}
+                    <span className="text-[10px] opacity-60">{t("advisorRunDeepValue")}</span>
+                  </button>
+                  {onAddToCompare && (
+                    <>
+                      <span className="w-px bg-sky-500/30" />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onAddToCompare(ticker); }}
+                        title={t("advisorAddToCompare")}
+                        className="inline-flex items-center bg-sky-500/10 px-1.5 text-xs text-sky-400 transition hover:bg-sky-500/25 hover:text-sky-200 rounded-r-md"
+                      >
+                        +
+                      </button>
+                    </>
+                  )}
+                </span>
               );
             }
             return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
@@ -64,11 +78,11 @@ function UserBubble({ content }: { content: string }) {
   );
 }
 
-function AssistantBubble({ content, isStreaming }: { content: string; isStreaming?: boolean }) {
+function AssistantBubble({ content, isStreaming, onAddToCompare }: { content: string; isStreaming?: boolean; onAddToCompare?: (ticker: string) => void }) {
   return (
     <div className="flex justify-start">
       <div className="w-full rounded-2xl rounded-tl-sm border border-slate-700/30 bg-[#0f172a] px-4 py-3 text-sm text-slate-200 shadow-[0_4px_20px_-8px_rgba(56,189,248,0.10)]">
-        <MessageContent content={content} />
+        <MessageContent content={content} onAddToCompare={onAddToCompare} />
         {isStreaming && content && (
           <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse bg-sky-400" />
         )}
@@ -190,20 +204,24 @@ function ArrowRight() {
 }
 
 function EmptyState({
+  mode,
   contextCounts,
   examplePrompts,
   onSend,
 }: {
+  mode: "portfolio" | "discovery";
   contextCounts: { positions: number; analyses: number } | null;
   examplePrompts: string[];
   onSend: (text: string) => void;
 }) {
   const { t } = useLanguage();
+  const title = mode === "discovery" ? t("advisorDiscoveryEmptyTitle") : t("advisorEmptyTitle");
+  const hint = mode === "discovery" ? t("advisorDiscoveryEmptyHint") : t("advisorEmptyHint");
   return (
     <div className="flex h-full flex-col items-center justify-center gap-7 px-4">
       <div className="text-center">
-        {/* Context awareness pill */}
-        {contextCounts !== null && (
+        {/* Context awareness pill — only in portfolio mode */}
+        {mode === "portfolio" && contextCounts !== null && (
           <div className="mx-auto mb-3 inline-flex items-center gap-2 rounded-full border border-slate-700/60 bg-slate-800/50 px-3 py-1">
             <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
             <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
@@ -211,8 +229,8 @@ function EmptyState({
             </span>
           </div>
         )}
-        <p className="text-sm font-semibold text-slate-200">{t("advisorEmptyTitle")}</p>
-        <p className="mt-1 text-xs text-slate-500">{t("advisorEmptyHint")}</p>
+        <p className="text-sm font-semibold text-slate-200">{title}</p>
+        <p className="mt-1 text-xs text-slate-500">{hint}</p>
       </div>
 
       <div className="w-full max-w-sm space-y-1.5">
@@ -242,9 +260,47 @@ export default function AdvisorClient() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [contextCounts, setContextCounts] = useState<{ positions: number; analyses: number } | null>(null);
+  const [mode, setMode] = useState<"portfolio" | "discovery">("portfolio");
+  const [compareQueue, setCompareQueue] = useState<string[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Persist mode to localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("sfa:advisor-mode");
+    if (saved === "portfolio" || saved === "discovery") setMode(saved);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("sfa:advisor-mode", mode);
+  }, [mode]);
+
+  // Persist compare queue to localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("sfa:compareQueue");
+    if (saved) {
+      try { setCompareQueue(JSON.parse(saved)); } catch { /* ignore */ }
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("sfa:compareQueue", JSON.stringify(compareQueue));
+  }, [compareQueue]);
+
+  function addToCompareQueue(ticker: string) {
+    setCompareQueue((prev) => {
+      if (prev.includes(ticker) || prev.length >= 5) return prev;
+      return [...prev, ticker];
+    });
+  }
+
+  function launchCompare() {
+    if (compareQueue.length === 0) return;
+    const tickers = compareQueue.join(",");
+    setCompareQueue([]);
+    window.location.href = `/compare?tickers=${tickers}`;
+  }
 
   // Load session list + context counts on mount.
   useEffect(() => {
@@ -363,6 +419,7 @@ export default function AdvisorClient() {
           body: JSON.stringify({
             messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
             language: APP_TO_AI_LANGUAGE[language],
+            mode,
           }),
           signal: abortRef.current.signal,
         });
@@ -396,7 +453,7 @@ export default function AdvisorClient() {
         abortRef.current = null;
       }
     },
-    [messages, isStreaming, language, t, activeSessionId]
+    [messages, isStreaming, language, t, activeSessionId, mode]
   );
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -413,11 +470,19 @@ export default function AdvisorClient() {
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   }
 
-  const examplePrompts = [
-    t("advisorExampleItalian"),
-    t("advisorExampleUndervalued"),
-    t("advisorExamplePortfolio"),
-  ];
+  const examplePrompts =
+    mode === "discovery"
+      ? [
+          t("advisorDiscoveryExample1"),
+          t("advisorDiscoveryExample2"),
+          t("advisorDiscoveryExample3"),
+          t("advisorDiscoveryExample4"),
+        ]
+      : [
+          t("advisorExampleItalian"),
+          t("advisorExampleUndervalued"),
+          t("advisorExamplePortfolio"),
+        ];
 
   const lastAssistantMsg = isStreaming
     ? [...messages].reverse().find((m) => m.role === "assistant")
@@ -440,9 +505,36 @@ export default function AdvisorClient() {
 
       {/* Chat area */}
       <div className="flex flex-1 flex-col overflow-hidden">
+        {/* Mode toggle */}
+        <div className="flex items-center justify-between pb-3">
+          <div className="inline-flex gap-0.5 rounded-lg border border-slate-800 bg-slate-900/60 p-0.5">
+            <button
+              onClick={() => setMode("portfolio")}
+              className={`rounded-md px-3 py-1 text-xs font-medium transition ${
+                mode === "portfolio"
+                  ? "bg-slate-700 text-slate-100 shadow-sm"
+                  : "text-slate-500 hover:text-slate-300"
+              }`}
+            >
+              {t("advisorModePortfolio")}
+            </button>
+            <button
+              onClick={() => setMode("discovery")}
+              className={`rounded-md px-3 py-1 text-xs font-medium transition ${
+                mode === "discovery"
+                  ? "bg-slate-700 text-slate-100 shadow-sm"
+                  : "text-slate-500 hover:text-slate-300"
+              }`}
+            >
+              {t("advisorModeDiscovery")}
+            </button>
+          </div>
+        </div>
+
         <div className="flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {messages.length === 0 ? (
             <EmptyState
+              mode={mode}
               contextCounts={contextCounts}
               examplePrompts={examplePrompts}
               onSend={sendMessage}
@@ -457,6 +549,7 @@ export default function AdvisorClient() {
                     key={m.id}
                     content={m.content}
                     isStreaming={m.id === streamingAssistantId}
+                    onAddToCompare={addToCompareQueue}
                   />
                 )
               )}
@@ -467,8 +560,35 @@ export default function AdvisorClient() {
           <div ref={bottomRef} />
         </div>
 
+        {/* Compare queue bar */}
+        {compareQueue.length > 0 && (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-sky-800/50 bg-sky-950/30 px-3 py-2 mb-2">
+            <div className="flex flex-wrap gap-1.5">
+              {compareQueue.map((ticker) => (
+                <span key={ticker} className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[11px] font-semibold text-sky-300">
+                  {ticker}
+                </span>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={() => setCompareQueue([])}
+                className="text-xs text-slate-600 transition hover:text-slate-400"
+              >
+                ✕
+              </button>
+              <button
+                onClick={launchCompare}
+                className="rounded-lg border border-sky-700 bg-sky-900/30 px-3 py-1 text-xs font-semibold text-sky-300 transition hover:border-sky-500 hover:bg-sky-900/50"
+              >
+                {t("advisorCompareQueue").replace("{n}", String(compareQueue.length))}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Input bar */}
-        <div className="pt-4">
+        <div className="pt-2">
           <div className="flex items-end gap-2 rounded-xl border border-slate-700/60 bg-[rgba(15,23,42,0.85)] px-3 py-2 transition focus-within:border-sky-500/50 focus-within:shadow-[0_0_0_3px_rgba(56,189,248,0.10)]">
             <textarea
               ref={textareaRef}

@@ -6,7 +6,7 @@ import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { buildAdvisorSystemPrompt, buildAdvisorUserPrompt } from "@/lib/ai/advisor-prompts";
+import { buildAdvisorSystemPrompt, buildAdvisorUserPrompt, buildDiscoverySystemPrompt } from "@/lib/ai/advisor-prompts";
 
 const messageSchema = z.object({
   role: z.enum(["user", "assistant"]),
@@ -16,6 +16,7 @@ const messageSchema = z.object({
 const requestSchema = z.object({
   messages: z.array(messageSchema).min(1).max(20),
   language: z.string().min(1).max(30).default("English"),
+  mode: z.enum(["portfolio", "discovery"]).default("portfolio"),
 });
 
 export async function POST(request: Request) {
@@ -40,51 +41,57 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Fetch portfolio context in parallel — only fields needed for the prompt.
-    const [positions, analyses] = await Promise.all([
-      db.position.findMany({
-        where: { userId: session.user.id },
-        orderBy: { purchasedAt: "desc" },
-        select: {
-          ticker: true,
-          companyName: true,
-          shares: true,
-          purchasePrice: true,
-          currency: true,
-          purchasedAt: true,
-        },
-      }),
-      db.analysis.findMany({
-        where: { userId: session.user.id },
-        orderBy: { createdAt: "desc" },
-        // Exclude full reportMd — context prompt only needs fair values.
-        select: {
-          ticker: true,
-          companyName: true,
-          fairValueBull: true,
-          fairValueBase: true,
-          fairValueBear: true,
-          valuationMethod: true,
-          priceAtAnalysis: true,
-          mosPercent: true,
-          createdAt: true,
-        },
-      }),
-    ]);
-
     const currentDate = new Date().toLocaleDateString("en-US", {
       year: "numeric",
       month: "long",
       day: "numeric",
     });
 
-    const systemPrompt = buildAdvisorSystemPrompt({
-      positions,
-      // Serialise Date → ISO string to match AnalysisSnippet.createdAt: string
-      analyses: analyses.map((a) => ({ ...a, createdAt: a.createdAt.toISOString() })),
-      currentDate,
-      language: body.language,
-    });
+    let systemPrompt: string;
+
+    if (body.mode === "discovery") {
+      systemPrompt = buildDiscoverySystemPrompt({ currentDate, language: body.language });
+    } else {
+      // Fetch portfolio context in parallel — only fields needed for the prompt.
+      const [positions, analyses] = await Promise.all([
+        db.position.findMany({
+          where: { userId: session.user.id },
+          orderBy: { purchasedAt: "desc" },
+          select: {
+            ticker: true,
+            companyName: true,
+            shares: true,
+            purchasePrice: true,
+            currency: true,
+            purchasedAt: true,
+          },
+        }),
+        db.analysis.findMany({
+          where: { userId: session.user.id },
+          orderBy: { createdAt: "desc" },
+          // Exclude full reportMd — context prompt only needs fair values.
+          select: {
+            ticker: true,
+            companyName: true,
+            fairValueBull: true,
+            fairValueBase: true,
+            fairValueBear: true,
+            valuationMethod: true,
+            priceAtAnalysis: true,
+            mosPercent: true,
+            createdAt: true,
+          },
+        }),
+      ]);
+
+      systemPrompt = buildAdvisorSystemPrompt({
+        positions,
+        // Serialise Date → ISO string to match AnalysisSnippet.createdAt: string
+        analyses: analyses.map((a) => ({ ...a, createdAt: a.createdAt.toISOString() })),
+        currentDate,
+        language: body.language,
+      });
+    }
 
     // Map chat history: all messages except the last go as conversation history;
     // the last user message is sent as the final turn.

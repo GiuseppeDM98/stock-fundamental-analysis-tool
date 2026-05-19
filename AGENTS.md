@@ -63,10 +63,10 @@ __tests__/         # Vitest tests
 - Data fetchers: `getQuote()`, `getFundamentals()`, `getAnalystEstimates()`, `getRiskFreeRate()`
 - Client helpers: `fetchAnalyses()`, `saveAnalysis()`, `fetchPositions()`, `createPosition()`, `deletePosition()`, `fetchSnapshots()`
 - Factories: `getDefaultScenarios()`, `getCompanyScenarios()`, `getDefaultDdmScenarios()`, `getCompanyDdmScenarios()`, `getDefaultEvEbitdaScenarios()`, `getCompanyEvEbitdaScenarios()`
-- Prompt builders: `buildDeepValueSystemPrompt()`, `buildDeepValueUserPrompt()` in `lib/ai/deep-value-prompts.ts`; `buildAdvisorSystemPrompt()` in `lib/ai/advisor-prompts.ts`
+- Prompt builders: `buildDeepValueSystemPrompt()`, `buildDeepValueUserPrompt()` in `lib/ai/deep-value-prompts.ts`; `buildAdvisorSystemPrompt()`, `buildDiscoverySystemPrompt()` in `lib/ai/advisor-prompts.ts`
 
 ### LocalStorage Keys
-All prefixed with `sfa:`: `sfa:lastTicker`, `sfa:mosPercent`, `sfa:scenarioOverrides`, `sfa:ddmScenarioOverrides`, `sfa:evEbitdaScenarioOverrides`, `sfa:language`
+All prefixed with `sfa:`: `sfa:lastTicker`, `sfa:mosPercent`, `sfa:scenarioOverrides`, `sfa:ddmScenarioOverrides`, `sfa:evEbitdaScenarioOverrides`, `sfa:language`, `sfa:advisor-mode` (`"portfolio" | "discovery"`), `sfa:compareQueue` (JSON array of ticker strings, max 5, deduped)
 
 ---
 
@@ -509,6 +509,43 @@ const raw = payload[0]?.payload as ChartPoint | undefined;
 ### `overflow-x-auto` on in-card tables creates a spurious scrollbar
 
 Adding `overflow-x-auto` to a `<div>` wrapping a `<table className="w-full">` inside a `.card` will render a thin horizontal scrollbar even when the table fits — because the browser measures the table's natural unconstrained width before applying `w-full`. Remove `overflow-x-auto` when the table is expected to fill the card; only add it when content genuinely overflows (verified by testing at narrow viewport).
+
+### Split-action chips inside ReactMarkdown
+
+When a chip rendered via a ReactMarkdown custom `a` component needs two distinct click targets, wrap both buttons in an `inline-flex` `<span>` rather than using a single `<button>`:
+
+```tsx
+// The outer <span> holds the ring; the two <button>s share it visually
+<span className="mx-0.5 inline-flex items-stretch rounded-md ring-1 ring-inset ring-sky-500/30">
+  <button onClick={() => navigate(ticker)} className="... rounded-l-md">
+    {children}
+  </button>
+  <span className="w-px bg-sky-500/30" />   {/* vertical divider */}
+  <button onClick={() => onSecondaryAction(ticker)} className="... rounded-r-md">
+    +
+  </button>
+</span>
+```
+
+The secondary action callback (`onAddToCompare`) must be threaded as a prop from the parent component down to `MessageContent` → `AssistantBubble` → `MessageContent`. Using a React context is overkill for a single callback.
+
+**Important**: `ReactMarkdown` renders custom `a` components synchronously. The outer `<span>` is a valid inline element inside prose — don't use `<div>` (block inside inline = hydration error).
+
+### Mode-conditional DB fetch in API routes
+
+When a route has two operating modes and one of them doesn't need DB data, branch early to skip the fetch — don't fetch then discard:
+
+```typescript
+// ✅ Skip DB entirely for discovery mode
+if (body.mode === "discovery") {
+  systemPrompt = buildDiscoverySystemPrompt({ currentDate, language: body.language });
+} else {
+  const [positions, analyses] = await Promise.all([...db queries...]);
+  systemPrompt = buildAdvisorSystemPrompt({ positions, analyses, currentDate, language: body.language });
+}
+```
+
+This matters for latency (two Turso round-trips skipped) and for prompt correctness — never inject portfolio context into a prompt that shouldn't have it.
 
 ### `t` prop type when passing down from `useLanguage()`
 

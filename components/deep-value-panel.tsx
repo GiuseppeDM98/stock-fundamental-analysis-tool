@@ -21,6 +21,7 @@ type Props = {
 };
 
 type Status = "idle" | "loading" | "streaming" | "done" | "error";
+type WatchlistStatus = "idle" | "loading" | "saved" | "already";
 
 type DeepValueResult = {
   method: string;
@@ -185,6 +186,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [result, setResult] = useState<DeepValueResult | null>(null);
+  const [watchlistStatus, setWatchlistStatus] = useState<WatchlistStatus>("idle");
 
   const abortRef = useRef<AbortController | null>(null);
   // Tracks which button triggered the current analysis for spinner placement
@@ -208,6 +210,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
     setStatus("loading");
     setErrorMsg(null);
     setSaveStatus("idle");
+    setWatchlistStatus("idle");
 
     try {
       const res = await fetch("/api/ai/deep-value", {
@@ -287,6 +290,36 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
       console.error("Save failed:", err);
       setSaveStatus("error");
     }
+  }
+
+  async function handleAddToWatchlist() {
+    if (!ticker) return;
+    setWatchlistStatus("loading");
+    try {
+      const res = await fetch("/api/watchlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ticker,
+          companyName: companyName ?? ticker,
+          mosPercent,
+        }),
+      });
+      if (res.status === 409) {
+        // Already in watchlist (unique constraint)
+        setWatchlistStatus("already");
+        return;
+      }
+      if (!res.ok) throw new Error();
+      setWatchlistStatus("saved");
+    } catch {
+      setWatchlistStatus("idle");
+    }
+  }
+
+  function handleAddToCompare() {
+    if (!ticker) return;
+    window.location.href = `/compare?tickers=${encodeURIComponent(ticker)}`;
   }
 
   const isStreaming = status === "loading" || status === "streaming";
@@ -460,6 +493,42 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           {saveStatus === "error" && (
             <p className="text-sm text-red-400">{t("errorFailedSaveReport")}</p>
           )}
+        </div>
+      )}
+
+      {/* Decision Panel — pipeline routing after analysis completes */}
+      {status === "done" && result && ticker && (
+        <div className="flex flex-wrap gap-2 border-t border-slate-800/60 pt-4">
+          {/* Add to Watchlist */}
+          <button
+            onClick={handleAddToWatchlist}
+            disabled={watchlistStatus === "loading" || watchlistStatus === "saved" || watchlistStatus === "already"}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-800/50 px-3 py-1.5 text-xs font-medium text-amber-400 transition hover:border-amber-600 hover:bg-amber-900/20 disabled:cursor-default disabled:opacity-70"
+          >
+            {watchlistStatus === "loading" && (
+              <span className="h-3 w-3 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
+            )}
+            {(watchlistStatus === "saved" || watchlistStatus === "already") ? (
+              <>
+                <span>✓</span>
+                {t("inWatchlist")}
+              </>
+            ) : (
+              <>
+                <span>👁</span>
+                {t("addToWatchlist")}
+              </>
+            )}
+          </button>
+
+          {/* Add to Compare */}
+          <button
+            onClick={handleAddToCompare}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-sky-800/50 px-3 py-1.5 text-xs font-medium text-sky-400 transition hover:border-sky-600 hover:bg-sky-900/20"
+          >
+            <span>↔</span>
+            {t("addToCompare")}
+          </button>
         </div>
       )}
     </div>

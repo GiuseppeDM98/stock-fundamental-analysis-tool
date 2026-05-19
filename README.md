@@ -2,7 +2,7 @@
 
 A Next.js web application for stock valuation using Discounted Cash Flow (DCF) analysis with scenario modeling. Fetch real-time financial data from Yahoo Finance and run bull/base/bear scenario valuations with interactive charts.
 
-![Version](https://img.shields.io/badge/version-0.9.8-blue)
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-green)
 ![Next.js](https://img.shields.io/badge/Next.js-15.5.12-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7.3-blue)
@@ -31,12 +31,13 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **Capital gains tax** — set an optional tax rate per position to see estimated taxes and net P&L alongside gross gains; dividend totals also show gross and estimated net amounts
 - **Analysis performance tracking** — see how the stock price moved since you saved each analysis vs. fair value
 - **Ticker Comparison** — compare up to 5 stocks side-by-side on the `/compare` page. Claude fetches AI fair values (Bear/Base/Bull) for all tickers in parallel via web search. Results are saved to your account, so you can leave and return without re-running. A global MoS slider adjusts the Base fair value across all columns instantly. Each fair value shows upside/downside % vs. current price; a ★ marks the best opportunity when comparing 2+ stocks.
-- **Watchlist + email digest** — add tickers to a personal watchlist and receive automatic bi-weekly or monthly email digests with AI fair value estimates (Bear/Base/Bull), current price, and upside vs. your margin-of-safety target. Pause emails with a single toggle when you're not actively investing.
+- **Watchlist + email digest** — add tickers to a personal watchlist and receive automatic bi-weekly or monthly email digests with AI fair value estimates (Bear/Base/Bull), current price, and upside vs. your margin-of-safety target. Pause emails with a single toggle when you're not actively investing. Each row shows a **price proximity badge** (distance from your buy target) and inline **Analyze** / **Compare** action buttons.
 - **Quality Scorecard** — Piotroski F-Score (0–9), ROIC vs WACC spread, FCF Conversion rate, and Altman Z-Score computed automatically from Yahoo Finance data; collapsible panel shows all nine Piotroski signals individually
 - **Historical Multiples Chart** — P/E, P/FCF, and EV/EBIT over up to 10 fiscal years with quartile band, median line, and current-multiple reference; summary row shows percentile rank color-coded green/amber/red (cheap/mid/expensive relative to own history)
 - **Reverse DCF** — for any DCF-eligible stock, see the implied annual FCF growth rate the market is pricing in, compared against the company's historical FCF CAGR; colored badge signals whether expectations are conservative, reasonable, or optimistic
 - **English / Italian UI** — switch the entire interface language from the navigation bar; preference is saved automatically
-- **AI Portfolio Advisor** — conversational AI at `/advisor` with full context of your portfolio and saved analyses; ask free-form questions, get stock ideas as clickable chips that launch Deep Value analysis; conversations saved to your account
+- **AI Portfolio Advisor** — conversational AI at `/advisor` in two modes: **Portfolio** (knows your holdings and saved analyses) and **Discovery** (idea generation — finds quality compounders, undervalued stocks, or sector opportunities with no portfolio context). Ticker chips are split-action: left zone launches Deep Value analysis, right `+` zone adds to a compare queue. Queue bar accumulates tickers and launches `/compare` with all of them in one click. Conversations saved to your account.
+- **Decision Panel** — after every Deep Value Analysis completes, action buttons appear: **Add to Watchlist** (pre-fills ticker + MoS) and **Add to Compare**. Every analysis ends with a deliberate next step, not a dead end.
 - **Exit signal ("At Fair Value")** — when a position's current price reaches the **intrinsic base fair value** from your most recent saved analysis (i.e. the margin of safety is fully consumed), an amber ⚠ badge appears in the portfolio row (always visible). A "Re-analyze →" button navigates to the dashboard with your position context pre-loaded
 - **Review Position (AI)** — after an exit signal, a dedicated amber "Review Position (AI)" button on the dashboard runs a modified AI prompt focused on "hold, add, or exit?" — includes your weighted average cost, previous fair value, and an explicit recommendation section. Saves and renders identically to a standard Deep Value analysis
 
@@ -495,7 +496,8 @@ turso db shell <your-db-name> < prisma/migrations/<latest>/migration.sql
 
 ### Phase 3: Features
 - [x] Multi-ticker comparison (side-by-side)
-- [x] AI Portfolio Advisor (conversational with portfolio context)
+- [x] AI Portfolio Advisor (conversational with portfolio context + Discovery mode)
+- [x] Investment pipeline connective tissue (Decision Panel, Watchlist quick-actions, Compare Watch button, Advisor chip split-action + compare queue)
 - [ ] PDF export for valuation reports
 - [x] Mobile installable (PWA)
 
