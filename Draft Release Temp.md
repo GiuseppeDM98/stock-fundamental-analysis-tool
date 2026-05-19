@@ -106,6 +106,10 @@
 
 ## 🐛 Bug Fixes
 
+- Fixed Valuation Summary table at the end of Deep Value Analysis showing "EUR Fair Value" as the column header even when a Margin of Safety is set — when MoS > 0 the AI outputs MoS-adjusted buy targets, and the column header now correctly reads "EUR Buy Target (-X%)" to reflect this. When MoS is 0% the header remains "EUR Fair Value" as before.
+
+- Fixed AI Portfolio Advisor confusing MoS-adjusted buy targets with intrinsic fair values when discussing your saved analyses — the advisor now receives both the reconstructed intrinsic value (Bear / Base / Bull) and the buy target (at your MoS discount) as clearly labeled separate entries. This means answers like "your ENEL.MI base fair value is 10.07" are now correct: the advisor knows 12.58 is the intrinsic value and 10.07 is your entry target at 20% MoS.
+
 - Fixed portfolio summary bar showing "converted to EUR · Frankfurter.app" even when all positions are already in EUR — the attribution now only appears when at least one position uses a non-EUR currency and FX conversion actually took place.
 
 - Fixed watchlist frequency label always showing "Every 2 weeks" even when "Monthly" was selected — the label now reflects the actual saved setting.

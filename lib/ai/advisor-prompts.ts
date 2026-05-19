@@ -19,6 +19,7 @@ type AnalysisSnippet = {
   fairValueBear?: number | null;
   valuationMethod?: string | null;
   priceAtAnalysis?: number | null;
+  mosPercent?: number | null;
   createdAt: string;
 };
 
@@ -44,10 +45,19 @@ function formatAnalysis(a: AnalysisSnippet): string {
   const parts: string[] = [`- ${a.ticker} (${a.companyName})`];
   if (a.valuationMethod) parts.push(`[${a.valuationMethod}]`);
   if (a.fairValueBear != null && a.fairValueBase != null && a.fairValueBull != null) {
-    const bear = a.fairValueBear.toFixed(2);
-    const base = a.fairValueBase.toFixed(2);
-    const bull = a.fairValueBull.toFixed(2);
-    parts.push(`Bear ${bear} / Base ${base} / Bull ${bull}`);
+    const mos = a.mosPercent ?? 0;
+    if (mos > 0) {
+      // Stored values are MoS-adjusted buy targets: intrinsic = stored / (1 - mos/100).
+      // Expose both so the AI correctly distinguishes fair value from entry target.
+      const divisor = 1 - mos / 100;
+      const intrinsicBear = (a.fairValueBear / divisor).toFixed(2);
+      const intrinsicBase = (a.fairValueBase / divisor).toFixed(2);
+      const intrinsicBull = (a.fairValueBull / divisor).toFixed(2);
+      parts.push(`Intrinsic Bear ${intrinsicBear} / Base ${intrinsicBase} / Bull ${intrinsicBull}`);
+      parts.push(`Buy Target (-${mos}%) Bear ${a.fairValueBear.toFixed(2)} / Base ${a.fairValueBase.toFixed(2)} / Bull ${a.fairValueBull.toFixed(2)}`);
+    } else {
+      parts.push(`Fair Value Bear ${a.fairValueBear.toFixed(2)} / Base ${a.fairValueBase.toFixed(2)} / Bull ${a.fairValueBull.toFixed(2)}`);
+    }
   }
   if (a.priceAtAnalysis != null) {
     parts.push(`price at analysis: ${a.priceAtAnalysis.toFixed(2)}`);

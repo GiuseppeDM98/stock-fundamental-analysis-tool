@@ -72,6 +72,7 @@ function UpsideBadge({ upside }: { upside: number }) {
 type RecapTableProps = {
   result: DeepValueResult;
   currentPrice?: number;
+  mosPercent?: number;
   title: string;
   currentPriceLabel: string;
   bearLabel: string;
@@ -84,6 +85,7 @@ type RecapTableProps = {
 function RecapTable({
   result,
   currentPrice,
+  mosPercent = 0,
   title,
   currentPriceLabel,
   bearLabel,
@@ -108,7 +110,8 @@ function RecapTable({
           <tr className="border-b border-slate-700/60">
             <th className="pb-2 text-left font-medium text-slate-400">Scenario</th>
             <th className="pb-2 text-right font-medium text-slate-400">
-              {result.currency} Fair Value
+              {result.currency}{" "}
+              {mosPercent > 0 ? `Buy Target (-${mosPercent}%)` : "Fair Value"}
             </th>
             <th className="pb-2 text-right font-medium text-slate-400">vs. Price</th>
           </tr>
@@ -459,6 +462,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
         <RecapTable
           result={result}
           currentPrice={currentPrice}
+          mosPercent={mosPercent}
           title={t("recapTableTitle")}
           currentPriceLabel={t("recapCurrentPrice")}
           bearLabel={t("bearLabel")}

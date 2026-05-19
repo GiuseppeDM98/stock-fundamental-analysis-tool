@@ -386,24 +386,6 @@ Key invariants:
 
 ---
 
-## PWA
-
-The app is a full PWA. The three browser requirements for the "Install App" prompt are all met:
-1. **Manifest** — `app/manifest.ts` exports `MetadataRoute.Manifest`; Next.js serves it at `/manifest.webmanifest` automatically. No package needed.
-2. **Service Worker** — `public/sw.js` (network-only strategy). Registered client-side by `components/pwa-register.tsx` after hydration.
-3. **HTTPS** — provided by Vercel in production.
-
-**Icon rules:**
-- `public/icons/icon-192.svg` — regular icon (has rounded corners to match the favicon style)
-- `public/icons/icon-512.svg` — `purpose: "maskable"`, full bleed background with no `rx` (browser crops to any shape)
-- Both replicate the favicon design from `app/icon.tsx` (gradient + trend line + magnifying glass)
-
-**Service worker caching policy**: network-only for everything — never cache API routes or AI responses. If static asset caching is added later, scope it only to `/icons/`, `/_next/static/`, etc., never to `/api/*`.
-
-**iOS note**: iOS Safari does not auto-prompt installation. User must manually use Share → Add to Home Screen. The `appleWebApp` metadata and apple-touch-icon are set in `app/layout.tsx` to make that experience work correctly.
-
----
-
 ## Internationalisation (i18n)
 
 App supports EN and IT via `context/language-context.tsx` + `lib/i18n/translations.ts`.
@@ -591,6 +573,7 @@ t: (key: keyof Translations) => string;
 17. **ReactMarkdown filters non-standard URL protocols**: Custom protocol links like `ticker://AAPL` are silently stripped — the `href` received by the custom `a` component is `undefined` or empty. Always use a relative URL pattern (`/?ticker=AAPL`) and match with a regex in the `a` component: `href?.match(/^\/\?ticker=([A-Z0-9.]+)$/)`. This avoids protocol filtering and works correctly in both development and production.
 18. **`messages.findLast()` not available in configured TS lib**: The `Array.prototype.findLast` method requires `ES2023` lib target. Use `[...arr].reverse().find(predicate)` as a drop-in replacement.
 19. **`validateResult: false` on `chart()` widens return type to `unknown`**: Unlike `quoteSummary`, adding `{ validateResult: false }` as the third argument to `yahooFinance.chart()` makes the TypeScript return type `unknown` rather than the typed chart result. Do not add it to `chart()` calls — the default validation works correctly for price data.
+20. **Prisma `select` fields silently dropped at type boundaries**: If you add a field to a Prisma `select` (e.g. `mosPercent: true`) but the TypeScript type that consumes the result doesn't include that field, the value is silently discarded at the assignment boundary — no error, no warning. Symptom: field exists in DB + query but never reaches the function that uses it. Fix: always mirror every selected field in the downstream type (e.g. `AnalysisSnippet`, prompt context types). Search for the type name across `lib/` when adding fields to a Prisma select.
 
 ---
 
