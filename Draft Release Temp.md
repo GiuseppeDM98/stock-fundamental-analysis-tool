@@ -138,6 +138,8 @@
 
 ## 🔧 Improvements
 
+- The Ticker Comparison page now shows both the **intrinsic fair value** and the **buy target** for each Bear / Base / Bull scenario when a Margin of Safety is set. The intrinsic value (what the AI determined the stock is fundamentally worth) is shown on the first line; the buy target discounted by your MoS% appears below it in amber. A legend at the bottom of the table labels the two lines. When MoS is 0% the table is unchanged — one line per cell as before.
+
 - Deep Value Analysis report sections are now better spaced — headers, paragraphs, and bullet lists have more breathing room, making long multi-section reports easier to read
 - Deep Value Analysis now sources up to **5 years** of financial data (previously defaulted to 3), giving a clearer picture of long-term trends in growth, margins, and capital returns
 - Removed the standard "Generate AI Analysis" panel — the Deep Value Analysis covers everything it did and more, so there's now a single, more powerful AI analysis panel on the dashboard

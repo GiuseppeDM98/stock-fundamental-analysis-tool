@@ -184,8 +184,9 @@ Current project state and context for AI assistants.
 - `CompareResult` DB model: `@@unique([userId, ticker])` — one row per user per ticker, upserted on each run. Fields: `fairValueBull`, `fairValueBase`, `fairValueBear`, `method`, `sector`, `currency`, `analyzedAt`
 - **Flow**: user adds tickers → clicks "Run Analysis" → `POST /api/compare/analyze` runs `analyzeTickerLite` in parallel for all tickers → results upserted to DB → client fetches live prices separately
 - **DB persistence**: `GET /api/compare/results?tickers=A,B` restores previous results across sessions/devices
-- **MoS slider**: 0–40% (step 5%) applied client-side to FV Base display; raw values stored in DB unchanged
-- **Inline upside/downside**: `±X%` shown next to each FV scenario (bear/base/bull) vs current price
+- **MoS slider**: 0–40% (step 5%) applied client-side; raw intrinsic values stored in DB unchanged. `CompareResult` always stores intrinsic fair values (unlike `Analysis` which stores MoS-adjusted buy targets).
+- **Dual FV/buy-target display**: when `mosPercent > 0`, each Bear/Base/Bull cell shows two lines — intrinsic fair value (slate-200) above, buy target `intrinsic × (1 − mos/100)` (amber, smaller) below. A legend below the table labels the two lines. When `mosPercent = 0` only one line is shown.
+- **Inline upside/downside**: `±X%` shown next to each value (both intrinsic and buy target) vs current price
 - **Freshness badge**: green "oggi" / grey ≤3d / amber >3d based on `analyzedAt`
 - **Best-in-class ★**: ticker with highest MoS-adjusted base upside highlighted (≥2 ready tickers required)
 - **Watch button**: actions row has a "Watch" button per column (below "Deep Analysis →"). `compare-client.tsx` fetches `GET /api/watchlist` at mount to populate `watchedTickers: string[]`; `handleWatch()` POSTs to `/api/watchlist` with `companyName: ticker` as fallback (LiteAnalysisResult has no company name). Button hidden when not logged in. Shows "In Watchlist" chip once saved or if already in watchlist. Per-column `WatchStatus` tracked in `watchStatuses: Record<string, WatchStatus>` state inside `CompareTable`.

@@ -123,10 +123,7 @@ export function CompareTable({ items, mosPercent, watchedTickers = [], onWatch }
     }
   }
 
-  const baseLabel =
-    mosPercent > 0
-      ? `${t("compareFairValueBase")} (−${mosPercent}% MoS)`
-      : t("compareFairValueBase");
+  const baseLabel = t("compareFairValueBase");
 
   const rows: { label: string; key: RowKey }[] = [
     { label: t("compareCurrentPrice"), key: "currentPrice" },
@@ -156,31 +153,59 @@ export function CompareTable({ items, mosPercent, watchedTickers = [], onWatch }
       case "currentPrice":
         return <span>{currentPrice !== null ? fmt(currentPrice, result.currency) : t("compareNoData")}</span>;
 
-      case "bear":
+      case "bear": {
+        const buyTargetBear = result.fairValueBear * mosMultiplier;
         return (
-          <span>
-            {fmt(result.fairValueBear, result.currency)}
-            <InlineUpside fairValue={result.fairValueBear} currentPrice={currentPrice} />
-          </span>
-        );
-
-      case "base": {
-        const adjustedBase = result.fairValueBase * mosMultiplier;
-        return (
-          <span>
-            {fmt(adjustedBase, result.currency)}
-            <InlineUpside fairValue={adjustedBase} currentPrice={currentPrice} />
-          </span>
+          <div className="flex flex-col items-center gap-0.5">
+            <span>
+              {fmt(result.fairValueBear, result.currency)}
+              <InlineUpside fairValue={result.fairValueBear} currentPrice={currentPrice} />
+            </span>
+            {mosPercent > 0 && (
+              <span className="text-xs text-amber-400/70">
+                {fmt(buyTargetBear, result.currency)}
+                <InlineUpside fairValue={buyTargetBear} currentPrice={currentPrice} />
+              </span>
+            )}
+          </div>
         );
       }
 
-      case "bull":
+      case "base": {
+        const buyTargetBase = result.fairValueBase * mosMultiplier;
         return (
-          <span>
-            {fmt(result.fairValueBull, result.currency)}
-            <InlineUpside fairValue={result.fairValueBull} currentPrice={currentPrice} />
-          </span>
+          <div className="flex flex-col items-center gap-0.5">
+            <span>
+              {fmt(result.fairValueBase, result.currency)}
+              <InlineUpside fairValue={result.fairValueBase} currentPrice={currentPrice} />
+            </span>
+            {mosPercent > 0 && (
+              <span className="text-xs text-amber-400/70">
+                {fmt(buyTargetBase, result.currency)}
+                <InlineUpside fairValue={buyTargetBase} currentPrice={currentPrice} />
+              </span>
+            )}
+          </div>
         );
+      }
+
+      case "bull": {
+        const buyTargetBull = result.fairValueBull * mosMultiplier;
+        return (
+          <div className="flex flex-col items-center gap-0.5">
+            <span>
+              {fmt(result.fairValueBull, result.currency)}
+              <InlineUpside fairValue={result.fairValueBull} currentPrice={currentPrice} />
+            </span>
+            {mosPercent > 0 && (
+              <span className="text-xs text-amber-400/70">
+                {fmt(buyTargetBull, result.currency)}
+                <InlineUpside fairValue={buyTargetBull} currentPrice={currentPrice} />
+              </span>
+            )}
+          </div>
+        );
+      }
 
       case "method":
         return <span>{result.method}</span>;
@@ -281,6 +306,13 @@ export function CompareTable({ items, mosPercent, watchedTickers = [], onWatch }
           </tr>
         </tbody>
       </table>
+      {mosPercent > 0 && (
+        <div className="border-t border-slate-800/50 px-4 py-2 text-xs text-slate-500">
+          <span className="text-slate-400">Fair value intrinseco</span>
+          {" · "}
+          <span className="text-amber-400/70">Buy target (−{mosPercent}% MoS)</span>
+        </div>
+      )}
     </div>
   );
 }
