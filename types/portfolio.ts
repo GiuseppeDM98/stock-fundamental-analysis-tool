@@ -10,6 +10,8 @@ export type Position = {
   currency: string;
   purchasedAt: string; // ISO 8601 string
   notes?: string | null;
+  // Capital gains tax rate (%) applied to unrealized gains and dividends for this position.
+  capitalGainsTaxRate?: number | null;
   createdAt: string;
 };
 
@@ -23,6 +25,7 @@ export type CreatePositionRequest = {
   currency: string;
   purchasedAt: string; // ISO date string YYYY-MM-DD
   notes?: string;
+  capitalGainsTaxRate?: number;
 };
 
 /** Purchases for a single ticker grouped client-side, with WAC computed. */
@@ -34,6 +37,8 @@ export type AggregatedPosition = {
   weightedAvgCost: number;
   totalCost: number;
   purchases: Position[]; // sorted oldest→newest
+  // Tax rate from the first purchase — assumed uniform across DCA purchases for the same ticker.
+  capitalGainsTaxRate?: number | null;
 };
 
 /** One daily data point for the portfolio P&L history chart. */

@@ -2,7 +2,7 @@
 
 A Next.js web application for stock valuation using Discounted Cash Flow (DCF) analysis with scenario modeling. Fetch real-time financial data from Yahoo Finance and run bull/base/bear scenario valuations with interactive charts.
 
-![Version](https://img.shields.io/badge/version-0.9.2-blue)
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-green)
 ![Next.js](https://img.shields.io/badge/Next.js-15.5.12-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7.3-blue)
@@ -26,9 +26,20 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **User accounts** with saved reports — revisit your analyses anytime
 - **Portfolio tracker** — track real purchases with live P&L, multi-currency FX conversion, DCA aggregation (Weighted Average Cost per ticker), and cross-links to saved analyses per ticker
 - **Dividend tracking** — add an ISIN to any portfolio position and dividends paid on Borsa Italiana are automatically recorded at each daily snapshot; cumulative total shown in the summary bar
-- **Portfolio P&L history** — line chart showing portfolio value vs. cost basis over time, updated automatically every weekday after market close; dividend payment days marked with a green vertical line
+- **Portfolio P&L history** — line chart showing portfolio value vs. cost basis over time, updated automatically every weekday after market close; dividend payment days marked with a green vertical line; days when new capital was invested marked with an amber line (hover to see the amount)
+- **Daily price change** — each portfolio position shows today's % move vs. the previous close, inline next to the current price
+- **Capital gains tax** — set an optional tax rate per position to see estimated taxes and net P&L alongside gross gains; dividend totals also show gross and estimated net amounts
 - **Analysis performance tracking** — see how the stock price moved since you saved each analysis vs. fair value
+- **Ticker Comparison** — compare up to 5 stocks side-by-side on the `/compare` page. Claude fetches AI fair values (Bear/Base/Bull) for all tickers in parallel via web search. Results are saved to your account, so you can leave and return without re-running. A global MoS slider adjusts the Base fair value across all columns instantly. Each fair value shows upside/downside % vs. current price; a ★ marks the best opportunity when comparing 2+ stocks.
+- **Watchlist + email digest** — add tickers to a personal watchlist and receive automatic bi-weekly or monthly email digests with AI fair value estimates (Bear/Base/Bull), current price, and upside vs. your margin-of-safety target. Pause emails with a single toggle when you're not actively investing. Each row shows a **price proximity badge** (distance from your buy target) and inline **Analyze** / **Compare** action buttons.
+- **Quality Scorecard** — Piotroski F-Score (0–9), ROIC vs WACC spread, FCF Conversion rate, and Altman Z-Score computed automatically from Yahoo Finance data; collapsible panel shows all nine Piotroski signals individually
+- **Historical Multiples Chart** — P/E, P/FCF, and EV/EBIT over up to 10 fiscal years with quartile band, median line, and current-multiple reference; summary row shows percentile rank color-coded green/amber/red (cheap/mid/expensive relative to own history)
+- **Reverse DCF** — for any DCF-eligible stock, see the implied annual FCF growth rate the market is pricing in, compared against the company's historical FCF CAGR; colored badge signals whether expectations are conservative, reasonable, or optimistic
 - **English / Italian UI** — switch the entire interface language from the navigation bar; preference is saved automatically
+- **AI Portfolio Advisor** — conversational AI at `/advisor` in two modes: **Portfolio** (knows your holdings and saved analyses) and **Discovery** (idea generation — finds quality compounders, undervalued stocks, or sector opportunities with no portfolio context). Ticker chips are split-action: left zone launches Deep Value analysis, right `+` zone adds to a compare queue. Queue bar accumulates tickers and launches `/compare` with all of them in one click. Conversations saved to your account.
+- **Decision Panel** — after every Deep Value Analysis completes, action buttons appear: **Add to Watchlist** (pre-fills ticker + MoS) and **Add to Compare**. Every analysis ends with a deliberate next step, not a dead end.
+- **Exit signal ("At Fair Value")** — when a position's current price reaches the **intrinsic base fair value** from your most recent saved analysis (i.e. the margin of safety is fully consumed), an amber ⚠ badge appears in the portfolio row (always visible). A "Re-analyze →" button navigates to the dashboard with your position context pre-loaded
+- **Review Position (AI)** — after an exit signal, a dedicated amber "Review Position (AI)" button on the dashboard runs a modified AI prompt focused on "hold, add, or exit?" — includes your weighted average cost, previous fair value, and an explicit recommendation section. Saves and renders identically to a standard Deep Value analysis
 
 ### What Problem Does It Solve?
 
@@ -62,9 +73,19 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - 🧮 **Valuation Metrics**: P/E, P/FCF, FCF Yield, Earnings Yield cards with YoY trend and educational tooltips
 - 💼 **Portfolio Tracker**: Track real purchases with live P&L per position + DCA aggregation (Weighted Average Cost per ticker) + multi-currency aggregate summary (EUR conversion via Frankfurter) + cross-links to saved analyses per ticker
 - 💸 **Dividend Tracking**: Add an ISIN to any position and dividends paid on Borsa Italiana are auto-recorded at each daily snapshot — cumulative total in the summary bar, payment days marked on the chart
-- 📉 **Portfolio P&L History**: Line chart showing total portfolio value vs. cost basis over time — updated automatically every weekday after market close via Vercel Cron
+- 📉 **Portfolio P&L History**: Line chart showing total portfolio value vs. cost basis over time — updated automatically every weekday after market close; amber markers on days new capital was invested, green markers on dividend days
+- 📊 **Daily Price Change**: Each portfolio position shows today's % move vs. previous close (green/red), inline next to the current price
+- 🧾 **Capital Gains Tax**: Set an optional tax rate per position to see estimated taxes and net P&L on unrealized gains; dividend totals show gross and estimated net
 - 📈 **Analysis Performance**: See how price moved since saving vs. fair value — "Under FV" / "Above FV" badge per report
 - 🌐 **EN / IT UI**: Switch the entire interface language from the navbar; preference saved automatically
+- 📉 **Historical Multiples Chart**: P/E, P/FCF, EV/EBIT over 10 fiscal years with quartile shading, median line, current-multiple line, and percentile rank badge (green = historically cheap, red = historically expensive)
+- 🔄 **Reverse DCF**: For any DCF-eligible stock with positive FCF, see the implied FCF growth rate the market is pricing in — compare against historical CAGR with a colored interpretation badge
+- ⚖️ **Ticker Comparison**: Compare up to 5 stocks side-by-side at `/compare` — AI fetches Bear/Base/Bull fair values in parallel, results saved to DB, global MoS slider, inline upside/downside %, freshness badges, and a ★ marking the best opportunity
+- 📬 **Watchlist + AI Email Digest**: Add any ticker to your watchlist and receive automatic bi-weekly or monthly emails with AI fair value estimates (Bear/Base/Bull), current price, upside vs. MoS target, and status badges — pause with a toggle when not actively investing
+- 📱 **Installable PWA**: Install the app on Android or iOS for a native-like experience — standalone mode, home screen icon, no browser chrome
+- 💬 **AI Portfolio Advisor**: Conversational AI at `/advisor` that knows your portfolio and saved analyses — ask free-form questions, receive stock recommendations as one-click Deep Value chips, with full conversation history saved to your account
+- ⚠️ **Exit Signal**: Amber "At Fair Value" badge appears in the portfolio row when price ≥ base fair value from the most recent saved analysis — signals when the margin of safety is consumed; one click pre-loads context for re-analysis
+- 🔁 **Review Position (AI)**: Dedicated "hold, add, or exit?" AI analysis triggered from an exit signal — includes WAC, previous fair value, unrealized gain/loss, and an explicit Hold / Add / Exit Recommendation section
 - 🧪 **Fully Tested**: Vitest + Testing Library coverage for calculations and UI
 
 ---
@@ -474,9 +495,11 @@ turso db shell <your-db-name> < prisma/migrations/<latest>/migration.sql
 - [ ] Sensitivity analysis matrix (WACC vs growth)
 
 ### Phase 3: Features
-- [ ] Multi-ticker comparison (side-by-side)
+- [x] Multi-ticker comparison (side-by-side)
+- [x] AI Portfolio Advisor (conversational with portfolio context + Discovery mode)
+- [x] Investment pipeline connective tissue (Decision Panel, Watchlist quick-actions, Compare Watch button, Advisor chip split-action + compare queue)
 - [ ] PDF export for valuation reports
-- [ ] Mobile-responsive design
+- [x] Mobile installable (PWA)
 
 ### Phase 4: Advanced
 - [ ] Custom scenario presets with sharing

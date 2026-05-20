@@ -17,9 +17,11 @@ type Props = {
   companyName?: string;
   mosPercent?: number;
   currentPrice?: number;
+  exitReviewContext?: { wac: number; prevFv: number } | null;
 };
 
 type Status = "idle" | "loading" | "streaming" | "done" | "error";
+type WatchlistStatus = "idle" | "loading" | "saved" | "already";
 
 type DeepValueResult = {
   method: string;
@@ -70,6 +72,7 @@ function UpsideBadge({ upside }: { upside: number }) {
 type RecapTableProps = {
   result: DeepValueResult;
   currentPrice?: number;
+  mosPercent?: number;
   title: string;
   currentPriceLabel: string;
   bearLabel: string;
@@ -82,6 +85,7 @@ type RecapTableProps = {
 function RecapTable({
   result,
   currentPrice,
+  mosPercent = 0,
   title,
   currentPriceLabel,
   bearLabel,
@@ -106,7 +110,8 @@ function RecapTable({
           <tr className="border-b border-slate-700/60">
             <th className="pb-2 text-left font-medium text-slate-400">Scenario</th>
             <th className="pb-2 text-right font-medium text-slate-400">
-              {result.currency} Fair Value
+              {result.currency}{" "}
+              {mosPercent > 0 ? `Buy Target (-${mosPercent}%)` : "Fair Value"}
             </th>
             <th className="pb-2 text-right font-medium text-slate-400">vs. Price</th>
           </tr>
@@ -159,7 +164,7 @@ function RecapTable({
   );
 }
 
-export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, currentPrice }: Props) {
+export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, currentPrice, exitReviewContext }: Props) {
   const { data: session } = useSession();
   const router = useRouter();
   const { language: globalLanguage, t } = useLanguage();
@@ -184,10 +189,13 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [result, setResult] = useState<DeepValueResult | null>(null);
+  const [watchlistStatus, setWatchlistStatus] = useState<WatchlistStatus>("idle");
 
   const abortRef = useRef<AbortController | null>(null);
+  // Tracks which button triggered the current analysis for spinner placement
+  const [isReviewMode, setIsReviewMode] = useState(false);
 
-  async function handleGenerate() {
+  async function handleGenerate(reviewContext?: { wac: number; prevFv: number }) {
     if (!ticker) return;
 
     if (!session) {
@@ -199,17 +207,24 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
     const controller = new AbortController();
     abortRef.current = controller;
 
+    setIsReviewMode(!!reviewContext);
     setReport("");
     setResult(null);
     setStatus("loading");
     setErrorMsg(null);
     setSaveStatus("idle");
+    setWatchlistStatus("idle");
 
     try {
       const res = await fetch("/api/ai/deep-value", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ticker, language, mosPercent }),
+        body: JSON.stringify({
+          ticker,
+          language,
+          mosPercent,
+          ...(reviewContext ? { reviewContext } : {}),
+        }),
         signal: controller.signal,
       });
 
@@ -280,6 +295,36 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
     }
   }
 
+  async function handleAddToWatchlist() {
+    if (!ticker) return;
+    setWatchlistStatus("loading");
+    try {
+      const res = await fetch("/api/watchlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ticker,
+          companyName: companyName ?? ticker,
+          mosPercent,
+        }),
+      });
+      if (res.status === 409) {
+        // Already in watchlist (unique constraint)
+        setWatchlistStatus("already");
+        return;
+      }
+      if (!res.ok) throw new Error();
+      setWatchlistStatus("saved");
+    } catch {
+      setWatchlistStatus("idle");
+    }
+  }
+
+  function handleAddToCompare() {
+    if (!ticker) return;
+    window.location.href = `/compare?tickers=${encodeURIComponent(ticker)}`;
+  }
+
   const isStreaming = status === "loading" || status === "streaming";
   const markdownContent = status === "done" && report ? stripJsonBlock(report) : report;
 
@@ -292,7 +337,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           <p className="text-sm text-slate-400">{t("deepValueDesc")}</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <select
             value={language}
             onChange={(e) => setLanguage(e.target.value)}
@@ -307,12 +352,29 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
             ))}
           </select>
 
+          {exitReviewContext && (
+            <button
+              onClick={() => handleGenerate(exitReviewContext)}
+              disabled={!ticker || isStreaming}
+              className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-400 transition hover:bg-amber-500/20 hover:border-amber-400 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {isStreaming && isReviewMode ? (
+                <span className="flex items-center gap-2">
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
+                  {status === "loading" ? t("startingState") : t("analyzingState")}
+                </span>
+              ) : (
+                t("reviewPositionBtn")
+              )}
+            </button>
+          )}
+
           <button
-            onClick={handleGenerate}
+            onClick={() => handleGenerate()}
             disabled={!ticker || isStreaming}
             className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {isStreaming ? (
+            {isStreaming && !isReviewMode ? (
               <span className="flex items-center gap-2">
                 <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
                 {status === "loading" ? t("startingState") : t("analyzingState")}
@@ -323,6 +385,15 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           </button>
         </div>
       </div>
+
+      {/* Position review context banner — shown when navigated from the portfolio exit signal */}
+      {exitReviewContext && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+          <span>WAC: {exitReviewContext.wac.toFixed(2)} · Prev. FV: {exitReviewContext.prevFv.toFixed(2)}</span>
+          <span className="text-amber-600">·</span>
+          <span>{t("reviewPositionBtnHint")}</span>
+        </div>
+      )}
 
       {/* Auth hint */}
       {!session && ticker && (
@@ -391,6 +462,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
         <RecapTable
           result={result}
           currentPrice={currentPrice}
+          mosPercent={mosPercent}
           title={t("recapTableTitle")}
           currentPriceLabel={t("recapCurrentPrice")}
           bearLabel={t("bearLabel")}
@@ -425,6 +497,42 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           {saveStatus === "error" && (
             <p className="text-sm text-red-400">{t("errorFailedSaveReport")}</p>
           )}
+        </div>
+      )}
+
+      {/* Decision Panel — pipeline routing after analysis completes */}
+      {status === "done" && result && ticker && (
+        <div className="flex flex-wrap gap-2 border-t border-slate-800/60 pt-4">
+          {/* Add to Watchlist */}
+          <button
+            onClick={handleAddToWatchlist}
+            disabled={watchlistStatus === "loading" || watchlistStatus === "saved" || watchlistStatus === "already"}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-800/50 px-3 py-1.5 text-xs font-medium text-amber-400 transition hover:border-amber-600 hover:bg-amber-900/20 disabled:cursor-default disabled:opacity-70"
+          >
+            {watchlistStatus === "loading" && (
+              <span className="h-3 w-3 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
+            )}
+            {(watchlistStatus === "saved" || watchlistStatus === "already") ? (
+              <>
+                <span>✓</span>
+                {t("inWatchlist")}
+              </>
+            ) : (
+              <>
+                <span>👁</span>
+                {t("addToWatchlist")}
+              </>
+            )}
+          </button>
+
+          {/* Add to Compare */}
+          <button
+            onClick={handleAddToCompare}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-sky-800/50 px-3 py-1.5 text-xs font-medium text-sky-400 transition hover:border-sky-600 hover:bg-sky-900/20"
+          >
+            <span>↔</span>
+            {t("addToCompare")}
+          </button>
         </div>
       )}
     </div>

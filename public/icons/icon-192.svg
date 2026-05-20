@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <!-- Matches favicon gradient: linear-gradient(135deg, #0a101f 0%, #1a2540 100%) -->
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1" gradientUnits="objectBoundingBox">
+      <stop offset="0%" stop-color="#0a101f"/>
+      <stop offset="100%" stop-color="#1a2540"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background with rounded corners (rx=36 matches favicon borderRadius=6 at 6× scale) -->
+  <rect width="192" height="192" rx="36" fill="url(#bg)"/>
+
+  <!-- Stock trend line (favicon polyline scaled 6× + offset 12 for the inner SVG padding) -->
+  <polyline
+    points="30,144 66,108 102,120 144,54"
+    fill="none"
+    stroke="#38bdf8"
+    stroke-width="15"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Magnifying glass circle -->
+  <circle
+    cx="120" cy="96" r="36"
+    fill="none"
+    stroke="rgba(255,255,255,0.85)"
+    stroke-width="10.8"
+  />
+
+  <!-- Magnifying glass handle -->
+  <line
+    x1="147" y1="123" x2="168" y2="144"
+    stroke="rgba(255,255,255,0.85)"
+    stroke-width="12"
+    stroke-linecap="round"
+  />
+</svg>

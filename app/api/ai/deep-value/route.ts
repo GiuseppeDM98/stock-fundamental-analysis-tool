@@ -7,12 +7,21 @@ import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { auth } from "@/lib/auth";
 import { getQuote } from "@/lib/yahoo-client";
-import { buildDeepValueSystemPrompt, buildDeepValueUserPrompt } from "@/lib/ai/deep-value-prompts";
+import {
+  buildDeepValueSystemPrompt,
+  buildDeepValueUserPrompt,
+  buildReviewPositionSystemPrompt,
+  buildReviewPositionUserPrompt,
+} from "@/lib/ai/deep-value-prompts";
 
 const requestSchema = z.object({
   ticker: z.string().min(1).max(20),
   language: z.string().min(1).max(30).default("English"),
   mosPercent: z.number().min(0).max(80).default(0),
+  reviewContext: z.object({
+    wac: z.number().positive(),
+    prevFv: z.number().positive(),
+  }).optional(),
 });
 
 export async function POST(request: Request) {
@@ -43,8 +52,12 @@ export async function POST(request: Request) {
       day: "numeric",
     });
 
-    const systemPrompt = buildDeepValueSystemPrompt(body.language, currentDate, body.mosPercent);
-    const userPrompt = buildDeepValueUserPrompt(body.ticker, currentPrice, currency, body.language, currentDate, body.mosPercent);
+    const systemPrompt = body.reviewContext
+      ? buildReviewPositionSystemPrompt(body.language, currentDate, body.mosPercent, body.reviewContext)
+      : buildDeepValueSystemPrompt(body.language, currentDate, body.mosPercent);
+    const userPrompt = body.reviewContext
+      ? buildReviewPositionUserPrompt(body.ticker, currentPrice, currency, body.language, currentDate, body.mosPercent, body.reviewContext)
+      : buildDeepValueUserPrompt(body.ticker, currentPrice, currency, body.language, currentDate, body.mosPercent);
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 

@@ -14,6 +14,13 @@ import {
 import { fetchSnapshots } from "@/lib/portfolio";
 import type { SnapshotPoint } from "@/types/portfolio";
 import { useLanguage } from "@/context/language-context";
+import type { Translations } from "@/lib/i18n/translations";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+// Extends SnapshotPoint with optional capital deployment delta for tooltip display.
+// capitalDelta is set when costEur grew by more than €50 vs the previous snapshot.
+type SnapshotChartPoint = SnapshotPoint & { capitalDelta?: number };
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
@@ -44,20 +51,26 @@ function formatEurFull(value: number, locale: string): string {
 
 // ─── Custom tooltip ───────────────────────────────────────────────────────────
 
-type TooltipEntry = { name: string; value: number; stroke: string };
+type TooltipEntry = { name: string; value: number; stroke: string; payload: SnapshotChartPoint };
 
 function ChartTooltip({
   active,
   payload,
   label,
   locale,
+  t,
 }: {
   active?: boolean;
   payload?: TooltipEntry[];
   label?: string;
   locale: string;
+  t: (key: keyof Translations) => string;
 }) {
   if (!active || !payload?.length) return null;
+
+  // The full data point is available via payload[0].payload — used to read
+  // capitalDelta and dividendsEur which are not exposed as Line dataKeys.
+  const raw = payload[0]?.payload;
 
   return (
     <div className="rounded-xl border border-slate-700/60 bg-[var(--card)] px-3 py-2 shadow-lg text-xs">
@@ -70,6 +83,18 @@ function ChartTooltip({
           <span className="font-semibold">{formatEurFull(entry.value, locale)}</span>
         </p>
       ))}
+      {raw?.capitalDelta !== undefined && (
+        <p style={{ color: "#f59e0b" }} className="mt-1 border-t border-slate-700/40 pt-1">
+          {t("capitalDeployedMarkerLabel")}:{" "}
+          <span className="font-semibold">+{formatEurFull(raw.capitalDelta, locale)}</span>
+        </p>
+      )}
+      {(raw?.dividendsEur ?? 0) > 0 && (
+        <p style={{ color: "#34d399" }} className="mt-1 border-t border-slate-700/40 pt-1">
+          {t("dividendMarkerLabel")}:{" "}
+          <span className="font-semibold">+{formatEurFull(raw!.dividendsEur!, locale)}</span>
+        </p>
+      )}
     </div>
   );
 }
@@ -113,8 +138,18 @@ export default function PortfolioHistoryChart() {
     );
   }
 
-  // Snapshots with a dividend payment that day — shown as vertical markers on the chart
-  const dividendDays = snapshots.filter((s) => (s.dividendsEur ?? 0) > 0);
+  // Enrich each snapshot with capitalDelta: the cost basis increase vs the previous day.
+  // €50 threshold suppresses FX rounding drift on unchanged positions.
+  const chartData: SnapshotChartPoint[] = snapshots.map((s, i) => ({
+    ...s,
+    capitalDelta:
+      i > 0 && s.costEur - snapshots[i - 1].costEur > 50
+        ? s.costEur - snapshots[i - 1].costEur
+        : undefined,
+  }));
+
+  const dividendDays = chartData.filter((s) => (s.dividendsEur ?? 0) > 0);
+  const capitalEventDays = chartData.filter((s) => s.capitalDelta !== undefined);
 
   return (
     <div className="card mb-6" style={{ height: 272 }}>
@@ -123,7 +158,7 @@ export default function PortfolioHistoryChart() {
       </p>
       <ResponsiveContainer width="100%" height="88%">
         <LineChart
-          data={snapshots}
+          data={chartData}
           margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#1e2d47" />
@@ -140,8 +175,8 @@ export default function PortfolioHistoryChart() {
             tickFormatter={(v) => formatEurCompact(v, locale)}
             width={68}
           />
-          <Tooltip content={<ChartTooltip locale={locale} />} />
-          {/* Vertical markers for days when dividends were paid */}
+          <Tooltip content={<ChartTooltip locale={locale} t={t} />} />
+          {/* Vertical markers for days when dividends were paid — label shown inline */}
           {dividendDays.map((s) => (
             <ReferenceLine
               key={s.takenAt}
@@ -155,6 +190,17 @@ export default function PortfolioHistoryChart() {
                 fill: "#34d399",
                 fontSize: 10,
               }}
+            />
+          ))}
+          {/* Vertical markers for days when new capital was deployed (new position or DCA).
+              No inline label — amount is shown in the tooltip to avoid edge clipping. */}
+          {capitalEventDays.map((s) => (
+            <ReferenceLine
+              key={`cap-${s.takenAt}`}
+              x={s.takenAt}
+              stroke="#f59e0b"
+              strokeWidth={1.5}
+              strokeDasharray="3 3"
             />
           ))}
           {/* Market value of the portfolio */}

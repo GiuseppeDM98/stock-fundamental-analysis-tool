@@ -214,7 +214,64 @@ Not a heading, not a caption: the section label is a structural element that div
 - **Style:** `text-xs font-semibold uppercase tracking-wider text-slate-mist`. Always the first element in a card, separated from the data below by `margin-top: 12px`.
 - **Purpose:** Performs the role of a printed column header or ledger section divider. It tells the investor the data category before they read the data. Never colored; never Bold above 600 weight; never larger than 0.75rem.
 
-## 6. Do's and Don'ts
+## 6. Pipeline Components
+
+New component patterns introduced for the investment pipeline flow. All inherit the base design system (card glow, tonal depth, label doctrine, semantic color rules).
+
+### Decision Panel
+
+Appears at the bottom of the Deep Value panel after streaming completes (`result !== null`). Three actions side by side, each routing the investor to the next pipeline stage.
+
+- **Layout**: `flex gap-2 pt-4 border-t border-slate-800/60 mt-4` — a flush row of three equal-width ghost buttons with distinct semantic icons.
+- **Actions and semantic color**:
+  - **"Add to Portfolio"** (`text-emerald-400 border-emerald-800/50 hover:border-emerald-600 hover:bg-emerald-900/20`): only shown when the analysis suggests the price is at or below buy target. Opens the AddPosition modal pre-filled with ticker + current price.
+  - **"Add to Watchlist"** (`text-amber-400 border-amber-800/50 hover:border-amber-600 hover:bg-amber-900/20`): pre-fills watchlist with buy target from analysis. Shows "In Watchlist" chip (disabled, muted) when already tracked.
+  - **"Add to Compare"** (`text-sky-400 border-sky-800/50 hover:border-sky-600 hover:bg-sky-900/20`): navigates to `/compare?tickers=X`, appending to any existing tickers.
+- **Button shape**: same ghost-button base (8px radius, `0.8125rem` text, `6px 12px` padding), with a colored icon (`1rem`) left of label.
+- **Rule**: Decision Panel buttons use semantic colors because the action itself carries that state meaning — portfolio = positive, watchlist = caution/holding pattern, compare = informational. This is the only permitted exception to the State-Only Rule for button backgrounds.
+
+### Quick-Action Buttons (Inline Pipeline Routing)
+
+Compact secondary buttons placed inline in table rows (Watchlist, Compare) and response messages (Advisor). They route the investor to the next pipeline stage without navigating away.
+
+- **Style**: `text-xs font-medium py-1 px-2.5 rounded-md border border-slate-700/60 text-slate-400 hover:border-slate-500 hover:text-slate-200 transition-colors` — understated, reads as metadata-level actions, not primary CTAs.
+- **Placement**: always trailing in a row, never interrupting the data columns. Watchlist rows: rightmost column after Edit/Delete. Compare columns: stacked below the existing "Deep Analysis" button.
+- **"Already added" state**: when a ticker is already in the target (watchlist item exists, ticker already in compare list), the button becomes a static chip: `text-xs text-slate-500 border border-slate-800 rounded-md px-2 py-1 cursor-default` with checkmark icon. No disabled styling — it reads as resolved, not blocked.
+- **Label convention**: verb-only labels ("Watch", "Compare", "Analyze") — no articles, no "Add to". One word, or two when the verb alone is ambiguous.
+
+### Price Proximity Badge
+
+Appears in the Watchlist table, showing how far the current price is from the buy target as a percentage. Replaces the need for the investor to calculate this mentally.
+
+- **Layout**: an inline pill chip in the "Distance" column: `text-xs font-semibold rounded-full px-2 py-0.5`.
+- **States**:
+  - **At target or below** (≤ 0%): `bg-emerald-500/15 text-emerald-400 border border-emerald-800/50` — "AT TARGET" label, no percentage shown. Signals an actionable opportunity.
+  - **Close** (1–10% above target): `bg-amber-500/15 text-amber-400 border border-amber-800/40` — shows "+X% to target". Investor should start reviewing.
+  - **Watching** (> 10% above target): `bg-slate-800/60 text-slate-400 border border-slate-700/50` — shows "+X% to target". Passive monitoring state.
+- **Rule**: distance is computed as `(currentPrice - buyTarget) / buyTarget * 100`. When buyTarget is null (no saved analysis for ticker), the badge is omitted.
+
+### Mode Toggle (Advisor: Portfolio / Discovery)
+
+A tab-strip toggle at the top of the Advisor page, switching between the two advisor modes without a page navigation.
+
+- **Style**: `inline-flex gap-0.5 bg-slate-900/60 border border-slate-800 rounded-lg p-0.5`. Each tab: `text-xs font-semibold px-4 py-1.5 rounded-md transition-colors`.
+- **Active tab**: `bg-midnight-surface text-slate-100 shadow-sm` — the active surface rises one tonal step from the container.
+- **Inactive tab**: `text-slate-500 hover:text-slate-300` — recedes, reads as navigation affordance not current context.
+- **Labels**: "Portfolio" (portfolio icon) and "Discovery" (search/compass icon). Short, not "Portfolio Advisor" — the page title already establishes context.
+- **Rule**: the toggle is a mode switch, not a filter. Switching mode resets the conversation input and suggested prompts. It does NOT reset conversation history (sessions from both modes are preserved in the sidebar).
+
+### Advisor Ticker Chip (Split Action)
+
+Extends the existing `[[TICKER]]` chip pattern in Advisor responses. Each chip now has two affordances.
+
+- **Base chip**: `text-sky-400 font-mono text-xs bg-sky-900/20 border border-sky-800/50 rounded-md px-2 py-0.5 inline-flex items-center gap-1` — same as current clickable ticker chip.
+- **Split button**: the chip divides into two zones with a `1px border-slate-700` divider:
+  - Left zone (ticker label + arrow icon): navigates to `/?ticker=X` — current behavior, unchanged.
+  - Right zone (graph/compare icon, `px-1.5`): appends ticker to the compare page URL and shows a toast notification "Added to Compare".
+- **Hover state**: the hovered zone lightens (`bg-sky-900/40`); the other zone stays at rest. This makes the two affordances spatially distinct.
+- **"Already in compare" state**: the right zone shows a checkmark icon in `text-slate-500`; no click behavior. Tooltip on hover: "Already in Compare".
+
+## 7. Do's and Don'ts
 
 ### Do:
 - **Do** open every card section with a `text-xs font-semibold uppercase tracking-wider text-muted` label. The label is structure, not decoration.

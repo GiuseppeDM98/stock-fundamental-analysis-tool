@@ -20,6 +20,8 @@ export type QuoteResponse = {
   exchange: string;
   region: Region;
   regularMarketPrice: number;
+  regularMarketChange: number;        // Absolute change vs previous close
+  regularMarketChangePercent: number; // Relative change vs previous close — yahoo-finance2 returns this as a whole-number percentage (e.g. 1.23 = +1.23%, NOT 0.0123)
   marketCap: number | null;           // Null if not reported by Yahoo Finance
   sharesOutstanding: number | null;   // Null if not reported (required for DCF)
   fetchedAt: string;                  // ISO 8601 timestamp

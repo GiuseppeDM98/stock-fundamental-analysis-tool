@@ -11,13 +11,25 @@ datasource db {
 }
 
 model User {
-  id           String              @id @default(cuid())
-  email        String              @unique
-  passwordHash String
-  createdAt    DateTime            @default(now())
-  analyses     Analysis[]
-  positions    Position[]
-  snapshots    PortfolioSnapshot[]
+  id                      String              @id @default(cuid())
+  email                   String              @unique
+  passwordHash            String
+  createdAt               DateTime            @default(now())
+  analyses                Analysis[]
+  positions               Position[]
+  snapshots               PortfolioSnapshot[]
+  watchlistItems          WatchlistItem[]
+  watchlistRuns           WatchlistRun[]
+  compareResults          CompareResult[]
+  advisorSessions         AdvisorSession[]
+  // null = use account email
+  watchlistEmail          String?
+  // "biweekly" | "monthly"
+  watchlistFreq           String              @default("biweekly")
+  // When false the cron skips this user entirely — useful when not actively investing
+  watchlistEnabled        Boolean             @default(true)
+  // Rate-limit manual trigger to once per 24h
+  lastManualWatchlistRun  DateTime?
 }
 
 model Analysis {
@@ -54,6 +66,40 @@ model PortfolioSnapshot {
   @@index([userId, takenAt])
 }
 
+// Ticker the user wants to monitor periodically via the AI cron digest.
+model WatchlistItem {
+  id          String   @id @default(cuid())
+  userId      String
+  ticker      String
+  companyName String
+  mosPercent  Float    @default(0.20)
+  notes       String?
+  addedAt     DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, ticker])
+  @@index([userId])
+}
+
+// Result of each cron/manual analysis run per ticker per user.
+// Retained for last-run display in the UI and future trend tracking.
+model WatchlistRun {
+  id            String   @id @default(cuid())
+  userId        String
+  ticker        String
+  runAt         DateTime @default(now())
+  fairValueBull Float?
+  fairValueBase Float?
+  fairValueBear Float?
+  method        String?
+  sector        String?
+  currency      String?
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, runAt])
+  @@index([userId, ticker])
+}
+
 // Tracks real purchases made by the user for long-term P&L tracking.
 model Position {
   id            String   @id @default(cuid())
@@ -68,9 +114,58 @@ model Position {
   currency      String   @default("EUR")
   purchasedAt   DateTime
   notes         String?
+  // User's applicable capital gains tax rate for this position (e.g. 26.0 for Italy).
+  // Used client-side to show estimated tax on unrealized gains and net dividend amounts.
+  capitalGainsTaxRate Float?
   createdAt     DateTime @default(now())
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([userId, ticker])
+}
+
+// AI Portfolio Advisor chat sessions.
+// Each session has a title derived from the first user message.
+model AdvisorSession {
+  id        String           @id @default(cuid())
+  userId    String
+  title     String
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  messages  AdvisorMessage[]
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Individual messages within an advisor chat session.
+model AdvisorMessage {
+  id        String         @id @default(cuid())
+  sessionId String
+  // "user" | "assistant"
+  role      String
+  content   String
+  createdAt DateTime       @default(now())
+  session   AdvisorSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+// Latest AI fair value estimate per user per ticker, saved from the compare page.
+// One row per user+ticker — upserted on each new analysis run.
+model CompareResult {
+  id            String   @id @default(cuid())
+  userId        String
+  ticker        String
+  fairValueBull Float
+  fairValueBase Float
+  fairValueBear Float
+  method        String
+  sector        String
+  currency      String
+  analyzedAt    DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, ticker])
+  @@index([userId])
 }

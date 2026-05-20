@@ -1,5 +1,59 @@
 ## ✨ New Features
 
+- **Investment pipeline — connected workflow** — the app now guides you through the full stock-picking process without dead ends. Every major page now has direct routes to the next step, so you never have to manually re-enter a ticker or copy-paste between tabs.
+
+- **Decision Panel after Deep Value Analysis** — once a Deep Value analysis finishes streaming, two action buttons appear below "Save Report": an amber **Add to Watchlist** button (pre-filled with the ticker and your current margin of safety) and a sky **Add to Compare** button. If the ticker is already on your watchlist, the button shows "In Watchlist" instead of re-adding it. This turns every completed analysis into a deliberate decision point.
+
+- **Advisor Discovery Mode** — the AI Advisor now has two modes, switchable via a toggle above the chat. **Portfolio mode** (the original) has full context of your holdings and saved analyses. **Discovery mode** starts clean — no portfolio context — and is purpose-built for finding new investment ideas. Ask for quality compounders, undervalued dividend growers, or sector opportunities and get 3–5 concrete ticker suggestions with a thesis, ROIC, valuation setup, and key risk for each. Your selected mode is remembered across sessions.
+
+- **Compare queue from Advisor** — ticker chips in Advisor responses now have two zones: click the ticker name to launch a Deep Value analysis as before, or click the small **+** on the right to add the ticker to a compare queue. Once you've queued 2+ tickers, a bar appears above the chat input showing all queued tickers and a **Compare (N) →** button that takes you directly to the comparison page with all of them pre-loaded. The queue persists if you leave the page.
+
+- **Watchlist quick-actions** — each watchlist row now has two inline action buttons: **Analyze** (launches a Deep Value analysis for that ticker) and **Compare** (opens the comparison page with that ticker). No more manually typing tickers to continue your research.
+
+- **Price proximity badge on Watchlist** — each watchlist row now shows how close the current price is to your buy target (fair value base discounted by your MoS%). The badge turns emerald when the price has reached or exceeded the target ("AT TARGET"), amber when within 10% below the target, and grey when further away. Only shown when an AI analysis has been run for that ticker.
+
+- **Watch from Compare** — the Compare page now has a **Watch** button in each ticker's column (below the existing "Deep Analysis" link). Click it to add the ticker directly to your watchlist without leaving the comparison. The button shows "In Watchlist" once saved or if the ticker was already being tracked.
+
+- **Dual fair value visualization in Saved Analyses** — when a saved analysis was run with a Margin of Safety > 0%, the Saved Analyses page now shows two separate sets of Bear/Base/Bull cards and two stacked gradient bars instead of one. The top row (violet) shows the **intrinsic fair value** — what the AI determined the stock is fundamentally worth. The bottom row (yellow) shows the **buy target** — the same values discounted by your MoS%. This makes it clear at a glance what the stock is worth vs. at what price it becomes a buy, without having to do the mental math yourself.
+
+- **Exit signal now triggers at intrinsic fair value** — the amber ⚠ "At Fair Value" badge in the Portfolio now fires when the current price reaches the **intrinsic base fair value**, not the buy target. Previously, the alert was triggering at the original entry price (the MoS-discounted buy target), which meant the signal fired too early — as soon as the stock recovered to your purchase price, not when it actually reached fair value. The new threshold correctly signals when the original margin of safety has been fully consumed.
+
+- **Portfolio analyses list shows buy target and intrinsic value** — in the "Saved Analyses" collapse inside each portfolio position, each analysis row now shows both values when MoS > 0: `Buy Target 17.26 · FV 21.58`. Previously only the buy target was shown (labeled "FV base"), which was ambiguous.
+
+- **Exit signal banner: fair value shown inline** — the amber banner text now reads *"Price has reached the base fair value (21.57). Consider whether the investment thesis still holds."* — with the exact value placed right after the description of what was reached, instead of appended at the end of the full message.
+
+- **Exit signal — "At Fair Value"** — when a portfolio position's current price reaches or exceeds the base fair value from the most recent saved Deep Value Analysis for that ticker, an amber **⚠ At Fair Value** badge now appears directly in the aggregated position row — always visible, no need to expand. The badge is also shown inside the "Saved Analyses" collapse with additional context (the exact base fair value threshold). Both show a **Re-analyze →** button that takes you directly to the dashboard for that ticker. The threshold is the *base* fair value (not Bull, not Bear): this is the point where the original margin of safety is fully consumed and it's time to revisit the investment thesis.
+
+- **Review Position (AI)** — clicking "Re-analyze →" from an exit signal now passes your position context to the dashboard automatically (weighted average cost + previous base fair value). A new amber **"Review Position (AI)"** button appears above the standard Deep Analysis button. Clicking it runs a dedicated AI analysis with a fundamentally different question: *"I already own this stock — should I hold, add, or exit?"* The report includes your WAC, your unrealized gain/loss, and ends with a **Hold, Add, or Exit Recommendation** section. The Bear/Base/Bull fair value cards and save flow work exactly as with a standard Deep Value analysis — the new analysis is saved to your history like any other.
+
+- **AI Portfolio Advisor** — a new `/advisor` page lets you have a free-form conversation with an AI that knows your entire portfolio and saved analyses. Ask questions like "which Italian stocks should I add?", "which of my positions has the most upside left?", or "what's undervalued in my watchlist?" The AI has full context of your positions, weighted average costs, and the Bear/Base/Bull fair values from your saved analyses. When it recommends a specific stock, the ticker appears as a clickable chip — click it to launch a full Deep Value analysis instantly. Past conversations are saved automatically and listed in a sidebar so you can revisit them anytime.
+
+- **Ticker Comparison** — a new `/compare` page lets you analyze up to 5 stocks side-by-side in seconds. Add any ticker, click "Run Analysis", and Claude fetches live fair values (Bear / Base / Bull) for all of them in parallel via web search. Results are saved to your account so you can leave and come back without re-running the analysis. A global **Margin of Safety slider** (0–40%) adjusts the Base fair value in real-time across all columns. Each fair value shows the **upside or downside % vs. the current price** inline, colored green or red. A **freshness badge** tells you how old each result is (green = today, amber = stale). When comparing 2+ tickers, a ★ star marks the one with the best MoS-adjusted upside. A "Deep Analysis →" link opens the full AI report for any ticker in a new tab.
+
+- **Quality Scorecard** — a new panel on the dashboard gives you four quantitative signals to assess a company's financial quality at a glance: **Piotroski F-Score** (0–9 signals covering profitability, cash flow quality, leverage, and efficiency — each signal shown individually in a collapsible list), **ROIC vs WACC Spread** (is the company creating or destroying value?), **FCF Conversion** (are reported earnings backed by real cash?), and **Altman Z-Score** (bankruptcy risk indicator, skipped automatically for banks and real estate). All data comes directly from Yahoo Finance — no extra input required. The panel appears between the valuation metrics cards and the historical charts.
+
+- **Historical Multiples Chart** — a new chart below the fundamental data shows P/E, P/FCF, and EV/EBIT over the last 10 fiscal years. Toggle between the three metrics using pill buttons. A shaded band marks the historical cheap/expensive range (25th–75th percentile), a dashed line marks the median, and a solid line shows where the stock trades today. A summary row below the chart shows current / median / min / max values and a color-coded percentile badge: green means historically cheap (< 30th percentile), amber is mid-range, red means historically expensive (> 70th percentile). Instantly answers the question: "Is this stock cheap or expensive relative to its own history?"
+
+- **Reverse DCF — Implied Growth Rate** — after searching a DCF-eligible stock (Technology, Healthcare, Consumer, Industrials), a new card shows the annualised FCF growth rate the market is implicitly pricing in at the current stock price. Compare it against the company's 4-year historical FCF CAGR to instantly see whether market expectations are conservative, reasonable, or optimistic. A colored badge summarises the assessment (green = conservative/potential upside, amber = reasonable, red = priced for perfection). Only appears for companies with positive free cash flow.
+
+- **Watchlist with AI email digest** — add any ticker to your personal watchlist and receive an automatic email every two weeks (or monthly) with AI-generated fair value estimates for each stock. Each digest shows Bear / Base / Bull fair values, the current price, upside vs. your margin-of-safety target, and an "Under FV" / "Over FV" status badge.
+
+- **Per-ticker margin of safety on watchlist** — each watchlist entry has its own MoS% slider. The "Base −MoS%" column in the table shows the exact price you should aim to buy at, already discounted by your safety margin.
+
+- **Pause watchlist analysis** — a toggle in Watchlist Settings lets you disable analysis emails without deleting your watchlist. Useful when you're not actively looking to invest and don't want emails cluttering your inbox.
+
+- **Manual watchlist trigger** — click "Update now" in Watchlist Settings to run the AI analysis immediately, without waiting for the next scheduled run. Rate-limited to once every 24 hours.
+
+- **Capital invested markers in Portfolio chart** — the P&L history chart now shows an amber vertical line on days when you put new money into the portfolio (adding a new position or buying more of an existing one). Hover over that point to see exactly how much was invested. This makes it easy to tell apart market gains from capital you deposited yourself.
+
+- **Daily price change in Portfolio** — each position now shows today's % change and absolute move vs. the previous close (e.g. ▲ +0.89% today / ▼ -1.63% today) directly next to the current price, in green or red. No extra clicks needed to check how your holdings are moving today.
+
+- **Capital gains tax per position** — you can now set an optional tax rate (%) on each position when adding it. The portfolio will then show estimated taxes and net P&L alongside the gross gain for every position in gain. The summary bar also shows total estimated taxes and your net P&L across the whole portfolio. Useful for the Italian market (standard 26% rate) or any other jurisdiction.
+
+- **Gross and net dividends** — when a tax rate is set, the "Dividends Received" total in the summary bar now shows both the gross amount (as before) and an estimated net amount after applying the tax rate.
+
+- **Installable app (PWA)** — the app can now be installed directly on your device. On Android, Chrome shows an "Install" banner automatically. On iOS, use Share → Add to Home Screen in Safari. Once installed, the app opens in standalone mode (no browser chrome) with its own icon on your home screen — exactly like a native app.
+
 - **Dividend tracking** — add an ISIN to any portfolio position and dividends paid on Borsa Italiana are automatically recorded each day the cron runs. The portfolio summary bar shows a cumulative "Dividends Received" total, and the P&L history chart marks dividend payment days with a green vertical line. Only payment date is tracked (not ex-dividend date), so the amount reflects cash actually received. Works for stocks listed on Borsa Italiana (MTAA); other exchanges are silently skipped.
 
 - **Deep Value Analysis** now shows a **Valuation Summary table** at the end of each report — a quick-reference table listing the current price alongside Bear, Base, and Bull fair values and their upside/downside percentage vs. the current price. No more scrolling back to the top to check the numbers after reading the full report.
@@ -52,6 +106,18 @@
 
 ## 🐛 Bug Fixes
 
+- Fixed Valuation Summary table at the end of Deep Value Analysis showing "EUR Fair Value" as the column header even when a Margin of Safety is set — when MoS > 0 the AI outputs MoS-adjusted buy targets, and the column header now correctly reads "EUR Buy Target (-X%)" to reflect this. When MoS is 0% the header remains "EUR Fair Value" as before.
+
+- Fixed AI Portfolio Advisor confusing MoS-adjusted buy targets with intrinsic fair values when discussing your saved analyses — the advisor now receives both the reconstructed intrinsic value (Bear / Base / Bull) and the buy target (at your MoS discount) as clearly labeled separate entries. This means answers like "your ENEL.MI base fair value is 10.07" are now correct: the advisor knows 12.58 is the intrinsic value and 10.07 is your entry target at 20% MoS.
+
+- Fixed portfolio summary bar showing "converted to EUR · Frankfurter.app" even when all positions are already in EUR — the attribution now only appears when at least one position uses a non-EUR currency and FX conversion actually took place.
+
+- Fixed watchlist frequency label always showing "Every 2 weeks" even when "Monthly" was selected — the label now reflects the actual saved setting.
+
+- Fixed valuation metric card titles ("Years of Earnings", "Years of FCF", "FCF Yield", "Earnings Yield") not translating when switching the app language — they now update immediately when switching between English and Italian, along with the modal descriptions
+
+- Fixed favicon not appearing in browser tabs — the app icon now shows correctly in all browsers, including incognito mode
+
 - Fixed Deep Value Analysis saving with MoS 0% — the panel was hardcoding `mosPercent: 0` instead of reading the dashboard's actual margin of safety setting
 - Fixed Deep Value Analysis not saving bull/base/bear fair values — the save call now reads them from the parsed JSON result block
 - Fixed saved analysis detail page not rendering markdown — added missing `remark-gfm` plugin; tables, bold, and headings now render correctly
@@ -71,6 +137,8 @@
 - Fixed fundamental analysis failing for some European tickers (e.g. Italian small-caps) that return unknown data types from Yahoo Finance
 
 ## 🔧 Improvements
+
+- The Ticker Comparison page now shows both the **intrinsic fair value** and the **buy target** for each Bear / Base / Bull scenario when a Margin of Safety is set. The intrinsic value (what the AI determined the stock is fundamentally worth) is shown on the first line; the buy target discounted by your MoS% appears below it in amber. A legend at the bottom of the table labels the two lines. When MoS is 0% the table is unchanged — one line per cell as before.
 
 - Deep Value Analysis report sections are now better spaced — headers, paragraphs, and bullet lists have more breathing room, making long multi-section reports easier to read
 - Deep Value Analysis now sources up to **5 years** of financial data (previously defaulted to 3), giving a clearer picture of long-term trends in growth, margins, and capital returns

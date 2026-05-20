@@ -20,13 +20,18 @@ import { EvEbitdaScenarioPanel } from "@/components/ev-ebitda-scenario-panel";
 import { FairValueCard } from "@/components/fair-value-card";
 import { FundamentalsCharts } from "@/components/fundamentals-charts";
 import { PriceSummary } from "@/components/price-summary";
+import { ReverseDcfCard } from "@/components/reverse-dcf-card";
 import { ScenarioPanel } from "@/components/scenario-panel";
 import { TickerSearch } from "@/components/ticker-search";
 import DeepValuePanel from "@/components/deep-value-panel";
 import { ValuationMetricsCards } from "@/components/valuation-metrics-cards";
+import { QualityScorecardPanel } from "@/components/quality-scorecard-panel";
+import { MultiplesHistoryChart } from "@/components/multiples-history-chart";
 import { useLanguage } from "@/context/language-context";
 import { getDefaultDdmScenarios, getCompanyDdmScenarios, getDefaultEvEbitdaScenarios, getCompanyEvEbitdaScenarios, getDefaultScenarios } from "@/lib/valuation/scenario-presets";
+import { computeFcfCagr } from "@/lib/valuation/dcf";
 import { detectSector, getRecommendedMethod } from "@/lib/valuation/sector";
+import { computeQualityScorecard } from "@/lib/valuation/quality-metrics";
 import { FundamentalsResponse } from "@/types/fundamentals";
 import { QuoteResponse } from "@/types/market";
 import { AnalystEstimates, AnalystEstimatesResponse, DdmScenariosInput, EvEbitdaScenariosInput, ScenariosInput, ValuationResponse } from "@/types/valuation";
@@ -142,6 +147,8 @@ export function DashboardClient() {
   const [evEbitdaScenarioSource, setEvEbitdaScenarioSource] = useState<ScenarioSource>("generic");
   // Tracks whether client-side hydration has completed to prevent localStorage reads during SSR
   const [isHydrated, setIsHydrated] = useState(false);
+  // Context injected when navigating from the portfolio exit signal (⚠ At Fair Value → Re-analyze)
+  const [exitReviewContext, setExitReviewContext] = useState<{ wac: number; prevFv: number } | null>(null);
 
   // Refs store latest scenario values for use in async callbacks (fetchDashboardData)
   // Without refs, fetchDashboardData would close over stale state from its creation time
@@ -156,11 +163,26 @@ export function DashboardClient() {
   // This useEffect runs once after the initial server-side render completes,
   // ensuring window.localStorage is available and preventing hydration mismatches
   useEffect(() => {
-    // ?ticker= URL param (from Re-run button) takes precedence over localStorage
-    const urlParam = new URLSearchParams(window.location.search).get("ticker");
+    // Read all URL params before clearing the URL — params are removed together by replaceState
+    const searchParams = new URLSearchParams(window.location.search);
+    const urlParam = searchParams.get("ticker");
+    const exitReviewFlag = searchParams.get("exitReview");
+    const wacParam = searchParams.get("wac");
+    const prevFvParam = searchParams.get("prevFv");
+
+    // ?ticker= URL param (from Re-run button, advisor chip, or exit signal) takes precedence over localStorage
     if (urlParam) {
       urlTickerRef.current = urlParam.toUpperCase();
       window.history.replaceState({}, "", window.location.pathname);
+    }
+
+    // Inject position context when navigating from the portfolio exit signal
+    if (exitReviewFlag === "1" && wacParam && prevFvParam) {
+      const wac = parseFloat(wacParam);
+      const prevFv = parseFloat(prevFvParam);
+      if (Number.isFinite(wac) && wac > 0 && Number.isFinite(prevFv) && prevFv > 0) {
+        setExitReviewContext({ wac, prevFv });
+      }
     }
 
     const storedTicker = urlTickerRef.current ?? getStorageItem("sfa:lastTicker", (value) => String(value), "AAPL");
@@ -365,6 +387,17 @@ export function DashboardClient() {
     }));
   }, [valuation]);
 
+  // Quality scorecard depends on fundamentals, WACC from the active base scenario, and quote
+  const scorecard = useMemo(() => {
+    if (!fundamentals || !quote) return null;
+    return computeQualityScorecard(
+      fundamentals,
+      scenarios.base.wacc,
+      quote.regularMarketPrice,
+      quote.sharesOutstanding,
+    );
+  }, [fundamentals, quote, scenarios.base.wacc]);
+
   return (
     <main className="mx-auto max-w-7xl p-4 pb-10 sm:p-6 lg:p-8">
       {/* Page header */}
@@ -524,15 +557,58 @@ export function DashboardClient() {
               <p className="mt-2 text-xs text-muted">{t("chartScenarioNote")}</p>
             </div>
 
+            {/* Reverse DCF — shown only for DCF-eligible sectors with positive FCF */}
+            {valuation.valuationMethod === "dcf" &&
+              fundamentals.sector !== null &&
+              getRecommendedMethod(detectSector(fundamentals.sector)).isDcfAppropriate &&
+              quote.sharesOutstanding != null &&
+              quote.sharesOutstanding > 0 &&
+              fundamentals.annual.length > 0 &&
+              fundamentals.annual[0].fcf > 0 && (
+                <section>
+                  <ReverseDcfCard
+                    currentPrice={quote.regularMarketPrice}
+                    sharesOutstanding={quote.sharesOutstanding}
+                    wacc={scenarios.base.wacc}
+                    terminalGrowthRate={scenarios.base.terminalGrowth}
+                    operatingMarginTarget={scenarios.base.operatingMarginTarget}
+                    taxRate={scenarios.base.taxRate}
+                    reinvestmentRate={scenarios.base.reinvestmentRate}
+                    baseFcf={fundamentals.annual[0].fcf}
+                    baseRevenue={fundamentals.annual[0].revenue}
+                    historicalFcfCagr5yr={computeFcfCagr(fundamentals.annual.map((p) => p.fcf))}
+                    currency={quote.currency}
+                  />
+                </section>
+              )}
+
             <ValuationMetricsCards quote={quote} fundamentals={fundamentals} />
 
+            <QualityScorecardPanel scorecard={scorecard} isLoading={false} />
+
             <FundamentalsCharts fundamentals={fundamentals} />
+
+            <MultiplesHistoryChart
+              ticker={ticker}
+              currentPe={fundamentals.ratios.pe ?? null}
+              currentPFcf={
+                quote.marketCap != null && fundamentals.annual.length > 0 && fundamentals.annual[0].fcf > 0
+                  ? quote.marketCap / fundamentals.annual[0].fcf
+                  : null
+              }
+              currentEvEbit={
+                quote.marketCap != null && fundamentals.annual.length > 0 && fundamentals.annual[0].ebit > 0
+                  ? quote.marketCap / fundamentals.annual[0].ebit
+                  : null
+              }
+            />
 
             <DeepValuePanel
               ticker={ticker}
               companyName={quote.shortName}
               mosPercent={mosPercent}
               currentPrice={quote.regularMarketPrice}
+              exitReviewContext={exitReviewContext}
             />
           </motion.div>
         )}
