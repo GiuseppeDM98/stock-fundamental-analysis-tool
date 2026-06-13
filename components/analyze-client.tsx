@@ -102,7 +102,10 @@ export function AnalyzeClient() {
     if (!isHydrated) {
       return;
     }
-    window.localStorage.setItem("sfa:lastTicker", ticker);
+    // getStorageItem JSON.parses on read, so the stored value must be valid JSON.
+    // A bare string like "MSFT" isn't — without stringify the read always threw and
+    // fell back to the default (AAPL), so the last ticker never actually persisted.
+    window.localStorage.setItem("sfa:lastTicker", JSON.stringify(ticker));
   }, [ticker, isHydrated]);
 
   // Persist margin of safety and keep the ref in sync for the async fetch callback
