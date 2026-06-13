@@ -56,11 +56,17 @@ export default function SavedValuationSummary({
 
   const cardLabels = { bull: "Bull", base: "Base", bear: "Bear" } as const;
 
+  // Upside vs. the live price, computed deterministically from the displayed value.
+  // The AI's stored `upside` is unreliable (sometimes the ratio unscaled, e.g. 1.4 → 143%),
+  // so we recompute. null until the live price resolves.
+  const computeUpside = (value: number): number | null =>
+    currentPrice != null && currentPrice > 0 ? ((value - currentPrice) / currentPrice) * 100 : null;
+
   const rows: { label: string; value: number; upside: number | null; isBase?: boolean }[] = [
     ...(currentPrice != null ? [{ label: t("recapCurrentPrice"), value: currentPrice, upside: null }] : []),
-    { label: t("bearLabel"), value: meta.bear.fairValue, upside: meta.bear.upside },
-    { label: t("baseLabel"), value: meta.base.fairValue, upside: meta.base.upside, isBase: true },
-    { label: t("bullLabel"), value: meta.bull.fairValue, upside: meta.bull.upside },
+    { label: t("bearLabel"), value: meta.bear.fairValue, upside: computeUpside(meta.bear.fairValue) },
+    { label: t("baseLabel"), value: meta.base.fairValue, upside: computeUpside(meta.base.fairValue), isBase: true },
+    { label: t("bullLabel"), value: meta.bull.fairValue, upside: computeUpside(meta.bull.fairValue) },
   ];
 
   return (
@@ -75,13 +81,14 @@ export default function SavedValuationSummary({
       <div className="grid grid-cols-3 gap-3">
         {(["bull", "base", "bear"] as const).map((scenario) => {
           const s = meta[scenario];
+          const up = computeUpside(s.fairValue);
           return (
             <div key={scenario} className="rounded-xl border border-slate-700/60 bg-slate-800/50 p-3 text-center">
               <p className="text-xs text-slate-400">{cardLabels[scenario]}</p>
               <p className="mt-1 text-base font-bold text-slate-100">
                 {meta.currency} {s.fairValue.toFixed(2)}
               </p>
-              <UpsideBadge upside={s.upside} />
+              {up != null && <UpsideBadge upside={up} />}
             </div>
           );
         })}
