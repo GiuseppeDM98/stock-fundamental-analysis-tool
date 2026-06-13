@@ -482,7 +482,7 @@ const en: Translations = {
   sharesUnit: "shares",
   exitSignalBadge: "At Fair Value",
   exitSignalReviewReached: "Price has reached the base fair value",
-  exitSignalReviewConsider: "Consider whether the investment thesis still holds.",
+  exitSignalReviewConsider: "Review the thesis — hold (e.g. for dividends), add, or exit.",
   exitSignalCta: "Re-analyze",
 
   // Analyses
@@ -881,7 +881,7 @@ const it: Translations = {
   sharesUnit: "az.",
   exitSignalBadge: "A Fair Value",
   exitSignalReviewReached: "Il prezzo ha raggiunto il fair value base",
-  exitSignalReviewConsider: "Valuta se la tesi d'investimento è ancora valida.",
+  exitSignalReviewConsider: "Valuta se la tesi regge: tieni (es. per i dividendi), aggiungi o esci.",
   exitSignalCta: "Ri-analizza",
 
   // Analyses

@@ -23,7 +23,7 @@ Dare all'app una direzione unica da investitore value: rimuovere l'analisi class
 - [x] 2. Route move `/analyze` + rework deep-link (1 commit) — build+test verdi
 - [x] 3. Hub home + Advisor "tutte in Compare" — build+test verdi
 - [x] 4. Nav reorder + label + fix `analyses-list:813` — build+test verdi
-- [ ] 5. Exit signal dividend-aware
+- [x] 5. Exit signal dividend-aware — copy reframe + AI Review valuta i dividendi. **Numero inline yield-on-cost RINVIATO**: serve esporre i dividendi per-ticker via `/api/portfolio/snapshots` (oggi il client riceve solo il totale giornaliero di portafoglio, non per-posizione).
 - [ ] 6. Docs (PRODUCT/CLAUDE/AGENTS/README) + verifica finale + PR → develop
 
 ## Log
