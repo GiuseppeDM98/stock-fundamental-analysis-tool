@@ -20,8 +20,8 @@ Dare all'app una direzione unica da investitore value: rimuovere l'analisi class
 ## Checklist (commit atomici; build+test verdi a ogni step)
 - [x] 0. Branch + tracking + memoria workflow
 - [x] 1. Rimozione classica + slim client (1 commit) — build+test verdi
-- [ ] 2. Route move `/analyze` + rework deep-link (1 commit)
-- [ ] 3. Hub home + Advisor "tutte in Compare"
+- [x] 2. Route move `/analyze` + rework deep-link (1 commit) — build+test verdi
+- [x] 3. Hub home + Advisor "tutte in Compare" — build+test verdi
 - [ ] 4. Nav reorder + label + fix `analyses-list:813`
 - [ ] 5. Exit signal dividend-aware
 - [ ] 6. Docs (PRODUCT/CLAUDE/AGENTS/README) + verifica finale + PR → develop

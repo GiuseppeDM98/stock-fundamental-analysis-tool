@@ -376,6 +376,26 @@ export type Translations = {
   advisorDiscoveryExample3: string;
   advisorDiscoveryExample4: string;
   advisorCompareQueue: string;
+  advisorCompareAll: string;
+  // Hub (home)
+  hubTagline: string;
+  hubStepDiscoverTitle: string;
+  hubStepDiscoverDesc: string;
+  hubStepScreenTitle: string;
+  hubStepScreenDesc: string;
+  hubStepDecideTitle: string;
+  hubStepDecideDesc: string;
+  hubStepMonitorTitle: string;
+  hubStepMonitorDesc: string;
+  hubPrimaryCta: string;
+  hubTickerPlaceholder: string;
+  hubRecentTitle: string;
+  hubRecentAnalysesTitle: string;
+  hubRecentPortfolioTitle: string;
+  hubRecentWatchlistTitle: string;
+  hubViewAll: string;
+  hubRecentEmpty: string;
+  hubWatchlistTracked: string;
   advisorAddToCompare: string;
 };
 
@@ -754,6 +774,26 @@ const en: Translations = {
   advisorDiscoveryExample3: "Undervalued small caps in the tech sector",
   advisorDiscoveryExample4: "Best risk/reward setup in industrials right now",
   advisorCompareQueue: "Compare ({n}) →",
+  advisorCompareAll: "Compare all ({n}) →",
+  // Hub (home)
+  hubTagline: "From discovery to decision — your value-investing pipeline.",
+  hubStepDiscoverTitle: "Discover",
+  hubStepDiscoverDesc: "Ask the AI advisor for value ideas that fit your criteria.",
+  hubStepScreenTitle: "Screen",
+  hubStepScreenDesc: "Compare candidates on fair value and margin of safety.",
+  hubStepDecideTitle: "Decide",
+  hubStepDecideDesc: "Run a Deep Value analysis on the most promising one.",
+  hubStepMonitorTitle: "Monitor",
+  hubStepMonitorDesc: "Track holdings and watch prices with exit signals.",
+  hubPrimaryCta: "Start with the Advisor →",
+  hubTickerPlaceholder: "Or analyze a ticker (e.g. AAPL)…",
+  hubRecentTitle: "Pick up where you left off",
+  hubRecentAnalysesTitle: "Recent analyses",
+  hubRecentPortfolioTitle: "Portfolio",
+  hubRecentWatchlistTitle: "Watchlist",
+  hubViewAll: "View all →",
+  hubRecentEmpty: "Nothing yet",
+  hubWatchlistTracked: "tracked",
   advisorAddToCompare: "Add to Compare",
 };
 
@@ -1132,6 +1172,26 @@ const it: Translations = {
   advisorDiscoveryExample3: "Small cap sottovalutate nel settore tech",
   advisorDiscoveryExample4: "Miglior rapporto rischio/rendimento negli industriali ora",
   advisorCompareQueue: "Confronta ({n}) →",
+  advisorCompareAll: "Confronta tutte ({n}) →",
+  // Hub (home)
+  hubTagline: "Dalla scoperta alla decisione — la tua pipeline da investitore value.",
+  hubStepDiscoverTitle: "Scopri",
+  hubStepDiscoverDesc: "Chiedi all'AI advisor idee value su misura per i tuoi criteri.",
+  hubStepScreenTitle: "Confronta",
+  hubStepScreenDesc: "Confronta i candidati su fair value e margine di sicurezza.",
+  hubStepDecideTitle: "Decidi",
+  hubStepDecideDesc: "Lancia un'analisi Deep Value sul più promettente.",
+  hubStepMonitorTitle: "Monitora",
+  hubStepMonitorDesc: "Segui posizioni e prezzi con segnali di uscita.",
+  hubPrimaryCta: "Inizia con l'Advisor →",
+  hubTickerPlaceholder: "O analizza un ticker (es. AAPL)…",
+  hubRecentTitle: "Riprendi da dove eri rimasto",
+  hubRecentAnalysesTitle: "Ultime analisi",
+  hubRecentPortfolioTitle: "Portfolio",
+  hubRecentWatchlistTitle: "Watchlist",
+  hubViewAll: "Vedi tutte →",
+  hubRecentEmpty: "Ancora niente",
+  hubWatchlistTracked: "monitorati",
   advisorAddToCompare: "Aggiungi al Confronto",
 };
 

@@ -1,10 +1,14 @@
-import { AnalyzeClient } from "@/components/analyze-client";
+import { auth } from "@/lib/auth";
+import HubClient from "@/components/hub-client";
 
 /**
- * Root route (`/`) — delegates to the analyzer for now.
+ * Root route (`/`) — the adaptive Hub home.
  *
- * Replaced by the adaptive Hub home in the next step; the deep-dive lives at `/analyze`.
+ * Renders for everyone (no redirect): logged-out visitors see the pipeline + CTAs.
+ * `auth()` only gates the logged-in recent-activity strip, passed as the `isAuthed`
+ * primitive so the session object never crosses into the client bundle.
  */
-export default function HomePage() {
-  return <AnalyzeClient />;
+export default async function HomePage() {
+  const session = await auth();
+  return <HubClient isAuthed={!!session} />;
 }
