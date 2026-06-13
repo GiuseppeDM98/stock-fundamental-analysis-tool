@@ -71,9 +71,9 @@ The JSON block MUST be the very first thing you output, before any other text:
   "method": "<DCF|DDM|EV/EBITDA|P/B>",
   "sector": "<sector name>",
   "currency": "<ISO currency code, e.g. USD, EUR>",
-  "bull": { "fairValue": <buy target after ${mosPercent}% MoS>, "upside": <upside of buy target vs current price> },
-  "base": { "fairValue": <buy target after ${mosPercent}% MoS>, "upside": <upside of buy target vs current price> },
-  "bear": { "fairValue": <buy target after ${mosPercent}% MoS>, "upside": <upside of buy target vs current price> }
+  "bull": { "fairValue": <buy target after ${mosPercent}% MoS> },
+  "base": { "fairValue": <buy target after ${mosPercent}% MoS> },
+  "bear": { "fairValue": <buy target after ${mosPercent}% MoS> }
 }
 \`\`\`
 
@@ -208,9 +208,9 @@ The JSON block MUST be the very first thing you output, before any other text:
   "method": "<DCF|DDM|EV/EBITDA|P/B>",
   "sector": "<sector name>",
   "currency": "<ISO currency code, e.g. USD, EUR>",
-  "bull": { "fairValue": <buy target after ${mosPercent}% MoS>, "upside": <upside of buy target vs current price> },
-  "base": { "fairValue": <buy target after ${mosPercent}% MoS>, "upside": <upside of buy target vs current price> },
-  "bear": { "fairValue": <buy target after ${mosPercent}% MoS>, "upside": <upside of buy target vs current price> }
+  "bull": { "fairValue": <buy target after ${mosPercent}% MoS> },
+  "base": { "fairValue": <buy target after ${mosPercent}% MoS> },
+  "bear": { "fairValue": <buy target after ${mosPercent}% MoS> }
 }
 \`\`\`
 

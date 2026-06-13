@@ -19,10 +19,8 @@ function parseValuationMeta(reportMd: string): SavedValuationMeta | null {
   if (!match) return null;
   try {
     const parsed = JSON.parse(match[1]);
-    const isScenario = (s: unknown): s is { fairValue: number; upside: number } =>
-      !!s &&
-      typeof (s as { fairValue?: unknown }).fairValue === "number" &&
-      typeof (s as { upside?: unknown }).upside === "number";
+    const isScenario = (s: unknown): s is { fairValue: number } =>
+      !!s && typeof (s as { fairValue?: unknown }).fairValue === "number";
     if (
       parsed &&
       typeof parsed.currency === "string" &&

@@ -27,9 +27,9 @@ type DeepValueResult = {
   method: string;
   sector: string;
   currency: string;
-  bull: { fairValue: number; upside: number };
-  base: { fairValue: number; upside: number };
-  bear: { fairValue: number; upside: number };
+  bull: { fairValue: number };
+  base: { fairValue: number };
+  bear: { fairValue: number };
 };
 
 const LANGUAGES = [

@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react";
 import { useLanguage } from "@/context/language-context";
 
-type Scenario = { fairValue: number; upside: number };
+type Scenario = { fairValue: number };
 
 export type SavedValuationMeta = {
   method: string;
