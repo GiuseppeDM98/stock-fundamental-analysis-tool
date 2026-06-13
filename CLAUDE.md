@@ -157,11 +157,11 @@ The Quality Scorecard (Piotroski / ROIC-WACC / Altman Z / FCF conversion), Valua
 - **Price Proximity Badge**: shown in each row's Ticker cell. `priceDist = (currentPrice − adjustedBase) / adjustedBase × 100`. `>= 0` → emerald "AT TARGET"; `|dist| ≤ 10%` → amber "+X% to target"; `> 10%` → slate "+X% to target". Omitted when `adjustedBase` or `currentPrice` is null.
 - **Quick-action buttons**: each row has "Analyze" → `window.location.href = '/analyze?ticker=X'` and "Add to Compare" → `window.location.href = '/compare?tickers=X'`, styled as `Quick-Action Buttons` (see DESIGN.md §6). Rendered above Edit/Delete in the Actions column.
 - `WatchlistItem`: `id, userId, ticker, companyName, mosPercent, notes, addedAt` — `@@unique([userId, ticker])`
-- `WatchlistRun`: stores per-ticker AI analysis results; retained for last-run display and future trend tracking
+- `WatchlistRun`: **no longer written** — the lite analysis was removed from the watchlist. The watchlist UI + email digest now source from the user's latest saved Deep Value `Analysis` per ticker. Model left in the schema, unused (no migration).
 - **User-level toggle** `watchlistEnabled Boolean @default(true)` — when false, the cron skips the user entirely.
 - **Manual trigger**: `POST /api/watchlist/run` — rate-limited to once per 24h via `lastManualWatchlistRun DateTime?` on the User model
 - **Cron**: Vercel Cron fires `GET /api/cron/watchlist-analysis` on the 1st and 15th of each month at 08:00 UTC. Monthly-frequency users are skipped on the 15th.
-- **Lite analysis**: `analyzeTickerLite()` from `lib/ai/lite-analysis.ts` — shared with compare endpoint. ~$0.05–0.08/ticker.
+- **Source of values**: the watchlist row + email digest read the user's latest saved Deep Value `Analysis` per ticker (reconstruct the intrinsic from the stored buy target, then apply the item's own MoS). Lite analysis (`analyzeTickerLite`) is **Compare-only** now — the watchlist no longer runs it (no AI cost in the cron). Tickers without a saved Deep Value analysis show no values (use the row's Deep Value button to analyze).
 - **Email**: sent via Resend — dark-themed HTML table with bear/base(MoS-adjusted)/bull/price/upside/status. Native currency per row.
 - `lib/watchlist-analysis.ts` — `import "server-only"`, exports `runWatchlistAnalysisForAllUsers()` and `runWatchlistAnalysisForUser(userId)`
 - `lib/email.ts` — Resend client (lazily initialized to avoid build-time throw), exports `sendWatchlistDigest()`
@@ -194,7 +194,7 @@ The Quality Scorecard (Piotroski / ROIC-WACC / Altman Z / FCF conversion), Valua
 types/                 # fundamentals.ts, market.ts, analysis.ts, auth.ts, portfolio.ts, watchlist.ts
 lib/
   ai/deep-value-prompts.ts # Prompt builders for deep value AI analysis (incl. Review Position)
-  ai/lite-analysis.ts      # analyzeTickerLite() — non-streaming, shared by watchlist cron + compare endpoint
+  ai/lite-analysis.ts      # analyzeTickerLite() — non-streaming, used by the compare endpoint (Compare only)
   ai/advisor-prompts.ts    # buildAdvisorSystemPrompt() — injects portfolio + analyses context
   yahoo-client.ts          # Yahoo adapter — getQuote + extractRawNumber + mapFundamentalsFromTimeSeries
   auth.ts                  # Auth.js v5 config
@@ -203,7 +203,7 @@ lib/
   portfolio.ts             # Client-side fetch helpers (positions + fetchSnapshots)
   portfolio-snapshots.ts   # Server-only: snapshot creation logic (import "server-only")
   dividends.ts             # Server-only: Borsa Italiana dividend fetcher + HTML parser
-  watchlist-analysis.ts    # Server-only: lite AI analysis + per-user/all-users cron runner
+  watchlist-analysis.ts    # Server-only: cron/email digest from saved Deep Value analyses + live prices (no AI)
   email.ts                 # Resend email sender — sendWatchlistDigest()
   format.ts                # Formatting utilities
 app/api/

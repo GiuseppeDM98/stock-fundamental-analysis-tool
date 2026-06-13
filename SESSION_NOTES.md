@@ -40,6 +40,13 @@ Dare all'app una direzione unica da investitore value: rimuovere l'analisi class
 - **2026-06-13** (cleanup): rimosso del tutto il campo `upside` dallo schema JSON del prompt Deep Value (e Review Position) + dai tipi `DeepValueResult`/`Scenario` e dalla validazione del parsing. L'AI restituisce solo `fairValue`; l'upside è SEMPRE calcolato in codice (come già fanno Compare e Watchlist). Niente più doppia fonte di verità.
 - **2026-06-13** (fix): watchlist mostrava il prezzo in `$` per ticker EUR non ancora analizzati — la valuta ripiegava su "USD" e il fetch del quote scartava `data.currency`. Ora cattura la valuta dal quote (fallback EUR). 
 
-## Domande aperte / enhancement proposti (non ancora implementati)
-- **Mostrare anche il fair value intrinseco** (oltre al buy target) nel pannello live `/analyze` e nella vista salvata — oggi mostrano solo il buy target (la pagina lista invece mostra entrambi). Intrinseco = `buyTarget / (1 − MoS)`.
-- **Watchlist: seed dai valori dell'ultima analisi Deep Value salvata** quando non esiste ancora un `WatchlistRun` (oggi i valori vengono solo dai run lite del cron/manuale, separati dalle analisi salvate → ORS.MI risulta "Non ancora analizzato").
+## Watchlist redesign (fatto — la lite esce dalla watchlist, resta solo in Compare)
+- **Fair value intrinseco** mostrato accanto al buy target nel pannello live + vista salvata (commit `546ae58`).
+- **Watchlist UI**: legge i valori dall'ultima analisi Deep Value salvata per ticker (ricostruisce l'intrinseco, applica il MoS dell'item); ticker senza analisi → nessun valore (bottone Deep Value per analizzare). Valuta dal quote live (commit `6cb2521`).
+- **Cron/email digest**: ripuntato sulle analisi salvate + prezzi live, niente più `analyzeTickerLite` (niente AI nel cron); fixato bug `data.price`→`regularMarketPrice` (commit `2211d92`).
+- **`analyzeTickerLite` ora usato SOLO da `/api/compare/analyze`** (verificato). `WatchlistRun` non più scritto, modello lasciato inutilizzato (no migrazione).
+
+## Follow-up residui (non urgenti)
+- README: sezioni profonde / API-reference dei route rimossi ancora da ripulire (c'è la nota in cima).
+- Eventuale rimozione del modello `WatchlistRun` + relazione `WatchlistItem.lastRun` (migrazione DB) se si vuole pulizia completa.
+- Yield-on-cost per-ticker inline nell'exit signal (serve esporre dividendi per-ticker via snapshots API).

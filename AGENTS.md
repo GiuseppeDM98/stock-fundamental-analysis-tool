@@ -19,7 +19,7 @@ types/             # fundamentals.ts, market.ts, analysis.ts, auth.ts, portfolio
 lib/               # Business logic and utilities (Yahoo quote adapter, AI prompts, lite analysis, snapshots, dividends, formatters)
   ai/
     deep-value-prompts.ts   # Prompt builders for streaming deep value analysis
-    lite-analysis.ts        # analyzeTickerLite() — server-only, shared by watchlist cron + compare endpoint
+    lite-analysis.ts        # analyzeTickerLite() — server-only, used by the compare endpoint (Compare only)
     advisor-prompts.ts      # buildAdvisorSystemPrompt() — injects portfolio + analyses context
   yahoo-client.ts  # Yahoo Finance API adapter
   auth.ts          # Auth.js v5 config
@@ -250,7 +250,7 @@ The classic `lib/valuation/*` engine (sector detection + DCF/DDM/EV-EBITDA + sce
 
 ### Lite analysis pattern (non-streaming, shared between cron + compare)
 
-`lib/ai/lite-analysis.ts` exports `analyzeTickerLite(ticker)` — non-streaming `messages.create()` call used by both the watchlist cron and the compare endpoint. Key invariants:
+`lib/ai/lite-analysis.ts` exports `analyzeTickerLite(ticker)` — non-streaming `messages.create()` call used by the **compare endpoint** (the watchlist no longer uses lite analysis — it sources from saved Deep Value analyses + live prices). Key invariants:
 - `temperature: 0` — makes sector→method selection fully deterministic regardless of which web results are retrieved
 - Sector→method rules are in the **system prompt** (not user prompt) as explicit mandatory rules with no exceptions:
   ```
