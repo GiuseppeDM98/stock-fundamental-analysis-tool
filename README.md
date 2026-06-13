@@ -1,6 +1,8 @@
 # Stock Fundamental Analysis Tool
 
-A Next.js web application for stock valuation using Discounted Cash Flow (DCF) analysis with scenario modeling. Fetch real-time financial data from Yahoo Finance and run bull/base/bear scenario valuations with interactive charts.
+A Next.js web app for value investors: an AI-assisted pipeline from idea **Discovery** → side-by-side **Screening** → an AI **Deep Value** analysis → **Monitoring**. The home is an adaptive Hub; the deep dive — where Claude autonomously picks the valuation method and sources data via web search — lives at `/analyze`.
+
+> **June 2026 refactor:** the classic Yahoo DCF/DDM/EV-EBITDA scenario engine (and its fundamentals charts, quality scorecard, historical multiples, reverse DCF) was removed — AI Deep Value is now the only analysis. Some deeper feature/API-reference sections below may still describe the old engine.
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-green)
@@ -14,7 +16,7 @@ A Next.js web application for stock valuation using Discounted Cash Flow (DCF) a
 
 This tool helps investors and analysts perform fundamental stock valuation through:
 
-- **Sector-adaptive valuation** — DCF for most stocks, DDM for utilities, EV/EBITDA for energy and materials, auto-detected from Yahoo Finance
+- **AI Deep Value analysis** — Claude autonomously picks the method (DCF/DDM/EV-EBITDA/P-B) and sources financials via web search, for any global ticker
 - **10-year DCF projections** with Gordon Growth terminal value
 - **Smart scenario defaults** auto-populated from analyst estimates and historical data
 - **Three scenario modeling** (Bull/Base/Bear) with independent parameters
@@ -60,7 +62,7 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 
 ## ✨ Key Features
 
-- 🎯 **Multi-Method Valuation**: DCF, DDM (Utilities), or EV/EBITDA (Energy/Materials) — auto-selected by sector
+- 🎯 **AI Deep Value**: Claude autonomously selects the valuation method and sources data via web search — works for any global ticker, ends in a buy / watch / pass decision
 - 🧠 **Smart Defaults**: Scenarios auto-populated from Yahoo Finance analyst estimates and historical data
 - ⚡ **Real-Time Data**: Yahoo Finance integration for quotes and up to 10-year fundamentals
 - 📊 **Interactive Charts**: Fair value comparison and historical financial metrics with formatted axes
@@ -111,7 +113,7 @@ npx prisma migrate dev
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and enter a stock ticker (e.g., `AAPL`, `MSFT`, `TSLA`).
+Open [http://localhost:3000](http://localhost:3000) — the **Hub** home frames the pipeline. Start with the **Advisor** for ideas, or go to **`/analyze`** and enter a ticker (e.g., `AAPL`, `MSFT`, `TSLA`) to run a Deep Value analysis.
 
 ---
 

@@ -18,10 +18,12 @@ In both modes, they want precision and calm, not reassurance and hype. They trus
 A stock picking pipeline for the self-directed investor: from AI-assisted idea discovery, through side-by-side screening, to fundamental analysis and a deliberate buy/watch/pass decision. It replaces scattered spreadsheets, paywalled data tools, and disjointed research tabs with a single, opinionated workflow.
 
 The pipeline has four stages:
-1. **Discover** — AI conversation surfaces new investment candidates from the investor's criteria (sector, quality metrics, valuation setup).
-2. **Screen** — Side-by-side AI fair value comparison for 2–5 tickers narrows the shortlist.
-3. **Monitor** — Tickers that aren't cheap enough today go to a personal watchlist with price alerts and bi-monthly re-analysis.
-4. **Decide** — For tickers ready to act on, a deep fundamental analysis (DCF/DDM/EV/EBITDA + AI report) ends with a clear decision panel: add to portfolio, add to watchlist, or compare further.
+1. **Discover** — AI conversation surfaces new investment candidates from the investor's criteria (sector, geography, quality metrics, valuation setup).
+2. **Screen** — Side-by-side AI fair value comparison for 2–5 tickers narrows the shortlist; from the advisor, a full set of candidates can be sent to Compare in one click.
+3. **Decide** — For the most promising ticker, an AI **Deep Value** analysis (Claude autonomously picks the method — DCF/DDM/EV-EBITDA/P-B — and sources data via web search) ends with a clear decision: add to portfolio, add to watchlist, or compare further.
+4. **Monitor** — Tickers that aren't cheap enough today go to a personal watchlist with price alerts and bi-monthly re-analysis; holdings are tracked in the portfolio with a dividend-aware "at fair value" review signal.
+
+The home is an adaptive **Hub** that frames these four stages and routes into them (and surfaces recent activity once you're logged in). The deep dive lives at `/analyze`.
 
 Success means the investor ends each session with either a position opened, a ticker added to the watchlist with a justified buy target, or a deliberate "pass" — never just a tab closed with a half-read report.
 

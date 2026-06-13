@@ -24,7 +24,12 @@ Dare all'app una direzione unica da investitore value: rimuovere l'analisi class
 - [x] 3. Hub home + Advisor "tutte in Compare" — build+test verdi
 - [x] 4. Nav reorder + label + fix `analyses-list:813` — build+test verdi
 - [x] 5. Exit signal dividend-aware — copy reframe + AI Review valuta i dividendi. **Numero inline yield-on-cost RINVIATO**: serve esporre i dividendi per-ticker via `/api/portfolio/snapshots` (oggi il client riceve solo il totale giornaliero di portafoglio, non per-posizione).
-- [ ] 6. Docs (PRODUCT/CLAUDE/AGENTS/README) + verifica finale + PR → develop
+- [x] 6. Docs (PRODUCT/CLAUDE/AGENTS aggiornati a fondo; README: tagline/feature/getting-started + nota refactor) + verifica finale + PR → develop
+
+## Follow-up (documentati, non urgenti)
+- **README**: le sezioni profonde (feature DCF/Reverse DCF, diagramma architettura, **API-reference per `/api/fundamentals` `/api/valuation` `/api/analyst-estimates`** ora rimossi) vanno ancora ripulite — c'è una nota in cima al README che lo segnala.
+- **Yield-on-cost inline** nell'exit signal del portfolio: serve esporre i dividendi per-ticker via `/api/portfolio/snapshots` (oggi solo totale giornaliero di portafoglio).
+- **Quant cards deterministiche** (Piotroski/Altman/multipli percentile) come contesto opzionale sotto il Deep Value (rimosse col motore classico).
 
 ## Log
 - **2026-06-13**: creato branch `refactor/deep-value-pipeline` da `develop`; creati SESSION_NOTES + memoria workflow. Inizio step 1.

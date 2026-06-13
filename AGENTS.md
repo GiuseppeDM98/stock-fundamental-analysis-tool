@@ -15,9 +15,8 @@ Next.js 15 stock fundamental analysis tool with multi-method valuation (DCF, DDM
 ## Directory Structure
 
 ```
-types/             # fundamentals.ts, market.ts, valuation.ts, analysis.ts, auth.ts, ai.ts, portfolio.ts, watchlist.ts
-lib/               # Business logic and utilities
-  valuation/       # DCF, DDM, EV-EBITDA engines + sector routing + presets + metrics
+types/             # fundamentals.ts, market.ts, analysis.ts, auth.ts, portfolio.ts, watchlist.ts
+lib/               # Business logic and utilities (Yahoo quote adapter, AI prompts, lite analysis, snapshots, dividends, formatters)
   ai/
     deep-value-prompts.ts   # Prompt builders for streaming deep value analysis
     lite-analysis.ts        # analyzeTickerLite() — server-only, shared by watchlist cron + compare endpoint
@@ -60,13 +59,12 @@ __tests__/         # Vitest tests
 - Literal unions: `ScenarioName = "bull" | "base" | "bear"`
 
 ### Functions
-- Data fetchers: `getQuote()`, `getFundamentals()`, `getAnalystEstimates()`, `getRiskFreeRate()`
+- Data fetchers: `getQuote()` (the only Yahoo data fetcher remaining)
 - Client helpers: `fetchAnalyses()`, `saveAnalysis()`, `fetchPositions()`, `createPosition()`, `deletePosition()`, `fetchSnapshots()`
-- Factories: `getDefaultScenarios()`, `getCompanyScenarios()`, `getDefaultDdmScenarios()`, `getCompanyDdmScenarios()`, `getDefaultEvEbitdaScenarios()`, `getCompanyEvEbitdaScenarios()`
 - Prompt builders: `buildDeepValueSystemPrompt()`, `buildDeepValueUserPrompt()` in `lib/ai/deep-value-prompts.ts`; `buildAdvisorSystemPrompt()`, `buildDiscoverySystemPrompt()` in `lib/ai/advisor-prompts.ts`
 
 ### LocalStorage Keys
-All prefixed with `sfa:`: `sfa:lastTicker`, `sfa:mosPercent`, `sfa:scenarioOverrides`, `sfa:ddmScenarioOverrides`, `sfa:evEbitdaScenarioOverrides`, `sfa:language`, `sfa:advisor-mode` (`"portfolio" | "discovery"`), `sfa:compareQueue` (JSON array of ticker strings, max 5, deduped)
+All prefixed with `sfa:`: `sfa:lastTicker`, `sfa:mosPercent`, `sfa:language`, `sfa:advisor-mode` (`"portfolio" | "discovery"`), `sfa:compareQueue` (JSON array of ticker strings, max 5, deduped). _The `sfa:scenarioOverrides` / `sfa:ddmScenarioOverrides` / `sfa:evEbitdaScenarioOverrides` keys were removed with the classic engine._
 
 ---
 
@@ -89,7 +87,7 @@ if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 
 // Use session.user.id — typed via declaration merge in types/auth.ts
 ```
 
-**Endpoints:** `/api/quote`, `/api/fundamentals`, `/api/valuation` (POST), `/api/analyst-estimates`, `/api/macro/risk-free-rate`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/DELETE), `/api/positions` (GET/POST), `/api/positions/[id]` (DELETE), `/api/ai/deep-value` (POST, streaming), `/api/ai/advisor` (POST, streaming conversational), `/api/advisor/sessions` (GET/POST), `/api/advisor/sessions/[id]` (GET/DELETE), `/api/advisor/sessions/[id]/messages` (POST, full replace), `/api/portfolio/snapshots` (GET), `/api/cron/portfolio-snapshot` (GET, Vercel Cron), `/api/watchlist` (GET/POST), `/api/watchlist/[id]` (DELETE/PATCH), `/api/watchlist/settings` (PATCH), `/api/watchlist/run` (POST), `/api/cron/watchlist-analysis` (GET, Vercel Cron), `/api/compare/analyze` (POST, runs lite AI for 1–5 tickers in parallel + upserts to DB), `/api/compare/results` (GET, returns saved CompareResult rows for given tickers)
+**Endpoints:** `/api/quote`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/DELETE), `/api/positions` (GET/POST), `/api/positions/[id]` (DELETE), `/api/ai/deep-value` (POST, streaming), `/api/ai/advisor` (POST, streaming conversational), `/api/advisor/sessions` (GET/POST), `/api/advisor/sessions/[id]` (GET/DELETE), `/api/advisor/sessions/[id]/messages` (POST, full replace), `/api/portfolio/snapshots` (GET), `/api/cron/portfolio-snapshot` (GET, Vercel Cron), `/api/watchlist` (GET/POST), `/api/watchlist/[id]` (DELETE/PATCH), `/api/watchlist/settings` (PATCH), `/api/watchlist/run` (POST), `/api/cron/watchlist-analysis` (GET, Vercel Cron), `/api/compare/analyze` (POST, runs lite AI for 1–5 tickers in parallel + upserts to DB), `/api/compare/results` (GET, returns saved CompareResult rows for given tickers)
 
 ---
 
@@ -237,17 +235,9 @@ yahooFinance.quoteSummary(ticker, { modules: ["summaryDetail", "defaultKeyStatis
 
 ---
 
-## Multi-Method Valuation
+## Multi-Method Valuation — REMOVED
 
-```typescript
-// lib/valuation/sector.ts
-detectSector(yahooSector: string | null): Sector
-getRecommendedMethod(sector: Sector): ValuationMethodInfo  // returns { label, isDcfAppropriate }
-```
-
-**Method routing:** Energy/Materials → EV/EBITDA · Utilities → DDM · Financial/Real Estate → DCF + disclaimer · Others → DCF
-
-**Client pattern**: Always send all three scenario sets in the POST body. Server selects the right one.
+The classic `lib/valuation/*` engine (sector detection + DCF/DDM/EV-EBITDA + scenario presets) was removed. **AI Deep Value** now picks the method autonomously inside its prompt, and **lite-analysis** enforces sector→method rules in its system prompt (see "Lite analysis pattern" below). No client-side scenario sets are sent anymore.
 
 ---
 
@@ -568,9 +558,9 @@ t: (key: keyof Translations) => string;
     let _client: Resend | null = null;
     function getClient() { return (_client ??= new Resend(process.env.KEY)); }
     ```
-15. **Next.js Router Cache blocks `?ticker=` on re-navigation**: `router.push('/')` from `/advisor` (or any other page) restores the cached `/` without remounting `DashboardClient` — the `useEffect` that reads `?ticker=` never fires, so the dashboard shows the default ticker (AAPL). Fix: use `window.location.href = '/?ticker=XXX'` for full page navigation. This applies to any pattern where a second page needs to pass a URL param to a page that caches in the Router Cache.
+15. **Next.js Router Cache blocks `?ticker=` on re-navigation**: `router.push('/analyze')` from another page can restore a cached `/analyze` without remounting `AnalyzeClient` — the `useEffect` that reads `?ticker=` never fires. Fix: use `window.location.href = '/analyze?ticker=XXX'` for full page navigation. This applies to every cross-page deep-link (advisor chips, compare, watchlist, analyses re-run, portfolio exit signal) — all use `window.location.href`.
 16. **Multiple `YahooFinance` instances each need `suppressNotices`**: If a route creates its own `new YahooFinance({ suppressNotices: [...] })` instead of importing the shared instance from `lib/yahoo-client.ts`, it gets a separate instance that still emits notices. Fix: add `suppressNotices` to each instance, or import the shared one. Symptom: warning persists after fixing `lib/yahoo-client.ts` and restarting the dev server.
-17. **ReactMarkdown filters non-standard URL protocols**: Custom protocol links like `ticker://AAPL` are silently stripped — the `href` received by the custom `a` component is `undefined` or empty. Always use a relative URL pattern (`/?ticker=AAPL`) and match with a regex in the `a` component: `href?.match(/^\/\?ticker=([A-Z0-9.]+)$/)`. This avoids protocol filtering and works correctly in both development and production.
+17. **ReactMarkdown filters non-standard URL protocols**: Custom protocol links like `ticker://AAPL` are silently stripped — the `href` received by the custom `a` component is `undefined` or empty. Always use a relative URL pattern (`/analyze?ticker=AAPL`) and match with a regex in the `a` component: `href?.match(/^\/analyze\?ticker=([A-Z0-9.]+)$/)`. This avoids protocol filtering and works correctly in both development and production.
 18. **`messages.findLast()` not available in configured TS lib**: The `Array.prototype.findLast` method requires `ES2023` lib target. Use `[...arr].reverse().find(predicate)` as a drop-in replacement.
 19. **`validateResult: false` on `chart()` widens return type to `unknown`**: Unlike `quoteSummary`, adding `{ validateResult: false }` as the third argument to `yahooFinance.chart()` makes the TypeScript return type `unknown` rather than the typed chart result. Do not add it to `chart()` calls — the default validation works correctly for price data.
 20. **Prisma `select` fields silently dropped at type boundaries**: If you add a field to a Prisma `select` (e.g. `mosPercent: true`) but the TypeScript type that consumes the result doesn't include that field, the value is silently discarded at the assignment boundary — no error, no warning. Symptom: field exists in DB + query but never reaches the function that uses it. Fix: always mirror every selected field in the downstream type (e.g. `AnalysisSnippet`, prompt context types). Search for the type name across `lib/` when adding fields to a Prisma select.
