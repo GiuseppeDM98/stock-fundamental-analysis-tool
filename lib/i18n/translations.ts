@@ -339,6 +339,7 @@ export type Translations = {
 
   // ─── Compare page ─────────────────────────────────────────────────────────
   navCompare: string;
+  navDeepValue: string;
   comparePageTitle: string;
   comparePageDesc: string;
   compareAddTicker: string;
@@ -737,6 +738,7 @@ const en: Translations = {
 
   // Compare page
   navCompare: "Compare",
+  navDeepValue: "Deep Value",
   comparePageTitle: "Compare Tickers",
   comparePageDesc: "AI-powered fair value comparison across multiple stocks",
   compareAddTicker: "+ Add ticker",
@@ -756,7 +758,7 @@ const en: Translations = {
   compareNoData: "—",
   compareAiNote: "Fair values estimated by Claude AI with live web search.",
   compareBestUpside: "Best upside",
-  compareDeepAnalysis: "Deep Analysis →",
+  compareDeepAnalysis: "Deep Value →",
   compareRefreshAll: "Refresh All",
 
   // Pipeline actions
@@ -1135,6 +1137,7 @@ const it: Translations = {
 
   // Compare page
   navCompare: "Confronta",
+  navDeepValue: "Deep Value",
   comparePageTitle: "Confronta Titoli",
   comparePageDesc: "Confronto fair value AI su più azioni in parallelo",
   compareAddTicker: "+ Aggiungi ticker",
@@ -1154,7 +1157,7 @@ const it: Translations = {
   compareNoData: "—",
   compareAiNote: "Fair value stimati da Claude AI con ricerca web in tempo reale.",
   compareBestUpside: "Miglior upside",
-  compareDeepAnalysis: "Analisi Deep →",
+  compareDeepAnalysis: "Deep Value →",
   compareRefreshAll: "Aggiorna tutti",
 
   // Pipeline actions

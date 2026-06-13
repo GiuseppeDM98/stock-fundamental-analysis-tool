@@ -319,7 +319,7 @@ function WatchlistRow({ item, currentPrice, onDelete, onSave, t }: RowProps) {
                 onClick={() => { window.location.href = `/analyze?ticker=${item.ticker}`; }}
                 className="rounded-md border border-slate-700/60 px-2.5 py-1 text-xs font-medium text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
               >
-                {t("analyzeBtn")}
+                {t("navDeepValue")}
               </button>
               <button
                 onClick={() => { window.location.href = `/compare?tickers=${item.ticker}`; }}

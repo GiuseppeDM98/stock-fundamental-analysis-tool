@@ -810,10 +810,10 @@ export default function AnalysesList() {
         <p className="text-lg">{t("noAnalysesYet")}</p>
         <p className="mt-1 text-sm">{t("noAnalysesDesc")}</p>
         <button
-          onClick={() => router.push("/")}
+          onClick={() => router.push("/advisor")}
           className="mt-4 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-slate-950 transition hover:brightness-110"
         >
-          {t("goToDashboard")}
+          {t("hubPrimaryCta")}
         </button>
       </div>
     );
