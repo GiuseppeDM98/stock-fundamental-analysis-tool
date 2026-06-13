@@ -8,7 +8,7 @@ Current project state and context for AI assistants.
 
 **Version**: `1.0.0`
 **Status**: Active Development
-**Last Updated**: June 13, 2026 — **major refactor**: removed the classic Yahoo valuation engine (DCF/DDM/EV-EBITDA scenario tuning + fundamentals charts + quality scorecard + historical multiples + reverse DCF). AI **Deep Value** is now the only analysis, on the dedicated `/analyze` route. Home (`/`) is an adaptive **Hub** framing the Discover→Screen→Decide→Monitor pipeline. Advisor can send candidates to Compare in one click. Portfolio exit signal is dividend-aware.
+**Last Updated**: June 13, 2026 — **major refactor**: removed the classic Yahoo valuation engine (DCF/DDM/EV-EBITDA scenario tuning + fundamentals charts + quality scorecard + historical multiples + reverse DCF). AI **Deep Value** is now the only analysis, on the dedicated `/analyze` route. Home (`/`) is an adaptive **Hub** framing the Discover→Screen→Decide→Monitor pipeline. Advisor can send candidates to Compare in one click. Portfolio exit signal is dividend-aware. The watchlist now sources values from your saved Deep Value analyses (lite analysis is Compare-only); the saved-analysis page renders the full valuation summary (cards + recap) with the intrinsic fair value shown alongside the buy target. Fixes: deterministic upside %, watchlist quote currency, deleting a ticker's only/latest analysis, last-ticker persistence.
 
 ---
 
