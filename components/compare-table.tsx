@@ -272,7 +272,7 @@ export function CompareTable({ items, mosPercent, watchedTickers = [], onWatch }
                 <td key={item.ticker} className="px-4 py-3 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <Link
-                      href={`/?ticker=${item.ticker}`}
+                      href={`/analyze?ticker=${item.ticker}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="rounded-lg border border-sky-800 px-3 py-1.5 text-xs font-semibold text-sky-400 transition hover:border-sky-500 hover:bg-sky-500/10 hover:text-sky-300"

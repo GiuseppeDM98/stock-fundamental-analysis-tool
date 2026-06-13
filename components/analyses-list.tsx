@@ -528,7 +528,7 @@ function TickerGroup({
           )}
         </div>
         <button
-          onClick={() => { window.location.href = `/?ticker=${encodeURIComponent(ticker)}`; }}
+          onClick={() => { window.location.href = `/analyze?ticker=${encodeURIComponent(ticker)}`; }}
           className="rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-accent hover:border-sky-400/40 hover:text-sky-300 transition shrink-0"
         >
           Re-run

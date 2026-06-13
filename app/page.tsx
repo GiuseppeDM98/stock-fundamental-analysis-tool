@@ -1,12 +1,10 @@
-import { DashboardClient } from "@/components/dashboard-client";
+import { AnalyzeClient } from "@/components/analyze-client";
 
 /**
- * Root page component for the stock analysis dashboard.
+ * Root route (`/`) — delegates to the analyzer for now.
  *
- * This is a thin server component that delegates all UI logic to DashboardClient.
- * We keep this separate to enable server-side rendering of the page shell while
- * maintaining client-side interactivity for the dashboard itself.
+ * Replaced by the adaptive Hub home in the next step; the deep-dive lives at `/analyze`.
  */
 export default function HomePage() {
-  return <DashboardClient />;
+  return <AnalyzeClient />;
 }

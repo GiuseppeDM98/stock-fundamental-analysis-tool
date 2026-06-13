@@ -14,9 +14,9 @@ type AdvisorSession = { id: string; title: string; createdAt: string; updatedAt:
 
 // ─── Markdown / ticker helpers ────────────────────────────────────────────────
 
-// Convert [[TICKER]] to relative /?ticker= URLs — ReactMarkdown filters non-http protocols.
+// Convert [[TICKER]] to relative /analyze?ticker= URLs — ReactMarkdown filters non-http protocols.
 function preprocessMarkdown(content: string): string {
-  return content.replace(/\[\[([A-Z0-9.]+)\]\]/g, "[$1](/?ticker=$1)");
+  return content.replace(/\[\[([A-Z0-9.]+)\]\]/g, "[$1](/analyze?ticker=$1)");
 }
 
 function MessageContent({ content, onAddToCompare }: { content: string; onAddToCompare?: (ticker: string) => void }) {
@@ -27,7 +27,7 @@ function MessageContent({ content, onAddToCompare }: { content: string; onAddToC
         remarkPlugins={[remarkGfm]}
         components={{
           a({ href, children }) {
-            const tickerMatch = href?.match(/^\/\?ticker=([A-Z0-9.]+)$/);
+            const tickerMatch = href?.match(/^\/analyze\?ticker=([A-Z0-9.]+)$/);
             if (tickerMatch) {
               const ticker = tickerMatch[1];
               return (
@@ -35,7 +35,7 @@ function MessageContent({ content, onAddToCompare }: { content: string; onAddToC
                   <button
                     // Full navigation to bypass Next.js Router Cache — router.push would
                     // restore the cached dashboard without remounting.
-                    onClick={() => { window.location.href = `/?ticker=${encodeURIComponent(ticker)}`; }}
+                    onClick={() => { window.location.href = `/analyze?ticker=${encodeURIComponent(ticker)}`; }}
                     className="inline-flex items-center gap-1 bg-sky-500/15 px-2 py-0.5 text-xs font-semibold text-sky-300 transition hover:bg-sky-500/25 hover:text-sky-200 rounded-l-md"
                   >
                     {children}

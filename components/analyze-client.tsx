@@ -49,7 +49,7 @@ function getStorageItem<T>(key: string, parser: (value: unknown) => T, fallback:
  * param (set by advisor chips, compare, watchlist, analyses re-run, and the
  * portfolio exit signal) only on the client.
  */
-export function DashboardClient() {
+export function AnalyzeClient() {
   const { t } = useLanguage();
   const [ticker, setTicker] = useState("AAPL");
   const [loadState, setLoadState] = useState<LoadState>("idle");

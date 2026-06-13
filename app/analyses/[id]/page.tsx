@@ -90,7 +90,7 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
         </Link>
         {/* Re-run opens dashboard with this ticker pre-loaded */}
         <a
-          href={`/?ticker=${encodeURIComponent(analysis.ticker)}`}
+          href={`/analyze?ticker=${encodeURIComponent(analysis.ticker)}`}
           className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-sky-400 transition hover:border-sky-500/50 hover:text-sky-300"
         >
           Re-run Analysis

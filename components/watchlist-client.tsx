@@ -316,7 +316,7 @@ function WatchlistRow({ item, currentPrice, onDelete, onSave, t }: RowProps) {
           <div className="flex flex-col items-end gap-2">
             <div className="flex items-center gap-2">
               <button
-                onClick={() => { window.location.href = `/?ticker=${item.ticker}`; }}
+                onClick={() => { window.location.href = `/analyze?ticker=${item.ticker}`; }}
                 className="rounded-md border border-slate-700/60 px-2.5 py-1 text-xs font-medium text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
               >
                 {t("analyzeBtn")}
