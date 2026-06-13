@@ -98,14 +98,19 @@ function RecapTable({
   const computeUpside = (value: number): number | null =>
     currentPrice != null && currentPrice > 0 ? ((value - currentPrice) / currentPrice) * 100 : null;
 
-  const rows: { label: string; value: number | null; upside: number | null; highlight?: "base" }[] = [
+  // Intrinsic fair value = the buy target grossed back up by the MoS (stored values are buy targets).
+  // null when MoS = 0 (then the displayed value already IS the fair value).
+  const intrinsicOf = (buyTarget: number): number | null =>
+    mosPercent > 0 ? buyTarget / (1 - mosPercent / 100) : null;
+
+  const rows: { label: string; value: number | null; intrinsic?: number | null; upside: number | null; highlight?: "base" }[] = [
     // Current price row — neutral anchor, no upside column
     ...(currentPrice != null
       ? [{ label: currentPriceLabel, value: currentPrice, upside: null as null }]
       : []),
-    { label: bearLabel, value: result.bear.fairValue, upside: computeUpside(result.bear.fairValue) },
-    { label: baseLabel, value: result.base.fairValue, upside: computeUpside(result.base.fairValue), highlight: "base" as const },
-    { label: bullLabel, value: result.bull.fairValue, upside: computeUpside(result.bull.fairValue) },
+    { label: bearLabel, value: result.bear.fairValue, intrinsic: intrinsicOf(result.bear.fairValue), upside: computeUpside(result.bear.fairValue) },
+    { label: baseLabel, value: result.base.fairValue, intrinsic: intrinsicOf(result.base.fairValue), upside: computeUpside(result.base.fairValue), highlight: "base" as const },
+    { label: bullLabel, value: result.bull.fairValue, intrinsic: intrinsicOf(result.bull.fairValue), upside: computeUpside(result.bull.fairValue) },
   ];
 
   return (
@@ -146,6 +151,9 @@ function RecapTable({
                 </td>
                 <td className="py-2.5 text-right text-slate-200">
                   {row.value != null ? row.value.toFixed(2) : "—"}
+                  {row.intrinsic != null && (
+                    <span className="block text-xs font-normal text-slate-500">{`FV ${row.intrinsic.toFixed(2)}`}</span>
+                  )}
                 </td>
                 <td className="py-2.5 pl-4 text-right">
                   {row.upside != null ? (
@@ -447,6 +455,11 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
                   <p className="mt-1 text-base font-bold text-slate-100">
                     {result.currency} {s.fairValue.toFixed(2)}
                   </p>
+                  {mosPercent > 0 && (
+                    <p className="text-[11px] text-slate-500">
+                      {`FV ${result.currency} ${(s.fairValue / (1 - mosPercent / 100)).toFixed(2)}`}
+                    </p>
+                  )}
                   {upside != null && <UpsideBadge upside={upside} />}
                 </div>
               );

@@ -62,11 +62,15 @@ export default function SavedValuationSummary({
   const computeUpside = (value: number): number | null =>
     currentPrice != null && currentPrice > 0 ? ((value - currentPrice) / currentPrice) * 100 : null;
 
-  const rows: { label: string; value: number; upside: number | null; isBase?: boolean }[] = [
+  // Intrinsic fair value = buy target grossed back up by the MoS (stored values are buy targets).
+  const intrinsicOf = (buyTarget: number): number | null =>
+    mosPercent > 0 ? buyTarget / (1 - mosPercent / 100) : null;
+
+  const rows: { label: string; value: number; intrinsic?: number | null; upside: number | null; isBase?: boolean }[] = [
     ...(currentPrice != null ? [{ label: t("recapCurrentPrice"), value: currentPrice, upside: null }] : []),
-    { label: t("bearLabel"), value: meta.bear.fairValue, upside: computeUpside(meta.bear.fairValue) },
-    { label: t("baseLabel"), value: meta.base.fairValue, upside: computeUpside(meta.base.fairValue), isBase: true },
-    { label: t("bullLabel"), value: meta.bull.fairValue, upside: computeUpside(meta.bull.fairValue) },
+    { label: t("bearLabel"), value: meta.bear.fairValue, intrinsic: intrinsicOf(meta.bear.fairValue), upside: computeUpside(meta.bear.fairValue) },
+    { label: t("baseLabel"), value: meta.base.fairValue, intrinsic: intrinsicOf(meta.base.fairValue), upside: computeUpside(meta.base.fairValue), isBase: true },
+    { label: t("bullLabel"), value: meta.bull.fairValue, intrinsic: intrinsicOf(meta.bull.fairValue), upside: computeUpside(meta.bull.fairValue) },
   ];
 
   return (
@@ -88,6 +92,11 @@ export default function SavedValuationSummary({
               <p className="mt-1 text-base font-bold text-slate-100">
                 {meta.currency} {s.fairValue.toFixed(2)}
               </p>
+              {mosPercent > 0 && (
+                <p className="text-[11px] text-slate-500">
+                  {`FV ${meta.currency} ${(s.fairValue / (1 - mosPercent / 100)).toFixed(2)}`}
+                </p>
+              )}
               {up != null && <UpsideBadge upside={up} />}
             </div>
           );
@@ -124,7 +133,12 @@ export default function SavedValuationSummary({
                   >
                     {row.label}
                   </td>
-                  <td className="py-2.5 text-right text-slate-200">{row.value.toFixed(2)}</td>
+                  <td className="py-2.5 text-right text-slate-200">
+                    {row.value.toFixed(2)}
+                    {row.intrinsic != null && (
+                      <span className="block text-xs font-normal text-slate-500">{`FV ${row.intrinsic.toFixed(2)}`}</span>
+                    )}
+                  </td>
                   <td className="py-2.5 pl-4 text-right">
                     {row.upside != null ? (
                       <span className={`font-semibold ${row.upside >= 0 ? "text-emerald-400" : "text-red-400"}`}>
