@@ -488,7 +488,7 @@ const en: Translations = {
 
   // Dashboard
   appTitle: "Stock Fundamental Analysis Tool",
-  appSubtitle: "Deep dive one ticker with fundamentals, scenario-based DCF, and margin-of-safety adjusted fair values.",
+  appSubtitle: "AI Deep Value analysis for one ticker — fair value, margin of safety, and a clear buy / watch / pass.",
   loadingAnalysis: "Loading market and valuation data...",
   errorUnableAnalysis: "Unable to complete analysis",
   chartScenarioTitle: "Scenario fair value vs current price",
@@ -866,7 +866,7 @@ const it: Translations = {
 
   // Dashboard
   appTitle: "Stock Fundamental Analysis Tool",
-  appSubtitle: "Analisi fondamentale con DCF, scenari multipli e fair value aggiustato per il margine di sicurezza.",
+  appSubtitle: "Analisi AI Deep Value su un ticker — fair value, margine di sicurezza e una decisione chiara: compra / osserva / passa.",
   loadingAnalysis: "Caricamento dati di mercato e valutazione...",
   errorUnableAnalysis: "Impossibile completare l'analisi",
   chartScenarioTitle: "Scenario fair value vs prezzo corrente",

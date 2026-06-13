@@ -1,91 +1,22 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { z } from "zod";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis
-} from "recharts";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { DisclaimerBanner } from "@/components/disclaimer-banner";
-import { DdmScenarioPanel } from "@/components/ddm-scenario-panel";
-import { EvEbitdaScenarioPanel } from "@/components/ev-ebitda-scenario-panel";
-import { FairValueCard } from "@/components/fair-value-card";
-import { FundamentalsCharts } from "@/components/fundamentals-charts";
 import { PriceSummary } from "@/components/price-summary";
-import { ReverseDcfCard } from "@/components/reverse-dcf-card";
-import { ScenarioPanel } from "@/components/scenario-panel";
 import { TickerSearch } from "@/components/ticker-search";
 import DeepValuePanel from "@/components/deep-value-panel";
-import { ValuationMetricsCards } from "@/components/valuation-metrics-cards";
-import { QualityScorecardPanel } from "@/components/quality-scorecard-panel";
-import { MultiplesHistoryChart } from "@/components/multiples-history-chart";
 import { useLanguage } from "@/context/language-context";
-import { getDefaultDdmScenarios, getCompanyDdmScenarios, getDefaultEvEbitdaScenarios, getCompanyEvEbitdaScenarios, getDefaultScenarios } from "@/lib/valuation/scenario-presets";
-import { computeFcfCagr } from "@/lib/valuation/dcf";
-import { detectSector, getRecommendedMethod } from "@/lib/valuation/sector";
-import { computeQualityScorecard } from "@/lib/valuation/quality-metrics";
-import { FundamentalsResponse } from "@/types/fundamentals";
 import { QuoteResponse } from "@/types/market";
-import { AnalystEstimates, AnalystEstimatesResponse, DdmScenariosInput, EvEbitdaScenariosInput, ScenariosInput, ValuationResponse } from "@/types/valuation";
 
 type LoadState = "idle" | "loading" | "success" | "error";
-type ScenarioSource = "smart" | "generic" | "custom";
-
-// Zod schemas for runtime validation of localStorage data
-const scenarioSchema = z.object({
-  revenueGrowthYears1to5: z.number(),
-  revenueGrowthYears6to10: z.number(),
-  operatingMarginTarget: z.number(),
-  taxRate: z.number(),
-  reinvestmentRate: z.number(),
-  wacc: z.number(),
-  terminalGrowth: z.number()
-});
-
-const scenarioOverridesSchema = z.object({
-  bull: scenarioSchema,
-  base: scenarioSchema,
-  bear: scenarioSchema
-});
-
-const ddmScenarioSchema = z.object({
-  dividendGrowthRate: z.number(),
-  costOfEquity: z.number(),
-  terminalGrowthRate: z.number(),
-});
-
-const ddmScenarioOverridesSchema = z.object({
-  bull: ddmScenarioSchema,
-  base: ddmScenarioSchema,
-  bear: ddmScenarioSchema,
-});
-
-const evEbitdaScenarioSchema = z.object({ targetMultiple: z.number() });
-const evEbitdaScenarioOverridesSchema = z.object({
-  bull: evEbitdaScenarioSchema,
-  base: evEbitdaScenarioSchema,
-  bear: evEbitdaScenarioSchema,
-});
 
 /**
  * Safely retrieves and parses a value from localStorage.
  *
- * Returns fallback if localStorage is unavailable (SSR), key doesn't exist,
- * or parsing fails. This prevents hydration mismatches and runtime errors
- * from corrupted localStorage data.
- *
- * @param key - localStorage key to read
- * @param parser - Function to parse and validate the JSON value (e.g., Zod schema)
- * @param fallback - Default value returned on SSR or parse failure
- * @returns Parsed value or fallback
+ * Returns fallback if localStorage is unavailable (SSR), the key is missing,
+ * or parsing fails — preventing hydration mismatches and crashes from corrupted data.
  */
 function getStorageItem<T>(key: string, parser: (value: unknown) => T, fallback: T): T {
   if (typeof window === "undefined") {
@@ -105,72 +36,46 @@ function getStorageItem<T>(key: string, parser: (value: unknown) => T, fallback:
 }
 
 /**
- * Main dashboard component orchestrating stock analysis workflow.
+ * Deep-dive analysis page (route `/analyze`).
  *
- * Manages:
- * - Ticker search and data fetching (quote, fundamentals, valuation, analyst estimates)
- * - Company-specific smart scenario defaults auto-populated on ticker search
- * - DCF scenario inputs with localStorage persistence
- * - Margin of safety slider
- * - UI preferences (compact charts toggle)
+ * Loads a single ticker's live quote, then hands off to the AI Deep Value panel —
+ * which sources its own financials via web search and autonomously picks the
+ * valuation method (DCF/DDM/EV-EBITDA/P/B). The legacy Yahoo-data valuation engine
+ * and scenario tuning were removed: Deep Value is now the only analysis path, so
+ * this component only needs the quote (price header + Deep Value reference price)
+ * plus a margin-of-safety control.
  *
- * On ticker search, the dashboard fetches analyst estimates and fundamentals to
- * compute company-specific scenarios (smart defaults). These replace generic presets
- * so the DCF valuation reflects the actual company's margins, growth, and reinvestment.
- *
- * Uses SSR-safe hydration pattern to prevent client/server mismatch errors
- * when reading from localStorage.
+ * Uses the SSR-safe hydration guard to read localStorage and the `?ticker=` URL
+ * param (set by advisor chips, compare, watchlist, analyses re-run, and the
+ * portfolio exit signal) only on the client.
  */
 export function DashboardClient() {
   const { t } = useLanguage();
   const [ticker, setTicker] = useState("AAPL");
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
-
   const [quote, setQuote] = useState<QuoteResponse | null>(null);
-  const [fundamentals, setFundamentals] = useState<FundamentalsResponse | null>(null);
-  const [valuation, setValuation] = useState<ValuationResponse | null>(null);
-  const [analystEstimates, setAnalystEstimates] = useState<AnalystEstimates | null>(null);
-
-  // Smart scenarios computed from company data — used as the "reset smart" target
-  const [smartScenarios, setSmartScenarios] = useState<ScenariosInput | null>(null);
-
   const [mosPercent, setMosPercent] = useState(25);
-  const [scenarios, setScenarios] = useState<ScenariosInput>(getDefaultScenarios());
-  const [ddmScenarios, setDdmScenarios] = useState<DdmScenariosInput>(getDefaultDdmScenarios());
-  const [smartDdmScenarios, setSmartDdmScenarios] = useState<DdmScenariosInput | null>(null);
-  const [evEbitdaScenarios, setEvEbitdaScenarios] = useState<EvEbitdaScenariosInput>(getDefaultEvEbitdaScenarios());
-  const [smartEvEbitdaScenarios, setSmartEvEbitdaScenarios] = useState<EvEbitdaScenariosInput | null>(null);
-  // Tracks the origin of the current scenario values for the UI indicator
-  const [scenarioSource, setScenarioSource] = useState<ScenarioSource>("generic");
-  const [ddmScenarioSource, setDdmScenarioSource] = useState<ScenarioSource>("generic");
-  const [evEbitdaScenarioSource, setEvEbitdaScenarioSource] = useState<ScenarioSource>("generic");
   // Tracks whether client-side hydration has completed to prevent localStorage reads during SSR
   const [isHydrated, setIsHydrated] = useState(false);
   // Context injected when navigating from the portfolio exit signal (⚠ At Fair Value → Re-analyze)
   const [exitReviewContext, setExitReviewContext] = useState<{ wac: number; prevFv: number } | null>(null);
 
-  // Refs store latest scenario values for use in async callbacks (fetchDashboardData)
-  // Without refs, fetchDashboardData would close over stale state from its creation time
-  const mosRef = useRef(mosPercent);
-  const scenariosRef = useRef(scenarios);
-  const ddmScenariosRef = useRef(ddmScenarios);
-  const evEbitdaScenariosRef = useRef(evEbitdaScenarios);
   // Holds a ticker from ?ticker= URL param so the post-hydration effect can auto-fetch it
   const urlTickerRef = useRef<string | null>(null);
+  // Latest MoS for use inside the async fetch callback (avoids a stale closure)
+  const mosRef = useRef(mosPercent);
 
-  // SSR Hydration: Load persisted state from localStorage on client mount only
-  // This useEffect runs once after the initial server-side render completes,
-  // ensuring window.localStorage is available and preventing hydration mismatches
+  // SSR hydration: read URL params + persisted state on client mount only.
   useEffect(() => {
-    // Read all URL params before clearing the URL — params are removed together by replaceState
+    // Read ALL URL params before clearing the URL — replaceState wipes them together.
     const searchParams = new URLSearchParams(window.location.search);
     const urlParam = searchParams.get("ticker");
     const exitReviewFlag = searchParams.get("exitReview");
     const wacParam = searchParams.get("wac");
     const prevFvParam = searchParams.get("prevFv");
 
-    // ?ticker= URL param (from Re-run button, advisor chip, or exit signal) takes precedence over localStorage
+    // ?ticker= (from re-run, advisor chip, or exit signal) takes precedence over localStorage
     if (urlParam) {
       urlTickerRef.current = urlParam.toUpperCase();
       window.history.replaceState({}, "", window.location.pathname);
@@ -187,30 +92,12 @@ export function DashboardClient() {
 
     const storedTicker = urlTickerRef.current ?? getStorageItem("sfa:lastTicker", (value) => String(value), "AAPL");
     const storedMos = getStorageItem("sfa:mosPercent", (value) => Number(value), 25);
-    const storedScenarios = getStorageItem(
-      "sfa:scenarioOverrides",
-      (value) => scenarioOverridesSchema.parse(value),
-      getDefaultScenarios()
-    );
-    const storedDdmScenarios = getStorageItem(
-      "sfa:ddmScenarioOverrides",
-      (value) => ddmScenarioOverridesSchema.parse(value),
-      getDefaultDdmScenarios()
-    );
-    const storedEvEbitdaScenarios = getStorageItem(
-      "sfa:evEbitdaScenarioOverrides",
-      (value) => evEbitdaScenarioOverridesSchema.parse(value),
-      getDefaultEvEbitdaScenarios()
-    );
     setTicker(storedTicker);
     setMosPercent(Number.isFinite(storedMos) ? storedMos : 25);
-    setScenarios(storedScenarios);
-    setDdmScenarios(storedDdmScenarios);
-    setEvEbitdaScenarios(storedEvEbitdaScenarios);
     setIsHydrated(true);
   }, []);
 
-  // Persist ticker to localStorage whenever it changes (but only after hydration)
+  // Persist ticker to localStorage whenever it changes (after hydration only)
   useEffect(() => {
     if (!isHydrated) {
       return;
@@ -218,16 +105,7 @@ export function DashboardClient() {
     window.localStorage.setItem("sfa:lastTicker", ticker);
   }, [ticker, isHydrated]);
 
-  // Auto-fetch when the page was opened via ?ticker= URL param (e.g. Re-run button)
-  useEffect(() => {
-    if (isHydrated && urlTickerRef.current) {
-      void fetchDashboardData(urlTickerRef.current, true);
-    }
-  // fetchDashboardData is stable (useCallback with no deps that change on hydration)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isHydrated]);
-
-  // Persist margin of safety and sync ref for async callbacks
+  // Persist margin of safety and keep the ref in sync for the async fetch callback
   useEffect(() => {
     mosRef.current = mosPercent;
     if (!isHydrated) {
@@ -236,167 +114,36 @@ export function DashboardClient() {
     window.localStorage.setItem("sfa:mosPercent", String(mosPercent));
   }, [mosPercent, isHydrated]);
 
-  // Persist scenario inputs and sync ref for async callbacks
-  useEffect(() => {
-    scenariosRef.current = scenarios;
-    if (!isHydrated) {
-      return;
-    }
-    window.localStorage.setItem("sfa:scenarioOverrides", JSON.stringify(scenarios));
-  }, [scenarios, isHydrated]);
-
-  // Persist DDM scenario inputs and sync ref for async callbacks
-  useEffect(() => {
-    ddmScenariosRef.current = ddmScenarios;
-    if (!isHydrated) {
-      return;
-    }
-    window.localStorage.setItem("sfa:ddmScenarioOverrides", JSON.stringify(ddmScenarios));
-  }, [ddmScenarios, isHydrated]);
-
-  // Persist EV/EBITDA scenario inputs and sync ref for async callbacks
-  useEffect(() => {
-    evEbitdaScenariosRef.current = evEbitdaScenarios;
-    if (!isHydrated) {
-      return;
-    }
-    window.localStorage.setItem("sfa:evEbitdaScenarioOverrides", JSON.stringify(evEbitdaScenarios));
-  }, [evEbitdaScenarios, isHydrated]);
-
   /**
-   * Fetch smart scenario defaults for a ticker from analyst estimates API.
+   * Fetches the live quote for a ticker. Deep Value sources its own financials,
+   * so the quote (price + name + currency) is all this page needs.
    *
-   * Called before the main data fetch so scenarios are populated with company-specific
-   * values before the DCF valuation runs. If this call fails (e.g., no analyst coverage),
-   * we silently keep the current scenarios — the valuation will still run with whatever
-   * scenarios are active.
+   * @param nextTicker - Stock ticker symbol to load
    */
-  const fetchSmartScenarios = useCallback(async (nextTicker: string): Promise<ScenariosInput | null> => {
+  const fetchQuote = useCallback(async (nextTicker: string) => {
+    setLoadState("loading");
+    setErrorMessage("");
+
     try {
-      const res = await fetch(`/api/analyst-estimates/${encodeURIComponent(nextTicker)}`);
-      if (!res.ok) return null;
-
-      const data: AnalystEstimatesResponse = await res.json();
-      setAnalystEstimates(data.analystEstimates);
-      setSmartScenarios(data.smartScenarios);
-
-      // Compute smart DDM defaults from dividendRate + beta (available from analystEstimates)
-      const ddmSmart = getCompanyDdmScenarios(data.analystEstimates);
-      setSmartDdmScenarios(ddmSmart);
-      setDdmScenarios(ddmSmart);
-      setDdmScenarioSource("smart");
-      ddmScenariosRef.current = ddmSmart;
-
-      // Compute smart EV/EBITDA defaults from current evEbitda ratio
-      const evEbitdaSmart = getCompanyEvEbitdaScenarios(data.analystEstimates);
-      setSmartEvEbitdaScenarios(evEbitdaSmart);
-      setEvEbitdaScenarios(evEbitdaSmart);
-      setEvEbitdaScenarioSource("smart");
-      evEbitdaScenariosRef.current = evEbitdaSmart;
-
-      return data.smartScenarios;
-    } catch {
-      return null;
+      const res = await fetch(`/api/quote/${encodeURIComponent(nextTicker)}`);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Unable to load quote.");
+      }
+      setQuote(data);
+      setLoadState("success");
+    } catch (error) {
+      setLoadState("error");
+      setErrorMessage(error instanceof Error ? error.message : "Unexpected error.");
     }
   }, []);
 
-  /**
-   * Fetches quote, fundamentals, and valuation data for a given ticker.
-   *
-   * First fetches smart scenarios from analyst estimates, then runs the main
-   * data fetch with the updated scenarios. Uses refs to access latest scenario
-   * values instead of closing over stale state from component render.
-   *
-   * @param nextTicker - Stock ticker symbol to analyze
-   * @param useSmartDefaults - Whether to auto-populate scenarios from company data
-   */
-  const fetchDashboardData = useCallback(
-    async (nextTicker: string, useSmartDefaults = true) => {
-      setLoadState("loading");
-      setErrorMessage("");
-
-      try {
-        // Fetch smart scenarios first so they're used in the valuation request
-        let activeScenarios = scenariosRef.current;
-        if (useSmartDefaults) {
-          const smart = await fetchSmartScenarios(nextTicker);
-          if (smart) {
-            activeScenarios = smart;
-            setScenarios(smart);
-            setScenarioSource("smart");
-            scenariosRef.current = smart;
-          }
-        }
-
-        // Parallel fetch: quote, fundamentals, and DCF valuation
-        const [quoteRes, fundamentalsRes, valuationRes] = await Promise.all([
-          fetch(`/api/quote/${encodeURIComponent(nextTicker)}`),
-          fetch(`/api/fundamentals/${encodeURIComponent(nextTicker)}`),
-          fetch(`/api/valuation/${encodeURIComponent(nextTicker)}`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              mosPercent: mosRef.current,
-              scenarios: activeScenarios,
-              ddmScenarios: ddmScenariosRef.current,
-              evEbitdaScenarios: evEbitdaScenariosRef.current,
-            })
-          })
-        ]);
-
-        const quoteData = await quoteRes.json();
-        const fundamentalsData = await fundamentalsRes.json();
-        const valuationData = await valuationRes.json();
-
-        // Check each response and throw on first error
-        if (!quoteRes.ok) {
-          throw new Error(quoteData.error || "Unable to load quote.");
-        }
-
-        if (!fundamentalsRes.ok) {
-          throw new Error(fundamentalsData.error || "Unable to load fundamentals.");
-        }
-
-        if (!valuationRes.ok) {
-          throw new Error(valuationData.error || "Unable to run valuation.");
-        }
-
-        setQuote(quoteData);
-        setFundamentals(fundamentalsData);
-        setValuation(valuationData);
-        setLoadState("success");
-      } catch (error) {
-        setLoadState("error");
-        setErrorMessage(error instanceof Error ? error.message : "Unexpected error.");
-      }
-    },
-    [fetchSmartScenarios]
-  );
-
-  const valuationChartData = useMemo(() => {
-    if (!valuation) {
-      return [];
+  // Auto-fetch when opened via ?ticker= URL param (advisor chip, compare, watchlist, re-run, exit signal)
+  useEffect(() => {
+    if (isHydrated && urlTickerRef.current) {
+      void fetchQuote(urlTickerRef.current);
     }
-
-    return ["bull", "base", "bear"].map((scenario) => ({
-      scenario,
-      currentPrice: valuation.currentPrice,
-      fairValueAfterMos: valuation.scenarios[scenario as keyof typeof valuation.scenarios].fairValueAfterMos
-    }));
-  }, [valuation]);
-
-  // Quality scorecard depends on fundamentals, WACC from the active base scenario, and quote
-  const scorecard = useMemo(() => {
-    if (!fundamentals || !quote) return null;
-    return computeQualityScorecard(
-      fundamentals,
-      scenarios.base.wacc,
-      quote.regularMarketPrice,
-      quote.sharesOutstanding,
-    );
-  }, [fundamentals, quote, scenarios.base.wacc]);
+  }, [isHydrated, fetchQuote]);
 
   return (
     <main className="mx-auto max-w-7xl p-4 pb-10 sm:p-6 lg:p-8">
@@ -407,7 +154,7 @@ export function DashboardClient() {
       </motion.header>
 
       <div className="space-y-4">
-        {/* Warning banner and search form */}
+        {/* Disclaimer and search form */}
         <DisclaimerBanner />
         <TickerSearch
           initialTicker={ticker}
@@ -415,95 +162,9 @@ export function DashboardClient() {
           onSearch={(nextTicker) => {
             const normalizedTicker = nextTicker.toUpperCase();
             setTicker(normalizedTicker);
-            // New ticker search: fetch smart defaults and use them for valuation
-            void fetchDashboardData(normalizedTicker, true);
+            void fetchQuote(normalizedTicker);
           }}
         />
-
-        {/* Scenario input controls — DDM for Utilities, EV/EBITDA for Energy/Materials, DCF otherwise */}
-        {valuation?.valuationMethod === "ev-ebitda" ? (
-          <EvEbitdaScenarioPanel
-            scenarios={evEbitdaScenarios}
-            mosPercent={mosPercent}
-            ebitda={fundamentals?.ebitda ?? null}
-            currentEvEbitda={fundamentals?.ratios?.evEbitda ?? null}
-            scenarioSource={evEbitdaScenarioSource}
-            loading={loadState === "loading"}
-            onMosChange={setMosPercent}
-            onResetSmart={() => {
-              if (smartEvEbitdaScenarios) {
-                setEvEbitdaScenarios(smartEvEbitdaScenarios);
-                setEvEbitdaScenarioSource("smart");
-              }
-            }}
-            onResetGeneric={() => {
-              setEvEbitdaScenarios(getDefaultEvEbitdaScenarios());
-              setEvEbitdaScenarioSource("generic");
-            }}
-            onRecalculate={() => void fetchDashboardData(ticker, false)}
-            onScenarioChange={(scenario, key, value) => {
-              setEvEbitdaScenarios((current) => ({
-                ...current,
-                [scenario]: { ...current[scenario], [key]: value }
-              }));
-              setEvEbitdaScenarioSource("custom");
-            }}
-          />
-        ) : valuation?.valuationMethod === "ddm" ? (
-          <DdmScenarioPanel
-            scenarios={ddmScenarios}
-            mosPercent={mosPercent}
-            dividendRate={fundamentals?.dividendRate ?? null}
-            scenarioSource={ddmScenarioSource}
-            loading={loadState === "loading"}
-            onMosChange={setMosPercent}
-            onResetSmart={() => {
-              if (smartDdmScenarios) {
-                setDdmScenarios(smartDdmScenarios);
-                setDdmScenarioSource("smart");
-              }
-            }}
-            onResetGeneric={() => {
-              setDdmScenarios(getDefaultDdmScenarios());
-              setDdmScenarioSource("generic");
-            }}
-            onRecalculate={() => void fetchDashboardData(ticker, false)}
-            onScenarioChange={(scenario, key, value) => {
-              setDdmScenarios((current) => ({
-                ...current,
-                [scenario]: { ...current[scenario], [key]: value }
-              }));
-              setDdmScenarioSource("custom");
-            }}
-          />
-        ) : (
-          <ScenarioPanel
-            scenarios={scenarios}
-            mosPercent={mosPercent}
-            analystEstimates={analystEstimates}
-            scenarioSource={scenarioSource}
-            loading={loadState === "loading"}
-            onMosChange={setMosPercent}
-            onResetSmart={() => {
-              if (smartScenarios) {
-                setScenarios(smartScenarios);
-                setScenarioSource("smart");
-              }
-            }}
-            onResetGeneric={() => {
-              setScenarios(getDefaultScenarios());
-              setScenarioSource("generic");
-            }}
-            onRecalculate={() => void fetchDashboardData(ticker, false)}
-            onScenarioChange={(scenario, key, value) => {
-              setScenarios((current) => ({
-                ...current,
-                [scenario]: { ...current[scenario], [key]: value }
-              }));
-              setScenarioSource("custom");
-            }}
-          />
-        )}
 
         {/* Loading state */}
         {loadState === "loading" && <div className="card text-sm text-muted">{t("loadingAnalysis")}</div>}
@@ -516,92 +177,33 @@ export function DashboardClient() {
           </div>
         )}
 
-        {/* Success state: render all dashboard sections */}
-        {loadState === "success" && quote && fundamentals && valuation && (
+        {/* Success state: price header, margin-of-safety control, and the AI Deep Value panel */}
+        {loadState === "success" && quote && (
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35 }}
             className="space-y-4"
           >
-            <PriceSummary quote={quote} sector={fundamentals.sector} industry={fundamentals.industry} />
+            <PriceSummary quote={quote} />
 
-            <div className="grid gap-4 lg:grid-cols-3">
-              <FairValueCard currency={quote.currency} currentPrice={quote.regularMarketPrice} scenario="bull" result={valuation.scenarios.bull} />
-              <FairValueCard currency={quote.currency} currentPrice={quote.regularMarketPrice} scenario="base" result={valuation.scenarios.base} />
-              <FairValueCard currency={quote.currency} currentPrice={quote.regularMarketPrice} scenario="bear" result={valuation.scenarios.bear} />
-            </div>
-
-            {valuation.valuationMethod === "dcf" && fundamentals.sector && !getRecommendedMethod(detectSector(fundamentals.sector)).isDcfAppropriate && (
-              <div className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-yellow-200">
-                <span className="font-semibold">{t("dcfWarningNote")}</span>{" "}
-                {t("dcfWarningBeforeSector")}<strong>{fundamentals.sector}</strong>{t("dcfWarningAfterSector")}<strong>{getRecommendedMethod(detectSector(fundamentals.sector)).label}</strong>.
-              </div>
-            )}
-
+            {/* Margin of safety — applied to the Deep Value buy targets */}
             <div className="card">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">{t("chartScenarioTitle")}</p>
-              <div className="h-[320px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={valuationChartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#23314f" />
-                    <XAxis dataKey="scenario" stroke="#7b8ba9" />
-                    <YAxis stroke="#7b8ba9" />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="currentPrice" fill="#64748b" radius={4} />
-                    <Bar dataKey="fairValueAfterMos" fill="#38bdf8" radius={4} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <p className="mt-2 text-xs text-muted">{t("chartScenarioNote")}</p>
+              <label className="block">
+                <span className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted">
+                  {t("marginOfSafety")} {mosPercent}%
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={80}
+                  step={5}
+                  value={mosPercent}
+                  onChange={(e) => setMosPercent(parseInt(e.target.value, 10))}
+                  className="w-full accent-sky-500"
+                />
+              </label>
             </div>
-
-            {/* Reverse DCF — shown only for DCF-eligible sectors with positive FCF */}
-            {valuation.valuationMethod === "dcf" &&
-              fundamentals.sector !== null &&
-              getRecommendedMethod(detectSector(fundamentals.sector)).isDcfAppropriate &&
-              quote.sharesOutstanding != null &&
-              quote.sharesOutstanding > 0 &&
-              fundamentals.annual.length > 0 &&
-              fundamentals.annual[0].fcf > 0 && (
-                <section>
-                  <ReverseDcfCard
-                    currentPrice={quote.regularMarketPrice}
-                    sharesOutstanding={quote.sharesOutstanding}
-                    wacc={scenarios.base.wacc}
-                    terminalGrowthRate={scenarios.base.terminalGrowth}
-                    operatingMarginTarget={scenarios.base.operatingMarginTarget}
-                    taxRate={scenarios.base.taxRate}
-                    reinvestmentRate={scenarios.base.reinvestmentRate}
-                    baseFcf={fundamentals.annual[0].fcf}
-                    baseRevenue={fundamentals.annual[0].revenue}
-                    historicalFcfCagr5yr={computeFcfCagr(fundamentals.annual.map((p) => p.fcf))}
-                    currency={quote.currency}
-                  />
-                </section>
-              )}
-
-            <ValuationMetricsCards quote={quote} fundamentals={fundamentals} />
-
-            <QualityScorecardPanel scorecard={scorecard} isLoading={false} />
-
-            <FundamentalsCharts fundamentals={fundamentals} />
-
-            <MultiplesHistoryChart
-              ticker={ticker}
-              currentPe={fundamentals.ratios.pe ?? null}
-              currentPFcf={
-                quote.marketCap != null && fundamentals.annual.length > 0 && fundamentals.annual[0].fcf > 0
-                  ? quote.marketCap / fundamentals.annual[0].fcf
-                  : null
-              }
-              currentEvEbit={
-                quote.marketCap != null && fundamentals.annual.length > 0 && fundamentals.annual[0].ebit > 0
-                  ? quote.marketCap / fundamentals.annual[0].ebit
-                  : null
-              }
-            />
 
             <DeepValuePanel
               ticker={ticker}
