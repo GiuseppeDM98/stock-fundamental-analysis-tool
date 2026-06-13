@@ -527,12 +527,24 @@ function TickerGroup({
             </span>
           )}
         </div>
-        <button
-          onClick={() => { window.location.href = `/analyze?ticker=${encodeURIComponent(ticker)}`; }}
-          className="rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-accent hover:border-sky-400/40 hover:text-sky-300 transition shrink-0"
-        >
-          Re-run
-        </button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={() => { window.location.href = `/analyze?ticker=${encodeURIComponent(ticker)}`; }}
+            className="rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-accent hover:border-sky-400/40 hover:text-sky-300 transition"
+          >
+            Re-run
+          </button>
+          {/* Delete the latest/only analysis — the collapsible history below only covers older ones,
+              so without this the single most-recent analysis (and a ticker's sole analysis) can't be removed. */}
+          <button
+            onClick={() => onDelete(latest.id)}
+            disabled={deleting === latest.id}
+            aria-label={deleteLabel}
+            className="rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-muted hover:border-red-500/50 hover:text-danger transition disabled:opacity-50"
+          >
+            {deleting === latest.id ? "…" : deleteLabel}
+          </button>
+        </div>
       </div>
 
       {/* Latest analysis metadata */}

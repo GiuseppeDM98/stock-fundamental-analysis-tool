@@ -33,3 +33,5 @@ Dare all'app una direzione unica da investitore value: rimuovere l'analisi class
 
 ## Log
 - **2026-06-13**: creato branch `refactor/deep-value-pipeline` da `develop`; creati SESSION_NOTES + memoria workflow. Inizio step 1.
+- **2026-06-13**: completati step 1–6; PR #3 verso `develop`. Build+test verdi a ogni commit.
+- **2026-06-13** (fix): bug pre-esistente — nelle Analisi salvate non si poteva eliminare la `latest`/unica analisi di un ticker (l'elimina viveva solo nello storico delle più vecchie). Aggiunto pulsante elimina nell'header del ticker. Sullo stesso branch/PR perché tocca lo stesso blocco header del refactor (evita conflitto di merge).
