@@ -139,12 +139,15 @@ function AddTickerForm({ onAdd, t }: AddFormProps) {
 interface RowProps {
   item: WatchlistItem;
   currentPrice: number | null;
+  // Currency of the live quote — used to format the current price (and as the row's
+  // currency fallback) so non-USD tickers (e.g. .MI → EUR) aren't shown with "$".
+  priceCurrency: string | null;
   onDelete: (id: string) => void;
   onSave: (id: string, mosPercent: number, notes: string | null) => Promise<void>;
   t: (key: keyof Translations) => string;
 }
 
-function WatchlistRow({ item, currentPrice, onDelete, onSave, t }: RowProps) {
+function WatchlistRow({ item, currentPrice, priceCurrency, onDelete, onSave, t }: RowProps) {
   const [editing, setEditing] = useState(false);
   const [editMos, setEditMos] = useState(item.mosPercent);
   const [editNotes, setEditNotes] = useState(item.notes ?? "");
@@ -152,7 +155,9 @@ function WatchlistRow({ item, currentPrice, onDelete, onSave, t }: RowProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const run = item.lastRun;
-  const currency = run?.currency ?? "USD";
+  // Prefer the analysis-run currency; fall back to the live quote currency, then EUR
+  // (never default to USD — most watched tickers here are EUR-denominated).
+  const currency = run?.currency ?? priceCurrency ?? "EUR";
   const adjustedBase =
     run?.fairValueBase != null ? run.fairValueBase * (1 - item.mosPercent) : null;
   const upside =
@@ -493,6 +498,7 @@ export default function WatchlistClient() {
     watchlistEnabled: true,
   });
   const [prices, setPrices] = useState<Record<string, number>>({});
+  const [currencies, setCurrencies] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [manualRunLoading, setManualRunLoading] = useState(false);
@@ -535,17 +541,22 @@ export default function WatchlistClient() {
           const res = await fetch(`/api/quote/${encodeURIComponent(ticker)}`);
           if (!res.ok) return null;
           const data = await res.json();
-          return { ticker, price: data.regularMarketPrice as number };
+          return { ticker, price: data.regularMarketPrice as number, currency: data.currency as string };
         } catch {
           return null;
         }
       })
     ).then((results) => {
-      const map: Record<string, number> = {};
+      const priceMap: Record<string, number> = {};
+      const currencyMap: Record<string, string> = {};
       for (const r of results) {
-        if (r) map[r.ticker] = r.price;
+        if (r) {
+          priceMap[r.ticker] = r.price;
+          if (r.currency) currencyMap[r.ticker] = r.currency;
+        }
       }
-      setPrices(map);
+      setPrices(priceMap);
+      setCurrencies(currencyMap);
     });
   }, [items]);
 
@@ -656,6 +667,7 @@ export default function WatchlistClient() {
                   key={item.id}
                   item={item}
                   currentPrice={prices[item.ticker] ?? null}
+                  priceCurrency={currencies[item.ticker] ?? null}
                   onDelete={handleDelete}
                   onSave={handleSaveItem}
                   t={t}
