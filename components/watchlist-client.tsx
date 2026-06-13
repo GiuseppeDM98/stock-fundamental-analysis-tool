@@ -5,7 +5,9 @@
 // Supports add/edit/remove items and settings (email, frequency, enabled toggle).
 import { useState, useEffect, useRef } from "react";
 import { useLanguage } from "@/context/language-context";
-import type { WatchlistItem, WatchlistSettings } from "@/types/watchlist";
+import { fetchAnalyses } from "@/lib/analyses";
+import type { WatchlistItem, WatchlistSettings, WatchlistLastRun } from "@/types/watchlist";
+import type { SavedAnalysis } from "@/types/analysis";
 import type { Translations } from "@/lib/i18n/translations";
 
 // ─── Formatting ───────────────────────────────────────────────────────────────
@@ -136,25 +138,46 @@ function AddTickerForm({ onAdd, t }: AddFormProps) {
 
 // ─── Watchlist row ────────────────────────────────────────────────────────────
 
+// Build a WatchlistLastRun-shaped object from a saved Deep Value analysis. Stored fair
+// values are MoS-adjusted buy targets, so gross them back up to the intrinsic fair value;
+// the row then re-applies the watchlist item's own MoS (matching the old WatchlistRun
+// convention, which stored raw fair values). Currency is left null — the row falls back
+// to the live quote currency (the Analysis row has no currency column).
+function deriveRunFromAnalysis(a: SavedAnalysis): WatchlistLastRun {
+  const mos = (a.mosPercent ?? 0) / 100;
+  const gross = (v: number | null | undefined): number | null => (v == null ? null : mos > 0 ? v / (1 - mos) : v);
+  return {
+    runAt: a.createdAt,
+    fairValueBull: gross(a.fairValueBull),
+    fairValueBase: gross(a.fairValueBase),
+    fairValueBear: gross(a.fairValueBear),
+    method: a.valuationMethod ?? null,
+    currency: null,
+  };
+}
+
 interface RowProps {
   item: WatchlistItem;
   currentPrice: number | null;
   // Currency of the live quote — used to format the current price (and as the row's
   // currency fallback) so non-USD tickers (e.g. .MI → EUR) aren't shown with "$".
   priceCurrency: string | null;
+  // Latest saved Deep Value analysis for this ticker, in WatchlistLastRun shape (or null
+  // if the ticker hasn't been analyzed yet). Replaces the old lite WatchlistRun source.
+  analysisRun: WatchlistLastRun | null;
   onDelete: (id: string) => void;
   onSave: (id: string, mosPercent: number, notes: string | null) => Promise<void>;
   t: (key: keyof Translations) => string;
 }
 
-function WatchlistRow({ item, currentPrice, priceCurrency, onDelete, onSave, t }: RowProps) {
+function WatchlistRow({ item, currentPrice, priceCurrency, analysisRun, onDelete, onSave, t }: RowProps) {
   const [editing, setEditing] = useState(false);
   const [editMos, setEditMos] = useState(item.mosPercent);
   const [editNotes, setEditNotes] = useState(item.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const run = item.lastRun;
+  const run = analysisRun;
   // Prefer the analysis-run currency; fall back to the live quote currency, then EUR
   // (never default to USD — most watched tickers here are EUR-denominated).
   const currency = run?.currency ?? priceCurrency ?? "EUR";
@@ -499,6 +522,7 @@ export default function WatchlistClient() {
   });
   const [prices, setPrices] = useState<Record<string, number>>({});
   const [currencies, setCurrencies] = useState<Record<string, string>>({});
+  const [analysisRuns, setAnalysisRuns] = useState<Record<string, WatchlistLastRun>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [manualRunLoading, setManualRunLoading] = useState(false);
@@ -506,6 +530,24 @@ export default function WatchlistClient() {
 
   // Avoid SSR mismatch with Intl formatting
   useEffect(() => setMounted(true), []);
+
+  // Watchlist values come from the user's latest saved Deep Value analysis per ticker
+  // (the lite WatchlistRun engine was removed — lite analysis now lives only in Compare).
+  useEffect(() => {
+    fetchAnalyses()
+      .then((analyses) => {
+        const latest: Record<string, SavedAnalysis> = {};
+        for (const a of analyses) {
+          if (a.fairValueBase == null) continue;
+          const existing = latest[a.ticker];
+          if (!existing || new Date(a.createdAt) > new Date(existing.createdAt)) latest[a.ticker] = a;
+        }
+        const runs: Record<string, WatchlistLastRun> = {};
+        for (const [ticker, a] of Object.entries(latest)) runs[ticker] = deriveRunFromAnalysis(a);
+        setAnalysisRuns(runs);
+      })
+      .catch(() => {});
+  }, []);
 
   // Load watchlist on mount
   useEffect(() => {
@@ -668,6 +710,7 @@ export default function WatchlistClient() {
                   item={item}
                   currentPrice={prices[item.ticker] ?? null}
                   priceCurrency={currencies[item.ticker] ?? null}
+                  analysisRun={analysisRuns[item.ticker] ?? null}
                   onDelete={handleDelete}
                   onSave={handleSaveItem}
                   t={t}
