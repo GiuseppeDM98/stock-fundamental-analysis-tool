@@ -50,3 +50,10 @@ Dare all'app una direzione unica da investitore value: rimuovere l'analisi class
 - README: sezioni profonde / API-reference dei route rimossi ancora da ripulire (c'è la nota in cima).
 - Eventuale rimozione del modello `WatchlistRun` + relazione `WatchlistItem.lastRun` (migrazione DB) se si vuole pulizia completa.
 - Yield-on-cost per-ticker inline nell'exit signal (serve esporre dividendi per-ticker via snapshots API).
+
+## Pre-merge review (high-effort, `develop...HEAD`) — esito
+- **Build + test verdi**; type-check pulito; nessun import/route/tipo pendente dopo la rimozione; tutti i deep-link `/?ticker=` ripuntati; `analyzeTickerLite` usato solo da Compare. **Nessuna nuova regressione introdotta dal branch.**
+- **Bug PRE-ESISTENTE (non introdotto qui, presente anche su `develop`)**: `sfa:lastTicker` — `analyze-client.tsx` (ex `dashboard-client.tsx`) scrive la stringa grezza (`setItem(..., ticker)`) ma `getStorageItem` fa `JSON.parse` → throw → fallback sempre ad `AAPL`. La persistenza dell'ultimo ticker è di fatto rotta da prima del refactor. Fix 1-riga (es. `JSON.stringify` in scrittura, o lettura senza `JSON.parse`). **Da decidere se includerlo qui o in una fix separata** (è fuori scope del refactor).
+- **Per-design (scelte utente, non bug)**: watchlist mostra/avvisa solo per ticker con un'analisi Deep Value salvata; idem il digest email; i valori sono lo snapshot dell'ultima analisi (freschezza = data analisi, prezzo live).
+- **Dead read (innocuo)**: `GET /api/watchlist` interroga ancora `WatchlistRun` per `lastRun`, ora sempre vuoto (write rimosso). La UI lo ignora. Si pulisce insieme alla rimozione del modello `WatchlistRun`.
+- **Follow-up reuse (non urgente)**: `intrinsic = buyTarget/(1-mos)` e `upside = (val-price)/price` duplicati in più file. Candidati a un `lib/valuation/upside.ts` + componente `<ValuationSummary>` condiviso tra pannello live e vista salvata.
