@@ -173,7 +173,9 @@ export default function PortfolioHistoryChart() {
             stroke="#7b8ba9"
             tick={{ fontSize: 11 }}
             tickFormatter={(v) => formatEurCompact(v, locale)}
-            width={68}
+            // Compact EUR labels (e.g. "€4.4k") fit in 56px; narrower than the
+            // old 68px to give the plot more room on phones.
+            width={56}
           />
           <Tooltip content={<ChartTooltip locale={locale} t={t} />} />
           {/* Vertical markers for days when dividends were paid — label shown inline */}

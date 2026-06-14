@@ -272,7 +272,7 @@ export function CompareClient({ initialTickers }: Props) {
     : t("compareRunAnalysis");
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-4 py-8">
+    <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-100">
           {t("comparePageTitle")}
@@ -314,7 +314,7 @@ export function CompareClient({ initialTickers }: Props) {
           <button
             onClick={runAnalysis}
             disabled={!canRun}
-            className="ml-auto rounded-xl bg-accent px-5 py-2 text-sm font-semibold text-slate-950 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+            className="tap ml-auto rounded-xl bg-accent px-5 py-2 text-sm font-semibold text-slate-950 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {runBtnLabel}
           </button>

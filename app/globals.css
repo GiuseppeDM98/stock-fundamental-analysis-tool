@@ -25,3 +25,77 @@ body {
 .card {
   @apply rounded-2xl border border-slate-800/70 bg-card p-5 shadow-[0_10px_40px_-20px_rgba(56,189,248,0.45)] backdrop-blur-sm;
 }
+
+/*
+ * Touch-target floor (WCAG 2.5.5 / 44px).
+ *
+ * Gated on `pointer: coarse` rather than a viewport width so the desktop's
+ * intentionally compact, data-dense controls keep their density, while real
+ * touch input (phone, tablet, touchscreen laptop) gets a finger-sized hit area.
+ * Apply `.tap` to the small quick-action / icon buttons that are too small to
+ * tap reliably; full-width form controls don't need it.
+ */
+@media (pointer: coarse) {
+  .tap {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/*
+ * Responsive table → cards (below sm / 640px).
+ *
+ * Add `.rtable` to a <table> and each row renders as a card on phones: the
+ * header is hidden and every cell becomes a label/value row, the label taken
+ * from the cell's `data-label`. Cells that carry their own heading or a button
+ * cluster opt out with `.rcell-block` (full-width, no generated label). This
+ * keeps one markup + logic source — no duplicated mobile component to drift.
+ */
+@media (max-width: 639px) {
+  .rtable,
+  .rtable tbody,
+  .rtable tr,
+  .rtable td {
+    display: block;
+    width: 100%;
+  }
+  .rtable thead {
+    display: none;
+  }
+  .rtable tr {
+    margin-bottom: 0.75rem;
+    border: 1px solid rgb(30 41 59 / 0.6); /* slate-800/60 */
+    border-radius: 0.75rem;
+    padding: 0.5rem 0.875rem;
+  }
+  .rtable tr:last-child {
+    margin-bottom: 0;
+  }
+  .rtable td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.3rem 0;
+    text-align: right;
+    border: 0;
+  }
+  .rtable td::before {
+    content: attr(data-label);
+    text-align: left;
+    white-space: nowrap;
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .rtable td.rcell-block {
+    display: block;
+    text-align: left;
+    padding: 0.25rem 0;
+  }
+  .rtable td.rcell-block::before {
+    content: none;
+  }
+}
