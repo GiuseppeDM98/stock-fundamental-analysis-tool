@@ -49,20 +49,23 @@ export default function NavBar() {
           </button>
           {status === "loading" ? null : session ? (
             <>
-              <Link href="/analyses" className={navLinkClass("/analyses")}>
-                {t("navSavedAnalyses")}
-              </Link>
-              <Link href="/portfolio" className={navLinkClass("/portfolio")}>
-                {t("navPortfolio")}
-              </Link>
-              <Link href="/watchlist" className={navLinkClass("/watchlist")}>
-                {t("navWatchlist")}
+              <Link href="/advisor" className={navLinkClass("/advisor")}>
+                {t("navAdvisor")}
               </Link>
               <Link href="/compare" className={navLinkClass("/compare")}>
                 {t("navCompare")}
               </Link>
-              <Link href="/advisor" className={navLinkClass("/advisor")}>
-                {t("navAdvisor")}
+              <Link href="/analyze" className={navLinkClass("/analyze")}>
+                {t("navDeepValue")}
+              </Link>
+              <Link href="/watchlist" className={navLinkClass("/watchlist")}>
+                {t("navWatchlist")}
+              </Link>
+              <Link href="/portfolio" className={navLinkClass("/portfolio")}>
+                {t("navPortfolio")}
+              </Link>
+              <Link href="/analyses" className={navLinkClass("/analyses")}>
+                {t("navSavedAnalyses")}
               </Link>
               <span className="text-muted">{session.user?.email}</span>
               <button

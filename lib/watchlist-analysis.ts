@@ -2,19 +2,22 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { sendWatchlistDigest, type DigestItem } from "@/lib/email";
-import { analyzeTickerLite } from "@/lib/ai/lite-analysis";
 
 // ─── Current price helper ─────────────────────────────────────────────────────
 
-async function fetchCurrentPrice(ticker: string): Promise<number | null> {
+async function fetchQuote(ticker: string): Promise<{ price: number | null; currency: string | null }> {
   try {
     const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
     const res = await fetch(`${baseUrl}/api/quote/${encodeURIComponent(ticker)}`);
-    if (!res.ok) return null;
+    if (!res.ok) return { price: null, currency: null };
     const data = await res.json();
-    return typeof data.price === "number" ? data.price : null;
+    // NB: the quote API field is `regularMarketPrice`, not `price` (AGENTS gotcha #12).
+    return {
+      price: typeof data.regularMarketPrice === "number" ? data.regularMarketPrice : null,
+      currency: typeof data.currency === "string" ? data.currency : null,
+    };
   } catch {
-    return null;
+    return { price: null, currency: null };
   }
 }
 
@@ -38,26 +41,26 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
   const digestItems: DigestItem[] = [];
 
   for (const item of items) {
-    const result = await analyzeTickerLite(item.ticker);
-
-    // Always persist a run record, even if analysis failed (null values)
-    await db.watchlistRun.create({
-      data: {
-        userId: user.id,
-        ticker: item.ticker,
-        fairValueBull: result?.fairValueBull ?? null,
-        fairValueBase: result?.fairValueBase ?? null,
-        fairValueBear: result?.fairValueBear ?? null,
-        method: result?.method ?? null,
-        sector: result?.sector ?? null,
-        currency: result?.currency ?? null,
-      },
+    // Source values from the user's latest saved Deep Value analysis for this ticker.
+    // The lite analysis engine was removed from the watchlist — it lives only in Compare.
+    const analysis = await db.analysis.findFirst({
+      where: { userId: user.id, ticker: item.ticker, fairValueBase: { not: null } },
+      orderBy: { createdAt: "desc" },
     });
+    if (!analysis) continue;
 
-    if (!result) continue;
+    // Stored fair values are MoS-adjusted buy targets — gross them back up to the intrinsic
+    // fair value, then re-apply the watchlist item's own MoS below.
+    const aMos = (analysis.mosPercent ?? 0) / 100;
+    const gross = (v: number | null): number | null => (v == null ? null : aMos > 0 ? v / (1 - aMos) : v);
+    const intrinsicBear = gross(analysis.fairValueBear);
+    const intrinsicBase = gross(analysis.fairValueBase);
+    const intrinsicBull = gross(analysis.fairValueBull);
+    // The digest needs a complete bear/base/bull set; skip incomplete analyses.
+    if (intrinsicBear == null || intrinsicBase == null || intrinsicBull == null) continue;
 
-    const currentPrice = await fetchCurrentPrice(item.ticker);
-    const adjustedBase = result.fairValueBase * (1 - item.mosPercent);
+    const { price: currentPrice, currency } = await fetchQuote(item.ticker);
+    const adjustedBase = intrinsicBase * (1 - item.mosPercent);
     const upside =
       currentPrice !== null ? (adjustedBase - currentPrice) / currentPrice : null;
     const status: DigestItem["status"] =
@@ -70,11 +73,11 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
     digestItems.push({
       ticker: item.ticker,
       companyName: item.companyName,
-      method: result.method,
-      currency: result.currency,
-      fairValueBear: result.fairValueBear,
-      fairValueBase: result.fairValueBase,
-      fairValueBull: result.fairValueBull,
+      method: analysis.valuationMethod ?? "Deep Value",
+      currency: currency ?? "EUR",
+      fairValueBear: intrinsicBear,
+      fairValueBase: intrinsicBase,
+      fairValueBull: intrinsicBull,
       currentPrice,
       mosPercent: item.mosPercent,
       adjustedBase,
@@ -82,8 +85,8 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
       status,
     });
 
-    // Respect Yahoo Finance + Anthropic rate limits between tickers
-    await new Promise((r) => setTimeout(r, 2000));
+    // Small delay between quote fetches to respect Yahoo rate limits (no AI calls now)
+    await new Promise((r) => setTimeout(r, 500));
   }
 
   if (digestItems.length === 0) return;

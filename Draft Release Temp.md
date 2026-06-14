@@ -1,5 +1,13 @@
 ## ✨ New Features
 
+- **Adaptive Hub home** — the home page (`/`) is now a hub that frames the full pipeline (Discover → Screen → Decide → Monitor) with a card per stage, a "Start with the Advisor" call-to-action, and a quick ticker box that jumps straight into an analysis. When you're logged in it also surfaces a recent-activity strip: your latest analyses, portfolio P&L, and watchlist count.
+
+- **One-click "Compare all" from the Advisor** — when the AI lists two or more candidate tickers in a reply, a **Compare all (N) →** button appears beneath it that opens the Compare page with all of them pre-loaded at once.
+
+- **Intrinsic fair value shown next to the buy target** — when a Margin of Safety is set, the Deep Value panel and the saved-analysis detail page now show both the intrinsic fair value (what the stock is worth) and the MoS-discounted buy target, for each Bear/Base/Bull scenario.
+
+- **Valuation summary on saved analyses** — opening a saved analysis now shows the method/sector badges, the Bull/Base/Bear fair-value cards, and the recap table — the same at-a-glance summary you saw when the report was generated, not just the report text.
+
 - **Investment pipeline — connected workflow** — the app now guides you through the full stock-picking process without dead ends. Every major page now has direct routes to the next step, so you never have to manually re-enter a ticker or copy-paste between tabs.
 
 - **Decision Panel after Deep Value Analysis** — once a Deep Value analysis finishes streaming, two action buttons appear below "Save Report": an amber **Add to Watchlist** button (pre-filled with the ticker and your current margin of safety) and a sky **Add to Compare** button. If the ticker is already on your watchlist, the button shows "In Watchlist" instead of re-adding it. This turns every completed analysis into a deliberate decision point.
@@ -106,6 +114,14 @@
 
 ## 🐛 Bug Fixes
 
+- Fixed the **upside/downside percentages** in Deep Value (the Bull/Base/Bear cards and the recap table) being wildly understated — e.g. a base value 143% above the current price showed as "+1.4%". The figures were coming from the AI in the wrong scale; they are now computed directly from fair value vs. the live price.
+
+- Fixed the **Watchlist showing prices in dollars** for EUR-listed tickers that hadn't been analyzed yet — the row now uses the live quote's actual currency.
+
+- Fixed being **unable to delete a ticker's only (or most recent) saved analysis** — a delete button is now available in each ticker's header, not only inside the older-analyses history.
+
+- Fixed the **analysis page always resetting to AAPL** instead of remembering the last ticker you viewed.
+
 - Fixed Valuation Summary table at the end of Deep Value Analysis showing "EUR Fair Value" as the column header even when a Margin of Safety is set — when MoS > 0 the AI outputs MoS-adjusted buy targets, and the column header now correctly reads "EUR Buy Target (-X%)" to reflect this. When MoS is 0% the header remains "EUR Fair Value" as before.
 
 - Fixed AI Portfolio Advisor confusing MoS-adjusted buy targets with intrinsic fair values when discussing your saved analyses — the advisor now receives both the reconstructed intrinsic value (Bear / Base / Bull) and the buy target (at your MoS discount) as clearly labeled separate entries. This means answers like "your ENEL.MI base fair value is 10.07" are now correct: the advisor knows 12.58 is the intrinsic value and 10.07 is your entry target at 20% MoS.
@@ -138,6 +154,10 @@
 
 ## 🔧 Improvements
 
+- **The Watchlist now reflects your Deep Value analyses.** Instead of running a separate, lighter AI re-analysis, each watchlist row — and the periodic email digest — now shows the fair values from your latest saved Deep Value analysis for that ticker, with the live price for proximity-to-target. The lighter analysis now lives only on the Compare page, and the email digest no longer spends on AI. Tickers you haven't analyzed yet prompt you to run a Deep Value analysis.
+
+- **The "at fair value" exit signal is now dividend-aware.** Reaching fair value is treated as a checkpoint, not an automatic sell: "hold (e.g. for dividends)" is presented as a first-class option, and the AI position review explicitly weighs dividend yield, yield-on-cost, and dividend safety before recommending hold / add / exit.
+
 - The Ticker Comparison page now shows both the **intrinsic fair value** and the **buy target** for each Bear / Base / Bull scenario when a Margin of Safety is set. The intrinsic value (what the AI determined the stock is fundamentally worth) is shown on the first line; the buy target discounted by your MoS% appears below it in amber. A legend at the bottom of the table labels the two lines. When MoS is 0% the table is unchanged — one line per cell as before.
 
 - Deep Value Analysis report sections are now better spaced — headers, paragraphs, and bullet lists have more breathing room, making long multi-section reports easier to read
@@ -156,6 +176,10 @@
 - Chart tooltips now show formatted values (compact numbers for revenue/FCF, percentages for margins)
 - AI reports no longer show transitional text ("Now I have the data…") before the actual content
 - Removed "Enable compact charts" toggle that had no visible effect
+
+## ⚠️ Breaking Changes
+
+- **The classic Yahoo-data valuation engine has been removed.** The dashboard's manual DCF/DDM/EV-EBITDA scenario tuning, the Quality Scorecard, the Historical Multiples chart, the Reverse DCF card, the valuation-metrics cards, and the fundamentals charts are gone. The AI **Deep Value** analysis — which picks the valuation method on its own and sources data via web search for any global ticker — is now the single analysis path. The deep dive lives on a dedicated **`/analyze`** page, and the home page is the new Hub. _(Note: this supersedes the Quality Scorecard, Historical Multiples, and Reverse DCF entries listed above, which were added in earlier unreleased work.)_
 
 ## 🔒 Security
 

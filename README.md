@@ -1,6 +1,8 @@
 # Stock Fundamental Analysis Tool
 
-A Next.js web application for stock valuation using Discounted Cash Flow (DCF) analysis with scenario modeling. Fetch real-time financial data from Yahoo Finance and run bull/base/bear scenario valuations with interactive charts.
+A Next.js web app for value investors: an AI-assisted pipeline from idea **Discovery** → side-by-side **Screening** → an AI **Deep Value** analysis → **Monitoring**. The home is an adaptive Hub; the deep dive — where Claude autonomously picks the valuation method and sources data via web search — lives at `/analyze`.
+
+> **June 2026 refactor:** the classic Yahoo DCF/DDM/EV-EBITDA scenario engine (and its fundamentals charts, quality scorecard, historical multiples, reverse DCF) was removed — AI Deep Value is now the only analysis. Some deeper feature/API-reference sections below may still describe the old engine.
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-green)
@@ -14,10 +16,7 @@ A Next.js web application for stock valuation using Discounted Cash Flow (DCF) a
 
 This tool helps investors and analysts perform fundamental stock valuation through:
 
-- **Sector-adaptive valuation** — DCF for most stocks, DDM for utilities, EV/EBITDA for energy and materials, auto-detected from Yahoo Finance
-- **10-year DCF projections** with Gordon Growth terminal value
-- **Smart scenario defaults** auto-populated from analyst estimates and historical data
-- **Three scenario modeling** (Bull/Base/Bear) with independent parameters
+- **AI Deep Value analysis** — Claude autonomously picks the method (DCF/DDM/EV-EBITDA/P-B) and sources financials via web search, for any global ticker
 - **Real-time market data** from Yahoo Finance (quotes, up to 10-year financials, ratios)
 - **Interactive visualizations** comparing fair value vs. current price
 - **Margin of safety** adjustment (0-80%) for conservative valuations
@@ -32,9 +31,6 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **Analysis performance tracking** — see how the stock price moved since you saved each analysis vs. fair value
 - **Ticker Comparison** — compare up to 5 stocks side-by-side on the `/compare` page. Claude fetches AI fair values (Bear/Base/Bull) for all tickers in parallel via web search. Results are saved to your account, so you can leave and return without re-running. A global MoS slider adjusts the Base fair value across all columns instantly. Each fair value shows upside/downside % vs. current price; a ★ marks the best opportunity when comparing 2+ stocks.
 - **Watchlist + email digest** — add tickers to a personal watchlist and receive automatic bi-weekly or monthly email digests with AI fair value estimates (Bear/Base/Bull), current price, and upside vs. your margin-of-safety target. Pause emails with a single toggle when you're not actively investing. Each row shows a **price proximity badge** (distance from your buy target) and inline **Analyze** / **Compare** action buttons.
-- **Quality Scorecard** — Piotroski F-Score (0–9), ROIC vs WACC spread, FCF Conversion rate, and Altman Z-Score computed automatically from Yahoo Finance data; collapsible panel shows all nine Piotroski signals individually
-- **Historical Multiples Chart** — P/E, P/FCF, and EV/EBIT over up to 10 fiscal years with quartile band, median line, and current-multiple reference; summary row shows percentile rank color-coded green/amber/red (cheap/mid/expensive relative to own history)
-- **Reverse DCF** — for any DCF-eligible stock, see the implied annual FCF growth rate the market is pricing in, compared against the company's historical FCF CAGR; colored badge signals whether expectations are conservative, reasonable, or optimistic
 - **English / Italian UI** — switch the entire interface language from the navigation bar; preference is saved automatically
 - **AI Portfolio Advisor** — conversational AI at `/advisor` in two modes: **Portfolio** (knows your holdings and saved analyses) and **Discovery** (idea generation — finds quality compounders, undervalued stocks, or sector opportunities with no portfolio context). Ticker chips are split-action: left zone launches Deep Value analysis, right `+` zone adds to a compare queue. Queue bar accumulates tickers and launches `/compare` with all of them in one click. Conversations saved to your account.
 - **Decision Panel** — after every Deep Value Analysis completes, action buttons appear: **Add to Watchlist** (pre-fills ticker + MoS) and **Add to Compare**. Every analysis ends with a deliberate next step, not a dead end.
@@ -60,7 +56,7 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 
 ## ✨ Key Features
 
-- 🎯 **Multi-Method Valuation**: DCF, DDM (Utilities), or EV/EBITDA (Energy/Materials) — auto-selected by sector
+- 🎯 **AI Deep Value**: Claude autonomously selects the valuation method and sources data via web search — works for any global ticker, ends in a buy / watch / pass decision
 - 🧠 **Smart Defaults**: Scenarios auto-populated from Yahoo Finance analyst estimates and historical data
 - ⚡ **Real-Time Data**: Yahoo Finance integration for quotes and up to 10-year fundamentals
 - 📊 **Interactive Charts**: Fair value comparison and historical financial metrics with formatted axes
@@ -78,8 +74,6 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - 🧾 **Capital Gains Tax**: Set an optional tax rate per position to see estimated taxes and net P&L on unrealized gains; dividend totals show gross and estimated net
 - 📈 **Analysis Performance**: See how price moved since saving vs. fair value — "Under FV" / "Above FV" badge per report
 - 🌐 **EN / IT UI**: Switch the entire interface language from the navbar; preference saved automatically
-- 📉 **Historical Multiples Chart**: P/E, P/FCF, EV/EBIT over 10 fiscal years with quartile shading, median line, current-multiple line, and percentile rank badge (green = historically cheap, red = historically expensive)
-- 🔄 **Reverse DCF**: For any DCF-eligible stock with positive FCF, see the implied FCF growth rate the market is pricing in — compare against historical CAGR with a colored interpretation badge
 - ⚖️ **Ticker Comparison**: Compare up to 5 stocks side-by-side at `/compare` — AI fetches Bear/Base/Bull fair values in parallel, results saved to DB, global MoS slider, inline upside/downside %, freshness badges, and a ★ marking the best opportunity
 - 📬 **Watchlist + AI Email Digest**: Add any ticker to your watchlist and receive automatic bi-weekly or monthly emails with AI fair value estimates (Bear/Base/Bull), current price, upside vs. MoS target, and status badges — pause with a toggle when not actively investing
 - 📱 **Installable PWA**: Install the app on Android or iOS for a native-like experience — standalone mode, home screen icon, no browser chrome
@@ -111,7 +105,7 @@ npx prisma migrate dev
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and enter a stock ticker (e.g., `AAPL`, `MSFT`, `TSLA`).
+Open [http://localhost:3000](http://localhost:3000) — the **Hub** home frames the pipeline. Start with the **Advisor** for ideas, or go to **`/analyze`** and enter a ticker (e.g., `AAPL`, `MSFT`, `TSLA`) to run a Deep Value analysis.
 
 ---
 

@@ -1,12 +1,14 @@
-import { DashboardClient } from "@/components/dashboard-client";
+import { auth } from "@/lib/auth";
+import HubClient from "@/components/hub-client";
 
 /**
- * Root page component for the stock analysis dashboard.
+ * Root route (`/`) — the adaptive Hub home.
  *
- * This is a thin server component that delegates all UI logic to DashboardClient.
- * We keep this separate to enable server-side rendering of the page shell while
- * maintaining client-side interactivity for the dashboard itself.
+ * Renders for everyone (no redirect): logged-out visitors see the pipeline + CTAs.
+ * `auth()` only gates the logged-in recent-activity strip, passed as the `isAuthed`
+ * primitive so the session object never crosses into the client bundle.
  */
-export default function HomePage() {
-  return <DashboardClient />;
+export default async function HomePage() {
+  const session = await auth();
+  return <HubClient isAuthed={!!session} />;
 }

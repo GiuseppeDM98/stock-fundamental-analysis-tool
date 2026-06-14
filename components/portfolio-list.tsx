@@ -136,7 +136,7 @@ function TickerAnalysesInline({
               </p>
               <button
                 onClick={() => {
-                  const url = new URL("/", window.location.origin);
+                  const url = new URL("/analyze", window.location.origin);
                   url.searchParams.set("ticker", ticker);
                   url.searchParams.set("exitReview", "1");
                   if (exitSignal.fairValueBase != null) url.searchParams.set("prevFv", exitSignal.fairValueBase.toFixed(4));
@@ -215,7 +215,7 @@ function AggregatedPositionRow({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <a
-              href={`/?ticker=${encodeURIComponent(agg.ticker)}`}
+              href={`/analyze?ticker=${encodeURIComponent(agg.ticker)}`}
               className="font-mono text-sm font-bold text-accent hover:text-sky-300"
             >
               {agg.ticker}
@@ -280,7 +280,7 @@ function AggregatedPositionRow({
                 </span>
                 <button
                   onClick={() => {
-                    const url = new URL("/", window.location.origin);
+                    const url = new URL("/analyze", window.location.origin);
                     url.searchParams.set("ticker", agg.ticker);
                     url.searchParams.set("exitReview", "1");
                     url.searchParams.set("wac", agg.weightedAvgCost.toFixed(4));
@@ -312,7 +312,7 @@ function AggregatedPositionRow({
 
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           <a
-            href={`/?ticker=${encodeURIComponent(agg.ticker)}`}
+            href={`/analyze?ticker=${encodeURIComponent(agg.ticker)}`}
             className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-accent transition hover:border-sky-400/40 hover:text-sky-300"
           >
             {t("analyzeBtn")}
@@ -883,7 +883,7 @@ export default function PortfolioList() {
                   {/* Header: ticker, company, currency badge, date */}
                   <div className="flex items-center gap-2 flex-wrap">
                     <a
-                      href={`/?ticker=${encodeURIComponent(pos.ticker)}`}
+                      href={`/analyze?ticker=${encodeURIComponent(pos.ticker)}`}
                       className="font-mono text-sm font-bold text-accent hover:text-sky-300"
                     >
                       {pos.ticker}
@@ -952,7 +952,7 @@ export default function PortfolioList() {
 
                 <div className="flex shrink-0 flex-col items-end gap-1.5">
                   <a
-                    href={`/?ticker=${encodeURIComponent(pos.ticker)}`}
+                    href={`/analyze?ticker=${encodeURIComponent(pos.ticker)}`}
                     className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-accent transition hover:border-sky-400/40 hover:text-sky-300"
                   >
                     {t("analyzeBtn")}

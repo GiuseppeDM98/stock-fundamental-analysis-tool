@@ -14,9 +14,18 @@ type AdvisorSession = { id: string; title: string; createdAt: string; updatedAt:
 
 // ─── Markdown / ticker helpers ────────────────────────────────────────────────
 
-// Convert [[TICKER]] to relative /?ticker= URLs — ReactMarkdown filters non-http protocols.
+// Convert [[TICKER]] to relative /analyze?ticker= URLs — ReactMarkdown filters non-http protocols.
 function preprocessMarkdown(content: string): string {
-  return content.replace(/\[\[([A-Z0-9.]+)\]\]/g, "[$1](/?ticker=$1)");
+  return content.replace(/\[\[([A-Z0-9.]+)\]\]/g, "[$1](/analyze?ticker=$1)");
+}
+
+// Extract unique tickers from [[TICKER]] markers in a message, preserving first-seen order.
+function extractTickers(content: string): string[] {
+  const seen = new Set<string>();
+  for (const m of content.matchAll(/\[\[([A-Z0-9.]+)\]\]/g)) {
+    seen.add(m[1]);
+  }
+  return [...seen];
 }
 
 function MessageContent({ content, onAddToCompare }: { content: string; onAddToCompare?: (ticker: string) => void }) {
@@ -27,7 +36,7 @@ function MessageContent({ content, onAddToCompare }: { content: string; onAddToC
         remarkPlugins={[remarkGfm]}
         components={{
           a({ href, children }) {
-            const tickerMatch = href?.match(/^\/\?ticker=([A-Z0-9.]+)$/);
+            const tickerMatch = href?.match(/^\/analyze\?ticker=([A-Z0-9.]+)$/);
             if (tickerMatch) {
               const ticker = tickerMatch[1];
               return (
@@ -35,7 +44,7 @@ function MessageContent({ content, onAddToCompare }: { content: string; onAddToC
                   <button
                     // Full navigation to bypass Next.js Router Cache — router.push would
                     // restore the cached dashboard without remounting.
-                    onClick={() => { window.location.href = `/?ticker=${encodeURIComponent(ticker)}`; }}
+                    onClick={() => { window.location.href = `/analyze?ticker=${encodeURIComponent(ticker)}`; }}
                     className="inline-flex items-center gap-1 bg-sky-500/15 px-2 py-0.5 text-xs font-semibold text-sky-300 transition hover:bg-sky-500/25 hover:text-sky-200 rounded-l-md"
                   >
                     {children}
@@ -79,12 +88,24 @@ function UserBubble({ content }: { content: string }) {
 }
 
 function AssistantBubble({ content, isStreaming, onAddToCompare }: { content: string; isStreaming?: boolean; onAddToCompare?: (ticker: string) => void }) {
+  const { t } = useLanguage();
+  // When a finished reply lists ≥2 candidates, offer a one-click "compare all" shortcut.
+  // Capped at 5 (the Compare page limit). Hidden while streaming so it appears only once complete.
+  const tickers = isStreaming ? [] : extractTickers(content).slice(0, 5);
   return (
     <div className="flex justify-start">
       <div className="w-full rounded-2xl rounded-tl-sm border border-slate-700/30 bg-[#0f172a] px-4 py-3 text-sm text-slate-200 shadow-[0_4px_20px_-8px_rgba(56,189,248,0.10)]">
         <MessageContent content={content} onAddToCompare={onAddToCompare} />
         {isStreaming && content && (
           <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse bg-sky-400" />
+        )}
+        {tickers.length >= 2 && (
+          <button
+            onClick={() => { window.location.href = `/compare?tickers=${tickers.join(",")}`; }}
+            className="mt-3 inline-flex items-center gap-1 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-xs font-semibold text-sky-300 transition hover:bg-sky-500/20 hover:text-sky-200"
+          >
+            {t("advisorCompareAll").replace("{n}", String(tickers.length))}
+          </button>
         )}
       </div>
     </div>
