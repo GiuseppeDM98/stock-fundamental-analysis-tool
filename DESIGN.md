@@ -291,3 +291,22 @@ Extends the existing `[[TICKER]]` chip pattern in Advisor responses. Each chip n
 - **Don't** add a side-stripe border (`border-left` > 1px as a colored accent) to cards, alert banners, or list items. The scenario fair value cards use a full perimeter border in the scenario color; they do not use a stripe.
 - **Don't** introduce glassmorphism cards decoratively. The backdrop blur on `.card` exists for depth against the gradient background, not as an aesthetic statement. New card surfaces should omit blur unless the context specifically requires it.
 - **Don't** use green, amber, or red for anything other than the semantic states (P&L, trend, scenario type, error). A green button that is not confirming a positive-return action, a red badge that is not warning about a negative — these erode the semantic contract the investor relies on to scan results quickly.
+
+## 8. Responsive & Touch
+
+The ledger is a desk-and-phone instrument: the same considered surface, restructured per context — not pixel-scaled.
+
+### Breakpoint doctrine
+- One stacked base **below `lg` (1024px)**; full desktop **at/above `lg`**. `sm` (640px) carries phone↔tablet-portrait refinements (1-col → 2-col grids, text/padding scale, table↔card). Tablet shares the mobile base.
+- Responsive behavior is **structural** (drawer vs inline nav, card vs table, grid columns), not fluid typography. Headings step at fixed sizes (`text-2xl sm:text-3xl`), not `clamp()`.
+
+### Touch
+- Interactive controls reach a **44px hit area on touch input** via the `.tap` helper (`globals.css`), gated on `pointer: coarse` so desktop density is untouched. `.tap` only lifts the floor — keep a base `py-*` so controls aren't cramped on a fine-pointer narrow window.
+- No affordance may depend on hover for **function** (touch can't hover): hover-only controls must also surface on touch (`[@media(pointer:coarse)]:block`).
+
+### Dense data on phones
+- The dense comparison tables (Compare, Watchlist) **become stacked label/value cards below `sm`**, never a side-scrolling squished grid. The per-row card carries its own actions. Don't nest these row-cards inside the panel's glow `.card` — strip the outer chrome on mobile so the rows read as the cards.
+
+### Chrome
+- Drawers (nav, advisor) are portaled overlays with a `bg-black/60 backdrop-blur-sm` scrim, slide-in motion (ease-out, ~0.25s) with a reduced-motion crossfade fallback, Esc + scrim dismiss, and scroll-lock. The drawer panel is `void-deep` (`#070d19`) — the nav's own tonal layer — not a glow card.
+- Notched-phone safe areas: `viewport-fit=cover` + `env(safe-area-inset-*)` on sticky/edge surfaces; `100dvh` for full-height columns.

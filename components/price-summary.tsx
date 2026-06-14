@@ -14,14 +14,14 @@ export function PriceSummary({ quote }: PriceSummaryProps) {
     <div className="card">
       <p className="text-xs font-semibold uppercase tracking-wider text-muted">{t("marketSnapshot")}</p>
       <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h2 className="font-display text-2xl font-bold">{quote.shortName}</h2>
+        <div className="min-w-0">
+          <h2 className="font-display text-2xl font-bold break-words">{quote.shortName}</h2>
           <p className="mt-0.5 text-sm text-muted">
             {quote.ticker} · {quote.exchange}
           </p>
         </div>
         <div className="text-right">
-          <p className="font-display text-3xl font-bold text-accent">
+          <p className="font-display text-2xl font-bold text-accent sm:text-3xl">
             {formatCurrency(quote.regularMarketPrice, quote.currency)}
           </p>
           <p className="text-sm text-muted">

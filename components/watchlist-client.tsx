@@ -37,7 +37,7 @@ function formatDate(iso: string): string {
 // ─── Input class ─────────────────────────────────────────────────────────────
 
 const inputClass =
-  "w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-accent focus:outline-none focus:ring-1 focus:ring-sky-400/30";
+  "w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-slate-100 focus:border-accent focus:outline-none focus:ring-1 focus:ring-sky-400/30";
 
 // ─── Add ticker form ──────────────────────────────────────────────────────────
 
@@ -128,7 +128,7 @@ function AddTickerForm({ onAdd, t }: AddFormProps) {
       <button
         type="submit"
         disabled={loading}
-        className="self-start rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-slate-950 transition hover:brightness-110 disabled:opacity-60"
+        className="tap self-start rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:brightness-110 disabled:opacity-60"
       >
         {loading ? t("loadingState") : t("watchlistAddTicker")}
       </button>
@@ -207,7 +207,7 @@ function WatchlistRow({ item, currentPrice, priceCurrency, analysisRun, onDelete
   return (
     <tr className="border-b border-slate-800/60 text-sm">
       {/* Ticker + Company + Method badge + last run date */}
-      <td className="py-3 pr-4">
+      <td className="rcell-block py-3 pr-4">
         <span className="font-semibold text-slate-100">{item.ticker}</span>
         <br />
         <span className="text-xs text-muted">{item.companyName}</span>
@@ -240,7 +240,7 @@ function WatchlistRow({ item, currentPrice, priceCurrency, analysisRun, onDelete
       </td>
 
       {/* MoS% + edit */}
-      <td className="py-3 pr-4">
+      <td data-label="MoS%" className="py-3 pr-4">
         {editing ? (
           <div className="flex flex-col gap-1">
             <span className="text-xs text-muted">{(editMos * 100).toFixed(0)}%</span>
@@ -269,12 +269,12 @@ function WatchlistRow({ item, currentPrice, priceCurrency, analysisRun, onDelete
       </td>
 
       {/* Bear */}
-      <td className="py-3 pr-4 text-right text-sm text-slate-500">
+      <td data-label="Bear" className="py-3 pr-4 text-right text-sm text-slate-500">
         {run?.fairValueBear != null ? formatPrice(run.fairValueBear, currency) : <span className="text-muted">—</span>}
       </td>
 
       {/* Base (MoS-adjusted) — target buy price, most prominent column */}
-      <td className="py-3 pr-4 text-center">
+      <td data-label="Base −MoS%" className="py-3 pr-4 text-center">
         {adjustedBase != null ? (
           <span className="font-bold text-sky-300">{formatPrice(adjustedBase, currency)}</span>
         ) : (
@@ -283,12 +283,12 @@ function WatchlistRow({ item, currentPrice, priceCurrency, analysisRun, onDelete
       </td>
 
       {/* Bull */}
-      <td className="py-3 pr-4 text-right text-sm text-slate-500">
+      <td data-label="Bull" className="py-3 pr-4 text-right text-sm text-slate-500">
         {run?.fairValueBull != null ? formatPrice(run.fairValueBull, currency) : <span className="text-muted">—</span>}
       </td>
 
       {/* Current price */}
-      <td className="py-3 pr-4 text-right">
+      <td data-label="Prezzo" className="py-3 pr-4 text-right">
         {currentPrice != null ? (
           formatPrice(currentPrice, currency)
         ) : (
@@ -297,7 +297,7 @@ function WatchlistRow({ item, currentPrice, priceCurrency, analysisRun, onDelete
       </td>
 
       {/* Upside */}
-      <td className="py-3 pr-4 text-right">
+      <td data-label="Upside" className="py-3 pr-4 text-right">
         {upside != null ? (
           <span className={upside >= 0 ? "font-medium text-emerald-400" : "font-medium text-red-400"}>
             {formatUpside(upside)}
@@ -308,50 +308,50 @@ function WatchlistRow({ item, currentPrice, priceCurrency, analysisRun, onDelete
       </td>
 
       {/* Actions */}
-      <td className="py-3 text-right">
+      <td className="rcell-block py-3 text-right">
         {editing ? (
-          <div className="flex items-center gap-2 justify-end">
+          <div className="flex items-center gap-2 justify-end max-sm:justify-start">
             <button
               onClick={handleSave}
               disabled={saving}
-              className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold text-slate-950 transition hover:brightness-110 disabled:opacity-60"
+              className="tap rounded-lg bg-accent px-3 py-1 text-xs font-semibold text-slate-950 transition hover:brightness-110 disabled:opacity-60"
             >
               {saving ? t("savingState") : t("watchlistSaveItem")}
             </button>
             <button
               onClick={() => setEditing(false)}
-              className="rounded-lg border border-slate-700 px-3 py-1 text-xs text-muted transition hover:text-slate-100"
+              className="tap rounded-lg border border-slate-700 px-3 py-1 text-xs text-muted transition hover:text-slate-100"
             >
               {t("cancelBtn")}
             </button>
           </div>
         ) : confirmDelete ? (
-          <div className="flex items-center gap-2 justify-end">
+          <div className="flex items-center gap-2 justify-end max-sm:justify-start">
             <button
               onClick={() => onDelete(item.id)}
-              className="rounded-lg bg-red-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-red-500"
+              className="tap rounded-lg bg-red-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-red-500"
             >
               {t("deleteBtn")}
             </button>
             <button
               onClick={() => setConfirmDelete(false)}
-              className="rounded-lg border border-slate-700 px-3 py-1 text-xs text-muted transition hover:text-slate-100"
+              className="tap rounded-lg border border-slate-700 px-3 py-1 text-xs text-muted transition hover:text-slate-100"
             >
               {t("cancelBtn")}
             </button>
           </div>
         ) : (
-          <div className="flex flex-col items-end gap-2">
+          <div className="flex flex-col items-end gap-2 max-sm:flex-row max-sm:flex-wrap max-sm:items-center">
             <div className="flex items-center gap-2">
               <button
                 onClick={() => { window.location.href = `/analyze?ticker=${item.ticker}`; }}
-                className="rounded-md border border-slate-700/60 px-2.5 py-1 text-xs font-medium text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
+                className="tap rounded-md border border-slate-700/60 px-2.5 py-1 text-xs font-medium text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
               >
                 {t("navDeepValue")}
               </button>
               <button
                 onClick={() => { window.location.href = `/compare?tickers=${item.ticker}`; }}
-                className="rounded-md border border-slate-700/60 px-2.5 py-1 text-xs font-medium text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
+                className="tap rounded-md border border-slate-700/60 px-2.5 py-1 text-xs font-medium text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
               >
                 {t("addToCompare")}
               </button>
@@ -359,13 +359,13 @@ function WatchlistRow({ item, currentPrice, priceCurrency, analysisRun, onDelete
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setEditing(true)}
-                className="rounded-lg border border-slate-700 px-3 py-1 text-xs text-muted transition hover:text-slate-100"
+                className="tap rounded-lg border border-slate-700 px-3 py-1 text-xs text-muted transition hover:text-slate-100"
               >
                 {t("watchlistEditItem")}
               </button>
               <button
                 onClick={() => setConfirmDelete(true)}
-                className="rounded-lg border border-red-800/50 px-3 py-1 text-xs text-red-400 transition hover:border-red-600 hover:text-red-300"
+                className="tap rounded-lg border border-red-800/50 px-3 py-1 text-xs text-red-400 transition hover:border-red-600 hover:text-red-300"
               >
                 {t("deleteBtn")}
               </button>
@@ -689,8 +689,10 @@ export default function WatchlistClient() {
           <p className="text-sm text-muted">{t("watchlistEmptyHint")}</p>
         </div>
       ) : (
-        <div className="card overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="card overflow-x-auto max-sm:border-0 max-sm:bg-transparent max-sm:p-0 max-sm:shadow-none">
+          {/* Below sm the outer card chrome is stripped (via max-sm:*) so the
+              per-row cards from .rtable stand alone, not nested in a glow card. */}
+          <table className="rtable w-full text-sm">
             <thead>
               <tr className="border-b border-slate-800">
                 <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-muted">Ticker</th>

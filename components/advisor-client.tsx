@@ -4,6 +4,8 @@
 // Sessions persisted to DB. Sidebar lists past sessions.
 // [[TICKER]] markers rendered as Deep Value launch chips.
 import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useLanguage } from "@/context/language-context";
@@ -147,7 +149,7 @@ function TrashIcon() {
   );
 }
 
-function SessionSidebar({
+function SidebarBody({
   sessions,
   activeId,
   onSelect,
@@ -164,15 +166,18 @@ function SessionSidebar({
     return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   }
 
+  // Inner content only — no <aside> wrapper — so it can be reused by both the
+  // desktop sidebar (≥ lg) and the mobile slide-in drawer (< lg). The parent
+  // (aside / drawer panel) must be a flex column for the list's flex-1 to size.
   return (
-    <aside className="flex w-52 flex-shrink-0 flex-col border-r border-slate-800 pr-3">
+    <>
       <p className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
         Conversations
       </p>
 
       <button
         onClick={onNew}
-        className="mb-3 flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-400 transition hover:border-sky-500/40 hover:text-sky-300"
+        className="tap mb-3 flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-400 transition hover:border-sky-500/40 hover:text-sky-300"
       >
         <PlusIcon />
         New chat
@@ -187,7 +192,7 @@ function SessionSidebar({
               <li key={s.id} className="group relative">
                 <button
                   onClick={() => onSelect(s)}
-                  className={`w-full rounded-lg px-2.5 py-2 pr-7 text-left text-xs transition ${
+                  className={`w-full rounded-lg px-2.5 py-2 pr-8 text-left text-xs transition ${
                     s.id === activeId
                       ? "border border-sky-500/15 bg-sky-500/[0.08] text-slate-100"
                       : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
@@ -200,7 +205,8 @@ function SessionSidebar({
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); onDelete(s.id); }}
-                  className="absolute right-1.5 top-2.5 hidden rounded p-0.5 text-slate-600 transition hover:text-rose-400 group-hover:block"
+                  // Shown on hover (mouse) and always on touch — group-hover never fires on coarse pointers.
+                  className="absolute right-1 top-2 hidden rounded p-1.5 text-slate-600 transition hover:text-rose-400 group-hover:block [@media(pointer:coarse)]:block"
                   aria-label="Delete session"
                 >
                   <TrashIcon />
@@ -210,7 +216,7 @@ function SessionSidebar({
           </ul>
         )}
       </div>
-    </aside>
+    </>
   );
 }
 
@@ -514,24 +520,58 @@ export default function AdvisorClient() {
     streamingAssistantId != null &&
     messages.find((m) => m.id === streamingAssistantId)?.content === "";
 
+  // Mobile sessions drawer — the sidebar collapses below lg (it would eat ~55%
+  // of a phone's width). A trigger in the header opens it as a slide-in panel.
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [drawerMounted, setDrawerMounted] = useState(false);
+  const reduceMotion = useReducedMotion();
+  useEffect(() => setDrawerMounted(true), []);
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSidebarOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [sidebarOpen]);
+
   return (
     <div className="flex flex-1 gap-5 overflow-hidden">
-      <SessionSidebar
-        sessions={sessions}
-        activeId={activeSessionId}
-        onSelect={loadSession}
-        onNew={startNewChat}
-        onDelete={deleteSession}
-      />
+      {/* Desktop sidebar (≥ lg); below lg it lives in the slide-in drawer below. */}
+      <aside className="hidden w-52 flex-shrink-0 flex-col border-r border-slate-800 pr-3 lg:flex">
+        <SidebarBody
+          sessions={sessions}
+          activeId={activeSessionId}
+          onSelect={loadSession}
+          onNew={startNewChat}
+          onDelete={deleteSession}
+        />
+      </aside>
 
       {/* Chat area */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Mode toggle */}
-        <div className="flex items-center justify-between pb-3">
+        {/* Header: mobile sessions trigger (< lg) + mode toggle */}
+        <div className="flex items-center justify-between gap-2 pb-3">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Conversations"
+            aria-expanded={sidebarOpen}
+            className="tap inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-1 text-xs font-medium text-slate-400 transition hover:border-sky-500/40 hover:text-sky-300 lg:hidden"
+          >
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+              <path d="M2 3.5h11M2 7.5h11M2 11.5h7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+            Conversations
+          </button>
           <div className="inline-flex gap-0.5 rounded-lg border border-slate-800 bg-slate-900/60 p-0.5">
             <button
               onClick={() => setMode("portfolio")}
-              className={`rounded-md px-3 py-1 text-xs font-medium transition ${
+              className={`tap rounded-md px-3 py-1 text-xs font-medium transition ${
                 mode === "portfolio"
                   ? "bg-slate-700 text-slate-100 shadow-sm"
                   : "text-slate-500 hover:text-slate-300"
@@ -541,7 +581,7 @@ export default function AdvisorClient() {
             </button>
             <button
               onClick={() => setMode("discovery")}
-              className={`rounded-md px-3 py-1 text-xs font-medium transition ${
+              className={`tap rounded-md px-3 py-1 text-xs font-medium transition ${
                 mode === "discovery"
                   ? "bg-slate-700 text-slate-100 shadow-sm"
                   : "text-slate-500 hover:text-slate-300"
@@ -594,13 +634,14 @@ export default function AdvisorClient() {
             <div className="flex items-center gap-2 flex-shrink-0">
               <button
                 onClick={() => setCompareQueue([])}
-                className="text-xs text-slate-600 transition hover:text-slate-400"
+                aria-label="Clear compare queue"
+                className="tap flex items-center justify-center px-1 text-xs text-slate-600 transition hover:text-slate-400"
               >
                 ✕
               </button>
               <button
                 onClick={launchCompare}
-                className="rounded-lg border border-sky-700 bg-sky-900/30 px-3 py-1 text-xs font-semibold text-sky-300 transition hover:border-sky-500 hover:bg-sky-900/50"
+                className="tap rounded-lg border border-sky-700 bg-sky-900/30 px-3 py-1 text-xs font-semibold text-sky-300 transition hover:border-sky-500 hover:bg-sky-900/50"
               >
                 {t("advisorCompareQueue").replace("{n}", String(compareQueue.length))}
               </button>
@@ -625,7 +666,7 @@ export default function AdvisorClient() {
             <button
               onClick={() => sendMessage(input)}
               disabled={isStreaming || !input.trim()}
-              className="mb-0.5 flex-shrink-0 rounded-lg bg-sky-500 px-3.5 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-40"
+              className="tap mb-0.5 flex-shrink-0 rounded-lg bg-sky-500 px-3.5 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {t("advisorSend")}
             </button>
@@ -635,6 +676,63 @@ export default function AdvisorClient() {
           </p>
         </div>
       </div>
+
+      {/* Mobile sessions drawer (< lg), portaled out of the overflow-hidden flex row */}
+      {drawerMounted &&
+        createPortal(
+          <AnimatePresence>
+            {sidebarOpen && (
+              <motion.div
+                className="fixed inset-0 z-[60] lg:hidden"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <div
+                  className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                  onClick={() => setSidebarOpen(false)}
+                />
+                <motion.div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Conversations"
+                  className="absolute inset-y-0 left-0 flex w-72 max-w-[80vw] flex-col border-r border-slate-800 bg-[#070d19] p-4 pt-[max(1rem,env(safe-area-inset-top))]"
+                  initial={reduceMotion ? { opacity: 0 } : { x: "-100%" }}
+                  animate={reduceMotion ? { opacity: 1 } : { x: 0 }}
+                  exit={reduceMotion ? { opacity: 0 } : { x: "-100%" }}
+                  transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  <div className="mb-2 flex items-center justify-end">
+                    <button
+                      onClick={() => setSidebarOpen(false)}
+                      aria-label="Close"
+                      className="tap flex items-center justify-center rounded-md border border-slate-700 px-2 py-1 text-slate-400 transition hover:border-slate-500 hover:text-slate-100"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  </div>
+                  <SidebarBody
+                    sessions={sessions}
+                    activeId={activeSessionId}
+                    onSelect={(s) => {
+                      loadSession(s);
+                      setSidebarOpen(false);
+                    }}
+                    onNew={() => {
+                      startNewChat();
+                      setSidebarOpen(false);
+                    }}
+                    onDelete={deleteSession}
+                  />
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body,
+        )}
     </div>
   );
 }
