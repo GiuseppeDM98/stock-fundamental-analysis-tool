@@ -11,7 +11,7 @@ export default async function PortfolioPage() {
   if (!session) redirect("/login");
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-10">
+    <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
       <PageHeader titleKey="portfolioPageTitle" descKey="portfolioPageDesc" />
       <PortfolioHistoryChart />
       <PortfolioList />

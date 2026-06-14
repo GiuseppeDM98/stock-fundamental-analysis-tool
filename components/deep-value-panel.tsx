@@ -116,15 +116,15 @@ function RecapTable({
   return (
     <div className="rounded-xl border border-slate-700/60 bg-slate-900/50 p-5">
       <h3 className="mb-3 text-sm font-semibold text-slate-200">{title}</h3>
-      <table className="w-full text-sm">
+      <table className="w-full text-xs sm:text-sm">
         <thead>
           <tr className="border-b border-slate-700/60">
-            <th className="pb-2 text-left font-medium text-slate-400">Scenario</th>
+            <th className="pb-2 pr-2 text-left font-medium text-slate-400 sm:pr-4">Scenario</th>
             <th className="pb-2 text-right font-medium text-slate-400">
               {result.currency}{" "}
               {mosPercent > 0 ? `Buy Target (-${mosPercent}%)` : "Fair Value"}
             </th>
-            <th className="pb-2 text-right font-medium text-slate-400">vs. Price</th>
+            <th className="pb-2 pl-2 text-right font-medium text-slate-400 sm:pl-4">vs. Price</th>
           </tr>
         </thead>
         <tbody>
@@ -139,7 +139,7 @@ function RecapTable({
                 }`}
               >
                 <td
-                  className={`py-2.5 pr-4 font-medium ${
+                  className={`py-2.5 pr-2 font-medium sm:pr-4 ${
                     isCurrentPrice
                       ? "text-slate-400"
                       : isBase
@@ -155,7 +155,7 @@ function RecapTable({
                     <span className="block text-xs font-normal text-slate-500">{`FV ${row.intrinsic.toFixed(2)}`}</span>
                   )}
                 </td>
-                <td className="py-2.5 pl-4 text-right">
+                <td className="py-2.5 pl-2 text-right sm:pl-4">
                   {row.upside != null ? (
                     <span
                       className={`font-semibold ${
@@ -356,7 +356,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
             value={language}
             onChange={(e) => setLanguage(e.target.value)}
             disabled={isStreaming}
-            className="rounded-lg border border-slate-700 bg-slate-800/60 px-2 py-2 text-sm text-slate-200 focus:border-violet-500 focus:outline-none disabled:opacity-50"
+            className="tap rounded-lg border border-slate-700 bg-slate-800/60 px-2 py-2 text-sm text-slate-200 focus:border-violet-500 focus:outline-none disabled:opacity-50"
             aria-label="Report language"
           >
             {LANGUAGES.map((l) => (
@@ -370,7 +370,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
             <button
               onClick={() => handleGenerate(exitReviewContext)}
               disabled={!ticker || isStreaming}
-              className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-400 transition hover:bg-amber-500/20 hover:border-amber-400 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="tap rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-400 transition hover:bg-amber-500/20 hover:border-amber-400 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {isStreaming && isReviewMode ? (
                 <span className="flex items-center gap-2">
@@ -386,7 +386,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           <button
             onClick={() => handleGenerate()}
             disabled={!ticker || isStreaming}
-            className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="tap rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {isStreaming && !isReviewMode ? (
               <span className="flex items-center gap-2">
@@ -438,7 +438,9 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           </div>
 
           {/* Fair value cards */}
-          <div className="grid grid-cols-3 gap-3">
+          {/* Kept 3-up at every width: the bull/base/bear side-by-side comparison
+              is the point of these cards. Text/padding scale down on phones. */}
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
             {(["bull", "base", "bear"] as const).map((scenario) => {
               const s = result[scenario];
               const labels = { bull: "Bull", base: "Base", bear: "Bear" };
@@ -449,10 +451,10 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
               return (
                 <div
                   key={scenario}
-                  className="rounded-xl border border-slate-700/60 bg-slate-800/50 p-3 text-center"
+                  className="rounded-xl border border-slate-700/60 bg-slate-800/50 p-2 text-center sm:p-3"
                 >
                   <p className="text-xs text-slate-400">{labels[scenario]}</p>
-                  <p className="mt-1 text-base font-bold text-slate-100">
+                  <p className="mt-1 text-sm font-bold text-slate-100 sm:text-base">
                     {result.currency} {s.fairValue.toFixed(2)}
                   </p>
                   {mosPercent > 0 && (
@@ -500,7 +502,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           <button
             onClick={handleSave}
             disabled={saveStatus === "saving" || saveStatus === "saved"}
-            className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-400 hover:text-slate-100 disabled:opacity-50"
+            className="tap rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-400 hover:text-slate-100 disabled:opacity-50"
           >
             {saveStatus === "saving" && t("savingState")}
             {saveStatus === "saved" && t("savedState")}
@@ -530,7 +532,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           <button
             onClick={handleAddToWatchlist}
             disabled={watchlistStatus === "loading" || watchlistStatus === "saved" || watchlistStatus === "already"}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-800/50 px-3 py-1.5 text-xs font-medium text-amber-400 transition hover:border-amber-600 hover:bg-amber-900/20 disabled:cursor-default disabled:opacity-70"
+            className="tap inline-flex items-center gap-1.5 rounded-lg border border-amber-800/50 px-3 py-1.5 text-xs font-medium text-amber-400 transition hover:border-amber-600 hover:bg-amber-900/20 disabled:cursor-default disabled:opacity-70"
           >
             {watchlistStatus === "loading" && (
               <span className="h-3 w-3 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
@@ -551,7 +553,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           {/* Add to Compare */}
           <button
             onClick={handleAddToCompare}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-sky-800/50 px-3 py-1.5 text-xs font-medium text-sky-400 transition hover:border-sky-600 hover:bg-sky-900/20"
+            className="tap inline-flex items-center gap-1.5 rounded-lg border border-sky-800/50 px-3 py-1.5 text-xs font-medium text-sky-400 transition hover:border-sky-600 hover:bg-sky-900/20"
           >
             <span>↔</span>
             {t("addToCompare")}

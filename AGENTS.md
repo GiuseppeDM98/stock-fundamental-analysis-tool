@@ -452,6 +452,31 @@ Use Tailwind built-in equivalents instead:
 
 ---
 
+## Responsive Design (Mobile / Tablet)
+
+The app is mobile/tablet-optimized. Default Tailwind breakpoints; no custom screens.
+
+### Breakpoint model
+- **Single stacked base below `lg` (1024px)** → full desktop **at/above `lg`**. Phone↔tablet-portrait nuance at **`sm` (640px)** (e.g. 1-col → 2-col grids). Mental model: "desktop vs mobile/tablet", tablet shares the mobile base.
+- Use `lg:` for the structural desktop/mobile switch (inline nav vs drawer, sidebar vs drawer), `sm:` for content refinements (grid columns, text/padding scale, table↔card).
+
+### Touch targets — the `.tap` helper
+- `.tap` (in `globals.css`) sets `min-height/width: 44px` **only inside `@media (pointer: coarse)`**, so desktop keeps its intentionally compact, data-dense controls while touch input gets a finger-sized hit area. Detecting the input device (not viewport width) also covers touchscreen laptops.
+- **Gotcha:** `.tap` does nothing on a fine pointer. If you remove a button's base padding and rely on `.tap` for height, it looks cramped when someone tests by narrowing a desktop window. **Always keep a base `py-*`** (≥ `py-2.5` for full-width controls); `.tap` only lifts the floor.
+- Full-width form inputs/submit use base `py-2.5` (≈44px) — no `.tap` needed.
+
+### Dense tables → cards below `sm`
+Two patterns, pick by row complexity:
+- **Per-card render path** (Compare, `compare-table.tsx`): `<table className="hidden …sm:block">` for desktop + a separate `sm:hidden` card list that reuses the same cell renderer (`renderCell`) — one logic source, two views.
+- **`.rtable` CSS transform** (Watchlist, stateful rows): add `.rtable` to the `<table>`; below `sm` rows become cards via `display:block`, `thead` hides, each `td` becomes a label/value row with the label from `data-label`. Cells that carry a heading or button cluster opt out with `.rcell-block`. Strip the outer `.card` chrome on mobile (`max-sm:border-0 max-sm:bg-transparent max-sm:p-0 max-sm:shadow-none`) to avoid nested cards. **Gotcha:** `.rtable td` selectors out-specify cell-level `max-sm:*` utilities — change the `.rtable` CSS, don't add padding/border utilities to `.rtable` cells.
+
+### Drawers (nav, advisor sidebar)
+- Below `lg`, the nav links and the advisor session sidebar collapse into a portaled slide-in drawer. Pattern: `createPortal(<AnimatePresence>…</AnimatePresence>, document.body)` gated on a `mounted` state (SSR has no `document`), with Esc-to-close, scrim click, `document.body` scroll-lock, a minimal Tab focus-trap, `aria-modal`, and `useReducedMotion()` (fade instead of slide). Ease `[0.22, 1, 0.36, 1]`, ~0.25s. Close the drawer on `pathname` change (nav) or on select (advisor).
+
+### Safe areas / PWA
+- `app/layout.tsx` sets `viewport: { viewportFit: "cover" }`; sticky/edge surfaces pad back with `pt-[max(<rest>,env(safe-area-inset-top))]`. Use `100dvh` (not `100vh`) for full-height columns so the mobile browser chrome doesn't clip them (see `app/advisor/page.tsx`).
+- Touch-only affordances: a hover-only control (`group-hover:block`) is invisible on touch — add `[@media(pointer:coarse)]:block` so it shows (see the advisor session delete button).
+
 ## Recharts Patterns
 
 ### Custom tooltip — accessing non-Line fields

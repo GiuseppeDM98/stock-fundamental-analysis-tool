@@ -443,14 +443,14 @@ function AnalysisRow({
       <div className="flex items-center gap-1.5 shrink-0">
         <button
           onClick={onView}
-          className="rounded px-2 py-1 text-xs text-accent border border-slate-700 hover:border-sky-400/40 transition"
+          className="tap rounded px-2 py-1 text-xs text-accent border border-slate-700 hover:border-sky-400/40 transition"
         >
           →
         </button>
         <button
           onClick={onDelete}
           disabled={isDeleting}
-          className="rounded px-2 py-1 text-xs text-muted border border-slate-700 hover:border-red-500/50 hover:text-danger transition disabled:opacity-50"
+          className="tap rounded px-2 py-1 text-xs text-muted border border-slate-700 hover:border-red-500/50 hover:text-danger transition disabled:opacity-50"
         >
           {isDeleting ? "…" : deleteLabel}
         </button>
@@ -530,7 +530,7 @@ function TickerGroup({
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             onClick={() => { window.location.href = `/analyze?ticker=${encodeURIComponent(ticker)}`; }}
-            className="rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-accent hover:border-sky-400/40 hover:text-sky-300 transition"
+            className="tap rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-accent hover:border-sky-400/40 hover:text-sky-300 transition"
           >
             Re-run
           </button>
@@ -540,7 +540,7 @@ function TickerGroup({
             onClick={() => onDelete(latest.id)}
             disabled={deleting === latest.id}
             aria-label={deleteLabel}
-            className="rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-muted hover:border-red-500/50 hover:text-danger transition disabled:opacity-50"
+            className="tap rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-muted hover:border-red-500/50 hover:text-danger transition disabled:opacity-50"
           >
             {deleting === latest.id ? "…" : deleteLabel}
           </button>
@@ -850,7 +850,7 @@ export default function AnalysesList() {
         {/* Under FV toggle */}
         <button
           onClick={() => setUnderFvOnly((v) => !v)}
-          className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+          className={`tap rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
             underFvOnly
               ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-400"
               : "border-slate-700 text-slate-400 hover:border-slate-600 hover:text-slate-300"
@@ -865,7 +865,7 @@ export default function AnalysesList() {
           <select
             value={sortMode}
             onChange={(e) => setSortMode(e.target.value as SortMode)}
-            className="rounded-lg border border-slate-700 bg-slate-800/80 px-2 py-1.5 text-xs text-slate-300 focus:border-sky-500/50 focus:outline-none"
+            className="tap rounded-lg border border-slate-700 bg-slate-800/80 px-2 py-1.5 text-xs text-slate-300 focus:border-sky-500/50 focus:outline-none"
           >
             <option value="recent">{t("sortRecent")}</option>
             <option value="ticker">{t("sortTicker")}</option>

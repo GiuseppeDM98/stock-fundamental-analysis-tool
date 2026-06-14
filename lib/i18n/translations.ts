@@ -30,6 +30,8 @@ export type Translations = {
   navSignIn: string;
   navSignOut: string;
   navRegister: string;
+  navOpenMenu: string;
+  navCloseMenu: string;
 
   // ─── Common actions ─────────────────────────────────────────────────────────
   loadingState: string;
@@ -430,6 +432,8 @@ const en: Translations = {
   navSignIn: "Sign in",
   navSignOut: "Sign out",
   navRegister: "Register",
+  navOpenMenu: "Open menu",
+  navCloseMenu: "Close menu",
 
   // Common actions
   loadingState: "Loading…",
@@ -829,6 +833,8 @@ const it: Translations = {
   navSignIn: "Accedi",
   navSignOut: "Esci",
   navRegister: "Registrati",
+  navOpenMenu: "Apri menu",
+  navCloseMenu: "Chiudi menu",
 
   // Common actions
   loadingState: "Caricamento…",

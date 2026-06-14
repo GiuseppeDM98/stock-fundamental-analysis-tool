@@ -20,9 +20,13 @@ export const metadata: Metadata = {
   },
 };
 
-// themeColor belongs in the viewport export in Next.js 15+
+// themeColor belongs in the viewport export in Next.js 15+.
+// viewportFit: "cover" lets the app draw into the notch/home-indicator area on
+// modern phones (this is an installable PWA); globals.css then pads sticky
+// surfaces back out with env(safe-area-inset-*).
 export const viewport: Viewport = {
   themeColor: "#0f172a",
+  viewportFit: "cover",
 };
 
 /**

@@ -216,7 +216,9 @@ export function CompareTable({ items, mosPercent, watchedTickers = [], onWatch }
   }
 
   return (
-    <div className="overflow-x-auto rounded-2xl border border-slate-800">
+    <>
+    {/* Desktop / tablet (≥ sm): transposed table; scrolls horizontally for many tickers. */}
+    <div className="hidden overflow-x-auto rounded-2xl border border-slate-800 sm:block">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-slate-800 bg-slate-900/60">
@@ -275,7 +277,7 @@ export function CompareTable({ items, mosPercent, watchedTickers = [], onWatch }
                       href={`/analyze?ticker=${item.ticker}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="rounded-lg border border-sky-800 px-3 py-1.5 text-xs font-semibold text-sky-400 transition hover:border-sky-500 hover:bg-sky-500/10 hover:text-sky-300"
+                      className="tap rounded-lg border border-sky-800 px-3 py-1.5 text-xs font-semibold text-sky-400 transition hover:border-sky-500 hover:bg-sky-500/10 hover:text-sky-300"
                     >
                       {t("compareDeepAnalysis")}
                     </Link>
@@ -288,7 +290,7 @@ export function CompareTable({ items, mosPercent, watchedTickers = [], onWatch }
                         <button
                           onClick={() => handleWatch(item.ticker)}
                           disabled={watchStatus === "loading"}
-                          className="inline-flex items-center gap-1 rounded-md border border-slate-700/60 px-2.5 py-1 text-xs font-medium text-slate-400 transition hover:border-slate-500 hover:text-slate-200 disabled:opacity-60"
+                          className="tap inline-flex items-center gap-1 rounded-md border border-slate-700/60 px-2.5 py-1 text-xs font-medium text-slate-400 transition hover:border-slate-500 hover:text-slate-200 disabled:opacity-60"
                         >
                           {watchStatus === "loading" ? (
                             <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-600 border-t-slate-300" />
@@ -306,13 +308,81 @@ export function CompareTable({ items, mosPercent, watchedTickers = [], onWatch }
           </tr>
         </tbody>
       </table>
-      {mosPercent > 0 && (
-        <div className="border-t border-slate-800/50 px-4 py-2 text-xs text-slate-500">
-          <span className="text-slate-400">Fair value intrinseco</span>
-          {" · "}
-          <span className="text-amber-400/70">Buy target (−{mosPercent}% MoS)</span>
-        </div>
-      )}
     </div>
+
+    {/* Mobile (< sm): one card per ticker. The table is transposed (metrics as
+        rows, tickers as columns), so a card per column reads far better than
+        side-scrolling a squished multi-ticker grid. */}
+    <div className="space-y-3 sm:hidden">
+      {items.map((item) => {
+        const watchStatus = watchStatuses[item.ticker] ?? "idle";
+        const alreadyWatched =
+          watchedTickers.includes(item.ticker) || watchStatus === "saved" || watchStatus === "already";
+        return (
+          <div key={item.ticker} className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5 font-semibold text-slate-100">
+                {item.ticker}
+                {item.ticker === bestUpsideTicker && (
+                  <span title={t("compareBestUpside")} className="text-amber-400">★</span>
+                )}
+              </span>
+              {item.status !== "loading" && <FreshnessBadge analyzedAt={item.analyzedAt} />}
+            </div>
+            <dl className="space-y-1.5">
+              {rows.map((row) => (
+                <div
+                  key={row.key}
+                  className={`flex items-start justify-between gap-3 ${
+                    row.key === "base" ? "rounded-md bg-sky-950/30 px-2 py-1" : ""
+                  }`}
+                >
+                  <dt className="pt-0.5 text-xs font-medium text-muted">{row.label}</dt>
+                  <dd className="text-right text-sm text-slate-200">{renderCell(item, row.key)}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="mt-3 flex items-center gap-2 border-t border-slate-800/60 pt-3">
+              <Link
+                href={`/analyze?ticker=${item.ticker}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="tap flex-1 rounded-lg border border-sky-800 px-3 py-1.5 text-center text-xs font-semibold text-sky-400 transition hover:border-sky-500 hover:bg-sky-500/10 hover:text-sky-300"
+              >
+                {t("compareDeepAnalysis")}
+              </Link>
+              {onWatch &&
+                (alreadyWatched ? (
+                  <span className="rounded-full bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-500">
+                    {t("inWatchlist")}
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => handleWatch(item.ticker)}
+                    disabled={watchStatus === "loading"}
+                    className="tap inline-flex items-center gap-1 rounded-md border border-slate-700/60 px-2.5 py-1 text-xs font-medium text-slate-400 transition hover:border-slate-500 hover:text-slate-200 disabled:opacity-60"
+                  >
+                    {watchStatus === "loading" ? (
+                      <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-600 border-t-slate-300" />
+                    ) : (
+                      <span>👁</span>
+                    )}
+                    {t("compareWatch")}
+                  </button>
+                ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+
+    {mosPercent > 0 && (
+      <div className="mt-2 px-1 text-xs text-slate-500 sm:mt-3">
+        <span className="text-slate-400">Fair value intrinseco</span>
+        {" · "}
+        <span className="text-amber-400/70">Buy target (−{mosPercent}% MoS)</span>
+      </div>
+    )}
+    </>
   );
 }

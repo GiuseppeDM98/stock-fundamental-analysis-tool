@@ -90,7 +90,7 @@ function getExitSignal(
 // ─── Shared input class ───────────────────────────────────────────────────────
 
 const inputClass =
-  "w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-accent focus:outline-none focus:ring-1 focus:ring-sky-400/30";
+  "w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-slate-100 focus:border-accent focus:outline-none focus:ring-1 focus:ring-sky-400/30";
 
 // ─── Ticker Analyses Inline ───────────────────────────────────────────────────
 
@@ -313,7 +313,7 @@ function AggregatedPositionRow({
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           <a
             href={`/analyze?ticker=${encodeURIComponent(agg.ticker)}`}
-            className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-accent transition hover:border-sky-400/40 hover:text-sky-300"
+            className="tap rounded-lg border border-slate-700 px-2 py-1 text-xs text-accent transition hover:border-sky-400/40 hover:text-sky-300"
           >
             {t("analyzeBtn")}
           </a>
@@ -322,7 +322,7 @@ function AggregatedPositionRow({
             <button
               onClick={() => onDelete(agg.purchases[0].id)}
               disabled={deleting === agg.purchases[0].id}
-              className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-muted transition hover:border-red-500/50 hover:text-danger disabled:opacity-50"
+              className="tap rounded-lg border border-slate-700 px-2 py-1 text-xs text-muted transition hover:border-red-500/50 hover:text-danger disabled:opacity-50"
             >
               {deleting === agg.purchases[0].id ? "…" : t("deleteBtn")}
             </button>
@@ -419,9 +419,9 @@ function AddPositionModal({ onClose, onSave, existingPositions }: AddPositionMod
   }
 
   const modal = (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm">
       <div
-        className="w-full max-w-md rounded-2xl bg-[var(--card)] border border-slate-700/60 p-6 shadow-2xl"
+        className="my-auto max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-700/60 bg-[var(--card)] p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-lg font-semibold text-slate-100 mb-4">{t("addPositionTitle")}</h2>
@@ -552,14 +552,14 @@ function AddPositionModal({ onClose, onSave, existingPositions }: AddPositionMod
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 rounded-lg bg-accent py-2 text-sm font-semibold text-slate-950 transition hover:brightness-110 disabled:opacity-50"
+              className="tap flex-1 rounded-lg bg-accent py-2.5 text-sm font-semibold text-slate-950 transition hover:brightness-110 disabled:opacity-50"
             >
               {saving ? t("savingState") : t("savePosition")}
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-muted transition hover:border-slate-500 hover:text-slate-100"
+              className="tap rounded-lg border border-slate-700 px-4 py-2.5 text-sm text-muted transition hover:border-slate-500 hover:text-slate-100"
             >
               {t("cancelBtn")}
             </button>
@@ -633,7 +633,7 @@ function SummaryBar({
   const netDividendsEur = avgTaxRate != null ? totalDividendsEur * (1 - avgTaxRate / 100) : null;
 
   return (
-    <div className={`card mb-4 grid gap-4 text-center ${hasDividends ? "grid-cols-4" : "grid-cols-3"}`}>
+    <div className={`card mb-4 grid grid-cols-2 gap-4 text-center ${hasDividends ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
       <div>
         <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-1">{t("totalCost")}</p>
         <p className="text-lg font-semibold text-slate-100">{formatAmount(totalCostEur, "EUR")}</p>
@@ -804,7 +804,7 @@ export default function PortfolioList() {
         />
       )}
 
-      <div className="mb-4 flex items-center justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted">
           {positions.length === 0
             ? t("noPositionsYet")
@@ -821,7 +821,7 @@ export default function PortfolioList() {
             <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs">
               <button
                 onClick={() => setViewMode("aggregated")}
-                className={`px-3 py-1.5 transition ${
+                className={`tap px-3 py-1.5 transition ${
                   viewMode === "aggregated"
                     ? "bg-slate-700 text-slate-100"
                     : "text-muted hover:text-slate-300"
@@ -831,7 +831,7 @@ export default function PortfolioList() {
               </button>
               <button
                 onClick={() => setViewMode("flat")}
-                className={`px-3 py-1.5 transition ${
+                className={`tap px-3 py-1.5 transition ${
                   viewMode === "flat"
                     ? "bg-slate-700 text-slate-100"
                     : "text-muted hover:text-slate-300"
@@ -843,7 +843,7 @@ export default function PortfolioList() {
           )}
           <button
             onClick={() => setShowModal(true)}
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-slate-950 transition hover:brightness-110"
+            className="tap rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-slate-950 transition hover:brightness-110"
           >
             {t("addPositionBtn")}
           </button>
@@ -953,14 +953,14 @@ export default function PortfolioList() {
                 <div className="flex shrink-0 flex-col items-end gap-1.5">
                   <a
                     href={`/analyze?ticker=${encodeURIComponent(pos.ticker)}`}
-                    className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-accent transition hover:border-sky-400/40 hover:text-sky-300"
+                    className="tap rounded-lg border border-slate-700 px-2 py-1 text-xs text-accent transition hover:border-sky-400/40 hover:text-sky-300"
                   >
                     {t("analyzeBtn")}
                   </a>
                   <button
                     onClick={() => handleDelete(pos.id)}
                     disabled={deleting === pos.id}
-                    className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-muted transition hover:border-red-500/50 hover:text-danger disabled:opacity-50"
+                    className="tap rounded-lg border border-slate-700 px-2 py-1 text-xs text-muted transition hover:border-red-500/50 hover:text-danger disabled:opacity-50"
                   >
                     {deleting === pos.id ? "…" : t("deleteBtn")}
                   </button>
