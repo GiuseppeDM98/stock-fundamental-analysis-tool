@@ -5,8 +5,38 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import OpenPositionBanner from "@/components/open-position-banner";
+import SavedValuationSummary, { type SavedValuationMeta } from "@/components/saved-valuation-summary";
 
 type PageProps = { params: Promise<{ id: string }> };
+
+/**
+ * Extract the Deep Value JSON block (method, sector, currency, bull/base/bear) from a
+ * saved report so the detail page can re-render the valuation summary. Returns null for
+ * reports without a valid block (e.g. older non-Deep-Value analyses).
+ */
+function parseValuationMeta(reportMd: string): SavedValuationMeta | null {
+  const match = reportMd.match(/```json\n([\s\S]*?)\n```/);
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(match[1]);
+    const isScenario = (s: unknown): s is { fairValue: number } =>
+      !!s && typeof (s as { fairValue?: unknown }).fairValue === "number";
+    if (
+      parsed &&
+      typeof parsed.currency === "string" &&
+      typeof parsed.method === "string" &&
+      typeof parsed.sector === "string" &&
+      isScenario(parsed.bull) &&
+      isScenario(parsed.base) &&
+      isScenario(parsed.bear)
+    ) {
+      return parsed as SavedValuationMeta;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Single saved analysis view.
@@ -40,6 +70,9 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
     day: "numeric",
   });
 
+  // Reconstruct the valuation summary (badges + cards + recap) from the saved JSON block.
+  const valuationMeta = parseValuationMeta(analysis.reportMd);
+
   return (
     <main className="mx-auto max-w-3xl px-4 py-10">
       {/* Breadcrumb */}
@@ -72,6 +105,13 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
         />
       )}
 
+      {/* Valuation summary — method/cards/recap reconstructed from the saved JSON block */}
+      {valuationMeta && (
+        <div className="mb-6">
+          <SavedValuationSummary meta={valuationMeta} mosPercent={analysis.mosPercent} ticker={analysis.ticker} />
+        </div>
+      )}
+
       {/* Report content — strip any leading JSON block (from Deep Value analyses) */}
       <div className="card">
         <div className="prose prose-invert prose-sm max-w-none prose-headings:text-slate-100 prose-headings:mt-6 prose-headings:mb-2 prose-p:text-slate-300 prose-p:leading-relaxed prose-p:mb-3 prose-strong:text-slate-100 prose-li:text-slate-300 prose-li:my-1 prose-a:text-sky-400 prose-table:w-full prose-th:text-slate-200 prose-td:text-slate-300 prose-hr:border-slate-700/50">
@@ -90,7 +130,7 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
         </Link>
         {/* Re-run opens dashboard with this ticker pre-loaded */}
         <a
-          href={`/?ticker=${encodeURIComponent(analysis.ticker)}`}
+          href={`/analyze?ticker=${encodeURIComponent(analysis.ticker)}`}
           className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-sky-400 transition hover:border-sky-500/50 hover:text-sky-300"
         >
           Re-run Analysis

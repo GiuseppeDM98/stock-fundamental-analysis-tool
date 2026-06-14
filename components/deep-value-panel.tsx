@@ -27,9 +27,9 @@ type DeepValueResult = {
   method: string;
   sector: string;
   currency: string;
-  bull: { fairValue: number; upside: number };
-  base: { fairValue: number; upside: number };
-  bear: { fairValue: number; upside: number };
+  bull: { fairValue: number };
+  base: { fairValue: number };
+  bear: { fairValue: number };
 };
 
 const LANGUAGES = [
@@ -92,14 +92,25 @@ function RecapTable({
   baseLabel,
   bullLabel,
 }: RecapTableProps) {
-  const rows: { label: string; value: number | null; upside: number | null; highlight?: "base" }[] = [
+  // Upside vs. the live price, computed deterministically from the displayed value.
+  // The AI's JSON `upside` field is unreliable (it sometimes returns the ratio unscaled,
+  // e.g. 1.4 instead of 143), so we recompute. null when there's no price to compare to.
+  const computeUpside = (value: number): number | null =>
+    currentPrice != null && currentPrice > 0 ? ((value - currentPrice) / currentPrice) * 100 : null;
+
+  // Intrinsic fair value = the buy target grossed back up by the MoS (stored values are buy targets).
+  // null when MoS = 0 (then the displayed value already IS the fair value).
+  const intrinsicOf = (buyTarget: number): number | null =>
+    mosPercent > 0 ? buyTarget / (1 - mosPercent / 100) : null;
+
+  const rows: { label: string; value: number | null; intrinsic?: number | null; upside: number | null; highlight?: "base" }[] = [
     // Current price row — neutral anchor, no upside column
     ...(currentPrice != null
       ? [{ label: currentPriceLabel, value: currentPrice, upside: null as null }]
       : []),
-    { label: bearLabel, value: result.bear.fairValue, upside: result.bear.upside },
-    { label: baseLabel, value: result.base.fairValue, upside: result.base.upside, highlight: "base" as const },
-    { label: bullLabel, value: result.bull.fairValue, upside: result.bull.upside },
+    { label: bearLabel, value: result.bear.fairValue, intrinsic: intrinsicOf(result.bear.fairValue), upside: computeUpside(result.bear.fairValue) },
+    { label: baseLabel, value: result.base.fairValue, intrinsic: intrinsicOf(result.base.fairValue), upside: computeUpside(result.base.fairValue), highlight: "base" as const },
+    { label: bullLabel, value: result.bull.fairValue, intrinsic: intrinsicOf(result.bull.fairValue), upside: computeUpside(result.bull.fairValue) },
   ];
 
   return (
@@ -140,6 +151,9 @@ function RecapTable({
                 </td>
                 <td className="py-2.5 text-right text-slate-200">
                   {row.value != null ? row.value.toFixed(2) : "—"}
+                  {row.intrinsic != null && (
+                    <span className="block text-xs font-normal text-slate-500">{`FV ${row.intrinsic.toFixed(2)}`}</span>
+                  )}
                 </td>
                 <td className="py-2.5 pl-4 text-right">
                   {row.upside != null ? (
@@ -428,6 +442,10 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
             {(["bull", "base", "bear"] as const).map((scenario) => {
               const s = result[scenario];
               const labels = { bull: "Bull", base: "Base", bear: "Bear" };
+              const upside =
+                currentPrice != null && currentPrice > 0
+                  ? ((s.fairValue - currentPrice) / currentPrice) * 100
+                  : null;
               return (
                 <div
                   key={scenario}
@@ -437,7 +455,12 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
                   <p className="mt-1 text-base font-bold text-slate-100">
                     {result.currency} {s.fairValue.toFixed(2)}
                   </p>
-                  <UpsideBadge upside={s.upside} />
+                  {mosPercent > 0 && (
+                    <p className="text-[11px] text-slate-500">
+                      {`FV ${result.currency} ${(s.fairValue / (1 - mosPercent / 100)).toFixed(2)}`}
+                    </p>
+                  )}
+                  {upside != null && <UpsideBadge upside={upside} />}
                 </div>
               );
             })}

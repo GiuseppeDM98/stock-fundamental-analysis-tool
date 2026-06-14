@@ -71,9 +71,9 @@ The JSON block MUST be the very first thing you output, before any other text:
   "method": "<DCF|DDM|EV/EBITDA|P/B>",
   "sector": "<sector name>",
   "currency": "<ISO currency code, e.g. USD, EUR>",
-  "bull": { "fairValue": <buy target after ${mosPercent}% MoS>, "upside": <upside of buy target vs current price> },
-  "base": { "fairValue": <buy target after ${mosPercent}% MoS>, "upside": <upside of buy target vs current price> },
-  "bear": { "fairValue": <buy target after ${mosPercent}% MoS>, "upside": <upside of buy target vs current price> }
+  "bull": { "fairValue": <buy target after ${mosPercent}% MoS> },
+  "base": { "fairValue": <buy target after ${mosPercent}% MoS> },
+  "bear": { "fairValue": <buy target after ${mosPercent}% MoS> }
 }
 \`\`\`
 
@@ -208,9 +208,9 @@ The JSON block MUST be the very first thing you output, before any other text:
   "method": "<DCF|DDM|EV/EBITDA|P/B>",
   "sector": "<sector name>",
   "currency": "<ISO currency code, e.g. USD, EUR>",
-  "bull": { "fairValue": <buy target after ${mosPercent}% MoS>, "upside": <upside of buy target vs current price> },
-  "base": { "fairValue": <buy target after ${mosPercent}% MoS>, "upside": <upside of buy target vs current price> },
-  "bear": { "fairValue": <buy target after ${mosPercent}% MoS>, "upside": <upside of buy target vs current price> }
+  "bull": { "fairValue": <buy target after ${mosPercent}% MoS> },
+  "base": { "fairValue": <buy target after ${mosPercent}% MoS> },
+  "bear": { "fairValue": <buy target after ${mosPercent}% MoS> }
 }
 \`\`\`
 
@@ -261,6 +261,7 @@ A direct, concrete recommendation for this existing position:
 - **Is intrinsic value flat or lower**? → The margin of safety at the current price is minimal; exiting or trimming is worth considering.
 - Explicitly compare the updated base fair value to the previous estimate (${reviewContext.prevFv.toFixed(2)}) and to the user's WAC (${reviewContext.wac.toFixed(2)}).
 - State the realized gain/loss from WAC to current price and whether the remaining upside justifies the position size.
+- **Income case:** if the company pays a dividend, explicitly weigh continued income against exiting — estimate the current dividend yield and the yield-on-cost relative to the user's WAC (${reviewContext.wac.toFixed(2)}), and assess dividend safety (payout ratio, FCF cover, track record). For an investor holding for income, reaching fair value is not by itself a reason to sell; flag an exit only if the thesis or the dividend is at risk, or the capital is clearly better deployed elsewhere.
 
 Rules:
 - Write the entire report in ${language} — every word, header, and disclaimer
