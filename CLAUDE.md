@@ -8,9 +8,7 @@ Current project state and context for AI assistants.
 
 **Version**: `1.0.0`
 **Status**: Active Development
-**Last Updated**: June 14, 2026 — **responsive (mobile/tablet) pass**: the whole app is now optimized for phone and tablet. Breakpoint model: a single stacked layout **below `lg` (1024px)**, full desktop **at/above `lg`**, with phone↔tablet-portrait nuance at **`sm` (640px)**. The NavBar and the Advisor session sidebar collapse into portaled hamburger / slide-in drawers below `lg` (Esc, scrim, focus-trap, scroll-lock, reduced-motion). The **Compare** and **Watchlist** dense tables transform into stacked cards below `sm` (Compare via a per-ticker card; Watchlist via the `.rtable` CSS transform + `data-label`). Touch targets reach 44px on touch input via a pointer-gated `.tap` helper (desktop density preserved). `viewport-fit=cover` + `env(safe-area-inset-*)` for notched PWAs; Advisor column uses `100dvh`. See AGENTS.md › "Responsive Design".
-
-_Previous (June 13, 2026) — **major refactor**: removed the classic Yahoo valuation engine (DCF/DDM/EV-EBITDA scenario tuning + fundamentals charts + quality scorecard + historical multiples + reverse DCF). AI **Deep Value** is now the only analysis, on the dedicated `/analyze` route. Home (`/`) is an adaptive **Hub** framing the Discover→Screen→Decide→Monitor pipeline. Advisor can send candidates to Compare in one click. Portfolio exit signal is dividend-aware. The watchlist now sources values from your saved Deep Value analyses (lite analysis is Compare-only); the saved-analysis page renders the full valuation summary (cards + recap) with the intrinsic fair value shown alongside the buy target. Fixes: deterministic upside %, watchlist quote currency, deleting a ticker's only/latest analysis, last-ticker persistence._
+**Last Updated**: July 3, 2026 — **report redesign + PDF export + AI model tuning**: Deep Value analysis now runs on **Claude Opus 4.8** (Advisor and Compare/watchlist stay on **Claude Sonnet 5**), all three calls using adaptive thinking + `effort: "high"`. AI reports (live streaming and saved) now render in a consolidated equity-research style — `@tailwindcss/typography` is installed with a custom `report` variant (numbered section dividers, unified violet accent), and the three previously-duplicated fair-value-card/recap-table implementations are consolidated into `components/report/*`, shared identically by the live panel and the saved-analysis detail page. A **"Download PDF"** button (browser print → Save as PDF via `app/print.css`, no new dependency) is now on both surfaces, preserving upside/downside and accent colors in the printed output. See AGENTS.md › "Markdown Rendering" / "Report Shell" / "Print / PDF export".
 
 ---
 
@@ -20,8 +18,8 @@ _Previous (June 13, 2026) — **major refactor**: removed the classic Yahoo valu
 - **yahoo-finance2** `3.13.2` + **Zod** `3.24.1`
 - **Prisma** `7.4.2` + **Turso** (libSQL) via `@prisma/adapter-libsql`
 - **Auth.js** `next-auth@5.0.0-beta.30` + **bcryptjs**
-- **Anthropic SDK** + **Claude Sonnet 4.6** (web search enabled)
-- **Tailwind CSS** `3.4.17` + **Framer Motion** `11.18.2` + **Recharts** `2.15.1` + **react-markdown** + **remark-gfm** + **node-html-parser**
+- **Anthropic SDK** + **Claude Opus 4.8** (Deep Value) / **Claude Sonnet 5** (Advisor, Compare) — adaptive thinking, `effort: "high"`, web search enabled
+- **Tailwind CSS** `3.4.17` + **@tailwindcss/typography** + **Framer Motion** `11.18.2` + **Recharts** `2.15.1` + **react-markdown** + **remark-gfm** + **node-html-parser**
 - **Vitest** `3.2.4` + **Testing Library** `16.2.0`
 
 ---
@@ -63,7 +61,8 @@ _Previous (June 13, 2026) — **major refactor**: removed the classic Yahoo valu
 - Prompt builders in `lib/ai/deep-value-prompts.ts`; endpoint at `/api/ai/deep-value`
 - **Date injection**: route computes `currentDate` from `new Date()` and passes it to both prompt builders — prevents Claude from anchoring analysis to its training year (Aug 2025)
 - **Stream suppression**: server buffers all text until the ` ```json ` marker appears; intermediate reasoning text emitted between tool calls is silently discarded before reaching the client
-- **Valuation recap table** (`RecapTable` in `components/deep-value-panel.tsx`): shown below the Markdown report once streaming completes. Displays a reference row with the current price (passed as `currentPrice` prop from `analyze-client`) followed by Bear / Base / Bull rows with fair value/buy-target and upside/downside %. The upside/downside is computed client-side as `(value − currentPrice) / currentPrice` — the AI's JSON no longer includes an `upside` field (it emitted it in the wrong scale). The Base row has a violet highlight. Column header is conditional: when `mosPercent > 0` → `{currency} Buy Target (-{mosPercent}%)`; when `mosPercent = 0` → `{currency} Fair Value`. This is correct because the AI outputs MoS-adjusted values in its JSON block when MoS > 0. Column headers contain the dynamic currency code and are intentionally not fully i18n-translated. `mosPercent` is passed as a prop to `RecapTable`.
+- **Valuation recap table** (`components/report/recap-table.tsx`, rendered via `ReportShell`): shown below the Markdown report once streaming completes. Displays a reference row with the current price (passed as `currentPrice` prop) followed by Bear / Base / Bull rows with fair value/buy-target and upside/downside %. The upside/downside is computed client-side as `(value − currentPrice) / currentPrice` — the AI's JSON no longer includes an `upside` field (it emitted it in the wrong scale). The Base row has a violet highlight. Column header is conditional: when `mosPercent > 0` → `{currency} Buy Target (-{mosPercent}%)`; when `mosPercent = 0` → `{currency} Fair Value`. This is correct because the AI outputs MoS-adjusted values in its JSON block when MoS > 0. Column headers contain the dynamic currency code and are intentionally not fully i18n-translated. Below 640px the table collapses into label/value cards via the `.rtable` utility.
+- **Report design + PDF export**: the live panel (once `status === "done"`) and the saved-analysis detail page both render `<ReportShell>` (`components/report/*`) — a masthead (company/ticker/report date), method/sector badges, the fair-value cards, the Markdown body, the recap table, and a static disclaimer footer, styled with a custom `@tailwindcss/typography` variant (`prose-report`) for an equity-research look. A **"Download PDF"** button on both surfaces calls `window.print()`; `app/print.css` hides app chrome and inverts the report to a print-safe light theme while keeping upside/downside and violet accent colors.
 - **Review Position (AI)**: when the user navigates from an exit signal badge (see Portfolio Tracker) with `?exitReview=1&wac=Y&prevFv=Z`, `analyze-client.tsx` reads all URL params before `replaceState` and stores `exitReviewContext: { wac, prevFv }` in state. `DeepValuePanel` receives this as `exitReviewContext` prop and renders an amber **"Review Position (AI)"** button above the standard violet button. Clicking it calls `buildReviewPositionSystemPrompt` + `buildReviewPositionUserPrompt` (in `lib/ai/deep-value-prompts.ts`) — same JSON output schema as deep value, different framing ("hold, add, or exit?", section 10 = "Hold, Add, or Exit Recommendation", includes WAC/prevFv/gain% in user message). `isReviewMode` boolean state tracks which button triggered streaming to show the spinner in the correct button. The amber info banner below the panel header shows WAC + previous FV.
 - **Decision Panel**: after streaming completes (`status === "done" && result && ticker`), a row of action buttons appears below "Save Report". Amber **"Add to Watchlist"** button (`WatchlistStatus = "idle" | "loading" | "saved" | "already"`) POSTs to `/api/watchlist`; 409 shows "In Watchlist" chip. Sky **"Add to Compare"** navigates to `/compare?tickers=${ticker}` via `window.location.href`. Both buttons reset on each new `handleGenerate()` call.
 
@@ -231,12 +230,16 @@ app/api/
 app/page.tsx (Hub home) app/analyze/ app/login/ app/register/ app/analyses/ app/analyses/[id]/ app/portfolio/ app/watchlist/ app/compare/ app/advisor/
 app/manifest.ts        # PWA Web App Manifest → /manifest.webmanifest
 app/icon.tsx           # Favicon (32×32, dynamic SVG via next/og)
+app/print.css          # @media print rules for the "Download PDF" feature (imported in layout.tsx)
 components/            # hub-client, analyze-client, ticker-search, price-summary,
                        # disclaimer-banner, deep-value-panel,
                        # analyses-list, portfolio-list, portfolio-history-chart,
                        # open-position-banner, nav-bar, login-form, register-form,
                        # watchlist-client, compare-client, compare-table, compare-ticker-input,
-                       # session-provider, page-header, pwa-register, advisor-client
+                       # session-provider, page-header, pwa-register, advisor-client,
+                       # download-pdf-button
+  report/              # types, method-badges, fair-value-cards, recap-table, report-body,
+                       # report-shell — shared "equity research" report UI (live + saved)
 lib/i18n/translations.ts   # EN/IT translation dictionary (~200 keys)
 context/language-context.tsx  # LanguageProvider + useLanguage() hook
 public/

@@ -1,11 +1,10 @@
 import { redirect, notFound } from "next/navigation";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import OpenPositionBanner from "@/components/open-position-banner";
 import SavedValuationSummary, { type SavedValuationMeta } from "@/components/saved-valuation-summary";
+import DownloadPdfButton from "@/components/download-pdf-button";
 
 type PageProps = { params: Promise<{ id: string }> };
 
@@ -73,10 +72,13 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
   // Reconstruct the valuation summary (badges + cards + recap) from the saved JSON block.
   const valuationMeta = parseValuationMeta(analysis.reportMd);
 
+  // Strip any leading JSON block (from Deep Value analyses) before rendering.
+  const markdown = analysis.reportMd.replace(/^```json\n[\s\S]*?\n```\n?/, "");
+
   return (
     <main className="mx-auto max-w-3xl px-4 py-10">
       {/* Breadcrumb */}
-      <div className="mb-6 flex items-center gap-2 text-sm text-slate-400">
+      <div className="mb-6 flex items-center gap-2 text-sm text-slate-400 print:hidden">
         <Link href="/analyses" className="hover:text-slate-200">
           Saved Analyses
         </Link>
@@ -84,57 +86,58 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
         <span className="font-mono text-sky-400">{analysis.ticker}</span>
       </div>
 
-      {/* Report metadata */}
-      <div className="mb-6">
-        <div className="flex items-baseline gap-3">
-          <h1 className="text-2xl font-bold text-slate-100">{analysis.companyName}</h1>
-          <span className="font-mono text-lg text-sky-400">{analysis.ticker}</span>
-        </div>
-        <p className="mt-1 text-sm text-slate-500">
-          {formattedDate} · Margin of Safety: {analysis.mosPercent}%
-        </p>
-      </div>
-
       {/* Open position banner — shown when the user holds this ticker in their portfolio */}
       {positions.length > 0 && (
-        <OpenPositionBanner
+        <div className="print:hidden">
+          <OpenPositionBanner
+            ticker={analysis.ticker}
+            totalShares={totalShares}
+            wac={wac}
+            currency={currency}
+          />
+        </div>
+      )}
+
+      {/* Full report shell — method/cards/body/recap reconstructed from the saved JSON block */}
+      {valuationMeta ? (
+        <SavedValuationSummary
+          meta={valuationMeta}
+          mosPercent={analysis.mosPercent}
           ticker={analysis.ticker}
-          totalShares={totalShares}
-          wac={wac}
-          currency={currency}
+          companyName={analysis.companyName}
+          reportDate={formattedDate}
+          markdown={markdown}
         />
-      )}
-
-      {/* Valuation summary — method/cards/recap reconstructed from the saved JSON block */}
-      {valuationMeta && (
-        <div className="mb-6">
-          <SavedValuationSummary meta={valuationMeta} mosPercent={analysis.mosPercent} ticker={analysis.ticker} />
+      ) : (
+        // Fallback for older/non-Deep-Value analyses without a parseable JSON block.
+        <div className="card">
+          <h1 className="mb-1 text-2xl font-bold text-slate-100">{analysis.companyName}</h1>
+          <p className="mb-4 text-sm text-slate-500">
+            <span className="font-mono text-sky-400">{analysis.ticker}</span> · {formattedDate}
+          </p>
+          <div className="prose prose-invert prose-report prose-sm max-w-none">
+            {markdown}
+          </div>
         </div>
       )}
 
-      {/* Report content — strip any leading JSON block (from Deep Value analyses) */}
-      <div className="card">
-        <div className="prose prose-invert prose-sm max-w-none prose-headings:text-slate-100 prose-headings:mt-6 prose-headings:mb-2 prose-p:text-slate-300 prose-p:leading-relaxed prose-p:mb-3 prose-strong:text-slate-100 prose-li:text-slate-300 prose-li:my-1 prose-a:text-sky-400 prose-table:w-full prose-th:text-slate-200 prose-td:text-slate-300 prose-hr:border-slate-700/50">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {analysis.reportMd.replace(/^```json\n[\s\S]*?\n```\n?/, "")}
-          </ReactMarkdown>
-        </div>
-      </div>
-
-      <div className="mt-6 flex items-center justify-between">
+      <div className="mt-6 flex items-center justify-between print:hidden">
         <Link
           href="/analyses"
           className="text-sm text-slate-400 hover:text-slate-200"
         >
           ← Back to Saved Analyses
         </Link>
-        {/* Re-run opens dashboard with this ticker pre-loaded */}
-        <a
-          href={`/analyze?ticker=${encodeURIComponent(analysis.ticker)}`}
-          className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-sky-400 transition hover:border-sky-500/50 hover:text-sky-300"
-        >
-          Re-run Analysis
-        </a>
+        <div className="flex items-center gap-3">
+          <DownloadPdfButton label="Download PDF" />
+          {/* Re-run opens dashboard with this ticker pre-loaded */}
+          <a
+            href={`/analyze?ticker=${encodeURIComponent(analysis.ticker)}`}
+            className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-sky-400 transition hover:border-sky-500/50 hover:text-sky-300"
+          >
+            Re-run Analysis
+          </a>
+        </div>
       </div>
     </main>
   );

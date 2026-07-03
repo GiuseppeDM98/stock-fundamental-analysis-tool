@@ -1,0 +1,66 @@
+/*
+ * Print / "Download PDF" stylesheet.
+ *
+ * The app is a single dark theme end-to-end; printing it as-is wastes ink and
+ * is hard to read. Scoped to `.print-report` (the wrapper in
+ * components/report/report-shell.tsx) so only the report itself is affected —
+ * app chrome (NavBar, action buttons, streaming indicator, etc.) is hidden via
+ * the `print:hidden` Tailwind utility applied directly in JSX, not here.
+ *
+ * Per product decision, upside/downside (emerald/red) and the violet accent
+ * colors are KEPT in print output (most users will "Save as PDF" and view on
+ * screen, not print on paper) — only the slate dark-theme surfaces/text are
+ * inverted to print-safe light values. Components that render inside
+ * `.print-report` already carry `print:` variants for their own accent
+ * colors (see components/report/*.tsx); this file only needs to override the
+ * neutral slate palette, since that's shared across many elements via plain
+ * utility classes rather than component-level print: variants.
+ */
+@media print {
+  .print-report {
+    background: #ffffff;
+    color: #0f172a; /* slate-900 */
+  }
+
+  .print-report .card,
+  .print-report .bg-slate-800\/50,
+  .print-report .bg-slate-900\/50 {
+    background: #ffffff !important;
+    border-color: #cbd5e1 !important; /* slate-300 */
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .print-report .text-slate-100,
+  .print-report .text-slate-200,
+  .print-report .text-slate-300 {
+    color: #1e293b !important; /* slate-800 */
+  }
+
+  .print-report .text-slate-400,
+  .print-report .text-slate-500 {
+    color: #64748b !important; /* slate-500 */
+  }
+
+  .print-report .border-slate-700\/60,
+  .print-report .border-slate-700\/30,
+  .print-report .border-slate-800\/60 {
+    border-color: #cbd5e1 !important; /* slate-300 */
+  }
+
+  /* Keep section content from splitting mid-card/mid-table across a page break. */
+  .print-report .card,
+  .print-report table,
+  .print-report .break-inside-avoid {
+    break-inside: avoid;
+  }
+
+  /* Avoid a numbered section heading stranded at the bottom of a page. */
+  .print-report h2 {
+    break-after: avoid;
+  }
+
+  @page {
+    margin: 2cm;
+  }
+}

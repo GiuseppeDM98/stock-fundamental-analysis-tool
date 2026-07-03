@@ -105,7 +105,7 @@ export default function NavBar() {
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b border-slate-800/60 bg-[#070d19]/80 backdrop-blur-md">
+    <header className="sticky top-0 z-50 border-b border-slate-800/60 bg-[#070d19]/80 backdrop-blur-md print:hidden">
       {/* Top safe-area inset keeps the brand/hamburger clear of the notch on
           notched phones (viewport-fit=cover); 0.75rem is the rest-state pad. */}
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">

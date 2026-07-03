@@ -21,7 +21,7 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **Interactive visualizations** comparing fair value vs. current price
 - **Margin of safety** adjustment (0-80%) for conservative valuations
 - **Client-side persistence** with localStorage for scenario configurations
-- **Deep Value Analysis** — Claude autonomously picks the valuation method and sources all financial data via web search; works for any global ticker; includes MOAT analysis, quality metrics, and near-term catalysts
+- **Deep Value Analysis** — Claude autonomously picks the valuation method and sources all financial data via web search; works for any global ticker; includes MOAT analysis, quality metrics, and near-term catalysts. Reports render in a clean, equity-research style and can be exported as a **PDF** with one click.
 - **User accounts** with saved reports — revisit your analyses anytime
 - **Portfolio tracker** — track real purchases with live P&L, multi-currency FX conversion, DCA aggregation (Weighted Average Cost per ticker), and cross-links to saved analyses per ticker
 - **Dividend tracking** — add an ISIN to any portfolio position and dividends paid on Borsa Italiana are automatically recorded at each daily snapshot; cumulative total shown in the summary bar
@@ -64,6 +64,7 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - 📈 **Live Risk-Free Rate**: US 10Y Treasury yield displayed next to WACC as a real-time reference
 - 💾 **State Persistence**: LocalStorage saves ticker history and scenario overrides
 - 🔍 **Deep Value Analysis**: Fully autonomous AI valuation — Claude picks the method, sources all data via web search, includes MOAT analysis, quality metrics (ROIC, ROE, FCF conversion), and near-term catalysts; works for any global ticker. Ends with a **Valuation Summary table** showing Bear / Base / Bull fair values and upside/downside vs. the current price at a glance.
+- 📄 **PDF Export**: Download any Deep Value report — live or saved — as a clean, print-ready PDF with one click
 - 👤 **User Accounts**: Save and revisit AI-generated reports with email/password auth
 - 📋 **Saved Analyses by Ticker**: Analyses page groups reports by stock — see Bear/Base/Bull fair values at a glance with a visual price-vs-FV bar; search, filter (Under FV), and sort across all your saved research
 - 🧮 **Valuation Metrics**: P/E, P/FCF, FCF Yield, Earnings Yield cards with YoY trend and educational tooltips
@@ -492,7 +493,7 @@ turso db shell <your-db-name> < prisma/migrations/<latest>/migration.sql
 - [x] Multi-ticker comparison (side-by-side)
 - [x] AI Portfolio Advisor (conversational with portfolio context + Discovery mode)
 - [x] Investment pipeline connective tissue (Decision Panel, Watchlist quick-actions, Compare Watch button, Advisor chip split-action + compare queue)
-- [ ] PDF export for valuation reports
+- [x] PDF export for valuation reports (Download PDF → browser print → Save as PDF)
 - [x] Mobile installable (PWA)
 
 ### Phase 4: Advanced

@@ -47,12 +47,13 @@ Return ONLY this JSON block:
     console.log(`[lite-analysis] ${ticker} — attempt ${attempt + 1}/2`);
     try {
       const response = await client.messages.create({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-5",
         max_tokens: 1000,
-        // temperature: 0 makes method selection deterministic — same sector always
-        // maps to the same valuation method regardless of which web results are found.
-        temperature: 0,
-        tools: [{ type: "web_search_20250305" as const, name: "web_search" }],
+        // Sonnet 5 rejects non-default temperature (400) — the system prompt's
+        // strict sector→method mapping table keeps selection deterministic instead.
+        thinking: { type: "adaptive" },
+        output_config: { effort: "high" },
+        tools: [{ type: "web_search_20260209" as const, name: "web_search" }],
         system: systemPrompt,
         messages: [{ role: "user", content: userPrompt }],
       });
