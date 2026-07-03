@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "./print.css";
 import SessionProvider from "@/components/session-provider";
 import NavBar from "@/components/nav-bar";
 import PwaRegister from "@/components/pwa-register";

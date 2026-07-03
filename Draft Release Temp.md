@@ -1,5 +1,7 @@
 ## ✨ New Features
 
+- **Download Deep Value reports as PDF** — a new **Download PDF** button is available both on a completed Deep Value analysis and on any saved analysis. It opens your browser's print dialog with a clean layout (navigation and buttons hidden, upside/downside and accent colors preserved) — choose "Save as PDF" to export.
+
 - **Adaptive Hub home** — the home page (`/`) is now a hub that frames the full pipeline (Discover → Screen → Decide → Monitor) with a card per stage, a "Start with the Advisor" call-to-action, and a quick ticker box that jumps straight into an analysis. When you're logged in it also surfaces a recent-activity strip: your latest analyses, portfolio P&L, and watchlist count.
 
 - **One-click "Compare all" from the Advisor** — when the AI lists two or more candidate tickers in a reply, a **Compare all (N) →** button appears beneath it that opens the Compare page with all of them pre-loaded at once.
@@ -153,6 +155,10 @@
 - Fixed fundamental analysis failing for some European tickers (e.g. Italian small-caps) that return unknown data types from Yahoo Finance
 
 ## 🔧 Improvements
+
+- **Deep Value reports redesigned with a cleaner, professional look** — reports (both while streaming and when saved) now read more like a structured research report: clearer section dividers, consistent spacing and colors, and the exact same layout whether you're looking at a fresh analysis or one you saved earlier.
+- **Recap table now adapts to your screen** — the Bear/Base/Bull summary table at the end of each report now displays as stacked cards on narrow screens instead of a cramped table.
+- **Deep Value analyses now use a more capable AI model** for deeper, more thorough reasoning.
 
 - **The Watchlist now reflects your Deep Value analyses.** Instead of running a separate, lighter AI re-analysis, each watchlist row — and the periodic email digest — now shows the fair values from your latest saved Deep Value analysis for that ticker, with the live price for proximity-to-target. The lighter analysis now lives only on the Compare page, and the email digest no longer spends on AI. Tickers you haven't analyzed yet prompt you to run a Deep Value analysis.
 

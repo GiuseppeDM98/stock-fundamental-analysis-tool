@@ -6,11 +6,12 @@
 import { useState, useRef, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { saveAnalysis } from "@/lib/analyses";
 import { useLanguage } from "@/context/language-context";
 import { APP_TO_AI_LANGUAGE } from "@/lib/i18n/translations";
+import ReportBody from "@/components/report/report-body";
+import ReportShell from "@/components/report/report-shell";
+import type { DeepValueResult } from "@/components/report/types";
 
 type Props = {
   ticker: string | null;
@@ -22,15 +23,6 @@ type Props = {
 
 type Status = "idle" | "loading" | "streaming" | "done" | "error";
 type WatchlistStatus = "idle" | "loading" | "saved" | "already";
-
-type DeepValueResult = {
-  method: string;
-  sector: string;
-  currency: string;
-  bull: { fairValue: number };
-  base: { fairValue: number };
-  bear: { fairValue: number };
-};
 
 const LANGUAGES = [
   { value: "English", label: "🇬🇧 English" },
@@ -55,127 +47,6 @@ function parseDeepValueJson(text: string): DeepValueResult | null {
 
 function stripJsonBlock(text: string): string {
   return text.replace(/```json\n[\s\S]*?\n```\n?/, "");
-}
-
-function UpsideBadge({ upside }: { upside: number }) {
-  const isPositive = upside >= 0;
-  return (
-    <span
-      className={`text-xs font-semibold ${isPositive ? "text-emerald-400" : "text-red-400"}`}
-    >
-      {isPositive ? "+" : ""}
-      {upside.toFixed(1)}%
-    </span>
-  );
-}
-
-type RecapTableProps = {
-  result: DeepValueResult;
-  currentPrice?: number;
-  mosPercent?: number;
-  title: string;
-  currentPriceLabel: string;
-  bearLabel: string;
-  baseLabel: string;
-  bullLabel: string;
-};
-
-// Recap table shown at the bottom of the report — gives a quick at-a-glance summary
-// of all three scenarios vs. the live price without having to scroll back up.
-function RecapTable({
-  result,
-  currentPrice,
-  mosPercent = 0,
-  title,
-  currentPriceLabel,
-  bearLabel,
-  baseLabel,
-  bullLabel,
-}: RecapTableProps) {
-  // Upside vs. the live price, computed deterministically from the displayed value.
-  // The AI's JSON `upside` field is unreliable (it sometimes returns the ratio unscaled,
-  // e.g. 1.4 instead of 143), so we recompute. null when there's no price to compare to.
-  const computeUpside = (value: number): number | null =>
-    currentPrice != null && currentPrice > 0 ? ((value - currentPrice) / currentPrice) * 100 : null;
-
-  // Intrinsic fair value = the buy target grossed back up by the MoS (stored values are buy targets).
-  // null when MoS = 0 (then the displayed value already IS the fair value).
-  const intrinsicOf = (buyTarget: number): number | null =>
-    mosPercent > 0 ? buyTarget / (1 - mosPercent / 100) : null;
-
-  const rows: { label: string; value: number | null; intrinsic?: number | null; upside: number | null; highlight?: "base" }[] = [
-    // Current price row — neutral anchor, no upside column
-    ...(currentPrice != null
-      ? [{ label: currentPriceLabel, value: currentPrice, upside: null as null }]
-      : []),
-    { label: bearLabel, value: result.bear.fairValue, intrinsic: intrinsicOf(result.bear.fairValue), upside: computeUpside(result.bear.fairValue) },
-    { label: baseLabel, value: result.base.fairValue, intrinsic: intrinsicOf(result.base.fairValue), upside: computeUpside(result.base.fairValue), highlight: "base" as const },
-    { label: bullLabel, value: result.bull.fairValue, intrinsic: intrinsicOf(result.bull.fairValue), upside: computeUpside(result.bull.fairValue) },
-  ];
-
-  return (
-    <div className="rounded-xl border border-slate-700/60 bg-slate-900/50 p-5">
-      <h3 className="mb-3 text-sm font-semibold text-slate-200">{title}</h3>
-      <table className="w-full text-xs sm:text-sm">
-        <thead>
-          <tr className="border-b border-slate-700/60">
-            <th className="pb-2 pr-2 text-left font-medium text-slate-400 sm:pr-4">Scenario</th>
-            <th className="pb-2 text-right font-medium text-slate-400">
-              {result.currency}{" "}
-              {mosPercent > 0 ? `Buy Target (-${mosPercent}%)` : "Fair Value"}
-            </th>
-            <th className="pb-2 pl-2 text-right font-medium text-slate-400 sm:pl-4">vs. Price</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const isBase = row.highlight === "base";
-            const isCurrentPrice = row.upside === null;
-            return (
-              <tr
-                key={row.label}
-                className={`border-b border-slate-700/30 last:border-0 ${
-                  isBase ? "ring-1 ring-inset ring-violet-500/30 rounded" : ""
-                }`}
-              >
-                <td
-                  className={`py-2.5 pr-2 font-medium sm:pr-4 ${
-                    isCurrentPrice
-                      ? "text-slate-400"
-                      : isBase
-                        ? "text-violet-300"
-                        : "text-slate-300"
-                  }`}
-                >
-                  {row.label}
-                </td>
-                <td className="py-2.5 text-right text-slate-200">
-                  {row.value != null ? row.value.toFixed(2) : "—"}
-                  {row.intrinsic != null && (
-                    <span className="block text-xs font-normal text-slate-500">{`FV ${row.intrinsic.toFixed(2)}`}</span>
-                  )}
-                </td>
-                <td className="py-2.5 pl-2 text-right sm:pl-4">
-                  {row.upside != null ? (
-                    <span
-                      className={`font-semibold ${
-                        row.upside >= 0 ? "text-emerald-400" : "text-red-400"
-                      }`}
-                    >
-                      {row.upside >= 0 ? "+" : ""}
-                      {row.upside.toFixed(1)}%
-                    </span>
-                  ) : (
-                    <span className="text-slate-500">—</span>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
 }
 
 export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, currentPrice, exitReviewContext }: Props) {
@@ -341,11 +212,16 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
 
   const isStreaming = status === "loading" || status === "streaming";
   const markdownContent = status === "done" && report ? stripJsonBlock(report) : report;
+  const reportDate = new Date().toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 
   return (
-    <div className="card space-y-4">
+    <div className="card space-y-4 print:border-0 print:bg-transparent print:p-0 print:shadow-none">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
         <div>
           <h2 className="text-lg font-semibold text-slate-100">{t("deepValueTitle")}</h2>
           <p className="text-sm text-slate-400">{t("deepValueDesc")}</p>
@@ -402,7 +278,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
 
       {/* Position review context banner — shown when navigated from the portfolio exit signal */}
       {exitReviewContext && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300 print:hidden">
           <span>WAC: {exitReviewContext.wac.toFixed(2)} · Prev. FV: {exitReviewContext.prevFv.toFixed(2)}</span>
           <span className="text-amber-600">·</span>
           <span>{t("reviewPositionBtnHint")}</span>
@@ -411,7 +287,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
 
       {/* Auth hint */}
       {!session && ticker && (
-        <p className="rounded-lg bg-violet-500/10 px-3 py-2 text-sm text-violet-300">
+        <p className="rounded-lg bg-violet-500/10 px-3 py-2 text-sm text-violet-300 print:hidden">
           <button onClick={() => router.push("/login")} className="underline hover:no-underline">
             {t("navSignIn")}
           </button>{" "}
@@ -421,84 +297,44 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
 
       {/* Error */}
       {status === "error" && errorMsg && (
-        <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{errorMsg}</p>
+        <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 print:hidden">{errorMsg}</p>
       )}
 
-      {/* Method + fair value cards — shown after streaming completes */}
-      {status === "done" && result && (
-        <div className="space-y-3">
-          {/* Method badge */}
-          <div className="flex items-center gap-2">
-            <span className="rounded-full bg-slate-700 px-3 py-1 text-xs font-medium text-slate-300">
-              {result.sector}
-            </span>
-            <span className="rounded-full bg-violet-900/50 px-3 py-1 text-xs font-semibold text-violet-300">
-              {result.method}
-            </span>
-          </div>
-
-          {/* Fair value cards */}
-          {/* Kept 3-up at every width: the bull/base/bear side-by-side comparison
-              is the point of these cards. Text/padding scale down on phones. */}
-          <div className="grid grid-cols-3 gap-2 sm:gap-3">
-            {(["bull", "base", "bear"] as const).map((scenario) => {
-              const s = result[scenario];
-              const labels = { bull: "Bull", base: "Base", bear: "Bear" };
-              const upside =
-                currentPrice != null && currentPrice > 0
-                  ? ((s.fairValue - currentPrice) / currentPrice) * 100
-                  : null;
-              return (
-                <div
-                  key={scenario}
-                  className="rounded-xl border border-slate-700/60 bg-slate-800/50 p-2 text-center sm:p-3"
-                >
-                  <p className="text-xs text-slate-400">{labels[scenario]}</p>
-                  <p className="mt-1 text-sm font-bold text-slate-100 sm:text-base">
-                    {result.currency} {s.fairValue.toFixed(2)}
-                  </p>
-                  {mosPercent > 0 && (
-                    <p className="text-[11px] text-slate-500">
-                      {`FV ${result.currency} ${(s.fairValue / (1 - mosPercent / 100)).toFixed(2)}`}
-                    </p>
-                  )}
-                  {upside != null && <UpsideBadge upside={upside} />}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+      {/* Full report shell (masthead + badges + cards + body + recap + disclaimer) —
+          shown once the analysis completes and the JSON block parsed successfully. */}
+      {status === "done" && result && ticker && (
+        <ReportShell
+          ticker={ticker}
+          companyName={companyName}
+          reportDate={reportDate}
+          reportTypeLabel={t("deepValueTitle")}
+          markdown={markdownContent}
+          result={result}
+          currentPrice={currentPrice}
+          mosPercent={mosPercent}
+          labels={{
+            recapTableTitle: t("recapTableTitle"),
+            recapCurrentPrice: t("recapCurrentPrice"),
+            bearLabel: t("bearLabel"),
+            baseLabel: t("baseLabel"),
+            bullLabel: t("bullLabel"),
+          }}
+        />
       )}
 
-      {/* Streaming report */}
-      {report && (
+      {/* Raw streaming report — shown while generating, before the shell above takes over. */}
+      {report && !(status === "done" && result) && (
         <div className="rounded-xl border border-slate-700/60 bg-slate-900/50 p-5">
           {isStreaming && (
             <span className="mb-2 inline-block h-3 w-1.5 animate-pulse bg-violet-400" />
           )}
-          <div className="prose prose-invert prose-sm max-w-none prose-headings:text-slate-100 prose-headings:mt-6 prose-headings:mb-2 prose-p:text-slate-300 prose-p:leading-relaxed prose-p:mb-3 prose-strong:text-slate-100 prose-li:text-slate-300 prose-li:my-1 prose-a:text-violet-400 prose-table:w-full prose-th:text-slate-200 prose-td:text-slate-300 prose-hr:border-slate-700/50">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdownContent}</ReactMarkdown>
-          </div>
+          <ReportBody markdown={markdownContent} />
         </div>
       )}
 
-      {/* Recap table — scenario summary vs. current price, shown after report completes */}
-      {status === "done" && result && (
-        <RecapTable
-          result={result}
-          currentPrice={currentPrice}
-          mosPercent={mosPercent}
-          title={t("recapTableTitle")}
-          currentPriceLabel={t("recapCurrentPrice")}
-          bearLabel={t("bearLabel")}
-          baseLabel={t("baseLabel")}
-          bullLabel={t("bullLabel")}
-        />
-      )}
-
-      {/* Save controls */}
+      {/* Save + export controls */}
       {status === "done" && report && (
-        <div className="flex items-center gap-3 pt-1">
+        <div className="flex flex-wrap items-center gap-3 pt-1 print:hidden">
           <button
             onClick={handleSave}
             disabled={saveStatus === "saving" || saveStatus === "saved"}
@@ -508,6 +344,13 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
             {saveStatus === "saved" && t("savedState")}
             {saveStatus === "error" && t("retrySave")}
             {saveStatus === "idle" && t("saveReport")}
+          </button>
+
+          <button
+            onClick={() => window.print()}
+            className="tap rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-400 hover:text-slate-100"
+          >
+            {t("downloadPdf")}
           </button>
 
           {saveStatus === "saved" && (
@@ -527,7 +370,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
 
       {/* Decision Panel — pipeline routing after analysis completes */}
       {status === "done" && result && ticker && (
-        <div className="flex flex-wrap gap-2 border-t border-slate-800/60 pt-4">
+        <div className="flex flex-wrap gap-2 border-t border-slate-800/60 pt-4 print:hidden">
           {/* Add to Watchlist */}
           <button
             onClick={handleAddToWatchlist}

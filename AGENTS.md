@@ -6,9 +6,9 @@ Project-specific patterns, conventions, and knowledge for AI agents working on t
 
 ## Project Context
 
-Next.js 15 stock fundamental analysis tool with multi-method valuation (DCF, DDM, EV/EBITDA), sector-adaptive scenario modeling, Yahoo Finance integration, AI-generated investment analysis (Claude Sonnet 4.6 + web search), portfolio tracker with live P&L, and user accounts with saved reports.
+Next.js 15 stock fundamental analysis tool with multi-method valuation (DCF, DDM, EV/EBITDA), sector-adaptive scenario modeling, Yahoo Finance integration, AI-generated investment analysis (Claude Opus 4.8 for Deep Value, Claude Sonnet 5 for Advisor/Compare, all with web search), portfolio tracker with live P&L, and user accounts with saved reports.
 
-**Tech Stack:** Next.js 15 (App Router), TypeScript (strict), React 19, yahoo-finance2, Prisma 7 + Turso (libSQL), Auth.js v5, Anthropic SDK, Vitest + Testing Library, Tailwind CSS, Framer Motion, Recharts
+**Tech Stack:** Next.js 15 (App Router), TypeScript (strict), React 19, yahoo-finance2, Prisma 7 + Turso (libSQL), Auth.js v5, Anthropic SDK, Vitest + Testing Library, Tailwind CSS + `@tailwindcss/typography`, Framer Motion, Recharts
 
 ---
 
@@ -32,6 +32,10 @@ lib/               # Business logic and utilities (Yahoo quote adapter, AI promp
   email.ts                 # Resend email sender
   format.ts                # Formatting utilities
 components/        # React components (all client-side, all "use client")
+  report/          # Shared report-rendering pieces (types, method-badges, fair-value-cards,
+                   # recap-table, report-body, report-shell) — used identically by the live
+                   # Deep Value panel and the saved-analysis detail page
+  download-pdf-button.tsx  # Client-only "Download PDF" button (window.print()), for use in server components
 app/api/           # API route handlers
 app/analyses/      # Saved analyses list + detail pages
 app/portfolio/     # Portfolio tracker page
@@ -156,25 +160,21 @@ This pattern is used in `compare-client.tsx` and should be used anywhere a compo
 ### Next.js Typed Routes (`typedRoutes: true`)
 `router.push(dynamicString)` fails type check. Use `window.location.href` for dynamic redirects after auth.
 
-### Markdown Rendering
-Use `react-markdown` with `remark-gfm` plugin — required in **every** page/component that renders markdown (list, detail page, stream panel). Without it, GFM tables, bold, and headings don't render.
-```typescript
-import remarkGfm from "remark-gfm";
-<ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
-```
-Standard prose classes for all AI report panels (ensures breathing room in long multi-section reports):
-```
-prose prose-invert prose-sm max-w-none
-prose-headings:text-slate-100 prose-headings:mt-6 prose-headings:mb-2
-prose-p:text-slate-300 prose-p:leading-relaxed prose-p:mb-3
-prose-strong:text-slate-100 prose-li:text-slate-300 prose-li:my-1
-prose-a:text-violet-400 prose-table:w-full prose-th:text-slate-200
-prose-td:text-slate-300 prose-hr:border-slate-700/50
-```
+### Markdown Rendering — `components/report/report-body.tsx`
+Don't hand-roll `ReactMarkdown` + `prose-*` class strings in a component — use the shared `<ReportBody markdown={...} />` (wraps `react-markdown` + `remark-gfm`, applies the canonical `prose prose-invert prose-report prose-sm max-w-none` class string). This is the single place that recipe lives; it used to be duplicated near-identically across 3 components with a violet/sky accent inconsistency.
+
+**`@tailwindcss/typography` is required** for any `prose*` class to do anything — without the plugin registered in `tailwind.config.ts`, `prose`/`prose-invert`/`prose-headings:*`/etc. are silently no-ops (Tailwind can't generate CSS for typography-plugin variant classes it doesn't know about). The plugin is installed and configured with a custom named variant, `report` (class `prose-report`) — see `tailwind.config.ts` → `theme.extend.typography.report`. It auto-adds a top rule + spacing on every `h2`, which is what creates the numbered-section-divider look on the AI's `## N. Title` headings — no Markdown parsing/injection needed.
+
 Also strip the Deep Value JSON block before rendering saved reports:
 ```typescript
 reportMd.replace(/^```json\n[\s\S]*?\n```\n?/, "")
 ```
+
+### Report Shell — consolidated fair-value UI (`components/report/*`)
+The live streaming panel and the saved-analysis detail page render the exact same report layout via `<ReportShell>`: masthead (company/ticker/date) → `MethodBadges` → `FairValueCards` → `ReportBody` (inside a `.card`) → `RecapTable` → static disclaimer footer. Do not reintroduce a local `RecapTable`/`UpsideBadge`/inline card JSX in a new consumer — import from `components/report/*`. `RecapTable` uses the `.rtable` responsive utility (see "Dense tables → cards below `sm`") so it collapses to cards on phones; the first `<td>` (scenario name) uses `.rcell-block` to act as the card title instead of a labeled row.
+
+### Print / PDF export
+"Download PDF" buttons call `window.print()` — no PDF library. `app/print.css` (imported once in `app/layout.tsx`) scopes light-theme overrides to `.print-report` (the wrapper `<ReportShell>` renders) and app chrome elements use the Tailwind `print:hidden` utility directly in JSX (nav, buttons, streaming indicator — no CSS class needed, Tailwind 3.4 ships `print:` out of the box). Upside/downside (emerald/red) and the violet accent are **kept** in print output by product decision — only the neutral slate dark-theme surfaces are inverted to print-safe light values, via targeted selectors on the well-known slate utility classes (`.text-slate-300`, `.bg-slate-800\/50`, etc.) rather than a blanket `* { color: black }`. `break-inside: avoid` on cards/tables and `break-after: avoid` on `h2` prevent mid-page splits.
 
 ### Modals / Overlays
 Use `ReactDOM.createPortal(modal, document.body)` for any modal. The `.card` class has `overflow: hidden` which clips absolutely-positioned children. Portal to `document.body` is the only reliable fix.
@@ -243,16 +243,18 @@ The classic `lib/valuation/*` engine (sector detection + DCF/DDM/EV-EBITDA + sce
 
 ## Anthropic AI Integration
 
-- Model: `claude-sonnet-4-6`, `max_tokens: 16000`
-- Web search: `tools: [{ type: "web_search_20250305" as const, name: "web_search" }]`
+- **Model split**: `claude-opus-4-8` for Deep Value (`/api/ai/deep-value`, `max_tokens: 16000`) — the heaviest, least-frequent analysis, worth the higher cost for deeper reasoning. `claude-sonnet-5` for Advisor (`/api/ai/advisor`, `max_tokens: 4096`) and Compare/watchlist lite analysis (`lib/ai/lite-analysis.ts`, `max_tokens: 1000`) — both run more often and don't need Opus-tier reasoning.
+- **Every call** sets `thinking: { type: "adaptive" }` + `output_config: { effort: "high" }`.
+- **Sonnet 5 rejects non-default sampling params** (`temperature`, `top_p`, `top_k` → 400 error) and has adaptive thinking on by default — do not add `temperature` to any Sonnet 5 call. (`lite-analysis.ts` previously used `temperature: 0` for deterministic method selection; removed for this reason — determinism now comes entirely from the sector→method rules in the system prompt.)
+- Web search: `tools: [{ type: "web_search_20260209" as const, name: "web_search" }]` (dynamic-filtering variant — current-gen models only; use `web_search_20250305` for older models)
 - Stream via `client.messages.stream()` — listen for `content_block_delta` + `text_delta` events
 - Always inject language in both system + user prompt
+- **Prompt caching (`cache_control`) was evaluated and rejected** for this app: single-user usage (~1 analysis/day) never produces a second request against the same cached prefix within the 5-minute TTL, so it would only pay the ~1.25× write premium with no offsetting reads. Revisit only if usage patterns change (e.g. multi-user deployment, or Advisor conversations with turns closer than 5 minutes apart).
 
 ### Lite analysis pattern (non-streaming, shared between cron + compare)
 
 `lib/ai/lite-analysis.ts` exports `analyzeTickerLite(ticker)` — non-streaming `messages.create()` call used by the **compare endpoint** (the watchlist no longer uses lite analysis — it sources from saved Deep Value analyses + live prices). Key invariants:
-- `temperature: 0` — makes sector→method selection fully deterministic regardless of which web results are retrieved
-- Sector→method rules are in the **system prompt** (not user prompt) as explicit mandatory rules with no exceptions:
+- Sector→method rules are in the **system prompt** (not user prompt) as explicit mandatory rules with no exceptions — this is what keeps method selection deterministic now that `temperature: 0` is gone (see above):
   ```
   Financial / Banking / Insurance → P/B
   Utilities / Water / Regulated infrastructure → DDM
@@ -590,6 +592,7 @@ t: (key: keyof Translations) => string;
 19. **`validateResult: false` on `chart()` widens return type to `unknown`**: Unlike `quoteSummary`, adding `{ validateResult: false }` as the third argument to `yahooFinance.chart()` makes the TypeScript return type `unknown` rather than the typed chart result. Do not add it to `chart()` calls — the default validation works correctly for price data.
 20. **Prisma `select` fields silently dropped at type boundaries**: If you add a field to a Prisma `select` (e.g. `mosPercent: true`) but the TypeScript type that consumes the result doesn't include that field, the value is silently discarded at the assignment boundary — no error, no warning. Symptom: field exists in DB + query but never reaches the function that uses it. Fix: always mirror every selected field in the downstream type (e.g. `AnalysisSnippet`, prompt context types). Search for the type name across `lib/` when adding fields to a Prisma select.
 21. **`getStorageItem` JSON.parses on read — so `JSON.stringify` non-JSON values on write**: the SSR-safe `getStorageItem(key, parser, fallback)` helper does `JSON.parse(raw)` before applying `parser`. Writing a bare string (`setItem("sfa:lastTicker", ticker)`) stores invalid JSON → `JSON.parse("MSFT")` throws → it silently returns the fallback (so the value never persists). Always `JSON.stringify` non-numeric values on write; numeric strings like `"25"` parse fine, which is why `sfa:mosPercent` worked by luck.
+22. **Tailwind `prose*` classes silently no-op without `@tailwindcss/typography` registered**: writing `prose prose-invert prose-headings:text-slate-100 ...` in JSX looks like it should work (valid-looking class names, no build error), but if the plugin isn't in `tailwind.config.ts`'s `plugins` array, none of it generates any CSS — the element renders with plain browser defaults. This went unnoticed for 3 components until a UI redesign surfaced it. If a "prose" block looks completely unstyled, check the plugin is installed and registered before debugging anything else.
 
 ---
 

@@ -65,10 +65,12 @@ export async function POST(request: Request) {
       async start(controller) {
         try {
           const stream = client.messages.stream({
-            model: "claude-sonnet-4-6",
+            model: "claude-opus-4-8",
             max_tokens: 16000,
+            thinking: { type: "adaptive" },
+            output_config: { effort: "high" },
             system: systemPrompt,
-            tools: [{ type: "web_search_20250305" as const, name: "web_search" }],
+            tools: [{ type: "web_search_20260209" as const, name: "web_search" }],
             messages: [{ role: "user", content: userPrompt }],
           });
 

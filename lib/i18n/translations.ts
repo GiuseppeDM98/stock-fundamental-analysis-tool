@@ -45,6 +45,7 @@ export type Translations = {
   viewSavedAnalyses: string;
   errorFailedSaveReport: string;
   rerun: string;
+  downloadPdf: string;
 
   // ─── Portfolio ──────────────────────────────────────────────────────────────
   totalCost: string;
@@ -447,6 +448,7 @@ const en: Translations = {
   viewSavedAnalyses: "View Saved Analyses →",
   errorFailedSaveReport: "Failed to save. Please try again.",
   rerun: "Re-run",
+  downloadPdf: "Download PDF",
 
   // Portfolio
   totalCost: "Total Cost",
@@ -848,6 +850,7 @@ const it: Translations = {
   viewSavedAnalyses: "Vedi Analisi Salvate →",
   errorFailedSaveReport: "Salvataggio fallito. Riprova.",
   rerun: "Ripeti",
+  downloadPdf: "Scarica PDF",
 
   // Portfolio
   totalCost: "Costo Totale",
