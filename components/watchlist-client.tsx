@@ -349,12 +349,6 @@ function WatchlistRow({ item, currentPrice, priceCurrency, analysisRun, onDelete
               >
                 {t("navDeepValue")}
               </button>
-              <button
-                onClick={() => { window.location.href = `/compare?tickers=${item.ticker}`; }}
-                className="tap rounded-md border border-slate-700/60 px-2.5 py-1 text-xs font-medium text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
-              >
-                {t("addToCompare")}
-              </button>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -532,7 +526,7 @@ export default function WatchlistClient() {
   useEffect(() => setMounted(true), []);
 
   // Watchlist values come from the user's latest saved Deep Value analysis per ticker
-  // (the lite WatchlistRun engine was removed — lite analysis now lives only in Compare).
+  // (the lite WatchlistRun engine was removed, and lite analysis was removed entirely with Compare).
   useEffect(() => {
     fetchAnalyses()
       .then((analyses) => {

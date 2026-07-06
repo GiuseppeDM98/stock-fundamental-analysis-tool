@@ -46,7 +46,7 @@ function getStorageItem<T>(key: string, parser: (value: unknown) => T, fallback:
  * plus a margin-of-safety control.
  *
  * Uses the SSR-safe hydration guard to read localStorage and the `?ticker=` URL
- * param (set by advisor chips, compare, watchlist, analyses re-run, and the
+ * param (set by advisor chips, watchlist, analyses re-run, and the
  * portfolio exit signal) only on the client.
  */
 export function AnalyzeClient() {
@@ -141,7 +141,7 @@ export function AnalyzeClient() {
     }
   }, []);
 
-  // Auto-fetch when opened via ?ticker= URL param (advisor chip, compare, watchlist, re-run, exit signal)
+  // Auto-fetch when opened via ?ticker= URL param (advisor chip, watchlist, re-run, exit signal)
   useEffect(() => {
     if (isHydrated && urlTickerRef.current) {
       void fetchQuote(urlTickerRef.current);

@@ -340,36 +340,17 @@ export type Translations = {
   advisorExampleUndervalued: string;
   advisorExamplePortfolio: string;
 
-  // ─── Compare page ─────────────────────────────────────────────────────────
-  navCompare: string;
   navDeepValue: string;
-  comparePageTitle: string;
-  comparePageDesc: string;
-  compareAddTicker: string;
-  compareMaxTickers: string;
-  compareEmpty: string;
-  compareEmptyHint: string;
-  compareRunAnalysis: string;
-  compareRunning: string;
-  compareAnalyzingTicker: string;
-  compareFairValueBase: string;
-  compareFairValueBull: string;
-  compareFairValueBear: string;
-  compareCurrentPrice: string;
-  compareUpside: string;
-  compareMethod: string;
-  compareSector: string;
-  compareNoData: string;
-  compareAiNote: string;
-  compareBestUpside: string;
-  compareDeepAnalysis: string;
-  compareRefreshAll: string;
+
+  // ─── Analyst Review (Deep Value red-team pass) ────────────────────────────
+  analystReviewTitle: string;
+  analystReviewButton: string;
+  analystReviewRunning: string;
+  analystReviewError: string;
 
   // ─── Pipeline actions ─────────────────────────────────────────────────────
   addToWatchlist: string;
-  addToCompare: string;
   inWatchlist: string;
-  compareWatch: string;
   priceAtTarget: string;
   advisorModePortfolio: string;
   advisorModeDiscovery: string;
@@ -379,14 +360,10 @@ export type Translations = {
   advisorDiscoveryExample2: string;
   advisorDiscoveryExample3: string;
   advisorDiscoveryExample4: string;
-  advisorCompareQueue: string;
-  advisorCompareAll: string;
   // Hub (home)
   hubTagline: string;
   hubStepDiscoverTitle: string;
   hubStepDiscoverDesc: string;
-  hubStepScreenTitle: string;
-  hubStepScreenDesc: string;
   hubStepDecideTitle: string;
   hubStepDecideDesc: string;
   hubStepMonitorTitle: string;
@@ -400,7 +377,6 @@ export type Translations = {
   hubViewAll: string;
   hubRecentEmpty: string;
   hubWatchlistTracked: string;
-  advisorAddToCompare: string;
 };
 
 const en: Translations = {
@@ -742,36 +718,17 @@ const en: Translations = {
   advisorExampleUndervalued: "Which positions in my portfolio have the most upside?",
   advisorExamplePortfolio: "Given my portfolio, what sectors am I missing exposure to?",
 
-  // Compare page
-  navCompare: "Compare",
   navDeepValue: "Deep Value",
-  comparePageTitle: "Compare Tickers",
-  comparePageDesc: "AI-powered fair value comparison across multiple stocks",
-  compareAddTicker: "+ Add ticker",
-  compareMaxTickers: "Max 5 tickers",
-  compareEmpty: "No tickers selected.",
-  compareEmptyHint: "Add up to 5 tickers to compare their AI fair value estimates side by side.",
-  compareRunAnalysis: "Run AI Analysis",
-  compareRunning: "Analysing…",
-  compareAnalyzingTicker: "Analysing {ticker}…",
-  compareFairValueBase: "Base FV",
-  compareFairValueBull: "Bull FV",
-  compareFairValueBear: "Bear FV",
-  compareCurrentPrice: "Current Price",
-  compareUpside: "Upside (Base)",
-  compareMethod: "Method",
-  compareSector: "Sector",
-  compareNoData: "—",
-  compareAiNote: "Fair values estimated by Claude AI with live web search.",
-  compareBestUpside: "Best upside",
-  compareDeepAnalysis: "Deep Value →",
-  compareRefreshAll: "Refresh All",
+
+  // Analyst Review (Deep Value red-team pass)
+  analystReviewTitle: "Analyst Review",
+  analystReviewButton: "Run Analyst Review",
+  analystReviewRunning: "Reviewing…",
+  analystReviewError: "Review failed. Try again.",
 
   // Pipeline actions
   addToWatchlist: "Add to Watchlist",
-  addToCompare: "Add to Compare",
   inWatchlist: "In Watchlist",
-  compareWatch: "Watch",
   priceAtTarget: "AT TARGET",
   advisorModePortfolio: "Portfolio",
   advisorModeDiscovery: "Discovery",
@@ -781,14 +738,10 @@ const en: Translations = {
   advisorDiscoveryExample2: "Dividend growers with wide moat and sustainable payout",
   advisorDiscoveryExample3: "Undervalued small caps in the tech sector",
   advisorDiscoveryExample4: "Best risk/reward setup in industrials right now",
-  advisorCompareQueue: "Compare ({n}) →",
-  advisorCompareAll: "Compare all ({n}) →",
   // Hub (home)
   hubTagline: "From discovery to decision — your value-investing pipeline.",
   hubStepDiscoverTitle: "Discover",
   hubStepDiscoverDesc: "Ask the AI advisor for value ideas that fit your criteria.",
-  hubStepScreenTitle: "Screen",
-  hubStepScreenDesc: "Compare candidates on fair value and margin of safety.",
   hubStepDecideTitle: "Decide",
   hubStepDecideDesc: "Run a Deep Value analysis on the most promising one.",
   hubStepMonitorTitle: "Monitor",
@@ -802,7 +755,6 @@ const en: Translations = {
   hubViewAll: "View all →",
   hubRecentEmpty: "Nothing yet",
   hubWatchlistTracked: "tracked",
-  advisorAddToCompare: "Add to Compare",
 };
 
 const it: Translations = {
@@ -1144,36 +1096,17 @@ const it: Translations = {
   advisorExampleUndervalued: "Quali posizioni nel mio portafoglio hanno il maggior upside?",
   advisorExamplePortfolio: "Dato il mio portafoglio, a quali settori sono sottoesposto?",
 
-  // Compare page
-  navCompare: "Confronta",
   navDeepValue: "Deep Value",
-  comparePageTitle: "Confronta Titoli",
-  comparePageDesc: "Confronto fair value AI su più azioni in parallelo",
-  compareAddTicker: "+ Aggiungi ticker",
-  compareMaxTickers: "Massimo 5 ticker",
-  compareEmpty: "Nessun ticker selezionato.",
-  compareEmptyHint: "Aggiungi fino a 5 ticker per confrontare le stime AI fianco a fianco.",
-  compareRunAnalysis: "Analisi AI rapida",
-  compareRunning: "Analisi in corso…",
-  compareAnalyzingTicker: "Analisi {ticker}…",
-  compareFairValueBase: "FV Base",
-  compareFairValueBull: "FV Bull",
-  compareFairValueBear: "FV Bear",
-  compareCurrentPrice: "Prezzo",
-  compareUpside: "Upside (Base)",
-  compareMethod: "Metodo",
-  compareSector: "Settore",
-  compareNoData: "—",
-  compareAiNote: "Fair value stimati da Claude AI con ricerca web in tempo reale.",
-  compareBestUpside: "Miglior upside",
-  compareDeepAnalysis: "Deep Value →",
-  compareRefreshAll: "Aggiorna tutti",
+
+  // Analyst Review (Deep Value red-team pass)
+  analystReviewTitle: "Revisione Analista",
+  analystReviewButton: "Avvia Revisione Analista",
+  analystReviewRunning: "Revisione in corso…",
+  analystReviewError: "Revisione fallita. Riprova.",
 
   // Pipeline actions
   addToWatchlist: "Aggiungi alla Watchlist",
-  addToCompare: "Aggiungi al Confronto",
   inWatchlist: "In Watchlist",
-  compareWatch: "Segui",
   priceAtTarget: "A TARGET",
   advisorModePortfolio: "Portfolio",
   advisorModeDiscovery: "Discovery",
@@ -1183,14 +1116,10 @@ const it: Translations = {
   advisorDiscoveryExample2: "Dividend growers con moat ampio e payout sostenibile",
   advisorDiscoveryExample3: "Small cap sottovalutate nel settore tech",
   advisorDiscoveryExample4: "Miglior rapporto rischio/rendimento negli industriali ora",
-  advisorCompareQueue: "Confronta ({n}) →",
-  advisorCompareAll: "Confronta tutte ({n}) →",
   // Hub (home)
   hubTagline: "Dalla scoperta alla decisione — la tua pipeline da investitore value.",
   hubStepDiscoverTitle: "Scopri",
   hubStepDiscoverDesc: "Chiedi all'AI advisor idee value su misura per i tuoi criteri.",
-  hubStepScreenTitle: "Confronta",
-  hubStepScreenDesc: "Confronta i candidati su fair value e margine di sicurezza.",
   hubStepDecideTitle: "Decidi",
   hubStepDecideDesc: "Lancia un'analisi Deep Value sul più promettente.",
   hubStepMonitorTitle: "Monitora",
@@ -1204,7 +1133,6 @@ const it: Translations = {
   hubViewAll: "Vedi tutte →",
   hubRecentEmpty: "Ancora niente",
   hubWatchlistTracked: "monitorati",
-  advisorAddToCompare: "Aggiungi al Confronto",
 };
 
 export const translations: Record<Language, Translations> = { en, it };

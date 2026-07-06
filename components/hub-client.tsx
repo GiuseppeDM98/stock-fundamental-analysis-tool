@@ -16,7 +16,7 @@ const STEP_CARD_CLASS = "card group flex flex-col gap-1 transition hover:border-
 /**
  * Adaptive Hub home (`/`) — frames the value-investing pipeline and routes into it.
  *
- * Renders for everyone with NO login wall: logged-out visitors see the four-stage
+ * Renders for everyone with NO login wall: logged-out visitors see the three-stage
  * pipeline, a primary "start with the advisor" CTA, and a quick ticker box. When
  * logged in, a recent-activity strip (last analyses, portfolio P&L, watchlist count)
  * lets the user resume. The deep-dive lives at `/analyze`.
@@ -43,19 +43,16 @@ export default function HubClient({ isAuthed }: { isAuthed: boolean }) {
         <p className="mt-2 text-base text-muted">{t("hubTagline")}</p>
       </header>
 
-      {/* The four-stage pipeline — each card routes into its stage */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {/* The three-stage pipeline — each card routes into its stage */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Link href="/advisor" className={STEP_CARD_CLASS}>
           <StepBody num="1" title={t("hubStepDiscoverTitle")} desc={t("hubStepDiscoverDesc")} />
         </Link>
-        <Link href="/compare" className={STEP_CARD_CLASS}>
-          <StepBody num="2" title={t("hubStepScreenTitle")} desc={t("hubStepScreenDesc")} />
-        </Link>
         <Link href="/analyze" className={STEP_CARD_CLASS}>
-          <StepBody num="3" title={t("hubStepDecideTitle")} desc={t("hubStepDecideDesc")} />
+          <StepBody num="2" title={t("hubStepDecideTitle")} desc={t("hubStepDecideDesc")} />
         </Link>
         <Link href="/watchlist" className={STEP_CARD_CLASS}>
-          <StepBody num="4" title={t("hubStepMonitorTitle")} desc={t("hubStepMonitorDesc")} />
+          <StepBody num="3" title={t("hubStepMonitorTitle")} desc={t("hubStepMonitorDesc")} />
         </Link>
       </div>
 

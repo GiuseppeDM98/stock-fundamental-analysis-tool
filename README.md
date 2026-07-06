@@ -22,6 +22,7 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **Margin of safety** adjustment (0-80%) for conservative valuations
 - **Client-side persistence** with localStorage for scenario configurations
 - **Deep Value Analysis** — Claude autonomously picks the valuation method and sources all financial data via web search; works for any global ticker; includes MOAT analysis, quality metrics, and near-term catalysts. Reports render in a clean, equity-research style and can be exported as a **PDF** with one click.
+- **Analyst Review** — after a Deep Value report, run an independent second-opinion pass: a fresh AI analyst red-teams the numbers and assumptions, spot-checks figures via web search, and gives a verdict on whether the base fair value holds
 - **User accounts** with saved reports — revisit your analyses anytime
 - **Portfolio tracker** — track real purchases with live P&L, multi-currency FX conversion, DCA aggregation (Weighted Average Cost per ticker), and cross-links to saved analyses per ticker
 - **Dividend tracking** — add an ISIN to any portfolio position and dividends paid on Borsa Italiana are automatically recorded at each daily snapshot; cumulative total shown in the summary bar
@@ -29,11 +30,10 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **Daily price change** — each portfolio position shows today's % move vs. the previous close, inline next to the current price
 - **Capital gains tax** — set an optional tax rate per position to see estimated taxes and net P&L alongside gross gains; dividend totals also show gross and estimated net amounts
 - **Analysis performance tracking** — see how the stock price moved since you saved each analysis vs. fair value
-- **Ticker Comparison** — compare up to 5 stocks side-by-side on the `/compare` page. Claude fetches AI fair values (Bear/Base/Bull) for all tickers in parallel via web search. Results are saved to your account, so you can leave and return without re-running. A global MoS slider adjusts the Base fair value across all columns instantly. Each fair value shows upside/downside % vs. current price; a ★ marks the best opportunity when comparing 2+ stocks.
-- **Watchlist + email digest** — add tickers to a personal watchlist and receive automatic bi-weekly or monthly email digests with AI fair value estimates (Bear/Base/Bull), current price, and upside vs. your margin-of-safety target. Pause emails with a single toggle when you're not actively investing. Each row shows a **price proximity badge** (distance from your buy target) and inline **Analyze** / **Compare** action buttons.
+- **Watchlist + email digest** — add tickers to a personal watchlist and receive automatic bi-weekly or monthly email digests with AI fair value estimates (Bear/Base/Bull), current price, and upside vs. your margin-of-safety target. Pause emails with a single toggle when you're not actively investing. Each row shows a **price proximity badge** (distance from your buy target) and an inline **Analyze** action button.
 - **English / Italian UI** — switch the entire interface language from the navigation bar; preference is saved automatically
-- **AI Portfolio Advisor** — conversational AI at `/advisor` in two modes: **Portfolio** (knows your holdings and saved analyses) and **Discovery** (idea generation — finds quality compounders, undervalued stocks, or sector opportunities with no portfolio context). Ticker chips are split-action: left zone launches Deep Value analysis, right `+` zone adds to a compare queue. Queue bar accumulates tickers and launches `/compare` with all of them in one click. Conversations saved to your account.
-- **Decision Panel** — after every Deep Value Analysis completes, action buttons appear: **Add to Watchlist** (pre-fills ticker + MoS) and **Add to Compare**. Every analysis ends with a deliberate next step, not a dead end.
+- **AI Portfolio Advisor** — conversational AI at `/advisor` in two modes: **Portfolio** (knows your holdings and saved analyses) and **Discovery** (idea generation — finds quality compounders, undervalued stocks, or sector opportunities with no portfolio context). Recommended tickers appear as one-click chips that launch a Deep Value analysis. Conversations saved to your account.
+- **Decision Panel** — after every Deep Value Analysis completes, an **Add to Watchlist** button appears (pre-fills ticker + MoS). Every analysis ends with a deliberate next step, not a dead end.
 - **Exit signal ("At Fair Value")** — when a position's current price reaches the **intrinsic base fair value** from your most recent saved analysis (i.e. the margin of safety is fully consumed), an amber ⚠ badge appears in the portfolio row (always visible). A "Re-analyze →" button navigates to the dashboard with your position context pre-loaded
 - **Review Position (AI)** — after an exit signal, a dedicated amber "Review Position (AI)" button on the dashboard runs a modified AI prompt focused on "hold, add, or exit?" — includes your weighted average cost, previous fair value, and an explicit recommendation section. Saves and renders identically to a standard Deep Value analysis
 
@@ -75,7 +75,7 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - 🧾 **Capital Gains Tax**: Set an optional tax rate per position to see estimated taxes and net P&L on unrealized gains; dividend totals show gross and estimated net
 - 📈 **Analysis Performance**: See how price moved since saving vs. fair value — "Under FV" / "Above FV" badge per report
 - 🌐 **EN / IT UI**: Switch the entire interface language from the navbar; preference saved automatically
-- ⚖️ **Ticker Comparison**: Compare up to 5 stocks side-by-side at `/compare` — AI fetches Bear/Base/Bull fair values in parallel, results saved to DB, global MoS slider, inline upside/downside %, freshness badges, and a ★ marking the best opportunity
+- 🔬 **Analyst Review**: After a Deep Value report, run an independent second-opinion pass — a fresh AI analyst red-teams the numbers and assumptions, spot-checks figures via web search, and gives a verdict on whether the base fair value holds
 - 📬 **Watchlist + AI Email Digest**: Add any ticker to your watchlist and receive automatic bi-weekly or monthly emails with AI fair value estimates (Bear/Base/Bull), current price, upside vs. MoS target, and status badges — pause with a toggle when not actively investing
 - 📱 **Installable PWA**: Install the app on Android or iOS for a native-like experience — standalone mode, home screen icon, no browser chrome
 - 💬 **AI Portfolio Advisor**: Conversational AI at `/advisor` that knows your portfolio and saved analyses — ask free-form questions, receive stock recommendations as one-click Deep Value chips, with full conversation history saved to your account
@@ -490,10 +490,11 @@ turso db shell <your-db-name> < prisma/migrations/<latest>/migration.sql
 - [ ] Sensitivity analysis matrix (WACC vs growth)
 
 ### Phase 3: Features
-- [x] Multi-ticker comparison (side-by-side)
 - [x] AI Portfolio Advisor (conversational with portfolio context + Discovery mode)
-- [x] Investment pipeline connective tissue (Decision Panel, Watchlist quick-actions, Compare Watch button, Advisor chip split-action + compare queue)
+- [x] Analyst Review — independent red-team second opinion on a Deep Value report
+- [x] Investment pipeline connective tissue (Decision Panel, Watchlist quick-action, Advisor chip → Deep Value)
 - [x] PDF export for valuation reports (Download PDF → browser print → Save as PDF)
+- ~~Multi-ticker comparison (side-by-side)~~ — removed; superseded by Advisor → Deep Value
 - [x] Mobile installable (PWA)
 
 ### Phase 4: Advanced

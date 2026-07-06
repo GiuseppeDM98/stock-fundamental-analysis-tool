@@ -47,13 +47,3 @@ export interface PatchWatchlistSettingsRequest {
   watchlistFreq?: WatchlistFreq;
   watchlistEnabled?: boolean;
 }
-
-// Shape returned by analyzeTickerLite — null when analysis fails
-export interface LiteAnalysisResult {
-  fairValueBull: number;
-  fairValueBase: number;
-  fairValueBear: number;
-  method: string;
-  sector: string;
-  currency: string;
-}

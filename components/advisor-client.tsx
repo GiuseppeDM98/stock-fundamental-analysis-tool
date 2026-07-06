@@ -21,16 +21,7 @@ function preprocessMarkdown(content: string): string {
   return content.replace(/\[\[([A-Z0-9.]+)\]\]/g, "[$1](/analyze?ticker=$1)");
 }
 
-// Extract unique tickers from [[TICKER]] markers in a message, preserving first-seen order.
-function extractTickers(content: string): string[] {
-  const seen = new Set<string>();
-  for (const m of content.matchAll(/\[\[([A-Z0-9.]+)\]\]/g)) {
-    seen.add(m[1]);
-  }
-  return [...seen];
-}
-
-function MessageContent({ content, onAddToCompare }: { content: string; onAddToCompare?: (ticker: string) => void }) {
+function MessageContent({ content }: { content: string }) {
   const { t } = useLanguage();
   return (
     <div className="prose prose-invert prose-sm max-w-none prose-headings:text-slate-100 prose-headings:mt-4 prose-headings:mb-1.5 prose-p:text-slate-300 prose-p:leading-relaxed prose-p:my-1.5 prose-strong:text-slate-100 prose-li:text-slate-300 prose-li:my-0.5 prose-a:text-sky-400 prose-table:w-full prose-th:text-slate-200 prose-td:text-slate-300 prose-hr:border-slate-700/50 prose-code:text-sky-300 prose-code:bg-slate-800 prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
@@ -42,29 +33,15 @@ function MessageContent({ content, onAddToCompare }: { content: string; onAddToC
             if (tickerMatch) {
               const ticker = tickerMatch[1];
               return (
-                <span className="mx-0.5 inline-flex items-stretch rounded-md ring-1 ring-inset ring-sky-500/30">
-                  <button
-                    // Full navigation to bypass Next.js Router Cache — router.push would
-                    // restore the cached dashboard without remounting.
-                    onClick={() => { window.location.href = `/analyze?ticker=${encodeURIComponent(ticker)}`; }}
-                    className="inline-flex items-center gap-1 bg-sky-500/15 px-2 py-0.5 text-xs font-semibold text-sky-300 transition hover:bg-sky-500/25 hover:text-sky-200 rounded-l-md"
-                  >
-                    {children}
-                    <span className="text-[10px] opacity-60">{t("advisorRunDeepValue")}</span>
-                  </button>
-                  {onAddToCompare && (
-                    <>
-                      <span className="w-px bg-sky-500/30" />
-                      <button
-                        onClick={(e) => { e.stopPropagation(); onAddToCompare(ticker); }}
-                        title={t("advisorAddToCompare")}
-                        className="inline-flex items-center bg-sky-500/10 px-1.5 text-xs text-sky-400 transition hover:bg-sky-500/25 hover:text-sky-200 rounded-r-md"
-                      >
-                        +
-                      </button>
-                    </>
-                  )}
-                </span>
+                <button
+                  // Full navigation to bypass Next.js Router Cache — router.push would
+                  // restore the cached dashboard without remounting.
+                  onClick={() => { window.location.href = `/analyze?ticker=${encodeURIComponent(ticker)}`; }}
+                  className="mx-0.5 inline-flex items-center gap-1 rounded-md bg-sky-500/15 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-inset ring-sky-500/30 transition hover:bg-sky-500/25 hover:text-sky-200"
+                >
+                  {children}
+                  <span className="text-[10px] opacity-60">{t("advisorRunDeepValue")}</span>
+                </button>
               );
             }
             return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
@@ -89,25 +66,13 @@ function UserBubble({ content }: { content: string }) {
   );
 }
 
-function AssistantBubble({ content, isStreaming, onAddToCompare }: { content: string; isStreaming?: boolean; onAddToCompare?: (ticker: string) => void }) {
-  const { t } = useLanguage();
-  // When a finished reply lists ≥2 candidates, offer a one-click "compare all" shortcut.
-  // Capped at 5 (the Compare page limit). Hidden while streaming so it appears only once complete.
-  const tickers = isStreaming ? [] : extractTickers(content).slice(0, 5);
+function AssistantBubble({ content, isStreaming }: { content: string; isStreaming?: boolean }) {
   return (
     <div className="flex justify-start">
       <div className="w-full rounded-2xl rounded-tl-sm border border-slate-700/30 bg-[#0f172a] px-4 py-3 text-sm text-slate-200 shadow-[0_4px_20px_-8px_rgba(56,189,248,0.10)]">
-        <MessageContent content={content} onAddToCompare={onAddToCompare} />
+        <MessageContent content={content} />
         {isStreaming && content && (
           <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse bg-sky-400" />
-        )}
-        {tickers.length >= 2 && (
-          <button
-            onClick={() => { window.location.href = `/compare?tickers=${tickers.join(",")}`; }}
-            className="mt-3 inline-flex items-center gap-1 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-xs font-semibold text-sky-300 transition hover:bg-sky-500/20 hover:text-sky-200"
-          >
-            {t("advisorCompareAll").replace("{n}", String(tickers.length))}
-          </button>
         )}
       </div>
     </div>
@@ -288,7 +253,6 @@ export default function AdvisorClient() {
   const [error, setError] = useState<string | null>(null);
   const [contextCounts, setContextCounts] = useState<{ positions: number; analyses: number } | null>(null);
   const [mode, setMode] = useState<"portfolio" | "discovery">("portfolio");
-  const [compareQueue, setCompareQueue] = useState<string[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -302,32 +266,6 @@ export default function AdvisorClient() {
   useEffect(() => {
     localStorage.setItem("sfa:advisor-mode", mode);
   }, [mode]);
-
-  // Persist compare queue to localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem("sfa:compareQueue");
-    if (saved) {
-      try { setCompareQueue(JSON.parse(saved)); } catch { /* ignore */ }
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem("sfa:compareQueue", JSON.stringify(compareQueue));
-  }, [compareQueue]);
-
-  function addToCompareQueue(ticker: string) {
-    setCompareQueue((prev) => {
-      if (prev.includes(ticker) || prev.length >= 5) return prev;
-      return [...prev, ticker];
-    });
-  }
-
-  function launchCompare() {
-    if (compareQueue.length === 0) return;
-    const tickers = compareQueue.join(",");
-    setCompareQueue([]);
-    window.location.href = `/compare?tickers=${tickers}`;
-  }
 
   // Load session list + context counts on mount.
   useEffect(() => {
@@ -610,7 +548,6 @@ export default function AdvisorClient() {
                     key={m.id}
                     content={m.content}
                     isStreaming={m.id === streamingAssistantId}
-                    onAddToCompare={addToCompareQueue}
                   />
                 )
               )}
@@ -620,34 +557,6 @@ export default function AdvisorClient() {
           {error && <p className="mt-3 text-center text-xs text-rose-400">{error}</p>}
           <div ref={bottomRef} />
         </div>
-
-        {/* Compare queue bar */}
-        {compareQueue.length > 0 && (
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-sky-800/50 bg-sky-950/30 px-3 py-2 mb-2">
-            <div className="flex flex-wrap gap-1.5">
-              {compareQueue.map((ticker) => (
-                <span key={ticker} className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[11px] font-semibold text-sky-300">
-                  {ticker}
-                </span>
-              ))}
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <button
-                onClick={() => setCompareQueue([])}
-                aria-label="Clear compare queue"
-                className="tap flex items-center justify-center px-1 text-xs text-slate-600 transition hover:text-slate-400"
-              >
-                ✕
-              </button>
-              <button
-                onClick={launchCompare}
-                className="tap rounded-lg border border-sky-700 bg-sky-900/30 px-3 py-1 text-xs font-semibold text-sky-300 transition hover:border-sky-500 hover:bg-sky-900/50"
-              >
-                {t("advisorCompareQueue").replace("{n}", String(compareQueue.length))}
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Input bar */}
         <div className="pt-2">
