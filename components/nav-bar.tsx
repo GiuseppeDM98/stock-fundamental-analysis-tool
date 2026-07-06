@@ -28,7 +28,6 @@ const NEXT_LANGUAGE: Record<Language, Language> = { en: "it", it: "en" };
 /** The pipeline links, in nav order. Shared by the desktop row and the drawer. */
 const NAV_LINKS = [
   { href: "/advisor", key: "navAdvisor" },
-  { href: "/compare", key: "navCompare" },
   { href: "/analyze", key: "navDeepValue" },
   { href: "/watchlist", key: "navWatchlist" },
   { href: "/portfolio", key: "navPortfolio" },

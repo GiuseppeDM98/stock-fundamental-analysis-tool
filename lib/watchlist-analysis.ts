@@ -42,7 +42,7 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
 
   for (const item of items) {
     // Source values from the user's latest saved Deep Value analysis for this ticker.
-    // The lite analysis engine was removed from the watchlist — it lives only in Compare.
+    // The lite analysis engine was removed entirely with the Compare page.
     const analysis = await db.analysis.findFirst({
       where: { userId: user.id, ticker: item.ticker, fairValueBase: { not: null } },
       orderBy: { createdAt: "desc" },

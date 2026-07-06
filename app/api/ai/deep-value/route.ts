@@ -66,9 +66,18 @@ export async function POST(request: Request) {
         try {
           const stream = client.messages.stream({
             model: "claude-opus-4-8",
-            max_tokens: 16000,
+            // Streaming, so a large ceiling can't hit HTTP timeouts (Opus 4.8 allows up to
+            // 128k). 64k gives ample room for xhigh adaptive thinking + JSON block + the
+            // full 10-section report without truncation. max_tokens is a cap, not a target —
+            // the model generates only what it needs, so this doesn't raise cost.
+            max_tokens: 64000,
             thinking: { type: "adaptive" },
-            output_config: { effort: "high" },
+            // xhigh (Opus 4.8) is the recommended effort for agentic, multi-step work —
+            // Deep Value is exactly that (iterative web search + valuation reasoning).
+            // The pinned SDK (^0.78) types the effort union as low|medium|high|max and
+            // doesn't yet list "xhigh"; it's valid at the API level and serializes through
+            // unchanged, so we cast to satisfy the compiler only.
+            output_config: { effort: "xhigh" as unknown as "high" },
             system: systemPrompt,
             tools: [{ type: "web_search_20260209" as const, name: "web_search" }],
             messages: [{ role: "user", content: userPrompt }],

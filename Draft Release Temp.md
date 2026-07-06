@@ -2,9 +2,9 @@
 
 - **Download Deep Value reports as PDF** — a new **Download PDF** button is available both on a completed Deep Value analysis and on any saved analysis. It opens your browser's print dialog with a clean layout (navigation and buttons hidden, upside/downside and accent colors preserved) — choose "Save as PDF" to export.
 
-- **Adaptive Hub home** — the home page (`/`) is now a hub that frames the full pipeline (Discover → Screen → Decide → Monitor) with a card per stage, a "Start with the Advisor" call-to-action, and a quick ticker box that jumps straight into an analysis. When you're logged in it also surfaces a recent-activity strip: your latest analyses, portfolio P&L, and watchlist count.
+- **Adaptive Hub home** — the home page (`/`) is now a hub that frames the full pipeline (Discover → Decide → Monitor) with a card per stage, a "Start with the Advisor" call-to-action, and a quick ticker box that jumps straight into an analysis. When you're logged in it also surfaces a recent-activity strip: your latest analyses, portfolio P&L, and watchlist count.
 
-- **One-click "Compare all" from the Advisor** — when the AI lists two or more candidate tickers in a reply, a **Compare all (N) →** button appears beneath it that opens the Compare page with all of them pre-loaded at once.
+- **Analyst Review for Deep Value** — after a Deep Value analysis finishes, a new **Run Analyst Review** button starts an independent second-opinion pass: a fresh AI analyst red-teams the report — stress-testing the numbers and assumptions, spot-checking key figures via web search, and giving a verdict on whether the base fair value holds up. It reads as a concise critique below your report, so a money decision gets a second set of eyes before you act.
 
 - **Intrinsic fair value shown next to the buy target** — when a Margin of Safety is set, the Deep Value panel and the saved-analysis detail page now show both the intrinsic fair value (what the stock is worth) and the MoS-discounted buy target, for each Bear/Base/Bull scenario.
 
@@ -12,17 +12,13 @@
 
 - **Investment pipeline — connected workflow** — the app now guides you through the full stock-picking process without dead ends. Every major page now has direct routes to the next step, so you never have to manually re-enter a ticker or copy-paste between tabs.
 
-- **Decision Panel after Deep Value Analysis** — once a Deep Value analysis finishes streaming, two action buttons appear below "Save Report": an amber **Add to Watchlist** button (pre-filled with the ticker and your current margin of safety) and a sky **Add to Compare** button. If the ticker is already on your watchlist, the button shows "In Watchlist" instead of re-adding it. This turns every completed analysis into a deliberate decision point.
+- **Decision Panel after Deep Value Analysis** — once a Deep Value analysis finishes streaming, an amber **Add to Watchlist** button appears below "Save Report", pre-filled with the ticker and your current margin of safety. If the ticker is already on your watchlist, the button shows "In Watchlist" instead of re-adding it. This turns every completed analysis into a deliberate decision point.
 
 - **Advisor Discovery Mode** — the AI Advisor now has two modes, switchable via a toggle above the chat. **Portfolio mode** (the original) has full context of your holdings and saved analyses. **Discovery mode** starts clean — no portfolio context — and is purpose-built for finding new investment ideas. Ask for quality compounders, undervalued dividend growers, or sector opportunities and get 3–5 concrete ticker suggestions with a thesis, ROIC, valuation setup, and key risk for each. Your selected mode is remembered across sessions.
 
-- **Compare queue from Advisor** — ticker chips in Advisor responses now have two zones: click the ticker name to launch a Deep Value analysis as before, or click the small **+** on the right to add the ticker to a compare queue. Once you've queued 2+ tickers, a bar appears above the chat input showing all queued tickers and a **Compare (N) →** button that takes you directly to the comparison page with all of them pre-loaded. The queue persists if you leave the page.
-
-- **Watchlist quick-actions** — each watchlist row now has two inline action buttons: **Analyze** (launches a Deep Value analysis for that ticker) and **Compare** (opens the comparison page with that ticker). No more manually typing tickers to continue your research.
+- **Watchlist quick-action** — each watchlist row now has an inline **Analyze** button that launches a Deep Value analysis for that ticker. No more manually typing tickers to continue your research.
 
 - **Price proximity badge on Watchlist** — each watchlist row now shows how close the current price is to your buy target (fair value base discounted by your MoS%). The badge turns emerald when the price has reached or exceeded the target ("AT TARGET"), amber when within 10% below the target, and grey when further away. Only shown when an AI analysis has been run for that ticker.
-
-- **Watch from Compare** — the Compare page now has a **Watch** button in each ticker's column (below the existing "Deep Analysis" link). Click it to add the ticker directly to your watchlist without leaving the comparison. The button shows "In Watchlist" once saved or if the ticker was already being tracked.
 
 - **Dual fair value visualization in Saved Analyses** — when a saved analysis was run with a Margin of Safety > 0%, the Saved Analyses page now shows two separate sets of Bear/Base/Bull cards and two stacked gradient bars instead of one. The top row (violet) shows the **intrinsic fair value** — what the AI determined the stock is fundamentally worth. The bottom row (yellow) shows the **buy target** — the same values discounted by your MoS%. This makes it clear at a glance what the stock is worth vs. at what price it becomes a buy, without having to do the mental math yourself.
 
@@ -37,8 +33,6 @@
 - **Review Position (AI)** — clicking "Re-analyze →" from an exit signal now passes your position context to the dashboard automatically (weighted average cost + previous base fair value). A new amber **"Review Position (AI)"** button appears above the standard Deep Analysis button. Clicking it runs a dedicated AI analysis with a fundamentally different question: *"I already own this stock — should I hold, add, or exit?"* The report includes your WAC, your unrealized gain/loss, and ends with a **Hold, Add, or Exit Recommendation** section. The Bear/Base/Bull fair value cards and save flow work exactly as with a standard Deep Value analysis — the new analysis is saved to your history like any other.
 
 - **AI Portfolio Advisor** — a new `/advisor` page lets you have a free-form conversation with an AI that knows your entire portfolio and saved analyses. Ask questions like "which Italian stocks should I add?", "which of my positions has the most upside left?", or "what's undervalued in my watchlist?" The AI has full context of your positions, weighted average costs, and the Bear/Base/Bull fair values from your saved analyses. When it recommends a specific stock, the ticker appears as a clickable chip — click it to launch a full Deep Value analysis instantly. Past conversations are saved automatically and listed in a sidebar so you can revisit them anytime.
-
-- **Ticker Comparison** — a new `/compare` page lets you analyze up to 5 stocks side-by-side in seconds. Add any ticker, click "Run Analysis", and Claude fetches live fair values (Bear / Base / Bull) for all of them in parallel via web search. Results are saved to your account so you can leave and come back without re-running the analysis. A global **Margin of Safety slider** (0–40%) adjusts the Base fair value in real-time across all columns. Each fair value shows the **upside or downside % vs. the current price** inline, colored green or red. A **freshness badge** tells you how old each result is (green = today, amber = stale). When comparing 2+ tickers, a ★ star marks the one with the best MoS-adjusted upside. A "Deep Analysis →" link opens the full AI report for any ticker in a new tab.
 
 - **Quality Scorecard** — a new panel on the dashboard gives you four quantitative signals to assess a company's financial quality at a glance: **Piotroski F-Score** (0–9 signals covering profitability, cash flow quality, leverage, and efficiency — each signal shown individually in a collapsible list), **ROIC vs WACC Spread** (is the company creating or destroying value?), **FCF Conversion** (are reported earnings backed by real cash?), and **Altman Z-Score** (bankruptcy risk indicator, skipped automatically for banks and real estate). All data comes directly from Yahoo Finance — no extra input required. The panel appears between the valuation metrics cards and the historical charts.
 
@@ -160,11 +154,11 @@
 - **Recap table now adapts to your screen** — the Bear/Base/Bull summary table at the end of each report now displays as stacked cards on narrow screens instead of a cramped table.
 - **Deep Value analyses now use a more capable AI model** for deeper, more thorough reasoning.
 
-- **The Watchlist now reflects your Deep Value analyses.** Instead of running a separate, lighter AI re-analysis, each watchlist row — and the periodic email digest — now shows the fair values from your latest saved Deep Value analysis for that ticker, with the live price for proximity-to-target. The lighter analysis now lives only on the Compare page, and the email digest no longer spends on AI. Tickers you haven't analyzed yet prompt you to run a Deep Value analysis.
+- **Deep Value analyses now dig deeper** — the analysis runs at a higher reasoning effort and with far more room to work, so reports are more thorough and complete (and less likely to be cut short on complex companies). No change to how you use it.
+
+- **The Watchlist now reflects your Deep Value analyses.** Instead of running a separate, lighter AI re-analysis, each watchlist row — and the periodic email digest — now shows the fair values from your latest saved Deep Value analysis for that ticker, with the live price for proximity-to-target. The email digest no longer spends on AI, and the lighter analysis has been retired. Tickers you haven't analyzed yet prompt you to run a Deep Value analysis.
 
 - **The "at fair value" exit signal is now dividend-aware.** Reaching fair value is treated as a checkpoint, not an automatic sell: "hold (e.g. for dividends)" is presented as a first-class option, and the AI position review explicitly weighs dividend yield, yield-on-cost, and dividend safety before recommending hold / add / exit.
-
-- The Ticker Comparison page now shows both the **intrinsic fair value** and the **buy target** for each Bear / Base / Bull scenario when a Margin of Safety is set. The intrinsic value (what the AI determined the stock is fundamentally worth) is shown on the first line; the buy target discounted by your MoS% appears below it in amber. A legend at the bottom of the table labels the two lines. When MoS is 0% the table is unchanged — one line per cell as before.
 
 - Deep Value Analysis report sections are now better spaced — headers, paragraphs, and bullet lists have more breathing room, making long multi-section reports easier to read
 - Deep Value Analysis now sources up to **5 years** of financial data (previously defaulted to 3), giving a clearer picture of long-term trends in growth, margins, and capital returns
@@ -184,6 +178,8 @@
 - Removed "Enable compact charts" toggle that had no visible effect
 
 ## ⚠️ Breaking Changes
+
+- **The Ticker Comparison page (`/compare`) has been removed.** It ran a separate, lighter valuation engine that could disagree with your Deep Value analyses. The workflow is now simpler and consistent — **Discover** with the Advisor, **Decide** with a full Deep Value analysis (now with an optional Analyst Review second opinion), and **Monitor** with the Watchlist and Portfolio. Advisor ticker chips now go straight to a Deep Value analysis in one click. _(Note: this supersedes the Compare-related entries from earlier unreleased work — the Compare page, the "Compare all"/compare-queue in the Advisor, the "Watch from Compare" button, and the "Add to Compare" buttons.)_
 
 - **The classic Yahoo-data valuation engine has been removed.** The dashboard's manual DCF/DDM/EV-EBITDA scenario tuning, the Quality Scorecard, the Historical Multiples chart, the Reverse DCF card, the valuation-metrics cards, and the fundamentals charts are gone. The AI **Deep Value** analysis — which picks the valuation method on its own and sources data via web search for any global ticker — is now the single analysis path. The deep dive lives on a dedicated **`/analyze`** page, and the home page is the new Hub. _(Note: this supersedes the Quality Scorecard, Historical Multiples, and Reverse DCF entries listed above, which were added in earlier unreleased work.)_
 

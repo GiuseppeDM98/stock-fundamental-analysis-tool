@@ -8,7 +8,7 @@ Current project state and context for AI assistants.
 
 **Version**: `1.0.0`
 **Status**: Active Development
-**Last Updated**: July 3, 2026 — **report redesign + PDF export + AI model tuning**: Deep Value analysis now runs on **Claude Opus 4.8** (Advisor and Compare/watchlist stay on **Claude Sonnet 5**), all three calls using adaptive thinking + `effort: "high"`. AI reports (live streaming and saved) now render in a consolidated equity-research style — `@tailwindcss/typography` is installed with a custom `report` variant (numbered section dividers, unified violet accent), and the three previously-duplicated fair-value-card/recap-table implementations are consolidated into `components/report/*`, shared identically by the live panel and the saved-analysis detail page. A **"Download PDF"** button (browser print → Save as PDF via `app/print.css`, no new dependency) is now on both surfaces, preserving upside/downside and accent colors in the printed output. See AGENTS.md › "Markdown Rendering" / "Report Shell" / "Print / PDF export".
+**Last Updated**: July 6, 2026 — **Deep Value depth + Compare removed**: (1) Deep Value now runs at `effort: "xhigh"` (was `high`) with `max_tokens: 64000` (was 16000) for deeper agentic research; (2) a new **Analyst Review** pass — an independent fresh-context Opus 4.8 red-team of the completed report (endpoint `/api/ai/deep-value/verify`, streaming, web search enabled) rendered in a collapsible violet section under the report via `<ReportBody>`; (3) the **Compare** page and its lite/Sonnet valuation engine were removed entirely (page, components, `/api/compare/*`, `lib/ai/lite-analysis.ts`, `LiteAnalysisResult`, `CompareResult` model + drop migration). The pipeline is now **Discover (Advisor) → Decide (Deep Value) → Monitor (Watchlist/Portfolio)** (3 stages). Advisor `[[TICKER]]` chips are now single-action (navigate only; the compare-queue was removed). _A future "paste financial data" grounding idea was deferred — see memory `project_paste_grounding_idea`._
 
 ---
 
@@ -18,7 +18,7 @@ Current project state and context for AI assistants.
 - **yahoo-finance2** `3.13.2` + **Zod** `3.24.1`
 - **Prisma** `7.4.2` + **Turso** (libSQL) via `@prisma/adapter-libsql`
 - **Auth.js** `next-auth@5.0.0-beta.30` + **bcryptjs**
-- **Anthropic SDK** + **Claude Opus 4.8** (Deep Value) / **Claude Sonnet 5** (Advisor, Compare) — adaptive thinking, `effort: "high"`, web search enabled
+- **Anthropic SDK** + **Claude Opus 4.8** (Deep Value + Analyst Review, `effort: "xhigh"`) / **Claude Sonnet 5** (Advisor, `effort: "high"`) — adaptive thinking, web search enabled
 - **Tailwind CSS** `3.4.17` + **@tailwindcss/typography** + **Framer Motion** `11.18.2` + **Recharts** `2.15.1` + **react-markdown** + **remark-gfm** + **node-html-parser**
 - **Vitest** `3.2.4` + **Testing Library** `16.2.0`
 
@@ -28,12 +28,12 @@ Current project state and context for AI assistants.
 
 **Pattern**: Next.js App Router with client-side interactivity and server-side API routes.
 
-- **Frontend**: Adaptive **Hub** home (`/`) framing the Discover→Screen→Decide→Monitor pipeline + `/analyze` (AI Deep Value deep-dive) + auth pages + saved analyses + portfolio + compare + advisor + watchlist
-- **API Layer**: `/api/quote`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses`, `/api/analyses/[id]`, `/api/positions`, `/api/positions/[id]`, `/api/ai/deep-value`, `/api/ai/advisor` (POST, streaming), `/api/advisor/sessions` (GET/POST), `/api/advisor/sessions/[id]` (GET/DELETE), `/api/advisor/sessions/[id]/messages` (POST), `/api/portfolio/snapshots`, `/api/cron/portfolio-snapshot`, `/api/watchlist` (GET/POST), `/api/watchlist/[id]` (DELETE/PATCH), `/api/watchlist/settings` (PATCH), `/api/watchlist/run` (POST), `/api/cron/watchlist-analysis` (GET), `/api/compare/analyze` (POST), `/api/compare/results` (GET) — _`/api/quote` is the only remaining Yahoo data route; valuation / fundamentals / analyst-estimates / historical-multiples / macro-risk-free-rate were removed with the classic engine_
-- **Business Logic**: Pure TypeScript in `lib/` (Yahoo quote adapter, deep-value AI prompts, advisor prompts, lite AI analysis, snapshot logic, dividends, formatters)
-- **Database**: SQLite via Prisma 7 — `User` + `Analysis` + `Position` + `PortfolioSnapshot` + `WatchlistItem` + `WatchlistRun` + `CompareResult` + `AdvisorSession` + `AdvisorMessage` models
+- **Frontend**: Adaptive **Hub** home (`/`) framing the Discover→Decide→Monitor pipeline + `/analyze` (AI Deep Value deep-dive) + auth pages + saved analyses + portfolio + advisor + watchlist
+- **API Layer**: `/api/quote`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses`, `/api/analyses/[id]`, `/api/positions`, `/api/positions/[id]`, `/api/ai/deep-value` (POST, streaming), `/api/ai/deep-value/verify` (POST, streaming — Analyst Review red-team pass), `/api/ai/advisor` (POST, streaming), `/api/advisor/sessions` (GET/POST), `/api/advisor/sessions/[id]` (GET/DELETE), `/api/advisor/sessions/[id]/messages` (POST), `/api/portfolio/snapshots`, `/api/cron/portfolio-snapshot`, `/api/watchlist` (GET/POST), `/api/watchlist/[id]` (DELETE/PATCH), `/api/watchlist/settings` (PATCH), `/api/watchlist/run` (POST), `/api/cron/watchlist-analysis` (GET) — _`/api/quote` is the only remaining Yahoo data route; `/api/compare/*` was removed with the Compare page; valuation / fundamentals / analyst-estimates / historical-multiples / macro-risk-free-rate were removed with the classic engine_
+- **Business Logic**: Pure TypeScript in `lib/` (Yahoo quote adapter, deep-value + verification AI prompts, advisor prompts, snapshot logic, dividends, formatters)
+- **Database**: SQLite via Prisma 7 — `User` + `Analysis` + `Position` + `PortfolioSnapshot` + `WatchlistItem` + `WatchlistRun` + `AdvisorSession` + `AdvisorMessage` models
 - **Auth**: Auth.js v5 credentials provider, JWT sessions
-- **Types**: Centralized in `types/` (fundamentals, market, analysis, auth, portfolio, watchlist) — `valuation.ts` and `ai.ts` removed with the classic engine
+- **Types**: Centralized in `types/` (fundamentals, market, analysis, auth, portfolio, watchlist) — `valuation.ts` and `ai.ts` removed with the classic engine; `LiteAnalysisResult` removed with Compare
 - **Cron**: Vercel Cron Job (`vercel.json`) fires POST to `/api/cron/portfolio-snapshot` weekdays at 20:00 UTC
 
 ---
@@ -41,8 +41,8 @@ Current project state and context for AI assistants.
 ## Current Features
 
 ### Hub (home `/`)
-- Adaptive landing that frames the pipeline **Discover (Advisor) → Screen (Compare) → Decide (`/analyze` Deep Value) → Monitor (Watchlist/Portfolio)**. `components/hub-client.tsx`; `app/page.tsx` is a server component calling `auth()` **without redirect**, passing `isAuthed` (primitive) so it renders logged-out too (no login wall).
-- 4 pipeline cards (each a `<Link>` to its stage) + primary "Start with the Advisor" CTA + a quick ticker box → `/analyze?ticker=` (full `window.location` navigation, not `router.push` — Router-Cache gotcha).
+- Adaptive landing that frames the pipeline **Discover (Advisor) → Decide (`/analyze` Deep Value) → Monitor (Watchlist/Portfolio)**. `components/hub-client.tsx`; `app/page.tsx` is a server component calling `auth()` **without redirect**, passing `isAuthed` (primitive) so it renders logged-out too (no login wall).
+- 3 pipeline cards (each a `<Link>` to its stage) + primary "Start with the Advisor" CTA + a quick ticker box → `/analyze?ticker=` (full `window.location` navigation, not `router.push` — Router-Cache gotcha).
 - Logged-in **recent-activity strip**: last 3 analyses (`fetchAnalyses`), portfolio P&L from the latest snapshot (`fetchSnapshots`), watchlist count (`GET /api/watchlist`). Fetched once via a `ranRef` guard (avoids the `useSession` re-render loop); each degrades to an empty state on failure.
 
 ### Deep Dive — `/analyze` (slim)
@@ -59,12 +59,14 @@ Current project state and context for AI assistants.
 - Fair value cards and method badge appear after streaming completes
 - Language selector (8 languages: EN, IT, ES, FR, DE, PT, ZH, JA); respects user's MoS setting
 - Prompt builders in `lib/ai/deep-value-prompts.ts`; endpoint at `/api/ai/deep-value`
+- **Model config**: `claude-opus-4-8`, adaptive thinking, `effort: "xhigh"`, `max_tokens: 64000`, streaming, web search. `xhigh` isn't in the pinned SDK's (`^0.78`) effort union yet — it's valid at the API level and cast (`as unknown as "high"`) in the route; see the Why-comment there.
+- **Analyst Review (red-team pass)**: after the report completes, a **"Run Analyst Review"** button (violet section under the report) streams an independent second-opinion critique from a fresh Opus 4.8 context via `/api/ai/deep-value/verify`. It stress-tests numbers/assumptions, spot-checks figures via web search, and gives a verdict on whether the base fair value holds — it does NOT rewrite the report (plain Markdown, no JSON). Builders `buildVerificationSystemPrompt` / `buildVerificationUserPrompt` in `lib/ai/deep-value-prompts.ts`. Client state (`reviewText`, `reviewStatus`, `reviewAbortRef`) in `deep-value-panel.tsx`, reset on each `handleGenerate()`; rendered via the shared `<ReportBody>`.
 - **Date injection**: route computes `currentDate` from `new Date()` and passes it to both prompt builders — prevents Claude from anchoring analysis to its training year (Aug 2025)
 - **Stream suppression**: server buffers all text until the ` ```json ` marker appears; intermediate reasoning text emitted between tool calls is silently discarded before reaching the client
 - **Valuation recap table** (`components/report/recap-table.tsx`, rendered via `ReportShell`): shown below the Markdown report once streaming completes. Displays a reference row with the current price (passed as `currentPrice` prop) followed by Bear / Base / Bull rows with fair value/buy-target and upside/downside %. The upside/downside is computed client-side as `(value − currentPrice) / currentPrice` — the AI's JSON no longer includes an `upside` field (it emitted it in the wrong scale). The Base row has a violet highlight. Column header is conditional: when `mosPercent > 0` → `{currency} Buy Target (-{mosPercent}%)`; when `mosPercent = 0` → `{currency} Fair Value`. This is correct because the AI outputs MoS-adjusted values in its JSON block when MoS > 0. Column headers contain the dynamic currency code and are intentionally not fully i18n-translated. Below 640px the table collapses into label/value cards via the `.rtable` utility.
 - **Report design + PDF export**: the live panel (once `status === "done"`) and the saved-analysis detail page both render `<ReportShell>` (`components/report/*`) — a masthead (company/ticker/report date), method/sector badges, the fair-value cards, the Markdown body, the recap table, and a static disclaimer footer, styled with a custom `@tailwindcss/typography` variant (`prose-report`) for an equity-research look. A **"Download PDF"** button on both surfaces calls `window.print()`; `app/print.css` hides app chrome and inverts the report to a print-safe light theme while keeping upside/downside and violet accent colors.
 - **Review Position (AI)**: when the user navigates from an exit signal badge (see Portfolio Tracker) with `?exitReview=1&wac=Y&prevFv=Z`, `analyze-client.tsx` reads all URL params before `replaceState` and stores `exitReviewContext: { wac, prevFv }` in state. `DeepValuePanel` receives this as `exitReviewContext` prop and renders an amber **"Review Position (AI)"** button above the standard violet button. Clicking it calls `buildReviewPositionSystemPrompt` + `buildReviewPositionUserPrompt` (in `lib/ai/deep-value-prompts.ts`) — same JSON output schema as deep value, different framing ("hold, add, or exit?", section 10 = "Hold, Add, or Exit Recommendation", includes WAC/prevFv/gain% in user message). `isReviewMode` boolean state tracks which button triggered streaming to show the spinner in the correct button. The amber info banner below the panel header shows WAC + previous FV.
-- **Decision Panel**: after streaming completes (`status === "done" && result && ticker`), a row of action buttons appears below "Save Report". Amber **"Add to Watchlist"** button (`WatchlistStatus = "idle" | "loading" | "saved" | "already"`) POSTs to `/api/watchlist`; 409 shows "In Watchlist" chip. Sky **"Add to Compare"** navigates to `/compare?tickers=${ticker}` via `window.location.href`. Both buttons reset on each new `handleGenerate()` call.
+- **Decision Panel**: after streaming completes (`status === "done" && result && ticker`), a row of action buttons appears below "Save Report". Amber **"Add to Watchlist"** button (`WatchlistStatus = "idle" | "loading" | "saved" | "already"`) POSTs to `/api/watchlist`; 409 shows "In Watchlist" chip. Resets on each new `handleGenerate()` call. _(The "Add to Compare" button was removed with the Compare page.)_
 
 ### User Accounts & Saved Analyses
 - Email + password registration/login (Auth.js v5, bcrypt)
@@ -120,50 +122,38 @@ Current project state and context for AI assistants.
 The Quality Scorecard (Piotroski / ROIC-WACC / Altman Z / FCF conversion), Valuation Metrics Cards, Historical Multiples chart, Fundamentals charts, and Reverse DCF were all removed with the classic engine (`lib/valuation/*`, `/api/fundamentals`, `/api/historical-multiples`). Their quantitative context now lives inside the AI Deep Value report's "Key Financial Data & Quality Metrics" section. Re-introducing deterministic quant cards as cheap context under Deep Value is a possible future enhancement (see "Next Priorities").
 
 ### Interactive UI
-- **Responsive (mobile/tablet)** — single stacked layout below `lg` (1024px), full desktop at/above `lg`, `sm` (640px) for phone↔tablet nuance. NavBar + Advisor sidebar become portaled drawers below `lg`; Compare/Watchlist tables become cards below `sm`; `.tap` helper (in `globals.css`, gated on `pointer:coarse`) gives 44px touch targets without bloating desktop; `viewport-fit=cover` + safe-area insets. Details + gotchas in AGENTS.md › "Responsive Design".
-- Auth-aware NavBar on all pages — active route highlighted; order reflects the pipeline (Advisor · Compare · Deep Value · Watchlist · Portfolio · Analyses). Below `lg` the links + email + sign-out collapse into a hamburger → portaled slide-in drawer
+- **Responsive (mobile/tablet)** — single stacked layout below `lg` (1024px), full desktop at/above `lg`, `sm` (640px) for phone↔tablet nuance. NavBar + Advisor sidebar become portaled drawers below `lg`; the Watchlist table becomes cards below `sm`; `.tap` helper (in `globals.css`, gated on `pointer:coarse`) gives 44px touch targets without bloating desktop; `viewport-fit=cover` + safe-area insets. Details + gotchas in AGENTS.md › "Responsive Design".
+- Auth-aware NavBar on all pages — active route highlighted; order reflects the pipeline (Advisor · Deep Value · Watchlist · Portfolio · Analyses). Below `lg` the links + email + sign-out collapse into a hamburger → portaled slide-in drawer
 - P&L and performance deltas shown as pill badges with colored background (`bg-emerald-500/15` / `bg-red-500/15`) — not plain colored text
 - Portfolio position rows: `N × buy_price → current_price [P&L badge]` — compact two-element layout
 - Input focus states (accent ring) on form fields and the Add Position modal
 - **Language toggle (EN/IT)** in NavBar — switches entire app UI; preference persisted in `sfa:language` localStorage. AI report panels default to the global language but allow per-report override. System: `lib/i18n/translations.ts` (type-safe dictionary) + `context/language-context.tsx` (React context + `useLanguage()` hook)
-- **LocalStorage keys**: `sfa:lastTicker`, `sfa:mosPercent`, `sfa:language`, `sfa:advisor-mode` (`"portfolio" | "discovery"`), `sfa:compareQueue` (JSON array of ticker strings, max 5). _The `sfa:scenarioOverrides` / `sfa:ddmScenarioOverrides` / `sfa:evEbitdaScenarioOverrides` keys were dropped with the classic engine._
+- **LocalStorage keys**: `sfa:lastTicker`, `sfa:mosPercent`, `sfa:language`, `sfa:advisor-mode` (`"portfolio" | "discovery"`). _`sfa:compareQueue` was dropped with the Compare page; `sfa:scenarioOverrides` / `sfa:ddmScenarioOverrides` / `sfa:evEbitdaScenarioOverrides` were dropped with the classic engine._
 
 ### AI Portfolio Advisor (`/advisor`)
 - Conversational chat page where the AI has full context of the user's portfolio and saved analyses
 - **Dual mode**: **Portfolio** (default) has full portfolio/analyses context; **Discovery** uses `buildDiscoverySystemPrompt()` — no portfolio context, focused on surfacing 3–5 investment candidates with thesis, ROIC, valuation setup, and risk. Mode toggled via a `Portfolio | Discovery` pill toggle, persisted in `localStorage["sfa:advisor-mode"]`. API route checks `body.mode` and skips the DB fetch for positions/analyses when `mode === "discovery"`.
 - **Context injection** (Portfolio mode): two parallel DB queries fetch positions + analyses (no `reportMd`); injected as compact markdown in the system prompt. For analyses with `mosPercent > 0`, `formatAnalysis()` reconstructs intrinsic values (`stored / (1 - mos/100)`) and shows both `Intrinsic Bear/Base/Bull` and `Buy Target (-X%) Bear/Base/Bull` so the AI correctly distinguishes the two. When `mosPercent = 0`, shows `Fair Value Bear/Base/Bull` unchanged.
-- **`[[TICKER]]` split-action chips**: Claude wraps tickers in `[[TICKER]]` → `preprocessMarkdown()` converts to `/analyze?ticker=XXX` → ReactMarkdown custom `a` component renders a two-zone chip: left zone navigates to dashboard via `window.location.href`; right zone (`+`) adds to `compareQueue` (localStorage `sfa:compareQueue`, max 5, deduped). `onAddToCompare` callback threaded via `AssistantBubble` → `MessageContent` props.
-- **Compare Queue bar**: visible above the input when `compareQueue.length > 0`. Shows ticker badges, a `✕` clear button, and a "Compare (N) →" button that navigates to `/compare?tickers=...` and clears the queue.
+- **`[[TICKER]]` chips**: Claude wraps tickers in `[[TICKER]]` → `preprocessMarkdown()` converts to `/analyze?ticker=XXX` → ReactMarkdown custom `a` component renders a **single-action** chip that navigates to `/analyze` via `window.location.href` (full navigation — Router-Cache gotcha). _(The former split-action "+" that added to a compare-queue was removed with the Compare page.)_
 - **Session persistence**: `AdvisorSession` + `AdvisorMessage` Prisma models. Full message sync after each response via `DELETE + createMany` in `$transaction`.
 - **Session sidebar**: lists past conversations ordered by `updatedAt desc`; auto-loads most recent on mount; delete on hover; "New chat" button.
 - **Streaming**: direct text streaming (`content_block_delta`). `max_tokens: 4096`, `temperature` default.
 - Prompt builders in `lib/ai/advisor-prompts.ts` (`buildAdvisorSystemPrompt`, `buildDiscoverySystemPrompt`); endpoint at `/api/ai/advisor`
 - Request schema: `{ messages, language, mode: "portfolio" | "discovery" = "portfolio" }`
 
-### Ticker Comparison (`/compare`)
-- Side-by-side AI fair value comparison for up to 5 tickers
-- `CompareResult` DB model: `@@unique([userId, ticker])` — one row per user per ticker, upserted on each run. Fields: `fairValueBull`, `fairValueBase`, `fairValueBear`, `method`, `sector`, `currency`, `analyzedAt`
-- **Flow**: user adds tickers → clicks "Run Analysis" → `POST /api/compare/analyze` runs `analyzeTickerLite` in parallel for all tickers → results upserted to DB → client fetches live prices separately
-- **DB persistence**: `GET /api/compare/results?tickers=A,B` restores previous results across sessions/devices
-- **MoS slider**: 0–40% (step 5%) applied client-side; raw intrinsic values stored in DB unchanged. `CompareResult` always stores intrinsic fair values (unlike `Analysis` which stores MoS-adjusted buy targets).
-- **Dual FV/buy-target display**: when `mosPercent > 0`, each Bear/Base/Bull cell shows two lines — intrinsic fair value (slate-200) above, buy target `intrinsic × (1 − mos/100)` (amber, smaller) below. A legend below the table labels the two lines. When `mosPercent = 0` only one line is shown.
-- **Inline upside/downside**: `±X%` shown next to each value (both intrinsic and buy target) vs current price
-- **Freshness badge**: green "oggi" / grey ≤3d / amber >3d based on `analyzedAt`
-- **Best-in-class ★**: ticker with highest MoS-adjusted base upside highlighted (≥2 ready tickers required)
-- **Watch button**: actions row has a "Watch" button per column (below "Deep Value →"). `compare-client.tsx` fetches `GET /api/watchlist` at mount to populate `watchedTickers: string[]`; `handleWatch()` POSTs to `/api/watchlist` with `companyName: ticker` as fallback (LiteAnalysisResult has no company name). Button hidden when not logged in. Shows "In Watchlist" chip once saved or if already in watchlist. Per-column `WatchStatus` tracked in `watchStatuses: Record<string, WatchStatus>` state inside `CompareTable`.
-- **URL persistence**: `?tickers=AAPL,MSFT` updated via `window.history.replaceState`
-- Components: `compare-client.tsx`, `compare-table.tsx`, `compare-ticker-input.tsx`
+### Ticker Comparison (`/compare`) — REMOVED
+The Compare page and its lite/Sonnet valuation engine were removed entirely (page, `compare-*` components, `/api/compare/analyze` + `/api/compare/results`, `lib/ai/lite-analysis.ts` / `analyzeTickerLite`, the `LiteAnalysisResult` type, and the `CompareResult` model + a drop migration). Rationale: it was a second valuation engine that could disagree with Deep Value, adding a screening step the pipeline no longer needs (Discover → Decide → Monitor). Screening now happens conversationally in the Advisor; the deep decision is a single Deep Value run per ticker.
 
 ### Watchlist + Email Digest
 - Users maintain a personal watchlist of tickers at `/watchlist`
 - **Price Proximity Badge**: shown in each row's Ticker cell. `priceDist = (currentPrice − adjustedBase) / adjustedBase × 100`. `>= 0` → emerald "AT TARGET"; `|dist| ≤ 10%` → amber "+X% to target"; `> 10%` → slate "+X% to target". Omitted when `adjustedBase` or `currentPrice` is null.
-- **Quick-action buttons**: each row has "Analyze" → `window.location.href = '/analyze?ticker=X'` and "Add to Compare" → `window.location.href = '/compare?tickers=X'`, styled as `Quick-Action Buttons` (see DESIGN.md §6). Rendered above Edit/Delete in the Actions column.
+- **Quick-action button**: each row has "Analyze" → `window.location.href = '/analyze?ticker=X'`, styled as a `Quick-Action Button` (see DESIGN.md §6). Rendered above Edit/Delete in the Actions column. _(The "Add to Compare" quick-action was removed with the Compare page.)_
 - `WatchlistItem`: `id, userId, ticker, companyName, mosPercent, notes, addedAt` — `@@unique([userId, ticker])`
 - `WatchlistRun`: **no longer written** — the lite analysis was removed from the watchlist. The watchlist UI + email digest now source from the user's latest saved Deep Value `Analysis` per ticker. Model left in the schema, unused (no migration).
 - **User-level toggle** `watchlistEnabled Boolean @default(true)` — when false, the cron skips the user entirely.
 - **Manual trigger**: `POST /api/watchlist/run` — rate-limited to once per 24h via `lastManualWatchlistRun DateTime?` on the User model
 - **Cron**: Vercel Cron fires `GET /api/cron/watchlist-analysis` on the 1st and 15th of each month at 08:00 UTC. Monthly-frequency users are skipped on the 15th.
-- **Source of values**: the watchlist row + email digest read the user's latest saved Deep Value `Analysis` per ticker (reconstruct the intrinsic from the stored buy target, then apply the item's own MoS). Lite analysis (`analyzeTickerLite`) is **Compare-only** now — the watchlist no longer runs it (no AI cost in the cron). Tickers without a saved Deep Value analysis show no values (use the row's Deep Value button to analyze).
+- **Source of values**: the watchlist row + email digest read the user's latest saved Deep Value `Analysis` per ticker (reconstruct the intrinsic from the stored buy target, then apply the item's own MoS). No AI runs in the cron. Tickers without a saved Deep Value analysis show no values (use the row's Deep Value button to analyze). _(Lite analysis was removed entirely with the Compare page.)_
 - **Email**: sent via Resend — dark-themed HTML table with bear/base(MoS-adjusted)/bull/price/upside/status. Native currency per row.
 - `lib/watchlist-analysis.ts` — `import "server-only"`, exports `runWatchlistAnalysisForAllUsers()` and `runWatchlistAnalysisForUser(userId)`
 - `lib/email.ts` — Resend client (lazily initialized to avoid build-time throw), exports `sendWatchlistDigest()`
@@ -195,8 +185,7 @@ The Quality Scorecard (Piotroski / ROIC-WACC / Altman Z / FCF conversion), Valua
 ```
 types/                 # fundamentals.ts, market.ts, analysis.ts, auth.ts, portfolio.ts, watchlist.ts
 lib/
-  ai/deep-value-prompts.ts # Prompt builders for deep value AI analysis (incl. Review Position)
-  ai/lite-analysis.ts      # analyzeTickerLite() — non-streaming, used by the compare endpoint (Compare only)
+  ai/deep-value-prompts.ts # Prompt builders for deep value + Analyst Review (verify) + Review Position
   ai/advisor-prompts.ts    # buildAdvisorSystemPrompt() — injects portfolio + analyses context
   yahoo-client.ts          # Yahoo adapter — getQuote + extractRawNumber + mapFundamentalsFromTimeSeries
   auth.ts                  # Auth.js v5 config
@@ -221,13 +210,12 @@ app/api/
   watchlist/settings/      # PATCH
   watchlist/run/           # POST — manual trigger (rate-limited)
   ai/deep-value/       # Autonomous deep value AI analysis (streaming)
+  ai/deep-value/verify/ # POST — Analyst Review red-team pass over the completed report (streaming)
   ai/advisor/          # POST — conversational advisor streaming endpoint
   advisor/sessions/    # GET + POST — list + create advisor sessions
   advisor/sessions/[id]/          # GET + DELETE — fetch session with messages / delete
   advisor/sessions/[id]/messages/ # POST — full message sync (delete + createMany)
-  compare/analyze/     # POST — runs analyzeTickerLite in parallel, upserts CompareResult
-  compare/results/     # GET — returns saved CompareResult rows for given tickers
-app/page.tsx (Hub home) app/analyze/ app/login/ app/register/ app/analyses/ app/analyses/[id]/ app/portfolio/ app/watchlist/ app/compare/ app/advisor/
+app/page.tsx (Hub home) app/analyze/ app/login/ app/register/ app/analyses/ app/analyses/[id]/ app/portfolio/ app/watchlist/ app/advisor/
 app/manifest.ts        # PWA Web App Manifest → /manifest.webmanifest
 app/icon.tsx           # Favicon (32×32, dynamic SVG via next/og)
 app/print.css          # @media print rules for the "Download PDF" feature (imported in layout.tsx)
@@ -235,7 +223,7 @@ components/            # hub-client, analyze-client, ticker-search, price-summar
                        # disclaimer-banner, deep-value-panel,
                        # analyses-list, portfolio-list, portfolio-history-chart,
                        # open-position-banner, nav-bar, login-form, register-form,
-                       # watchlist-client, compare-client, compare-table, compare-ticker-input,
+                       # watchlist-client,
                        # session-provider, page-header, pwa-register, advisor-client,
                        # download-pdf-button
   report/              # types, method-badges, fair-value-cards, recap-table, report-body,

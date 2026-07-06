@@ -6,7 +6,7 @@ Project-specific patterns, conventions, and knowledge for AI agents working on t
 
 ## Project Context
 
-Next.js 15 stock fundamental analysis tool with multi-method valuation (DCF, DDM, EV/EBITDA), sector-adaptive scenario modeling, Yahoo Finance integration, AI-generated investment analysis (Claude Opus 4.8 for Deep Value, Claude Sonnet 5 for Advisor/Compare, all with web search), portfolio tracker with live P&L, and user accounts with saved reports.
+Next.js 15 stock fundamental analysis tool with AI-generated investment analysis (Claude Opus 4.8 for Deep Value + its Analyst Review red-team pass, Claude Sonnet 5 for the Advisor, all with web search), portfolio tracker with live P&L, watchlist, and user accounts with saved reports. Pipeline: Discover (Advisor) → Decide (Deep Value) → Monitor (Watchlist/Portfolio).
 
 **Tech Stack:** Next.js 15 (App Router), TypeScript (strict), React 19, yahoo-finance2, Prisma 7 + Turso (libSQL), Auth.js v5, Anthropic SDK, Vitest + Testing Library, Tailwind CSS + `@tailwindcss/typography`, Framer Motion, Recharts
 
@@ -16,10 +16,9 @@ Next.js 15 stock fundamental analysis tool with multi-method valuation (DCF, DDM
 
 ```
 types/             # fundamentals.ts, market.ts, analysis.ts, auth.ts, portfolio.ts, watchlist.ts
-lib/               # Business logic and utilities (Yahoo quote adapter, AI prompts, lite analysis, snapshots, dividends, formatters)
+lib/               # Business logic and utilities (Yahoo quote adapter, AI prompts, snapshots, dividends, formatters)
   ai/
-    deep-value-prompts.ts   # Prompt builders for streaming deep value analysis
-    lite-analysis.ts        # analyzeTickerLite() — server-only, used by the compare endpoint (Compare only)
+    deep-value-prompts.ts   # Prompt builders for streaming deep value analysis + Analyst Review (verify) + Review Position
     advisor-prompts.ts      # buildAdvisorSystemPrompt() — injects portfolio + analyses context
   yahoo-client.ts  # Yahoo Finance API adapter
   auth.ts          # Auth.js v5 config
@@ -39,7 +38,6 @@ components/        # React components (all client-side, all "use client")
 app/api/           # API route handlers
 app/analyses/      # Saved analyses list + detail pages
 app/portfolio/     # Portfolio tracker page
-app/compare/       # Ticker comparison page
 app/watchlist/     # Watchlist page
 generated/prisma/  # Prisma 7 generated client (gitignored)
 prisma/            # Schema + migrations
@@ -68,7 +66,7 @@ __tests__/         # Vitest tests
 - Prompt builders: `buildDeepValueSystemPrompt()`, `buildDeepValueUserPrompt()` in `lib/ai/deep-value-prompts.ts`; `buildAdvisorSystemPrompt()`, `buildDiscoverySystemPrompt()` in `lib/ai/advisor-prompts.ts`
 
 ### LocalStorage Keys
-All prefixed with `sfa:`: `sfa:lastTicker`, `sfa:mosPercent`, `sfa:language`, `sfa:advisor-mode` (`"portfolio" | "discovery"`), `sfa:compareQueue` (JSON array of ticker strings, max 5, deduped). _The `sfa:scenarioOverrides` / `sfa:ddmScenarioOverrides` / `sfa:evEbitdaScenarioOverrides` keys were removed with the classic engine._
+All prefixed with `sfa:`: `sfa:lastTicker`, `sfa:mosPercent`, `sfa:language`, `sfa:advisor-mode` (`"portfolio" | "discovery"`). _`sfa:compareQueue` was removed with the Compare page; `sfa:scenarioOverrides` / `sfa:ddmScenarioOverrides` / `sfa:evEbitdaScenarioOverrides` were removed with the classic engine._
 
 ---
 
@@ -91,7 +89,7 @@ if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 
 // Use session.user.id — typed via declaration merge in types/auth.ts
 ```
 
-**Endpoints:** `/api/quote`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/DELETE), `/api/positions` (GET/POST), `/api/positions/[id]` (DELETE), `/api/ai/deep-value` (POST, streaming), `/api/ai/advisor` (POST, streaming conversational), `/api/advisor/sessions` (GET/POST), `/api/advisor/sessions/[id]` (GET/DELETE), `/api/advisor/sessions/[id]/messages` (POST, full replace), `/api/portfolio/snapshots` (GET), `/api/cron/portfolio-snapshot` (GET, Vercel Cron), `/api/watchlist` (GET/POST), `/api/watchlist/[id]` (DELETE/PATCH), `/api/watchlist/settings` (PATCH), `/api/watchlist/run` (POST), `/api/cron/watchlist-analysis` (GET, Vercel Cron), `/api/compare/analyze` (POST, runs lite AI for 1–5 tickers in parallel + upserts to DB), `/api/compare/results` (GET, returns saved CompareResult rows for given tickers)
+**Endpoints:** `/api/quote`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/DELETE), `/api/positions` (GET/POST), `/api/positions/[id]` (DELETE), `/api/ai/deep-value` (POST, streaming), `/api/ai/deep-value/verify` (POST, streaming — Analyst Review red-team pass), `/api/ai/advisor` (POST, streaming conversational), `/api/advisor/sessions` (GET/POST), `/api/advisor/sessions/[id]` (GET/DELETE), `/api/advisor/sessions/[id]/messages` (POST, full replace), `/api/portfolio/snapshots` (GET), `/api/cron/portfolio-snapshot` (GET, Vercel Cron), `/api/watchlist` (GET/POST), `/api/watchlist/[id]` (DELETE/PATCH), `/api/watchlist/settings` (PATCH), `/api/watchlist/run` (POST), `/api/cron/watchlist-analysis` (GET, Vercel Cron)
 
 ---
 
@@ -155,7 +153,7 @@ useEffect(() => {
 }, [userId, ...]);                                        // depend on userId string, not session
 ```
 
-This pattern is used in `compare-client.tsx` and should be used anywhere a component loads user-specific data once at mount.
+Use this pattern anywhere a component loads user-specific data once at mount (e.g. `watchlist-client.tsx`, `hub-client.tsx`).
 
 ### Next.js Typed Routes (`typedRoutes: true`)
 `router.push(dynamicString)` fails type check. Use `window.location.href` for dynamic redirects after auth.
@@ -237,33 +235,28 @@ yahooFinance.quoteSummary(ticker, { modules: ["summaryDetail", "defaultKeyStatis
 
 ## Multi-Method Valuation — REMOVED
 
-The classic `lib/valuation/*` engine (sector detection + DCF/DDM/EV-EBITDA + scenario presets) was removed. **AI Deep Value** now picks the method autonomously inside its prompt, and **lite-analysis** enforces sector→method rules in its system prompt (see "Lite analysis pattern" below). No client-side scenario sets are sent anymore.
+The classic `lib/valuation/*` engine (sector detection + DCF/DDM/EV-EBITDA + scenario presets) was removed. **AI Deep Value** now picks the method autonomously inside its prompt. No client-side scenario sets are sent anymore. _(The lite-analysis engine that enforced sector→method rules in a system prompt was itself removed with the Compare page.)_
 
 ---
 
 ## Anthropic AI Integration
 
-- **Model split**: `claude-opus-4-8` for Deep Value (`/api/ai/deep-value`, `max_tokens: 16000`) — the heaviest, least-frequent analysis, worth the higher cost for deeper reasoning. `claude-sonnet-5` for Advisor (`/api/ai/advisor`, `max_tokens: 4096`) and Compare/watchlist lite analysis (`lib/ai/lite-analysis.ts`, `max_tokens: 1000`) — both run more often and don't need Opus-tier reasoning.
-- **Every call** sets `thinking: { type: "adaptive" }` + `output_config: { effort: "high" }`.
-- **Sonnet 5 rejects non-default sampling params** (`temperature`, `top_p`, `top_k` → 400 error) and has adaptive thinking on by default — do not add `temperature` to any Sonnet 5 call. (`lite-analysis.ts` previously used `temperature: 0` for deterministic method selection; removed for this reason — determinism now comes entirely from the sector→method rules in the system prompt.)
+- **Model split**: `claude-opus-4-8` for Deep Value (`/api/ai/deep-value`, `max_tokens: 64000`, `effort: "xhigh"`) and its Analyst Review pass (`/api/ai/deep-value/verify`, `max_tokens: 16000`, `effort: "xhigh"`) — the heaviest, least-frequent analysis, worth the higher cost for deeper agentic reasoning. `claude-sonnet-5` for Advisor (`/api/ai/advisor`, `max_tokens: 4096`, `effort: "high"`) — runs more often and doesn't need Opus-tier depth.
+- **Every call** sets `thinking: { type: "adaptive" }`. Deep Value + verify use `effort: "xhigh"`, Advisor uses `"high"`.
+- **`"xhigh"` effort caveat**: valid on Opus 4.8 at the API level but not yet in the pinned SDK's (`^0.78`) effort union (`low|medium|high|max`). Both Deep Value routes cast it (`output_config: { effort: "xhigh" as unknown as "high" }`) — the string serializes through unchanged; the cast is compile-time only. Remove the cast if/when the SDK is bumped to a version that types `xhigh`.
+- **Sonnet 5 rejects non-default sampling params** (`temperature`, `top_p`, `top_k` → 400 error) and has adaptive thinking on by default — do not add `temperature` to any Sonnet 5 call.
 - Web search: `tools: [{ type: "web_search_20260209" as const, name: "web_search" }]` (dynamic-filtering variant — current-gen models only; use `web_search_20250305` for older models)
 - Stream via `client.messages.stream()` — listen for `content_block_delta` + `text_delta` events
 - Always inject language in both system + user prompt
 - **Prompt caching (`cache_control`) was evaluated and rejected** for this app: single-user usage (~1 analysis/day) never produces a second request against the same cached prefix within the 5-minute TTL, so it would only pay the ~1.25× write premium with no offsetting reads. Revisit only if usage patterns change (e.g. multi-user deployment, or Advisor conversations with turns closer than 5 minutes apart).
 
-### Lite analysis pattern (non-streaming, shared between cron + compare)
+### Analyst Review pattern (red-team / fresh-context verifier)
 
-`lib/ai/lite-analysis.ts` exports `analyzeTickerLite(ticker)` — non-streaming `messages.create()` call used by the **compare endpoint** (the watchlist no longer uses lite analysis — it sources from saved Deep Value analyses + live prices). Key invariants:
-- Sector→method rules are in the **system prompt** (not user prompt) as explicit mandatory rules with no exceptions — this is what keeps method selection deterministic now that `temperature: 0` is gone (see above):
-  ```
-  Financial / Banking / Insurance → P/B
-  Utilities / Water / Regulated infrastructure → DDM
-  Energy / Oil & Gas / Materials / Mining / Chemicals → EV/EBITDA
-  All other sectors → DCF
-  ```
-- `response.content` contains multiple `text` blocks (see gotcha #13) — always concatenate all before running the JSON regex
-- Returns `null` after 2 attempts — never throws, safe in `Promise.all()` parallel loops
-- `import "server-only"` — never import in client components
+After a Deep Value report completes, a **"Run Analyst Review"** button in `deep-value-panel.tsx` streams an independent second-opinion critique from `/api/ai/deep-value/verify`. Design notes:
+- **Fresh context, separate endpoint** — a distinct Opus 4.8 call that receives only the finished report (`stripJsonBlock(report)`), NOT the original conversation. This is the "independent verifier" pattern: a clean context red-teaming the output outperforms self-critique in the same context.
+- **It critiques, it does not rewrite** — the system prompt (`buildVerificationSystemPrompt`) frames the model as a skeptical second analyst that stress-tests numbers/assumptions, spot-checks figures via web search, and gives a verdict. Output is **plain Markdown, no JSON block** — rendered directly via the shared `<ReportBody>`.
+- **Client state** (`reviewText`, `reviewStatus`, `reviewAbortRef`) lives in `deep-value-panel.tsx` and is reset on every `handleGenerate()` — a new analysis invalidates any prior review; the in-flight review is aborted.
+- Same `ReadableStream` + `TextEncoder` streaming shape as the other AI routes; no JSON buffering (nothing to suppress).
 
 ### Deep Value pattern (autonomous valuation)
 
@@ -469,7 +462,7 @@ The app is mobile/tablet-optimized. Default Tailwind breakpoints; no custom scre
 
 ### Dense tables → cards below `sm`
 Two patterns, pick by row complexity:
-- **Per-card render path** (Compare, `compare-table.tsx`): `<table className="hidden …sm:block">` for desktop + a separate `sm:hidden` card list that reuses the same cell renderer (`renderCell`) — one logic source, two views.
+- **Per-card render path**: `<table className="hidden …sm:block">` for desktop + a separate `sm:hidden` card list that reuses the same cell renderer (`renderCell`) — one logic source, two views. _(Its former example, the Compare table, was removed with the Compare page; keep the pattern in mind for any new dense table with a shared cell renderer.)_
 - **`.rtable` CSS transform** (Watchlist, stateful rows): add `.rtable` to the `<table>`; below `sm` rows become cards via `display:block`, `thead` hides, each `td` becomes a label/value row with the label from `data-label`. Cells that carry a heading or button cluster opt out with `.rcell-block`. Strip the outer `.card` chrome on mobile (`max-sm:border-0 max-sm:bg-transparent max-sm:p-0 max-sm:shadow-none`) to avoid nested cards. **Gotcha:** `.rtable td` selectors out-specify cell-level `max-sm:*` utilities — change the `.rtable` CSS, don't add padding/border utilities to `.rtable` cells.
 
 ### Drawers (nav, advisor sidebar)
@@ -509,26 +502,13 @@ const raw = payload[0]?.payload as ChartPoint | undefined;
 
 Adding `overflow-x-auto` to a `<div>` wrapping a `<table className="w-full">` inside a `.card` will render a thin horizontal scrollbar even when the table fits — because the browser measures the table's natural unconstrained width before applying `w-full`. Remove `overflow-x-auto` when the table is expected to fill the card; only add it when content genuinely overflows (verified by testing at narrow viewport).
 
-### Split-action chips inside ReactMarkdown
+### Chips inside ReactMarkdown
 
-When a chip rendered via a ReactMarkdown custom `a` component needs two distinct click targets, wrap both buttons in an `inline-flex` `<span>` rather than using a single `<button>`:
+The Advisor renders `[[TICKER]]` markers as a **single-action** chip via a ReactMarkdown custom `a` component — a `<button>` that navigates to `/analyze?ticker=` on click (`advisor-client.tsx` → `MessageContent`). _(It was previously a two-zone split chip whose "+" added to a compare-queue; that secondary action was removed with the Compare page.)_
 
-```tsx
-// The outer <span> holds the ring; the two <button>s share it visually
-<span className="mx-0.5 inline-flex items-stretch rounded-md ring-1 ring-inset ring-sky-500/30">
-  <button onClick={() => navigate(ticker)} className="... rounded-l-md">
-    {children}
-  </button>
-  <span className="w-px bg-sky-500/30" />   {/* vertical divider */}
-  <button onClick={() => onSecondaryAction(ticker)} className="... rounded-r-md">
-    +
-  </button>
-</span>
-```
+**Important**: `ReactMarkdown` renders custom `a` components synchronously. The chip must be an inline element (`<button>`/`<span>`) — don't use `<div>` inside prose (block inside inline = hydration error).
 
-The secondary action callback (`onAddToCompare`) must be threaded as a prop from the parent component down to `MessageContent` → `AssistantBubble` → `MessageContent`. Using a React context is overkill for a single callback.
-
-**Important**: `ReactMarkdown` renders custom `a` components synchronously. The outer `<span>` is a valid inline element inside prose — don't use `<div>` (block inside inline = hydration error).
+If a future chip needs **two** click targets, wrap both `<button>`s in an `inline-flex` `<span>` (the span holds a shared ring, a `w-px` divider between the two) rather than nesting buttons — and thread the secondary callback down as a prop (a React context is overkill for one callback).
 
 ### Mode-conditional DB fetch in API routes
 
@@ -585,7 +565,7 @@ t: (key: keyof Translations) => string;
     let _client: Resend | null = null;
     function getClient() { return (_client ??= new Resend(process.env.KEY)); }
     ```
-15. **Next.js Router Cache blocks `?ticker=` on re-navigation**: `router.push('/analyze')` from another page can restore a cached `/analyze` without remounting `AnalyzeClient` — the `useEffect` that reads `?ticker=` never fires. Fix: use `window.location.href = '/analyze?ticker=XXX'` for full page navigation. This applies to every cross-page deep-link (advisor chips, compare, watchlist, analyses re-run, portfolio exit signal) — all use `window.location.href`.
+15. **Next.js Router Cache blocks `?ticker=` on re-navigation**: `router.push('/analyze')` from another page can restore a cached `/analyze` without remounting `AnalyzeClient` — the `useEffect` that reads `?ticker=` never fires. Fix: use `window.location.href = '/analyze?ticker=XXX'` for full page navigation. This applies to every cross-page deep-link (advisor chips, watchlist, analyses re-run, portfolio exit signal) — all use `window.location.href`.
 16. **Multiple `YahooFinance` instances each need `suppressNotices`**: If a route creates its own `new YahooFinance({ suppressNotices: [...] })` instead of importing the shared instance from `lib/yahoo-client.ts`, it gets a separate instance that still emits notices. Fix: add `suppressNotices` to each instance, or import the shared one. Symptom: warning persists after fixing `lib/yahoo-client.ts` and restarting the dev server.
 17. **ReactMarkdown filters non-standard URL protocols**: Custom protocol links like `ticker://AAPL` are silently stripped — the `href` received by the custom `a` component is `undefined` or empty. Always use a relative URL pattern (`/analyze?ticker=AAPL`) and match with a regex in the `a` component: `href?.match(/^\/analyze\?ticker=([A-Z0-9.]+)$/)`. This avoids protocol filtering and works correctly in both development and production.
 18. **`messages.findLast()` not available in configured TS lib**: The `Array.prototype.findLast` method requires `ES2023` lib target. Use `[...arr].reverse().find(predicate)` as a drop-in replacement.
