@@ -150,24 +150,28 @@ export function AnalyzeClient() {
 
   return (
     <main className="mx-auto max-w-7xl p-4 pb-10 sm:p-6 lg:p-8">
-      {/* Page header */}
-      <motion.header initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} className="mb-5">
+      {/* Page header — app chrome, excluded from the PDF export (window.print) */}
+      <motion.header initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} className="mb-5 print:hidden">
         <h1 className="font-display text-3xl font-bold sm:text-4xl">{t("appTitle")}</h1>
         <p className="mt-2 max-w-3xl text-sm text-muted">{t("appSubtitle")}</p>
       </motion.header>
 
       <div className="space-y-4">
-        {/* Disclaimer and search form */}
-        <DisclaimerBanner />
-        <TickerSearch
-          initialTicker={ticker}
-          loading={loadState === "loading"}
-          onSearch={(nextTicker) => {
-            const normalizedTicker = nextTicker.toUpperCase();
-            setTicker(normalizedTicker);
-            void fetchQuote(normalizedTicker);
-          }}
-        />
+        {/* Disclaimer and search form — app chrome, hidden in the PDF export */}
+        <div className="print:hidden">
+          <DisclaimerBanner />
+        </div>
+        <div className="print:hidden">
+          <TickerSearch
+            initialTicker={ticker}
+            loading={loadState === "loading"}
+            onSearch={(nextTicker) => {
+              const normalizedTicker = nextTicker.toUpperCase();
+              setTicker(normalizedTicker);
+              void fetchQuote(normalizedTicker);
+            }}
+          />
+        </div>
 
         {/* Loading state */}
         {loadState === "loading" && <div className="card text-sm text-muted">{t("loadingAnalysis")}</div>}
@@ -188,10 +192,14 @@ export function AnalyzeClient() {
             transition={{ duration: 0.35 }}
             className="space-y-4"
           >
-            <PriceSummary quote={quote} />
+            {/* Price header + MoS control are app chrome — the report shell below
+                carries its own masthead, so both are excluded from the PDF export. */}
+            <div className="print:hidden">
+              <PriceSummary quote={quote} />
+            </div>
 
             {/* Margin of safety — applied to the Deep Value buy targets */}
-            <div className="card">
+            <div className="card print:hidden">
               <label className="block">
                 <span className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted">
                   {t("marginOfSafety")} {mosPercent}%

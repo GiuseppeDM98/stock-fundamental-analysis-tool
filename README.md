@@ -22,7 +22,7 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **Margin of safety** adjustment (0-80%) for conservative valuations
 - **Client-side persistence** with localStorage for scenario configurations
 - **Deep Value Analysis** — Claude autonomously picks the valuation method and sources all financial data via web search; works for any global ticker; includes MOAT analysis, quality metrics, and near-term catalysts. Reports render in a clean, equity-research style and can be exported as a **PDF** with one click.
-- **Analyst Review** — after a Deep Value report, run an independent second-opinion pass: a fresh AI analyst red-teams the numbers and assumptions, spot-checks figures via web search, and gives a verdict on whether the base fair value holds
+- **Analyst Review** — after a Deep Value report, run an independent second-opinion pass: a fresh AI analyst red-teams the numbers and assumptions, spot-checks figures via web search, and gives a verdict on whether the base fair value holds. The review can be **saved with the analysis** (run it before or after saving), shows in a distinct panel with a **✓ Reviewed** badge, and is included in the PDF export
 - **User accounts** with saved reports — revisit your analyses anytime
 - **Portfolio tracker** — track real purchases with live P&L, multi-currency FX conversion, DCA aggregation (Weighted Average Cost per ticker), and cross-links to saved analyses per ticker
 - **Dividend tracking** — add an ISIN to any portfolio position and dividends paid on Borsa Italiana are automatically recorded at each daily snapshot; cumulative total shown in the summary bar
@@ -75,7 +75,7 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - 🧾 **Capital Gains Tax**: Set an optional tax rate per position to see estimated taxes and net P&L on unrealized gains; dividend totals show gross and estimated net
 - 📈 **Analysis Performance**: See how price moved since saving vs. fair value — "Under FV" / "Above FV" badge per report
 - 🌐 **EN / IT UI**: Switch the entire interface language from the navbar; preference saved automatically
-- 🔬 **Analyst Review**: After a Deep Value report, run an independent second-opinion pass — a fresh AI analyst red-teams the numbers and assumptions, spot-checks figures via web search, and gives a verdict on whether the base fair value holds
+- 🔬 **Analyst Review**: After a Deep Value report, run an independent second-opinion pass — a fresh AI analyst red-teams the numbers and assumptions, spot-checks figures via web search, and gives a verdict on whether the base fair value holds. Save it with the analysis and export it in the report PDF
 - 📬 **Watchlist + AI Email Digest**: Add any ticker to your watchlist and receive automatic bi-weekly or monthly emails with AI fair value estimates (Bear/Base/Bull), current price, upside vs. MoS target, and status badges — pause with a toggle when not actively investing
 - 📱 **Installable PWA**: Install the app on Android or iOS for a native-like experience — standalone mode, home screen icon, no browser chrome
 - 💬 **AI Portfolio Advisor**: Conversational AI at `/advisor` that knows your portfolio and saved analyses — ask free-form questions, receive stock recommendations as one-click Deep Value chips, with full conversation history saved to your account

@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import OpenPositionBanner from "@/components/open-position-banner";
 import SavedValuationSummary, { type SavedValuationMeta } from "@/components/saved-valuation-summary";
+import SavedAnalystReview from "@/components/saved-analyst-review";
 import DownloadPdfButton from "@/components/download-pdf-button";
 
 type PageProps = { params: Promise<{ id: string }> };
@@ -119,6 +120,17 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
             {markdown}
           </div>
         </div>
+      )}
+
+      {/* Analyst Review — render existing critique or let the user generate + persist one.
+          Only meaningful for reports with a parseable Deep Value JSON block. */}
+      {valuationMeta && (
+        <SavedAnalystReview
+          analysisId={analysis.id}
+          ticker={analysis.ticker}
+          reportMd={markdown}
+          initialReviewMd={analysis.reviewMd}
+        />
       )}
 
       <div className="mt-6 flex items-center justify-between print:hidden">

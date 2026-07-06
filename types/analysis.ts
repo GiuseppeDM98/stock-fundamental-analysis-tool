@@ -12,6 +12,8 @@ export type SavedAnalysis = {
   fairValueBase?: number | null;
   fairValueBear?: number | null;
   valuationMethod?: string | null;
+  // Independent "Analyst Review" critique — null until the user runs it.
+  reviewMd?: string | null;
   createdAt: string; // ISO 8601 string (JSON serialized from Date)
 };
 
@@ -26,4 +28,6 @@ export type SaveAnalysisRequest = {
   fairValueBase?: number;
   fairValueBear?: number;
   valuationMethod?: string;
+  // Attached only when the Analyst Review was run before saving.
+  reviewMd?: string;
 };

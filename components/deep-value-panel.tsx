@@ -229,6 +229,8 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
         fairValueBase: result?.base.fairValue,
         fairValueBear: result?.bear.fairValue,
         valuationMethod: result?.method,
+        // Attach the Analyst Review only if it has already completed for this report.
+        reviewMd: reviewStatus === "done" && reviewText ? reviewText : undefined,
       });
       setSaveStatus("saved");
     } catch (err) {
@@ -420,29 +422,40 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
         </div>
       )}
 
-      {/* Analyst Review — independent red-team pass over the completed report */}
+      {/* Analyst Review — independent red-team pass over the completed report.
+          Included in the PDF export only when a review actually exists; the
+          interactive controls (button/spinner/error) stay screen-only. */}
       {status === "done" && report && (
-        <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-5 print:hidden">
+        <div className={`rounded-xl border border-violet-500/20 bg-violet-500/5 p-5 ${reviewText ? "break-inside-avoid" : "print:hidden"}`}>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold text-violet-300">{t("analystReviewTitle")}</h3>
+            <h3 className="text-sm font-semibold text-violet-300 print:text-violet-700">{t("analystReviewTitle")}</h3>
             {reviewStatus === "idle" && (
               <button
                 onClick={handleRunReview}
-                className="tap rounded-lg border border-violet-500/40 px-3 py-1.5 text-xs font-medium text-violet-300 transition hover:border-violet-400 hover:bg-violet-500/10"
+                className="tap rounded-lg border border-violet-500/40 px-3 py-1.5 text-xs font-medium text-violet-300 transition hover:border-violet-400 hover:bg-violet-500/10 print:hidden"
               >
                 {t("analystReviewButton")}
               </button>
             )}
             {(reviewStatus === "loading" || reviewStatus === "streaming") && (
-              <span className="flex items-center gap-2 text-xs text-violet-300">
+              <span className="flex items-center gap-2 text-xs text-violet-300 print:hidden">
                 <span className="h-3 w-3 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />
                 {t("analystReviewRunning")}
               </span>
             )}
+            {/* Regenerate — e.g. after a truncated run, or to refresh the critique. */}
+            {reviewStatus === "done" && reviewText && (
+              <button
+                onClick={handleRunReview}
+                className="tap rounded-lg border border-violet-500/40 px-2.5 py-1 text-xs font-medium text-violet-300 transition hover:border-violet-400 hover:bg-violet-500/10 print:hidden"
+              >
+                {t("analystReviewRerun")}
+              </button>
+            )}
           </div>
 
           {reviewStatus === "error" && (
-            <div className="mt-3 flex items-center gap-3">
+            <div className="mt-3 flex items-center gap-3 print:hidden">
               <p className="text-sm text-red-400">{t("analystReviewError")}</p>
               <button
                 onClick={handleRunReview}
@@ -456,7 +469,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           {reviewText && (
             <div className="mt-3">
               {reviewStatus === "streaming" && (
-                <span className="mb-2 inline-block h-3 w-1.5 animate-pulse bg-violet-400" />
+                <span className="mb-2 inline-block h-3 w-1.5 animate-pulse bg-violet-400 print:hidden" />
               )}
               <ReportBody markdown={reviewText} />
             </div>

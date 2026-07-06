@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { auth } from "@/lib/auth";
+import { getQuote } from "@/lib/yahoo-client";
 import {
   buildVerificationSystemPrompt,
   buildVerificationUserPrompt,
@@ -41,8 +42,22 @@ export async function POST(request: Request) {
       day: "numeric",
     });
 
+    // Fetch the authoritative live price so the reviewer treats it as ground truth
+    // instead of "correcting" it with stale web-searched quotes (a real failure mode:
+    // it once flagged a correct price as overstated using month-old quotes). Best-effort
+    // — if the quote fails (rate limit, delisted), the review proceeds without it.
+    let currentPrice: number | undefined;
+    let currency = "";
+    try {
+      const quote = await getQuote(body.ticker);
+      currentPrice = quote.regularMarketPrice;
+      currency = quote.currency ?? "";
+    } catch {
+      // Non-fatal — omit the authoritative-price clause and let the review run.
+    }
+
     const systemPrompt = buildVerificationSystemPrompt(body.language, currentDate);
-    const userPrompt = buildVerificationUserPrompt(body.ticker, body.reportMd, body.language, currentDate);
+    const userPrompt = buildVerificationUserPrompt(body.ticker, body.reportMd, body.language, currentDate, currentPrice, currency);
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -51,10 +66,13 @@ export async function POST(request: Request) {
         try {
           const stream = client.messages.stream({
             model: "claude-opus-4-8",
-            // 16k: the critique itself is short, but xhigh adaptive thinking can consume a
-            // chunk of the budget before the visible output — headroom avoids truncation.
-            // Streaming, so no HTTP-timeout risk.
-            max_tokens: 16000,
+            // 16k was too low: with xhigh adaptive thinking + web search, the reasoning
+            // tokens (which count toward max_tokens) consumed almost the whole budget
+            // before the visible critique finished, so a real review truncated mid-word
+            // with stop_reason "max_tokens". Matched to the Deep Value route's 64k for a
+            // wide anti-truncation margin. Ceiling, not target — normal replies still stop
+            // at end_turn and cost the same. Streaming, so no HTTP-timeout risk.
+            max_tokens: 64000,
             thinking: { type: "adaptive" },
             // "xhigh" is valid on Opus 4.8 but not yet in the pinned SDK's effort union
             // (^0.78 types low|medium|high|max); it serializes through unchanged — cast
@@ -66,13 +84,26 @@ export async function POST(request: Request) {
           });
 
           // No JSON block to suppress here — forward all text deltas as they arrive.
+          let stopReason: string | null = null;
           for await (const event of stream) {
             if (
               event.type === "content_block_delta" &&
               event.delta.type === "text_delta"
             ) {
               controller.enqueue(new TextEncoder().encode(event.delta.text));
+            } else if (event.type === "message_delta" && event.delta.stop_reason) {
+              stopReason = event.delta.stop_reason;
             }
+          }
+
+          // Surface a hard token-cap cutoff instead of truncating silently — a clean
+          // mid-word cut is indistinguishable from a normal end. Mirrors /api/ai/advisor.
+          if (stopReason === "max_tokens") {
+            const isItalian = body.language === "Italiano" || body.language === "Italian";
+            const note = isItalian
+              ? "_[Revisione troncata: raggiunto il limite di lunghezza. Riavviala per rigenerarla.]_"
+              : "_[Review truncated: length limit reached. Re-run it to regenerate.]_";
+            controller.enqueue(new TextEncoder().encode(`\n\n${note}`));
           }
         } catch (streamErr) {
           const msg = streamErr instanceof Error ? streamErr.message : "AI error";
