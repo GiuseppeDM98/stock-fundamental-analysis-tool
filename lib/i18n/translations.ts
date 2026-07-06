@@ -105,6 +105,10 @@ export type Translations = {
   buyTargetBarLabel: string;
   aboveIntrinsicFv: string;
   underIntrinsicFv: string;
+  aboveBuyTarget: string;
+  underBuyTarget: string;
+  aboveFv: string;
+  underFv: string;
   olderAnalyses: string;
   noAnalysesMatchFilter: string;
   analysesCountLabel: string;
@@ -347,6 +351,10 @@ export type Translations = {
   analystReviewButton: string;
   analystReviewRunning: string;
   analystReviewError: string;
+  analystReviewSavedDesc: string;
+  analystReviewSavedNote: string;
+  analystReviewBadge: string;
+  analystReviewRerun: string;
 
   // ─── Pipeline actions ─────────────────────────────────────────────────────
   addToWatchlist: string;
@@ -484,6 +492,10 @@ const en: Translations = {
   buyTargetBarLabel: "Buy Target",
   aboveIntrinsicFv: "Above Intrinsic FV",
   underIntrinsicFv: "Under Intrinsic FV",
+  aboveBuyTarget: "Above Buy Target",
+  underBuyTarget: "Under Buy Target",
+  aboveFv: "Above FV",
+  underFv: "Under FV",
   olderAnalyses: "older analysis|older analyses",
   noAnalysesMatchFilter: "No analyses match the current filter.",
   analysesCountLabel: "analyses",
@@ -725,6 +737,10 @@ const en: Translations = {
   analystReviewButton: "Run Analyst Review",
   analystReviewRunning: "Reviewing…",
   analystReviewError: "Review failed. Try again.",
+  analystReviewSavedDesc: "Get an independent second opinion on this analysis. Once generated, it is saved alongside the report.",
+  analystReviewSavedNote: "Saved with this analysis",
+  analystReviewBadge: "Reviewed",
+  analystReviewRerun: "Re-run",
 
   // Pipeline actions
   addToWatchlist: "Add to Watchlist",
@@ -862,6 +878,10 @@ const it: Translations = {
   buyTargetBarLabel: "Buy Target",
   aboveIntrinsicFv: "Sopra FV Intrinseco",
   underIntrinsicFv: "Sotto FV Intrinseco",
+  aboveBuyTarget: "Sopra Buy Target",
+  underBuyTarget: "Sotto Buy Target",
+  aboveFv: "Sopra FV",
+  underFv: "Sotto FV",
   olderAnalyses: "analisi precedente|analisi precedenti",
   noAnalysesMatchFilter: "Nessuna analisi corrisponde al filtro.",
   analysesCountLabel: "analisi",
@@ -1103,6 +1123,10 @@ const it: Translations = {
   analystReviewButton: "Avvia Revisione Analista",
   analystReviewRunning: "Revisione in corso…",
   analystReviewError: "Revisione fallita. Riprova.",
+  analystReviewSavedDesc: "Ottieni un secondo parere indipendente su questa analisi. Una volta generata, viene salvata insieme al report.",
+  analystReviewSavedNote: "Salvata con questa analisi",
+  analystReviewBadge: "Revisionata",
+  analystReviewRerun: "Rigenera",
 
   // Pipeline actions
   addToWatchlist: "Aggiungi alla Watchlist",

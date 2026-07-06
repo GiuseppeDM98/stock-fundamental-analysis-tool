@@ -3,6 +3,33 @@
 // and autonomously picks the valuation method — no Yahoo Finance dependency.
 // Business logic lives here (not in the API route) per project conventions.
 
+// Shared "analytical rigor" checklist injected into BOTH the Deep Value and the
+// Review Position system prompts (between the scenario step and the output step).
+// Kept as one constant so the two near-identical prompts can't drift apart. Each
+// item hardens against a concrete failure mode surfaced by the Analyst Review
+// red-team pass (e.g. a stale quarter ignored, a superseded industrial plan cited,
+// an author estimate passed off as company guidance, reported EBITDA inflated by
+// one-offs, or scenarios that differ only by the exit multiple).
+const ANALYTICAL_RIGOR_BLOCK = `## Analytical rigor — MANDATORY checks
+These are non-negotiable. A valuation that fails them is not defensible.
+
+1. **Latest results, not just annual.** Beyond annual figures, search for the company's MOST RECENT quarterly/interim results and any trading updates from the last 6–12 months. State the latest reported period and its key numbers, then stress-test the base case against it: if the latest quarter's run-rate diverges materially from the full-year figures you assume, address the gap explicitly — never silently ignore a recent deterioration or acceleration.
+
+2. **Current guidance and plans only.** When you cite multi-year guidance or a strategic/industrial plan, verify it is the CURRENT version and give its publication date. Check whether it has been superseded by a newer plan or guidance; never build a case on a plan that has been replaced.
+
+3. **Guidance vs. your own estimate.** Only call a figure "guidance" if it comes from a primary company source (press release, filing, earnings call) — cite the source and date. If you derive or assume a number, label it explicitly as your estimate. Never present an assumption as official guidance.
+
+4. **Normalized earnings for multiples.** For EV/EBITDA, margin, and multiple analysis use RECURRING/normalized figures: strip out one-off items (asset disposals, insurance indemnities, impairments, litigation) and disclose them. Any headline multiple you quote must be computed on the normalized figure, not one flattered by non-recurring gains.
+
+5. **Differentiate scenarios on fundamentals.** The three scenarios must differ primarily through operating fundamentals (revenue growth, margins, EBITDA/FCF), not merely through the exit multiple or discount rate. Identify the single assumption that drives most of the value range and disclose its sensitivity (e.g. "each +1.0x on the exit multiple = +X per share"). If the whole upside rests on one lever, say so plainly.
+
+6. **Base case uses the central point.** For the base case use the central/most-likely point of any guidance or estimate range — not the optimistic end — especially when recent results trend below it. Reserve the top of the range for the bull case and the bottom for the bear case.
+
+7. **Closest comparables and structural discounts.** When valuing on a multiple, benchmark against the CLOSEST comparables (similar size, geography, ownership structure, free float, liquidity, index membership) — not just large global leaders that trade at a premium. Justify the target multiple against them. Assess whether any valuation discount is STRUCTURAL (controlling shareholder, thin free float, low liquidity, limited analyst coverage) — which tends to persist — versus a temporary anomaly likely to close. If your thesis depends on multiple re-rating, name the specific catalyst that would trigger it; if none is visible, temper the conclusion accordingly.
+
+8. **Internal consistency (final check).** Before emitting the JSON, verify that every number used in your scenario calculations matches the figure cited in the corresponding narrative. The inputs in the math must equal the inputs described in prose — no bull case that narrates one target but computes with another.
+`;
+
 /**
  * System prompt instructing Claude to:
  * 1. Identify sector via web search
@@ -61,6 +88,7 @@ Apply the chosen method with three scenario sets. For each scenario compute:
 **EV/EBITDA**: EV = EBITDA × multiple → subtract net debt → divide by shares.
 **P/B**: Fair value = Book Value per Share × target P/B multiple.
 
+${ANALYTICAL_RIGOR_BLOCK}
 ## Step 4 — Output format (MANDATORY — follow exactly)
 First, emit a JSON block with the computed values. Then write the full report.
 
@@ -198,6 +226,7 @@ Apply the chosen method with three scenario sets. For each scenario compute:
 **EV/EBITDA**: EV = EBITDA × multiple → subtract net debt → divide by shares.
 **P/B**: Fair value = Book Value per Share × target P/B multiple.
 
+${ANALYTICAL_RIGOR_BLOCK}
 ## Step 4 — Output format (MANDATORY — follow exactly)
 First, emit a JSON block with the computed values. Then write the full report.
 
@@ -287,7 +316,7 @@ export function buildReviewPositionUserPrompt(
   const mosClause = mosPercent > 0
     ? ` Apply a margin of safety of ${mosPercent}% to all fair values (buy target = intrinsic value × ${(1 - mosPercent / 100).toFixed(2)}).`
     : "";
-  return `Review my existing position in ${ticker}. Current price: ${currentPrice.toFixed(2)} ${currency}. My weighted average cost is ${reviewContext.wac.toFixed(2)} ${currency} (unrealized gain/loss: ${((currentPrice / reviewContext.wac - 1) * 100).toFixed(1)}%). My previous base fair value estimate was ${reviewContext.prevFv.toFixed(2)} ${currency} — the price has now reached that level.${dateClause}${mosClause}
+  return `Review my existing position in ${ticker}. Current price: ${currentPrice.toFixed(2)} ${currency} — this is the authoritative live market price; use it as the current price and do NOT replace it with web-searched quotes, which are frequently delayed or stale. My weighted average cost is ${reviewContext.wac.toFixed(2)} ${currency} (unrealized gain/loss: ${((currentPrice / reviewContext.wac - 1) * 100).toFixed(1)}%). My previous base fair value estimate was ${reviewContext.prevFv.toFixed(2)} ${currency} — the price has now reached that level.${dateClause}${mosClause}
 
 Use web search to find the latest financial data, choose the appropriate valuation method, compute updated fair values for bull/base/bear scenarios, and produce the hold/add/exit review in ${language} following the required format.`;
 }
@@ -309,7 +338,7 @@ export function buildDeepValueUserPrompt(
   const mosClause = mosPercent > 0
     ? ` Apply a margin of safety of ${mosPercent}% to all fair values (buy target = intrinsic value × ${(1 - mosPercent / 100).toFixed(2)}).`
     : "";
-  return `Analyze ${ticker}. Current price: ${currentPrice.toFixed(2)} ${currency}.${dateClause}${mosClause}
+  return `Analyze ${ticker}. Current price: ${currentPrice.toFixed(2)} ${currency} — this is the authoritative live market price. Use it as the current price for all upside/downside math; do NOT replace it with web-searched quotes, which are frequently delayed or stale.${dateClause}${mosClause}
 
 Use web search to find the financial data, choose the appropriate valuation method, compute the fair values for bull/base/bear scenarios, and produce the report in ${language} following the required format.`;
 }
@@ -335,6 +364,8 @@ export function buildVerificationSystemPrompt(language = "English", currentDate 
 ${dateClause}
 Read the report provided in the user message and critically stress-test it. Use web search to spot-check the most load-bearing figures (revenue, margins, FCF/EBITDA, net debt, shares, growth rate, discount rate, terminal assumptions) against primary sources.
 
+**Authoritative current price.** When the user message provides a current price, it comes from a live market-data feed and is authoritative. Do NOT flag it as wrong, "overstated", or "overvalued" on the basis of web-searched quotes — those are frequently delayed, stale, or from an intraday session and often disagree with the live price. Treat the provided price as ground truth for all "is it above/below fair value" reasoning; if a web quote differs, defer to the provided price.
+
 Focus your review on:
 1. **Internal consistency** — do the numbers add up? Does the fair value follow from the stated assumptions and method?
 2. **Assumption defensibility** — are growth, margin, discount-rate and terminal assumptions realistic vs. history and peers, or optimistic/pessimistic? Flag anything that materially swings the fair value.
@@ -354,15 +385,25 @@ Rules:
 
 /**
  * User message for the Analyst Review pass — carries the completed report to critique.
+ *
+ * @param currentPrice - Authoritative live price from the app's market-data feed.
+ *   When provided, it is stated as ground truth so the reviewer doesn't "correct" it
+ *   with stale web-searched quotes (see buildVerificationSystemPrompt).
  */
 export function buildVerificationUserPrompt(
   ticker: string,
   reportMd: string,
   language: string,
   currentDate = "",
+  currentPrice?: number,
+  currency = "",
 ): string {
   const dateClause = currentDate ? ` Today's date: ${currentDate}.` : "";
-  return `Independently review the following Deep Value report on ${ticker}.${dateClause} Red-team its numbers and assumptions, spot-check key figures via web search, and give your verdict in ${language} following the required format.
+  const priceClause =
+    currentPrice != null
+      ? ` Authoritative current price (live market feed${currentDate ? `, as of ${currentDate}` : ""}): ${currentPrice.toFixed(2)} ${currency}. Treat this as the true current price; do not override it with web-searched quotes.`
+      : "";
+  return `Independently review the following Deep Value report on ${ticker}.${dateClause}${priceClause} Red-team its numbers and assumptions, spot-check key figures via web search, and give your verdict in ${language} following the required format.
 
 --- REPORT UNDER REVIEW ---
 ${reportMd}
