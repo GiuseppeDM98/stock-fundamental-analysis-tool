@@ -4,6 +4,8 @@
 
 - **Analyst Review (second opinion)** — after a Deep Value report finishes, a **Run Analyst Review** button starts an independent red-team pass: a fresh AI analyst stress-tests the numbers and assumptions, spot-checks key figures via web search, and gives a verdict on whether the base fair value holds up. It reads as a concise critique below your report — a second set of eyes before you act.
 
+- **Save the Analyst Review with your analysis** — the second opinion is now kept alongside a saved analysis. Run it before or after saving; open any saved analysis later and the review is right there in a distinct violet panel, with a **✓ Reviewed** badge on the list card. You can regenerate it anytime with a **Re-run** button, and it's included in the PDF export.
+
 - **Margin of Safety & dual fair value** — set a Margin of Safety (0–80%) and the report shows both the intrinsic fair value (what the stock is worth) and the MoS-discounted buy target, for each Bear/Base/Bull scenario. A valuation recap table at the end of every report lists current price vs. fair values with upside/downside.
 
 - **Download reports as PDF** — a **Download PDF** button on both a completed analysis and any saved analysis opens a clean print layout (navigation and buttons hidden, upside/downside and accent colors preserved) — choose "Save as PDF" to export.
@@ -40,6 +42,12 @@
 
 ## 🐛 Bug Fixes
 
+- Fixed the **PDF export from the analysis page including an app "screenshot"** as the first page (the search box, disclaimer, market-data header, and Margin of Safety slider). The PDF now starts cleanly at the report, matching the saved-analysis export.
+
+- Fixed the **Analyst Review cutting off mid-sentence** on longer reviews — it now has far more room to work, and if it ever does reach the limit a clear "truncated" notice appears with a one-click **Re-run** to regenerate it.
+
+- Fixed a **mislabeled bar on the saved analyses page** — the buy-target gradient bar read "Above/Under FV" when it actually represents your buy target. It now reads "Above/Under Buy Target" and is properly translated.
+
 - Fixed **AI Advisor replies getting cut off mid-sentence** on longer answers — the length limit was too low for detailed Discovery responses. It has been raised substantially, and if a reply ever does hit the cap a clear "response truncated" notice now appears instead of the text simply stopping.
 
 - Fixed **AI responses truncating during long streaming** — a service-worker issue could sever the connection on lengthy analyses (Advisor and Deep Value), cutting the response short. Streaming responses are now delivered reliably.
@@ -71,6 +79,10 @@
 - Fixed a **crash on certain tickers** (some European stocks) that data providers return as unavailable — a clear error message is shown instead.
 
 ## 🔧 Improvements
+
+- **Deep Value analyses are more rigorous** — reports now incorporate the latest quarterly results (not just annual figures), verify that any cited guidance or business plan is the current version, separate official guidance from estimates, use normalized (recurring) earnings for valuation multiples, differentiate the Bull/Base/Bear scenarios on real fundamentals, and benchmark against the closest comparable companies rather than only large global peers. These directly address blind spots a second opinion used to catch.
+
+- **The Analyst Review trusts the app's live price** — it no longer second-guesses a correct current price using stale quotes from the web, so its "above or below fair value" verdict is reliable.
 
 - **Deep Value reports read like professional research** — clearer section dividers, consistent spacing and colors, and the exact same layout whether streaming live or opened from your saved history. The recap table collapses to stacked cards on narrow screens.
 

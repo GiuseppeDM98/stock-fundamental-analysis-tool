@@ -16,6 +16,8 @@ const saveSchema = z.object({
   fairValueBase: z.number().positive().optional(),
   fairValueBear: z.number().positive().optional(),
   valuationMethod: z.string().optional(),
+  // Optional Analyst Review critique, attached when run before saving.
+  reviewMd: z.string().max(60000).optional(),
 });
 
 export async function GET() {
@@ -37,6 +39,7 @@ export async function GET() {
       fairValueBase: true,
       fairValueBear: true,
       valuationMethod: true,
+      reviewMd: true,
     },
   });
 
@@ -69,6 +72,7 @@ export async function POST(request: Request) {
       fairValueBase: body.fairValueBase,
       fairValueBear: body.fairValueBear,
       valuationMethod: body.valuationMethod,
+      reviewMd: body.reviewMd,
     },
   });
 

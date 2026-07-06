@@ -44,6 +44,10 @@ model Analysis {
   fairValueBase    Float?
   fairValueBear    Float?
   valuationMethod  String?
+  // Optional "Analyst Review" — an independent red-team critique of this report.
+  // Null until the user runs the review (either before saving or later from the
+  // saved-analysis detail page). Stored as plain Markdown (no JSON block).
+  reviewMd         String?
   createdAt        DateTime @default(now())
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 

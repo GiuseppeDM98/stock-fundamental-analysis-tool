@@ -21,6 +21,20 @@ export async function saveAnalysis(data: SaveAnalysisRequest): Promise<SavedAnal
   return res.json();
 }
 
+/** Attaches (or replaces) the Analyst Review markdown on an existing saved analysis. */
+export async function updateAnalysisReview(id: string, reviewMd: string): Promise<SavedAnalysis> {
+  const res = await fetch(`/api/analyses/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reviewMd }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? "Failed to save review");
+  }
+  return res.json();
+}
+
 export async function deleteAnalysis(id: string): Promise<void> {
   const res = await fetch(`/api/analyses/${id}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Failed to delete analysis");

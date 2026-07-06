@@ -266,6 +266,10 @@ function PriceVsFVBar({
   buyTargetBarLabel,
   aboveIntrinsicFv,
   underIntrinsicFv,
+  aboveBuyTarget,
+  underBuyTarget,
+  aboveFv,
+  underFv,
 }: {
   currentPrice: number;
   bear: number;
@@ -279,6 +283,10 @@ function PriceVsFVBar({
   buyTargetBarLabel: string;
   aboveIntrinsicFv: string;
   underIntrinsicFv: string;
+  aboveBuyTarget: string;
+  underBuyTarget: string;
+  aboveFv: string;
+  underFv: string;
 }) {
   const showDual =
     mosPercent != null && mosPercent > 0 &&
@@ -315,8 +323,8 @@ function PriceVsFVBar({
           base={base}
           bull={bull}
           variant="yellow"
-          underLabel="Under FV"
-          overLabel="Above FV"
+          underLabel={underBuyTarget}
+          overLabel={aboveBuyTarget}
           showPriceLabel={true}
         />
       </div>
@@ -331,8 +339,8 @@ function PriceVsFVBar({
         base={base}
         bull={bull}
         variant="yellow"
-        underLabel="Under FV"
-        overLabel="Above FV"
+        underLabel={underFv}
+        overLabel={aboveFv}
       />
     </div>
   );
@@ -471,11 +479,16 @@ function TickerGroup({
   baseLabel,
   bullLabel,
   deleteLabel,
+  reviewedLabel,
   olderLabel,
   intrinsicBarLabel,
   buyTargetBarLabel,
   aboveIntrinsicFv,
   underIntrinsicFv,
+  aboveBuyTarget,
+  underBuyTarget,
+  aboveFv,
+  underFv,
 }: {
   ticker: string;
   analyses: SavedAnalysis[];
@@ -487,11 +500,16 @@ function TickerGroup({
   baseLabel: string;
   bullLabel: string;
   deleteLabel: string;
+  reviewedLabel: string;
   olderLabel: (n: number) => string;
   intrinsicBarLabel: string;
   buyTargetBarLabel: string;
   aboveIntrinsicFv: string;
   underIntrinsicFv: string;
+  aboveBuyTarget: string;
+  underBuyTarget: string;
+  aboveFv: string;
+  underFv: string;
 }) {
   const router = useRouter();
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -524,6 +542,12 @@ function TickerGroup({
           {latest.valuationMethod && (
             <span className="rounded bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-medium text-slate-400 shrink-0">
               {latest.valuationMethod}
+            </span>
+          )}
+          {/* Marks tickers whose latest analysis carries an Analyst Review. */}
+          {latest.reviewMd && (
+            <span className="rounded bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-medium text-violet-300 shrink-0">
+              ✓ {reviewedLabel}
             </span>
           )}
         </div>
@@ -613,6 +637,10 @@ function TickerGroup({
           buyTargetBarLabel={buyTargetBarLabel}
           aboveIntrinsicFv={aboveIntrinsicFv}
           underIntrinsicFv={underIntrinsicFv}
+          aboveBuyTarget={aboveBuyTarget}
+          underBuyTarget={underBuyTarget}
+          aboveFv={aboveFv}
+          underFv={underFv}
         />
       )}
 
@@ -899,11 +927,16 @@ export default function AnalysesList() {
               baseLabel={t("baseLabel")}
               bullLabel={t("bullLabel")}
               deleteLabel={t("deleteBtn")}
+              reviewedLabel={t("analystReviewBadge")}
               olderLabel={olderLabel}
               intrinsicBarLabel={t("intrinsicBarLabel")}
               buyTargetBarLabel={t("buyTargetBarLabel")}
               aboveIntrinsicFv={t("aboveIntrinsicFv")}
               underIntrinsicFv={t("underIntrinsicFv")}
+              aboveBuyTarget={t("aboveBuyTarget")}
+              underBuyTarget={t("underBuyTarget")}
+              aboveFv={t("aboveFv")}
+              underFv={t("underFv")}
             />
           ))}
         </div>
