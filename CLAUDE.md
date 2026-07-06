@@ -8,7 +8,7 @@ Current project state and context for AI assistants.
 
 **Version**: `1.0.0`
 **Status**: Active Development
-**Last Updated**: July 6, 2026 — **Deep Value depth + Compare removed**: (1) Deep Value now runs at `effort: "xhigh"` (was `high`) with `max_tokens: 64000` (was 16000) for deeper agentic research; (2) a new **Analyst Review** pass — an independent fresh-context Opus 4.8 red-team of the completed report (endpoint `/api/ai/deep-value/verify`, streaming, web search enabled) rendered in a collapsible violet section under the report via `<ReportBody>`; (3) the **Compare** page and its lite/Sonnet valuation engine were removed entirely (page, components, `/api/compare/*`, `lib/ai/lite-analysis.ts`, `LiteAnalysisResult`, `CompareResult` model + drop migration). The pipeline is now **Discover (Advisor) → Decide (Deep Value) → Monitor (Watchlist/Portfolio)** (3 stages). Advisor `[[TICKER]]` chips are now single-action (navigate only; the compare-queue was removed). _A future "paste financial data" grounding idea was deferred — see memory `project_paste_grounding_idea`._
+**Last Updated**: July 6, 2026 — **Advisor reliability fixes**: (1) **Stream truncation** — `public/sw.js` no longer proxies fetches (`event.respondWith(fetch(...))` was tying long-lived AI streams to the service-worker lifetime; Chrome kills idle SWs mid-stream → `Failed to fetch` + truncated replies). The fetch handler is now empty (`() => {}`), which still satisfies the PWA install prompt. (2) **`max_tokens` cutoff** — the Advisor route (`/api/ai/advisor`) was at `4096`; long Discovery replies exhausted it (thinking + web search count toward the budget) and stopped mid-word with `stop_reason: "max_tokens"`. Raised to `16000`; the route now tracks `stop_reason` and appends a visible "response truncated" marker (EN/IT) instead of cutting silently. (3) **Delisted-stock guard** — both Advisor prompts now require web-search-verifying a ticker is currently listed before recommending it (it had suggested Reno De Medici / RM.MI, delisted 2021); `Today is ${currentDate}` alone was insufficient. _A future "paste financial data" grounding idea and a deterministic `/api/quote` ticker-liveness check were deferred — see memory `project_paste_grounding_idea`._
 
 ---
 
@@ -137,7 +137,8 @@ The Quality Scorecard (Piotroski / ROIC-WACC / Altman Z / FCF conversion), Valua
 - **`[[TICKER]]` chips**: Claude wraps tickers in `[[TICKER]]` → `preprocessMarkdown()` converts to `/analyze?ticker=XXX` → ReactMarkdown custom `a` component renders a **single-action** chip that navigates to `/analyze` via `window.location.href` (full navigation — Router-Cache gotcha). _(The former split-action "+" that added to a compare-queue was removed with the Compare page.)_
 - **Session persistence**: `AdvisorSession` + `AdvisorMessage` Prisma models. Full message sync after each response via `DELETE + createMany` in `$transaction`.
 - **Session sidebar**: lists past conversations ordered by `updatedAt desc`; auto-loads most recent on mount; delete on hover; "New chat" button.
-- **Streaming**: direct text streaming (`content_block_delta`). `max_tokens: 4096`, `temperature` default.
+- **Streaming**: direct text streaming (`content_block_delta`). `max_tokens: 16000` (raised from 4096 — thinking + web search count toward the budget, so long Discovery replies were hitting `stop_reason: "max_tokens"` and truncating mid-word), `temperature` default. The route tracks `stop_reason` from `message_delta` events and appends a visible "response truncated" marker (EN/IT) on `"max_tokens"` instead of cutting silently.
+- **Delisted-stock guard**: both prompt builders require web-search-verifying a ticker is currently listed/traded before recommending it (`Today is ${currentDate}` alone doesn't prevent suggesting delisted names — training data lists them as active). Prompt-level mitigation; a deterministic `/api/quote` liveness check is a future enhancement.
 - Prompt builders in `lib/ai/advisor-prompts.ts` (`buildAdvisorSystemPrompt`, `buildDiscoverySystemPrompt`); endpoint at `/api/ai/advisor`
 - Request schema: `{ messages, language, mode: "portfolio" | "discovery" = "portfolio" }`
 
@@ -162,7 +163,7 @@ The Compare page and its lite/Sonnet valuation engine were removed entirely (pag
 ### PWA / Installability
 - Full PWA support — browsers show "Install App" prompt (Android Chrome) instead of plain "Add to Home Screen"
 - **Manifest**: `app/manifest.ts` exports `MetadataRoute.Manifest`; served automatically at `/manifest.webmanifest`. Fields: `name`, `short_name`, `display: standalone`, `start_url`, `background_color`, `theme_color`, `icons`
-- **Service Worker**: `public/sw.js` — network-only strategy (never caches API responses or AI data). Registered after hydration by `components/pwa-register.tsx`
+- **Service Worker**: `public/sw.js` — no caching. The fetch handler is intentionally **empty** (`() => {}`) — it must NOT proxy via `event.respondWith(fetch(...))`, which tied long-lived AI streams to the SW lifetime and truncated them when Chrome killed the idle SW. An empty handler still satisfies the PWA install prompt. Registered after hydration by `components/pwa-register.tsx`
 - **Icons**: `public/icons/icon-192.svg` (regular, rounded corners) + `public/icons/icon-512.svg` (maskable, full bleed). Both replicate the favicon design (`app/icon.tsx`): gradient `#0a101f → #1a2540`, trend line in `#38bdf8`, magnifying glass in white
 - **Metadata** in `app/layout.tsx`: `manifest`, `appleWebApp` (capable, statusBarStyle, title), `icons.icon` (explicit — auto-discovery from `app/icon.tsx` is unreliable in Next.js 15.5+), `icons.apple`. `themeColor` lives in the separate `viewport: Viewport` export (Next.js 15+ requirement)
 - **iOS**: no auto-prompt — user must Share → Add to Home Screen. Apple-touch-icon and `appleWebApp` metadata ensure the icon appears correctly
@@ -231,7 +232,7 @@ components/            # hub-client, analyze-client, ticker-search, price-summar
 lib/i18n/translations.ts   # EN/IT translation dictionary (~200 keys)
 context/language-context.tsx  # LanguageProvider + useLanguage() hook
 public/
-  sw.js                # Service Worker (network-only — required for PWA install prompt)
+  sw.js                # Service Worker (empty fetch handler — no proxy; required for PWA install prompt)
   icons/               # icon-192.svg (regular), icon-512.svg (maskable)
 prisma/                # schema.prisma + migrations
 generated/prisma/      # Prisma 7 generated client (gitignored)

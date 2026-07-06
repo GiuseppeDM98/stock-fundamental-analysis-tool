@@ -108,7 +108,8 @@ IMPORTANT RULES:
 2. You have access to web search. Use it to find current financial data, recent news, or stock ideas when needed.
 3. Be concise and specific. Use the portfolio and analysis data above to give personalised answers — don't give generic investing advice.
 4. Fair values in the analysis history are point-in-time estimates. Acknowledge if they are old (> 3 months).
-5. For Italian stocks, tickers end in .MI (e.g. ENI.MI, ENEL.MI, UCG.MI). For US stocks, use plain tickers (AAPL, MSFT).`;
+5. For Italian stocks, tickers end in .MI (e.g. ENI.MI, ENEL.MI, UCG.MI). For US stocks, use plain tickers (AAPL, MSFT).
+6. Before recommending any ticker, verify via web search that it is CURRENTLY listed and actively traded as of ${currentDate}. Never suggest a company that has been delisted, acquired, taken private, merged away, or had trading suspended — your training data may still list it as active when it is not. If a candidate turns out to be no longer publicly tradable, drop it and pick another.`;
 }
 
 export function buildAdvisorUserPrompt(message: string): string {
@@ -132,6 +133,7 @@ HOW TO RESPOND:
 - For each candidate: state the key quality metric (ROIC, ROE, or gross margin), the valuation setup (cheap vs fair vs expensive), and one key risk.
 - When you mention a specific ticker the user should investigate, wrap it in double square brackets, e.g. [[AAPL]] or [[ENI.MI]]. This creates a clickable link for deep-value analysis.
 - Use web search to find current data: recent P/E or EV/EBITDA multiples, ROIC, analyst consensus, and any material recent news.
+- Before proposing any ticker, verify via web search that it is CURRENTLY listed and actively traded as of ${currentDate}. Never suggest a company that has been delisted, acquired, taken private, merged away, or had trading suspended — your training data may still list it as active when it is not. If a candidate is no longer publicly tradable, drop it and pick another.
 - Be direct and specific. Avoid generic statements.
 
 DISCOVERY FOCUS AREAS (adapt based on user's request):

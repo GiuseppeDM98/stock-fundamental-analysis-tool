@@ -107,7 +107,13 @@ export async function POST(request: Request) {
         try {
           const stream = client.messages.stream({
             model: "claude-sonnet-5",
-            max_tokens: 4096,
+            // Headroom for adaptive thinking + web-search reasoning, which count
+            // toward max_tokens alongside the visible answer. At 4096 a long
+            // multi-candidate Discovery reply (thinking + several web searches +
+            // prose) exhausted the budget and got cut off mid-word with
+            // stop_reason "max_tokens". This is a ceiling, not a target — the model
+            // still stops at end_turn, so normal replies cost the same.
+            max_tokens: 16000,
             thinking: { type: "adaptive" },
             output_config: { effort: "high" },
             system: systemPrompt,
@@ -115,13 +121,26 @@ export async function POST(request: Request) {
             messages: anthropicMessages,
           });
 
+          let stopReason: string | null = null;
           for await (const event of stream) {
             if (
               event.type === "content_block_delta" &&
               event.delta.type === "text_delta"
             ) {
               controller.enqueue(new TextEncoder().encode(event.delta.text));
+            } else if (event.type === "message_delta" && event.delta.stop_reason) {
+              stopReason = event.delta.stop_reason;
             }
+          }
+
+          // Surface a hard token-cap cutoff instead of truncating silently — a
+          // clean mid-word cut with no marker is indistinguishable from a normal
+          // end for the user. See DEVELOPMENT_GUIDELINES: never swallow failures.
+          if (stopReason === "max_tokens") {
+            const note = body.language === "Italian"
+              ? "_[Risposta troncata: raggiunto il limite di lunghezza.]_"
+              : "_[Response truncated: length limit reached.]_";
+            controller.enqueue(new TextEncoder().encode(`\n\n${note}`));
           }
         } catch (streamErr) {
           const msg = streamErr instanceof Error ? streamErr.message : "AI error";
