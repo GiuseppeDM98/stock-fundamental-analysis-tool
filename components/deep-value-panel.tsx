@@ -76,6 +76,11 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
   const [result, setResult] = useState<DeepValueResult | null>(null);
   const [watchlistStatus, setWatchlistStatus] = useState<WatchlistStatus>("idle");
 
+  // Analyst Review — an independent fresh-context Opus pass that red-teams the report.
+  const [reviewText, setReviewText] = useState<string>("");
+  const [reviewStatus, setReviewStatus] = useState<Status>("idle");
+  const reviewAbortRef = useRef<AbortController | null>(null);
+
   const abortRef = useRef<AbortController | null>(null);
   // Tracks which button triggered the current analysis for spinner placement
   const [isReviewMode, setIsReviewMode] = useState(false);
@@ -99,6 +104,10 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
     setErrorMsg(null);
     setSaveStatus("idle");
     setWatchlistStatus("idle");
+    // A new analysis invalidates any prior review.
+    reviewAbortRef.current?.abort();
+    setReviewText("");
+    setReviewStatus("idle");
 
     try {
       const res = await fetch("/api/ai/deep-value", {
@@ -157,6 +166,54 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
     }
   }
 
+  async function handleRunReview() {
+    if (!ticker || !report) return;
+
+    reviewAbortRef.current?.abort();
+    const controller = new AbortController();
+    reviewAbortRef.current = controller;
+
+    setReviewText("");
+    setReviewStatus("loading");
+
+    try {
+      const res = await fetch("/api/ai/deep-value/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // Send the report without the machine-readable JSON block — the reviewer
+        // only needs the human-readable analysis to critique.
+        body: JSON.stringify({ ticker, reportMd: stripJsonBlock(report), language }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok || !res.body) throw new Error(`Request failed (${res.status})`);
+
+      setReviewStatus("streaming");
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+      let accumulated = "";
+
+      while (!done) {
+        const { value, done: streamDone } = await reader.read();
+        done = streamDone;
+        if (value) {
+          accumulated += decoder.decode(value, { stream: !streamDone });
+          setReviewText(accumulated);
+        }
+      }
+
+      setReviewStatus("done");
+    } catch (err) {
+      if ((err as Error).name === "AbortError") {
+        setReviewStatus("idle");
+        return;
+      }
+      setReviewStatus("error");
+    }
+  }
+
   async function handleSave() {
     if (!ticker || !report) return;
 
@@ -203,11 +260,6 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
     } catch {
       setWatchlistStatus("idle");
     }
-  }
-
-  function handleAddToCompare() {
-    if (!ticker) return;
-    window.location.href = `/compare?tickers=${encodeURIComponent(ticker)}`;
   }
 
   const isStreaming = status === "loading" || status === "streaming";
@@ -368,6 +420,50 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
         </div>
       )}
 
+      {/* Analyst Review — independent red-team pass over the completed report */}
+      {status === "done" && report && (
+        <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-5 print:hidden">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-violet-300">{t("analystReviewTitle")}</h3>
+            {reviewStatus === "idle" && (
+              <button
+                onClick={handleRunReview}
+                className="tap rounded-lg border border-violet-500/40 px-3 py-1.5 text-xs font-medium text-violet-300 transition hover:border-violet-400 hover:bg-violet-500/10"
+              >
+                {t("analystReviewButton")}
+              </button>
+            )}
+            {(reviewStatus === "loading" || reviewStatus === "streaming") && (
+              <span className="flex items-center gap-2 text-xs text-violet-300">
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />
+                {t("analystReviewRunning")}
+              </span>
+            )}
+          </div>
+
+          {reviewStatus === "error" && (
+            <div className="mt-3 flex items-center gap-3">
+              <p className="text-sm text-red-400">{t("analystReviewError")}</p>
+              <button
+                onClick={handleRunReview}
+                className="tap rounded-lg border border-violet-500/40 px-3 py-1 text-xs font-medium text-violet-300 transition hover:border-violet-400 hover:bg-violet-500/10"
+              >
+                {t("analystReviewButton")}
+              </button>
+            </div>
+          )}
+
+          {reviewText && (
+            <div className="mt-3">
+              {reviewStatus === "streaming" && (
+                <span className="mb-2 inline-block h-3 w-1.5 animate-pulse bg-violet-400" />
+              )}
+              <ReportBody markdown={reviewText} />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Decision Panel — pipeline routing after analysis completes */}
       {status === "done" && result && ticker && (
         <div className="flex flex-wrap gap-2 border-t border-slate-800/60 pt-4 print:hidden">
@@ -391,15 +487,6 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
                 {t("addToWatchlist")}
               </>
             )}
-          </button>
-
-          {/* Add to Compare */}
-          <button
-            onClick={handleAddToCompare}
-            className="tap inline-flex items-center gap-1.5 rounded-lg border border-sky-800/50 px-3 py-1.5 text-xs font-medium text-sky-400 transition hover:border-sky-600 hover:bg-sky-900/20"
-          >
-            <span>↔</span>
-            {t("addToCompare")}
           </button>
         </div>
       )}

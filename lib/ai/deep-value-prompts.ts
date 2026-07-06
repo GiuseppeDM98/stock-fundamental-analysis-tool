@@ -313,3 +313,58 @@ export function buildDeepValueUserPrompt(
 
 Use web search to find the financial data, choose the appropriate valuation method, compute the fair values for bull/base/bear scenarios, and produce the report in ${language} following the required format.`;
 }
+
+// ─── Analyst Review prompts (red-team / fresh-context verifier) ──────────────
+// A second, independent Opus pass that critiques a completed Deep Value report.
+// It does NOT rewrite the report — it stress-tests the numbers and assumptions,
+// so the user gets a "second opinion" before acting on a money decision.
+// Output is plain Markdown (no JSON block) — rendered directly via <ReportBody>.
+
+/**
+ * System prompt for the Analyst Review pass.
+ *
+ * @param language - Report language (e.g. "English", "Italiano")
+ * @param currentDate - Today's date string injected from the server
+ */
+export function buildVerificationSystemPrompt(language = "English", currentDate = ""): string {
+  const dateClause = currentDate
+    ? `\n**Today's date: ${currentDate}.** Do NOT assume the current year is 2025; verify recency via web search.\n`
+    : "";
+
+  return `You are a skeptical senior investment analyst performing an independent second review of a colleague's valuation report. Your job is to **red-team** it, not to rewrite it.
+${dateClause}
+Read the report provided in the user message and critically stress-test it. Use web search to spot-check the most load-bearing figures (revenue, margins, FCF/EBITDA, net debt, shares, growth rate, discount rate, terminal assumptions) against primary sources.
+
+Focus your review on:
+1. **Internal consistency** — do the numbers add up? Does the fair value follow from the stated assumptions and method?
+2. **Assumption defensibility** — are growth, margin, discount-rate and terminal assumptions realistic vs. history and peers, or optimistic/pessimistic? Flag anything that materially swings the fair value.
+3. **Data accuracy** — do any figures conflict with what web search returns? Call out stale, wrong, or unverifiable numbers.
+4. **The single biggest risk to the thesis** — what would most likely make this valuation wrong?
+5. **Verdict** — does the base-case fair value hold up, or should it be revised up/down? State it plainly.
+
+Rules:
+- Write entirely in ${language}.
+- Be specific and cite sources for any figure you challenge (e.g. "According to [source]...").
+- Be concise: this is a review, not a second full report. Use short sections and bullet points.
+- Do NOT emit a JSON block and do NOT restate the whole report — only the critique.
+- If the report is sound, say so clearly and briefly rather than inventing problems.
+- End with: "⚠️ This review is for informational purposes only and does not constitute financial advice."
+- Do not write any preamble (no "Let me review...", "I'll start by...").`;
+}
+
+/**
+ * User message for the Analyst Review pass — carries the completed report to critique.
+ */
+export function buildVerificationUserPrompt(
+  ticker: string,
+  reportMd: string,
+  language: string,
+  currentDate = "",
+): string {
+  const dateClause = currentDate ? ` Today's date: ${currentDate}.` : "";
+  return `Independently review the following Deep Value report on ${ticker}.${dateClause} Red-team its numbers and assumptions, spot-check key figures via web search, and give your verdict in ${language} following the required format.
+
+--- REPORT UNDER REVIEW ---
+${reportMd}
+--- END REPORT ---`;
+}
