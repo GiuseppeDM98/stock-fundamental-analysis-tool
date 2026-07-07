@@ -12,6 +12,7 @@ import { APP_TO_AI_LANGUAGE } from "@/lib/i18n/translations";
 import ReportBody from "@/components/report/report-body";
 import ReportShell from "@/components/report/report-shell";
 import type { DeepValueResult } from "@/components/report/types";
+import { parseDeepValueJson, stripJsonBlock } from "@/lib/report/parse-deep-value-json";
 
 type Props = {
   ticker: string | null;
@@ -34,20 +35,6 @@ const LANGUAGES = [
   { value: "中文", label: "🇨🇳 中文" },
   { value: "日本語", label: "🇯🇵 日本語" },
 ];
-
-function parseDeepValueJson(text: string): DeepValueResult | null {
-  const match = text.match(/```json\n([\s\S]*?)\n```/);
-  if (!match) return null;
-  try {
-    return JSON.parse(match[1]) as DeepValueResult;
-  } catch {
-    return null;
-  }
-}
-
-function stripJsonBlock(text: string): string {
-  return text.replace(/```json\n[\s\S]*?\n```\n?/, "");
-}
 
 export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, currentPrice, exitReviewContext }: Props) {
   const { data: session } = useSession();
@@ -79,6 +66,8 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
   // Analyst Review — an independent fresh-context Opus pass that red-teams the report.
   const [reviewText, setReviewText] = useState<string>("");
   const [reviewStatus, setReviewStatus] = useState<Status>("idle");
+  // The reviewer's own bull/base/bear valuation, parsed from the review's JSON block.
+  const [reviewResult, setReviewResult] = useState<DeepValueResult | null>(null);
   const reviewAbortRef = useRef<AbortController | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
@@ -108,6 +97,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
     reviewAbortRef.current?.abort();
     setReviewText("");
     setReviewStatus("idle");
+    setReviewResult(null);
 
     try {
       const res = await fetch("/api/ai/deep-value", {
@@ -174,6 +164,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
     reviewAbortRef.current = controller;
 
     setReviewText("");
+    setReviewResult(null);
     setReviewStatus("loading");
 
     try {
@@ -181,8 +172,9 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // Send the report without the machine-readable JSON block — the reviewer
-        // only needs the human-readable analysis to critique.
-        body: JSON.stringify({ ticker, reportMd: stripJsonBlock(report), language }),
+        // only needs the human-readable analysis to critique. mosPercent lets the
+        // reviewer emit its own fair values in the same (MoS-adjusted) unit as the base.
+        body: JSON.stringify({ ticker, reportMd: stripJsonBlock(report), language, mosPercent }),
         signal: controller.signal,
       });
 
@@ -204,6 +196,9 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
         }
       }
 
+      // Parse the reviewer's own valuation once streaming completes (null if it
+      // emitted no valid JSON — the critique still stands on its own).
+      setReviewResult(parseDeepValueJson(accumulated));
       setReviewStatus("done");
     } catch (err) {
       if ((err as Error).name === "AbortError") {
@@ -230,7 +225,13 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
         fairValueBear: result?.bear.fairValue,
         valuationMethod: result?.method,
         // Attach the Analyst Review only if it has already completed for this report.
-        reviewMd: reviewStatus === "done" && reviewText ? reviewText : undefined,
+        // Store the critique without its JSON block (the numbers live in the columns
+        // below); the reviewer's own fair values feed the consensus on the list page.
+        reviewMd: reviewStatus === "done" && reviewText ? stripJsonBlock(reviewText) : undefined,
+        reviewFairValueBull: reviewResult?.bull.fairValue,
+        reviewFairValueBase: reviewResult?.base.fairValue,
+        reviewFairValueBear: reviewResult?.bear.fairValue,
+        reviewValuationMethod: reviewResult?.method,
       });
       setSaveStatus("saved");
     } catch (err) {
@@ -471,7 +472,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
               {reviewStatus === "streaming" && (
                 <span className="mb-2 inline-block h-3 w-1.5 animate-pulse bg-violet-400 print:hidden" />
               )}
-              <ReportBody markdown={reviewText} />
+              <ReportBody markdown={stripJsonBlock(reviewText)} />
             </div>
           )}
         </div>

@@ -1,7 +1,9 @@
 // POST /api/ai/deep-value/verify — independent "Analyst Review" of a completed report.
 // A fresh-context Opus pass that red-teams the Deep Value report the client just
 // generated: it stress-tests numbers/assumptions and spot-checks figures via web
-// search, then streams a plain-Markdown critique (no JSON block).
+// search. It streams a leading JSON block with the reviewer's OWN bull/base/bear
+// valuation (same MoS-adjusted unit as the base analysis, so the two can be averaged
+// into a consensus) followed by the plain-Markdown critique.
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
@@ -16,6 +18,9 @@ const requestSchema = z.object({
   ticker: z.string().min(1).max(20),
   reportMd: z.string().min(1).max(60000),
   language: z.string().min(1).max(30).default("English"),
+  // Applied to the reviewer's own fair values so its JSON buy targets match the unit
+  // of the base analysis (MoS-adjusted) and the two can be averaged into a consensus.
+  mosPercent: z.number().min(0).max(80).default(0),
 });
 
 export async function POST(request: Request) {
@@ -56,8 +61,8 @@ export async function POST(request: Request) {
       // Non-fatal — omit the authoritative-price clause and let the review run.
     }
 
-    const systemPrompt = buildVerificationSystemPrompt(body.language, currentDate);
-    const userPrompt = buildVerificationUserPrompt(body.ticker, body.reportMd, body.language, currentDate, currentPrice, currency);
+    const systemPrompt = buildVerificationSystemPrompt(body.language, currentDate, body.mosPercent);
+    const userPrompt = buildVerificationUserPrompt(body.ticker, body.reportMd, body.language, currentDate, currentPrice, currency, body.mosPercent);
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -83,17 +88,39 @@ export async function POST(request: Request) {
             messages: [{ role: "user", content: userPrompt }],
           });
 
-          // No JSON block to suppress here — forward all text deltas as they arrive.
+          // Buffer text before the JSON block to suppress reasoning text Claude emits
+          // between web-search tool calls; only forward once ```json is seen. Mirrors
+          // the Deep Value route now that the reviewer leads with its own valuation JSON.
+          let jsonBlockStarted = false;
+          let preJsonBuffer = "";
           let stopReason: string | null = null;
           for await (const event of stream) {
             if (
               event.type === "content_block_delta" &&
               event.delta.type === "text_delta"
             ) {
-              controller.enqueue(new TextEncoder().encode(event.delta.text));
+              const text = event.delta.text;
+              if (!jsonBlockStarted) {
+                preJsonBuffer += text;
+                const jsonIdx = preJsonBuffer.indexOf("```json");
+                if (jsonIdx !== -1) {
+                  jsonBlockStarted = true;
+                  controller.enqueue(new TextEncoder().encode(preJsonBuffer.slice(jsonIdx)));
+                  preJsonBuffer = "";
+                }
+                // Silently discard pre-JSON reasoning text.
+              } else {
+                controller.enqueue(new TextEncoder().encode(text));
+              }
             } else if (event.type === "message_delta" && event.delta.stop_reason) {
               stopReason = event.delta.stop_reason;
             }
+          }
+
+          // Failsafe: if the model never emitted a JSON fence (e.g. it opened straight
+          // into prose), flush the buffered text so the critique is not swallowed.
+          if (!jsonBlockStarted && preJsonBuffer) {
+            controller.enqueue(new TextEncoder().encode(preJsonBuffer));
           }
 
           // Surface a hard token-cap cutoff instead of truncating silently — a clean

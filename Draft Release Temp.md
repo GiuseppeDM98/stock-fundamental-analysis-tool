@@ -6,6 +6,8 @@
 
 - **Save the Analyst Review with your analysis** — the second opinion is now kept alongside a saved analysis. Run it before or after saving; open any saved analysis later and the review is right there in a distinct violet panel, with a **✓ Reviewed** badge on the list card. You can regenerate it anytime with a **Re-run** button, and it's included in the PDF export.
 
+- **A second opinion with its own numbers** — the Analyst Review now commits to its own Bull / Base / Bear fair values, not just a written critique. On the saved-analyses card you see the reviewer's valuation next to the base analysis and a **consensus** (the average of the two) for each scenario, with the percentage gap between them — so you can gauge at a glance how much the red-team disagrees, and where.
+
 - **Margin of Safety & dual fair value** — set a Margin of Safety (0–80%) and the report shows both the intrinsic fair value (what the stock is worth) and the MoS-discounted buy target, for each Bear/Base/Bull scenario. A valuation recap table at the end of every report lists current price vs. fair values with upside/downside.
 
 - **Download reports as PDF** — a **Download PDF** button on both a completed analysis and any saved analysis opens a clean print layout (navigation and buttons hidden, upside/downside and accent colors preserved) — choose "Save as PDF" to export.
@@ -32,7 +34,7 @@
 
 - **Watchlist with email digest** — add any ticker and receive an automatic email (every two weeks or monthly) with the fair values from your latest saved Deep Value analysis, the live price, upside vs. your MoS target, and an "Under FV" / "Over FV" status. Each entry has its own MoS% slider. A per-row **Analyze** button launches a Deep Value analysis, and a price-proximity badge shows how close the current price is to your buy target. Pause the digest without deleting the list, or trigger an update on demand (rate-limited to once per 24h).
 
-- **Saved analyses, redesigned** — reports are grouped by ticker. Each card shows the latest Bear / Base / Bull fair values, a gradient bar placing the current price within the fair value range, and a collapsible history of older analyses. When a Margin of Safety was set, a violet "intrinsic value" row sits above a yellow "buy target" row so it's clear what the stock is worth vs. at what price it becomes a buy. Search by ticker/name, filter to "Under FV", or sort by recent / ticker / performance. A performance badge shows `$priceAtSave → $priceNow ±X%`.
+- **Saved analyses, redesigned** — reports are grouped by ticker as compact cards showing the live price and a **Buy / Watch / Over-FV verdict** at a glance. Expand a card for a single **valuation ruler** that places the current price on the Bear→Bull range with clear buy / watch zones, your fair value, the reviewer's fair value, and the consensus all marked on one axis (with their values), plus a compact **Analysis / Reviewer / Consensus** table you can flip between fair value and buy target. Metadata (performance, open-position P&L) and actions live in the expanded view; older analyses stay in a collapsible history. Search by ticker/name, filter to "Under FV", or sort by recent / ticker / performance. A performance badge shows `$priceAtSave → $priceNow ±X%`.
 
 - **User accounts** — register with email and password to save reports, revisit them at `/analyses`, and re-run any analysis with one click (ticker pre-filled).
 

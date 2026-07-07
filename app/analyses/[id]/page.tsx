@@ -129,6 +129,7 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
           analysisId={analysis.id}
           ticker={analysis.ticker}
           reportMd={markdown}
+          mosPercent={analysis.mosPercent}
           initialReviewMd={analysis.reviewMd}
         />
       )}
