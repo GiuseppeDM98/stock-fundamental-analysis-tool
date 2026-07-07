@@ -2,13 +2,23 @@
 
 // Watchlist page client component.
 // Fetches watchlist items + settings on mount, live prices in parallel.
-// Supports add/edit/remove items and settings (email, frequency, enabled toggle).
+// Supports add/edit/remove items and settings (notification email, enabled toggle).
+//
+// Each ticker is a card (compact → expandable) that reuses the saved-analyses valuation
+// ruler: it sources the user's latest saved Deep Value analysis per ticker, shows the
+// intrinsic fair value AND the (item-MoS-adjusted) buy target on one bear→bull axis, and —
+// when a red-team Analyst Review exists — the reviewer's fair value + the analysis↔reviewer
+// consensus. The buy target uses the *watchlist item's own* MoS (the user's per-ticker knob),
+// which is distinct from the analysis's MoS.
 import { useState, useEffect, useRef } from "react";
 import { useLanguage } from "@/context/language-context";
 import { fetchAnalyses } from "@/lib/analyses";
-import type { WatchlistItem, WatchlistSettings, WatchlistLastRun } from "@/types/watchlist";
+import type { WatchlistItem, WatchlistSettings } from "@/types/watchlist";
 import type { SavedAnalysis } from "@/types/analysis";
 import type { Translations } from "@/lib/i18n/translations";
+import { ValuationRuler, ComparisonTable, type Triple } from "@/components/report/valuation-ruler";
+import { getVerdict, VERDICT_BADGE, VERDICT_TEXT, type Verdict } from "@/lib/report/verdict";
+import { grossUpToIntrinsic } from "@/lib/report/valuation";
 
 // ─── Formatting ───────────────────────────────────────────────────────────────
 
@@ -19,11 +29,6 @@ function formatPrice(value: number, currency: string): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
-}
-
-function formatUpside(upside: number): string {
-  const pct = (upside * 100).toFixed(1);
-  return `${upside >= 0 ? "+" : ""}${pct}%`;
 }
 
 function formatDate(iso: string): string {
@@ -136,65 +141,120 @@ function AddTickerForm({ onAdd, t }: AddFormProps) {
   );
 }
 
-// ─── Watchlist row ────────────────────────────────────────────────────────────
+// ─── Watchlist card ───────────────────────────────────────────────────────────
 
-// Build a WatchlistLastRun-shaped object from a saved Deep Value analysis. Stored fair
-// values are MoS-adjusted buy targets, so gross them back up to the intrinsic fair value;
-// the row then re-applies the watchlist item's own MoS (matching the old WatchlistRun
-// convention, which stored raw fair values). Currency is left null — the row falls back
-// to the live quote currency (the Analysis row has no currency column).
-function deriveRunFromAnalysis(a: SavedAnalysis): WatchlistLastRun {
-  const mos = (a.mosPercent ?? 0) / 100;
-  const gross = (v: number | null | undefined): number | null => (v == null ? null : mos > 0 ? v / (1 - mos) : v);
-  return {
-    runAt: a.createdAt,
-    fairValueBull: gross(a.fairValueBull),
-    fairValueBase: gross(a.fairValueBase),
-    fairValueBear: gross(a.fairValueBear),
-    method: a.valuationMethod ?? null,
-    currency: null,
-  };
-}
-
-interface RowProps {
+interface CardProps {
   item: WatchlistItem;
   currentPrice: number | null;
-  // Currency of the live quote — used to format the current price (and as the row's
-  // currency fallback) so non-USD tickers (e.g. .MI → EUR) aren't shown with "$".
+  // Currency of the live quote — formats every value; falls back to EUR (never USD, since
+  // most watched tickers here are EUR-denominated). The Analysis row has no currency column.
   priceCurrency: string | null;
-  // Latest saved Deep Value analysis for this ticker, in WatchlistLastRun shape (or null
-  // if the ticker hasn't been analyzed yet). Replaces the old lite WatchlistRun source.
-  analysisRun: WatchlistLastRun | null;
+  // Latest saved Deep Value analysis for this ticker, or null if not analyzed yet.
+  analysis: SavedAnalysis | null;
   onDelete: (id: string) => void;
   onSave: (id: string, mosPercent: number, notes: string | null) => Promise<void>;
   t: (key: keyof Translations) => string;
 }
 
-function WatchlistRow({ item, currentPrice, priceCurrency, analysisRun, onDelete, onSave, t }: RowProps) {
+/**
+ * One ticker: compact by default (price + verdict + mini ruler), expands to the full
+ * valuation ruler + comparison table + edit controls. Reuses the saved-analyses ruler so
+ * the two pages read identically. The buy target uses the *watchlist item's* MoS (the user's
+ * per-ticker knob), distinct from the analysis's own MoS; reviewer + consensus are secondary
+ * marks (verdict/Δ% are driven by the analysis buy target, matching /analyses).
+ */
+function WatchlistCard({ item, currentPrice, priceCurrency, analysis, onDelete, onSave, t }: CardProps) {
+  const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editMos, setEditMos] = useState(item.mosPercent);
   const [editNotes, setEditNotes] = useState(item.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Ruler/table level: intrinsic fair value vs the (item-MoS-adjusted) buy target.
+  const [level, setLevel] = useState<"intrinsic" | "buyTarget">("intrinsic");
 
-  const run = analysisRun;
-  // Prefer the analysis-run currency; fall back to the live quote currency, then EUR
-  // (never default to USD — most watched tickers here are EUR-denominated).
-  const currency = run?.currency ?? priceCurrency ?? "EUR";
-  const adjustedBase =
-    run?.fairValueBase != null ? run.fairValueBase * (1 - item.mosPercent) : null;
-  const upside =
-    adjustedBase != null && currentPrice != null
-      ? (adjustedBase - currentPrice) / currentPrice
+  const currency = priceCurrency ?? "EUR";
+  const itemMos = item.mosPercent; // fraction 0–0.8, the user's per-ticker knob
+
+  // ── Valuation, derived from the latest saved analysis ──
+  const aMos = (analysis?.mosPercent ?? 0) / 100; // the analysis's own MoS
+  const hasFV =
+    analysis?.fairValueBear != null &&
+    analysis?.fairValueBase != null &&
+    analysis?.fairValueBull != null;
+  const hasReviewerFv =
+    hasFV &&
+    analysis?.reviewFairValueBear != null &&
+    analysis?.reviewFairValueBase != null &&
+    analysis?.reviewFairValueBull != null;
+
+  // Intrinsic scale: stored fair values are buy targets discounted by the analysis MoS —
+  // gross them back up. Buy-target scale: discount the intrinsic by the *item's* MoS.
+  const toIntrinsic = (v: number) => grossUpToIntrinsic(v, aMos);
+  const toBuyTarget = (v: number) => v * (1 - itemMos);
+
+  const intrinsic: Triple | null = hasFV
+    ? {
+        bear: toIntrinsic(analysis!.fairValueBear!),
+        base: toIntrinsic(analysis!.fairValueBase!),
+        bull: toIntrinsic(analysis!.fairValueBull!),
+      }
+    : null;
+  const reviewerIntrinsic: Triple | null = hasReviewerFv
+    ? {
+        bear: toIntrinsic(analysis!.reviewFairValueBear!),
+        base: toIntrinsic(analysis!.reviewFairValueBase!),
+        bull: toIntrinsic(analysis!.reviewFairValueBull!),
+      }
+    : null;
+
+  const buyTargetBase = intrinsic ? toBuyTarget(intrinsic.base) : null;
+  const verdict: Verdict | null =
+    intrinsic && buyTargetBase != null && currentPrice != null
+      ? getVerdict(currentPrice, buyTargetBase, intrinsic.base)
+      : null;
+  // Distance of the price from the buy target (the actionable reference).
+  const buyTargetPct =
+    buyTargetBase != null && currentPrice != null
+      ? ((currentPrice - buyTargetBase) / buyTargetBase) * 100
       : null;
 
-  // Price proximity to buy target: negative = below target (good), positive = above target
-  const priceDist =
-    adjustedBase != null && currentPrice != null
-      ? (currentPrice - adjustedBase) / adjustedBase * 100
-      : null;
+  const verdictLabel = (v: Verdict) =>
+    v === "buy" ? t("verdictBuy") : v === "watch" ? t("verdictWatch") : t("verdictOver");
 
-  async function handleSave() {
+  // Ruler marks projected to the selected level (axis + zones stay on the intrinsic scale).
+  const projectMark = (v: number) => (level === "buyTarget" ? toBuyTarget(v) : v);
+  const markers = intrinsic
+    ? {
+        analysisLabel: level === "intrinsic" ? t("fvShort") : t("buyTargetBarLabel"),
+        analysis: projectMark(intrinsic.base),
+        reviewerLabel: t("reviewerLabel"),
+        reviewer: reviewerIntrinsic ? projectMark(reviewerIntrinsic.base) : undefined,
+        consensusLabel: t("consensusLabel"),
+        consensus: reviewerIntrinsic
+          ? (projectMark(intrinsic.base) + projectMark(reviewerIntrinsic.base)) / 2
+          : undefined,
+      }
+    : null;
+
+  // ComparisonTable takes buy-target triples + the item MoS; it re-derives intrinsic.
+  const toBuyTargetTriple = (t3: Triple): Triple => ({
+    bear: toBuyTarget(t3.bear),
+    base: toBuyTarget(t3.base),
+    bull: toBuyTarget(t3.bull),
+  });
+  const analysisBT = intrinsic ? toBuyTargetTriple(intrinsic) : null;
+  const reviewerBT = reviewerIntrinsic ? toBuyTargetTriple(reviewerIntrinsic) : undefined;
+  const consensusBT =
+    analysisBT && reviewerBT
+      ? {
+          bear: (analysisBT.bear + reviewerBT.bear) / 2,
+          base: (analysisBT.base + reviewerBT.base) / 2,
+          bull: (analysisBT.bull + reviewerBT.bull) / 2,
+        }
+      : undefined;
+
+  async function handleSaveEdit() {
     setSaving(true);
     try {
       await onSave(item.id, editMos, editNotes || null);
@@ -205,169 +265,238 @@ function WatchlistRow({ item, currentPrice, priceCurrency, analysisRun, onDelete
   }
 
   return (
-    <tr className="border-b border-slate-800/60 text-sm">
-      {/* Ticker + Company + Method badge + last run date */}
-      <td className="rcell-block py-3 pr-4">
-        <span className="font-semibold text-slate-100">{item.ticker}</span>
-        <br />
-        <span className="text-xs text-muted">{item.companyName}</span>
-        <div className="mt-1 flex flex-wrap items-center gap-2">
-          {run?.method && (
-            <span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs text-slate-400">{run.method}</span>
+    <div className="card">
+      {/* Header — toggles expand */}
+      <div className="flex items-start justify-between gap-3">
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          className="min-w-0 flex-1 text-left"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="shrink-0 font-mono text-base font-bold text-accent">{item.ticker}</span>
+            <span className="truncate text-sm text-slate-400">{item.companyName}</span>
+            {analysis?.valuationMethod && (
+              <span className="shrink-0 rounded bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-medium text-slate-400">
+                {analysis.valuationMethod}
+              </span>
+            )}
+            {analysis?.reviewMd && (
+              <span className="shrink-0 rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-300">
+                ✓ {t("analystReviewBadge")}
+              </span>
+            )}
+            <span className="shrink-0 rounded-full bg-slate-700/60 px-2 py-0.5 text-[10px] font-medium text-slate-300">
+              MoS −{(itemMos * 100).toFixed(0)}%
+            </span>
+          </div>
+
+          {/* Collapsed summary: price + verdict at a glance */}
+          {!expanded && (
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+              {currentPrice != null ? (
+                <span className="tabular-nums text-slate-300">{formatPrice(currentPrice, currency)}</span>
+              ) : (
+                <span className="text-slate-600">{t("priceNa")}</span>
+              )}
+              {verdict && buyTargetPct != null ? (
+                <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${VERDICT_BADGE[verdict]}`}>
+                  {verdictLabel(verdict)} {buyTargetPct > 0 ? "+" : ""}
+                  {buyTargetPct.toFixed(0)}%
+                </span>
+              ) : !hasFV ? (
+                <span className="text-[10px] text-slate-600">{t("watchlistNoLastRun")}</span>
+              ) : null}
+            </div>
           )}
-          <span className="text-xs text-slate-600">
-            {run ? formatDate(run.runAt) : t("watchlistNoLastRun")}
-          </span>
-          {priceDist != null && (
-            priceDist >= 0 ? (
-              <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-400">
-                {t("priceAtTarget")}
-              </span>
-            ) : Math.abs(priceDist) <= 10 ? (
-              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-400">
-                +{Math.abs(priceDist).toFixed(1)}% to target
-              </span>
-            ) : (
-              <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-medium text-slate-500">
-                +{Math.abs(priceDist).toFixed(1)}% to target
-              </span>
-            )
+
+          {expanded && analysis && (
+            <p className="mt-1 text-xs text-slate-500">{formatDate(analysis.createdAt)}</p>
           )}
+        </button>
+
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          aria-label={expanded ? "Collapse" : "Expand"}
+          className="tap shrink-0 rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-slate-600 hover:text-slate-200"
+        >
+          <span className={`inline-block transition-transform duration-150 ${expanded ? "rotate-180" : ""}`}>▾</span>
+        </button>
+      </div>
+
+      {/* Collapsed mini ruler */}
+      {!expanded && intrinsic && buyTargetBase != null && (
+        <div className="mt-2">
+          <ValuationRuler
+            compact
+            min={intrinsic.bear}
+            max={intrinsic.bull}
+            price={currentPrice ?? undefined}
+            buyTargetEdge={buyTargetBase}
+            fvEdge={intrinsic.base}
+            priceLabel={t("priceShort")}
+          />
         </div>
-        {item.notes && !editing && (
-          <p className="mt-1 text-xs italic text-muted">{item.notes}</p>
-        )}
-      </td>
+      )}
 
-      {/* MoS% + edit */}
-      <td data-label="MoS%" className="py-3 pr-4">
-        {editing ? (
-          <div className="flex flex-col gap-1">
-            <span className="text-xs text-muted">{(editMos * 100).toFixed(0)}%</span>
-            <input
-              type="range"
-              min={0}
-              max={0.8}
-              step={0.05}
-              value={editMos}
-              onChange={(e) => setEditMos(parseFloat(e.target.value))}
-              className="w-28 accent-sky-500"
-            />
-            <input
-              value={editNotes}
-              onChange={(e) => setEditNotes(e.target.value)}
-              placeholder={t("watchlistNotes")}
-              maxLength={500}
-              className="mt-1 w-40 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100 focus:outline-none"
-            />
-          </div>
-        ) : (
-          <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-xs font-medium text-sky-300">
-            −{(item.mosPercent * 100).toFixed(0)}%
-          </span>
-        )}
-      </td>
+      {/* Expanded body */}
+      {expanded && (
+        <div className="mt-3">
+          {intrinsic && buyTargetBase != null ? (
+            <>
+              {/* Verdict line */}
+              {verdict && buyTargetPct != null && (
+                <p className="mb-3 text-xs">
+                  <span className={`font-semibold ${VERDICT_TEXT[verdict]}`}>{verdictLabel(verdict)}</span>
+                  <span className="text-slate-400">
+                    {" · "}
+                    {Math.abs(buyTargetPct).toFixed(0)}%{" "}
+                    {buyTargetPct <= 0 ? t("belowBuyTargetPhrase") : t("aboveBuyTargetPhrase")}
+                  </span>
+                </p>
+              )}
 
-      {/* Bear */}
-      <td data-label="Bear" className="py-3 pr-4 text-right text-sm text-slate-500">
-        {run?.fairValueBear != null ? formatPrice(run.fairValueBear, currency) : <span className="text-muted">—</span>}
-      </td>
+              <ValuationRuler
+                min={intrinsic.bear}
+                max={intrinsic.bull}
+                price={currentPrice ?? undefined}
+                buyTargetEdge={buyTargetBase}
+                fvEdge={intrinsic.base}
+                markers={markers ?? undefined}
+                priceLabel={t("priceShort")}
+                currency={currency}
+              />
 
-      {/* Base (MoS-adjusted) — target buy price, most prominent column */}
-      <td data-label="Base −MoS%" className="py-3 pr-4 text-center">
-        {adjustedBase != null ? (
-          <span className="font-bold text-sky-300">{formatPrice(adjustedBase, currency)}</span>
-        ) : (
-          <span className="text-muted">—</span>
-        )}
-      </td>
+              {/* Level toggle — drives the ruler marks + the table (only when the item's
+                  margin of safety separates the buy target from the intrinsic value). */}
+              {itemMos > 0 && (
+                <div className="mt-3 inline-flex rounded-md border border-slate-700 p-0.5 text-[11px]">
+                  {(["intrinsic", "buyTarget"] as const).map((lv) => (
+                    <button
+                      key={lv}
+                      onClick={() => setLevel(lv)}
+                      aria-pressed={level === lv}
+                      className={`tap rounded px-2 py-0.5 transition ${
+                        level === lv ? "bg-sky-500/15 text-sky-300" : "text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      {lv === "intrinsic" ? t("intrinsicBarLabel") : t("buyTargetBarLabel")}
+                    </button>
+                  ))}
+                </div>
+              )}
 
-      {/* Bull */}
-      <td data-label="Bull" className="py-3 pr-4 text-right text-sm text-slate-500">
-        {run?.fairValueBull != null ? formatPrice(run.fairValueBull, currency) : <span className="text-muted">—</span>}
-      </td>
+              <ComparisonTable
+                analysis={analysisBT!}
+                reviewer={reviewerBT}
+                consensus={consensusBT}
+                mos={itemMos}
+                level={level}
+                currency={currency}
+                labels={{
+                  analysis: t("analysisLabel"),
+                  reviewer: t("reviewerLabel"),
+                  consensus: t("consensusLabel"),
+                  bear: t("bearLabel"),
+                  base: t("baseLabel"),
+                  bull: t("bullLabel"),
+                }}
+              />
+            </>
+          ) : (
+            <p className="text-xs text-slate-500">{t("watchlistNoLastRun")}</p>
+          )}
 
-      {/* Current price */}
-      <td data-label="Prezzo" className="py-3 pr-4 text-right">
-        {currentPrice != null ? (
-          formatPrice(currentPrice, currency)
-        ) : (
-          <span className="text-muted">—</span>
-        )}
-      </td>
+          {item.notes && !editing && <p className="mt-3 text-xs italic text-muted">{item.notes}</p>}
 
-      {/* Upside */}
-      <td data-label="Upside" className="py-3 pr-4 text-right">
-        {upside != null ? (
-          <span className={upside >= 0 ? "font-medium text-emerald-400" : "font-medium text-red-400"}>
-            {formatUpside(upside)}
-          </span>
-        ) : (
-          <span className="text-muted">—</span>
-        )}
-      </td>
-
-      {/* Actions */}
-      <td className="rcell-block py-3 text-right">
-        {editing ? (
-          <div className="flex items-center gap-2 justify-end max-sm:justify-start">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="tap rounded-lg bg-accent px-3 py-1 text-xs font-semibold text-slate-950 transition hover:brightness-110 disabled:opacity-60"
-            >
-              {saving ? t("savingState") : t("watchlistSaveItem")}
-            </button>
-            <button
-              onClick={() => setEditing(false)}
-              className="tap rounded-lg border border-slate-700 px-3 py-1 text-xs text-muted transition hover:text-slate-100"
-            >
-              {t("cancelBtn")}
-            </button>
-          </div>
-        ) : confirmDelete ? (
-          <div className="flex items-center gap-2 justify-end max-sm:justify-start">
-            <button
-              onClick={() => onDelete(item.id)}
-              className="tap rounded-lg bg-red-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-red-500"
-            >
-              {t("deleteBtn")}
-            </button>
-            <button
-              onClick={() => setConfirmDelete(false)}
-              className="tap rounded-lg border border-slate-700 px-3 py-1 text-xs text-muted transition hover:text-slate-100"
-            >
-              {t("cancelBtn")}
-            </button>
-          </div>
-        ) : (
-          <div className="flex flex-col items-end gap-2 max-sm:flex-row max-sm:flex-wrap max-sm:items-center">
-            <div className="flex items-center gap-2">
+          {/* Edit form / actions */}
+          {editing ? (
+            <div className="mt-3 flex flex-col gap-3 border-t border-slate-700/50 pt-3">
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-muted">
+                  {t("watchlistMosPercent")}: {(editMos * 100).toFixed(0)}%
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={0.8}
+                  step={0.05}
+                  value={editMos}
+                  onChange={(e) => setEditMos(parseFloat(e.target.value))}
+                  className="w-full max-w-xs accent-sky-500"
+                />
+              </label>
+              <input
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                placeholder={t("watchlistNotes")}
+                maxLength={500}
+                className="w-full max-w-md rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 focus:outline-none"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSaveEdit}
+                  disabled={saving}
+                  className="tap rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:brightness-110 disabled:opacity-60"
+                >
+                  {saving ? t("savingState") : t("watchlistSaveItem")}
+                </button>
+                <button
+                  onClick={() => {
+                    setEditing(false);
+                    setEditMos(item.mosPercent);
+                    setEditNotes(item.notes ?? "");
+                  }}
+                  className="tap rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-muted transition hover:text-slate-100"
+                >
+                  {t("cancelBtn")}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <button
-                onClick={() => { window.location.href = `/analyze?ticker=${item.ticker}`; }}
-                className="tap rounded-md border border-slate-700/60 px-2.5 py-1 text-xs font-medium text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
+                onClick={() => {
+                  window.location.href = `/analyze?ticker=${encodeURIComponent(item.ticker)}`;
+                }}
+                className="tap rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:brightness-110"
               >
                 {t("navDeepValue")}
               </button>
-            </div>
-            <div className="flex items-center gap-2">
               <button
                 onClick={() => setEditing(true)}
-                className="tap rounded-lg border border-slate-700 px-3 py-1 text-xs text-muted transition hover:text-slate-100"
+                className="tap rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-muted transition hover:text-slate-100"
               >
                 {t("watchlistEditItem")}
               </button>
-              <button
-                onClick={() => setConfirmDelete(true)}
-                className="tap rounded-lg border border-red-800/50 px-3 py-1 text-xs text-red-400 transition hover:border-red-600 hover:text-red-300"
-              >
-                {t("deleteBtn")}
-              </button>
+              {confirmDelete ? (
+                <>
+                  <button
+                    onClick={() => onDelete(item.id)}
+                    className="tap rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-500"
+                  >
+                    {t("deleteBtn")}
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete(false)}
+                    className="tap rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-muted transition hover:text-slate-100"
+                  >
+                    {t("cancelBtn")}
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  className="tap rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-muted transition hover:border-red-500/50 hover:text-danger"
+                >
+                  {t("deleteBtn")}
+                </button>
+              )}
             </div>
-          </div>
-        )}
-      </td>
-    </tr>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -385,7 +514,6 @@ interface SettingsPanelProps {
 function SettingsPanel({ settings, onSave, onManualRun, manualRunLoading, cooldownMsg, t }: SettingsPanelProps) {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState(settings.watchlistEmail ?? "");
-  const [freq, setFreq] = useState(settings.watchlistFreq);
   const [enabled, setEnabled] = useState(settings.watchlistEnabled);
   const [saving, setSaving] = useState(false);
 
@@ -394,7 +522,6 @@ function SettingsPanel({ settings, onSave, onManualRun, manualRunLoading, cooldo
     try {
       await onSave({
         watchlistEmail: email || null,
-        watchlistFreq: freq,
         watchlistEnabled: enabled,
       });
     } finally {
@@ -446,34 +573,8 @@ function SettingsPanel({ settings, onSave, onManualRun, manualRunLoading, cooldo
             />
           </label>
 
-          {/* Frequency */}
-          <div>
-            <span className="mb-2 block text-xs text-muted">
-              {freq === "monthly" ? t("watchlistFreqMonthly") : t("watchlistFreqBiweekly")}
-            </span>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setFreq("biweekly")}
-                className={`rounded-lg border px-3 py-1.5 text-sm transition ${
-                  freq === "biweekly"
-                    ? "border-sky-500 bg-sky-500/10 text-sky-300"
-                    : "border-slate-700 text-muted hover:text-slate-100"
-                }`}
-              >
-                {t("watchlistFreqBiweekly")}
-              </button>
-              <button
-                onClick={() => setFreq("monthly")}
-                className={`rounded-lg border px-3 py-1.5 text-sm transition ${
-                  freq === "monthly"
-                    ? "border-sky-500 bg-sky-500/10 text-sky-300"
-                    : "border-slate-700 text-muted hover:text-slate-100"
-                }`}
-              >
-                {t("watchlistFreqMonthly")}
-              </button>
-            </div>
-          </div>
+          {/* Cadence — the digest is sent daily for everyone (no per-user frequency). */}
+          <p className="text-xs text-muted">{t("watchlistDailyNote")}</p>
 
           {/* Save + Manual run */}
           <div className="flex flex-wrap gap-3 pt-1">
@@ -511,12 +612,13 @@ export default function WatchlistClient() {
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [settings, setSettings] = useState<WatchlistSettings>({
     watchlistEmail: null,
-    watchlistFreq: "biweekly",
     watchlistEnabled: true,
   });
   const [prices, setPrices] = useState<Record<string, number>>({});
   const [currencies, setCurrencies] = useState<Record<string, string>>({});
-  const [analysisRuns, setAnalysisRuns] = useState<Record<string, WatchlistLastRun>>({});
+  // Latest saved Deep Value analysis per ticker — the full row, so the card can read the
+  // reviewer's fair values + consensus (not just a lossy derived shape).
+  const [latestAnalyses, setLatestAnalyses] = useState<Record<string, SavedAnalysis>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [manualRunLoading, setManualRunLoading] = useState(false);
@@ -536,9 +638,7 @@ export default function WatchlistClient() {
           const existing = latest[a.ticker];
           if (!existing || new Date(a.createdAt) > new Date(existing.createdAt)) latest[a.ticker] = a;
         }
-        const runs: Record<string, WatchlistLastRun> = {};
-        for (const [ticker, a] of Object.entries(latest)) runs[ticker] = deriveRunFromAnalysis(a);
-        setAnalysisRuns(runs);
+        setLatestAnalyses(latest);
       })
       .catch(() => {});
   }, []);
@@ -683,41 +783,20 @@ export default function WatchlistClient() {
           <p className="text-sm text-muted">{t("watchlistEmptyHint")}</p>
         </div>
       ) : (
-        <div className="card overflow-x-auto max-sm:border-0 max-sm:bg-transparent max-sm:p-0 max-sm:shadow-none">
-          {/* Below sm the outer card chrome is stripped (via max-sm:*) so the
-              per-row cards from .rtable stand alone, not nested in a glow card. */}
-          <table className="rtable w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-800">
-                <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-muted">Ticker</th>
-                <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-muted whitespace-nowrap">MoS%</th>
-                <th className="pb-3 pr-4 text-right text-xs font-medium uppercase tracking-wider text-muted">Bear</th>
-                <th className="pb-3 pr-4 text-center text-xs font-medium uppercase tracking-wider text-sky-400 whitespace-nowrap">Base −MoS% ↓</th>
-                <th className="pb-3 pr-4 text-right text-xs font-medium uppercase tracking-wider text-muted">Bull</th>
-                <th className="pb-3 pr-4 text-right text-xs font-medium uppercase tracking-wider text-muted">Prezzo</th>
-                <th className="pb-3 pr-4 text-right text-xs font-medium uppercase tracking-wider text-muted">Upside</th>
-                <th className="pb-3 text-right text-xs font-medium uppercase tracking-wider text-muted whitespace-nowrap">Azioni</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => (
-                <WatchlistRow
-                  key={item.id}
-                  item={item}
-                  currentPrice={prices[item.ticker] ?? null}
-                  priceCurrency={currencies[item.ticker] ?? null}
-                  analysisRun={analysisRuns[item.ticker] ?? null}
-                  onDelete={handleDelete}
-                  onSave={handleSaveItem}
-                  t={t}
-                />
-              ))}
-            </tbody>
-          </table>
-          <p className="mt-3 text-xs text-muted">
-            Bear e Bull sono i fair value grezzi stimati dall&apos;AI.{" "}
-            <span className="text-sky-400">Base −MoS%</span> è il prezzo target di acquisto: fair value base scontato del tuo margine di sicurezza.
-          </p>
+        <div className="space-y-3">
+          {items.map((item) => (
+            <WatchlistCard
+              key={item.id}
+              item={item}
+              currentPrice={prices[item.ticker] ?? null}
+              priceCurrency={currencies[item.ticker] ?? null}
+              analysis={latestAnalyses[item.ticker] ?? null}
+              onDelete={handleDelete}
+              onSave={handleSaveItem}
+              t={t}
+            />
+          ))}
+          <p className="text-xs text-muted">{t("watchlistRulerHint")}</p>
         </div>
       )}
 

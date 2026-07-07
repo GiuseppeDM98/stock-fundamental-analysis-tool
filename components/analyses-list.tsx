@@ -6,13 +6,16 @@
 // valuation ruler (one bear→bull axis carrying price, buy zone, analysis FV, reviewer
 // FV and consensus), a compact Analysis/Reviewer/Consensus table, P&L metadata, and a
 // collapsible history of older saves for the same ticker.
-import { useState, useEffect, useMemo, Fragment, type ReactNode } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { fetchAnalyses, deleteAnalysis } from "@/lib/analyses";
 import { fetchPositions } from "@/lib/portfolio";
 import type { SavedAnalysis } from "@/types/analysis";
 import type { Position } from "@/types/portfolio";
 import { useLanguage } from "@/context/language-context";
+import { ValuationRuler, ComparisonTable } from "@/components/report/valuation-ruler";
+import { getVerdict, VERDICT_BADGE, VERDICT_TEXT, type Verdict } from "@/lib/report/verdict";
+import { grossUpToIntrinsic } from "@/lib/report/valuation";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -51,276 +54,7 @@ function groupByTicker(analyses: SavedAnalysis[]): Map<string, SavedAnalysis[]> 
   return map;
 }
 
-// Returns a value in [0, 1] representing where `value` falls in [min, max], clamped.
-function axisFraction(value: number, min: number, max: number): number {
-  if (max <= min) return 0.5;
-  return Math.min(1, Math.max(0, (value - min) / (max - min)));
-}
-
-type Triple = { bear: number; base: number; bull: number };
 type SortMode = "recent" | "ticker" | "performance";
-
-// ─── Verdict ─────────────────────────────────────────────────────────────────
-
-// Where the live price sits relative to the (MoS-adjusted) buy target and the
-// intrinsic base fair value — the one thing the card exists to answer.
-type Verdict = "buy" | "watch" | "over";
-
-function getVerdict(price: number, buyTargetBase: number, intrinsicBase: number): Verdict {
-  if (price <= buyTargetBase) return "buy";
-  if (price <= intrinsicBase) return "watch";
-  return "over";
-}
-
-// Static class maps — Tailwind purges runtime-assembled class strings, so the full
-// literal must appear here (never `bg-${...}`).
-const VERDICT_BADGE: Record<Verdict, string> = {
-  buy: "bg-emerald-500/15 text-emerald-300",
-  watch: "bg-amber-500/15 text-amber-300",
-  over: "bg-slate-700/60 text-slate-300",
-};
-const VERDICT_TEXT: Record<Verdict, string> = {
-  buy: "text-emerald-300",
-  watch: "text-amber-300",
-  over: "text-slate-400",
-};
-
-// ─── Valuation ruler ─────────────────────────────────────────────────────────
-
-/**
- * The card's hero: one bear→bull axis (intrinsic scale) that replaces the old
- * number-cards + dual bars + consensus rows. Three zones encode the decision —
- * emerald = buy (≤ buy target), amber = watch (buy target→FV), neutral = rich (≥ FV) —
- * so the price dot's zone matches the verdict badge. When a review exists a slate tick
- * marks the reviewer's FV and an accent diamond marks the consensus (midpoint of the
- * two), making the red-team disagreement legible spatially. `compact` renders the thin
- * collapsed variant (zones + price only, no ticks/labels).
- */
-function ValuationRuler({
-  min,
-  max,
-  price,
-  buyTargetEdge,
-  fvEdge,
-  markers,
-  priceLabel,
-  compact = false,
-}: {
-  min: number;
-  max: number;
-  price?: number;
-  // Zone edges (fixed on the intrinsic axis, independent of the level toggle):
-  // buy zone runs to buyTargetEdge, watch zone from there to fvEdge.
-  buyTargetEdge: number;
-  fvEdge: number;
-  // Marks + their current values (already projected to the selected level). Absent in
-  // the compact variant and when the analysis carries no fair values.
-  markers?: {
-    analysisLabel: string;
-    analysis: number;
-    reviewerLabel: string;
-    reviewer?: number;
-    consensusLabel: string;
-    consensus?: number;
-  };
-  priceLabel: string;
-  compact?: boolean;
-}) {
-  const pct = (v: number) => axisFraction(v, min, max) * 100;
-  const buyPct = pct(buyTargetEdge);
-  const fvPct = pct(fvEdge);
-  const pricePct = price != null ? pct(price) : null;
-
-  const zones = (
-    <>
-      {/* Buy zone (cheap enough, incl. margin of safety) */}
-      <div className="absolute inset-y-0 left-0 bg-emerald-500/25" style={{ width: `${buyPct}%` }} />
-      {/* Watch zone (between buy target and fair value) — only when MoS opens a gap */}
-      {fvPct > buyPct + 0.5 && (
-        <div
-          className="absolute inset-y-0 bg-amber-500/20"
-          style={{ left: `${buyPct}%`, width: `${fvPct - buyPct}%` }}
-        />
-      )}
-    </>
-  );
-
-  if (compact) {
-    return (
-      <div className="relative h-1.5 overflow-hidden rounded-full bg-slate-700/40">
-        {zones}
-        {pricePct != null && (
-          <div
-            className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-slate-900 bg-white"
-            style={{ left: `${pricePct}%` }}
-          />
-        )}
-      </div>
-    );
-  }
-
-  // Values live in a legend row (labelling the marks in place would collide when
-  // FV/reviewer/consensus sit close together); each legend key re-decodes a mark by
-  // glyph, and the whole set updates when the level toggle flips FV ↔ buy target.
-  const priceGlyph = <span className="inline-block h-2 w-2 rounded-full border border-slate-900 bg-white" />;
-  const analysisGlyph = <span className="inline-block h-3 w-0.5 bg-slate-100" />;
-  const reviewerGlyph = <span className="inline-block h-3 w-0.5 bg-slate-400" />;
-  const consensusGlyph = <span className="inline-block h-2 w-2 rotate-45 bg-sky-400" />;
-
-  const legend: { key: string; glyph: ReactNode; label: string; value: number }[] = [];
-  if (price != null) legend.push({ key: "p", glyph: priceGlyph, label: priceLabel, value: price });
-  if (markers) {
-    legend.push({ key: "a", glyph: analysisGlyph, label: markers.analysisLabel, value: markers.analysis });
-    if (markers.reviewer != null)
-      legend.push({ key: "r", glyph: reviewerGlyph, label: markers.reviewerLabel, value: markers.reviewer });
-    if (markers.consensus != null)
-      legend.push({ key: "c", glyph: consensusGlyph, label: markers.consensusLabel, value: markers.consensus });
-  }
-
-  return (
-    <div>
-      {/* Zoned track */}
-      <div className="relative h-2.5 overflow-hidden rounded-full bg-slate-700/40">{zones}</div>
-
-      {/* Tick layer overlaid on the track (negative margin) so the tall ticks aren't
-          clipped by the track's overflow-hidden. */}
-      <div className="relative -mt-2.5 h-2.5">
-        {markers && (
-          <>
-            <div
-              className="absolute top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 bg-slate-100"
-              style={{ left: `${pct(markers.analysis)}%` }}
-            />
-            {markers.reviewer != null && (
-              <div
-                className="absolute top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 bg-slate-400"
-                style={{ left: `${pct(markers.reviewer)}%` }}
-              />
-            )}
-            {markers.consensus != null && (
-              <div
-                className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-slate-900 bg-sky-400"
-                style={{ left: `${pct(markers.consensus)}%` }}
-              />
-            )}
-          </>
-        )}
-        {pricePct != null && (
-          <div
-            className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-slate-900 bg-white shadow"
-            style={{ left: `${pricePct}%` }}
-          />
-        )}
-      </div>
-
-      {/* Endpoints — neutral axis scale (intrinsic bear→bull). */}
-      <div className="mt-1.5 flex justify-between text-[10px] font-medium tabular-nums text-slate-500">
-        <span>{formatPrice(min)}</span>
-        <span>{formatPrice(max)}</span>
-      </div>
-
-      {/* Legend with values — decodes each mark and updates with the level toggle. */}
-      {legend.length > 0 && (
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px]">
-          {legend.map((item) => (
-            <span key={item.key} className="flex items-center gap-1">
-              {item.glyph}
-              <span className="text-slate-500">{item.label}</span>
-              <span className="font-semibold text-slate-200 tabular-nums">{formatPrice(item.value)}</span>
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Comparison table ────────────────────────────────────────────────────────
-
-/**
- * Compact figures behind the ruler: rows Bull/Base/Bear, columns Analysis /
- * Reviewer / Consensus. Reviewer + Consensus appear only when a review exists. The
- * `level` (intrinsic value vs MoS-adjusted buy target) is controlled by the parent so
- * the ruler and the table stay in sync. Inputs are the stored buy-target triples;
- * intrinsic is reconstructed as target / (1 - mos).
- */
-function ComparisonTable({
-  analysis,
-  reviewer,
-  consensus,
-  mos,
-  level,
-  labels,
-}: {
-  analysis: Triple;
-  reviewer?: Triple;
-  consensus?: Triple;
-  mos: number;
-  level: "intrinsic" | "buyTarget";
-  labels: {
-    analysis: string;
-    reviewer: string;
-    consensus: string;
-    bear: string;
-    base: string;
-    bull: string;
-  };
-}) {
-  const project = (t: Triple): Triple =>
-    level === "intrinsic" && mos > 0
-      ? { bear: t.bear / (1 - mos), base: t.base / (1 - mos), bull: t.bull / (1 - mos) }
-      : t;
-
-  const cols: { key: string; label: string; triple: Triple; emphasize?: boolean }[] = [
-    { key: "a", label: labels.analysis, triple: project(analysis) },
-    ...(reviewer ? [{ key: "r", label: labels.reviewer, triple: project(reviewer) }] : []),
-    ...(consensus ? [{ key: "c", label: labels.consensus, triple: project(consensus), emphasize: true }] : []),
-  ];
-
-  const rows: { key: keyof Triple; label: string; tone: string; emphasize?: boolean }[] = [
-    { key: "bull", label: labels.bull, tone: "text-emerald-400" },
-    { key: "base", label: labels.base, tone: "text-slate-200", emphasize: true },
-    { key: "bear", label: labels.bear, tone: "text-rose-400" },
-  ];
-
-  const gridCols = `minmax(2.5rem, auto) repeat(${cols.length}, minmax(0, 1fr))`;
-
-  return (
-    <div className="mt-3">
-      <div
-        className="grid items-center gap-x-2 text-xs tabular-nums"
-        style={{ gridTemplateColumns: gridCols }}
-      >
-        <span />
-        {cols.map((c) => (
-          <span
-            key={c.key}
-            className={`px-1 py-1 text-right text-[10px] font-semibold uppercase tracking-wide ${
-              c.emphasize ? "text-sky-300" : "text-slate-500"
-            }`}
-          >
-            {c.label}
-          </span>
-        ))}
-
-        {rows.map((r) => (
-          <Fragment key={r.key}>
-            <span className={`py-1 text-[11px] font-medium ${r.tone}`}>{r.label}</span>
-            {cols.map((c) => {
-              const color = c.emphasize ? "text-slate-100" : r.emphasize ? "text-slate-200" : "text-slate-400";
-              const weight = r.emphasize || c.emphasize ? "font-semibold" : "";
-              return (
-                <span key={c.key} className={`px-1 py-1 text-right ${color} ${weight}`}>
-                  {formatPrice(c.triple[r.key])}
-                </span>
-              );
-            })}
-          </Fragment>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // ─── Metadata badges ─────────────────────────────────────────────────────────
 
@@ -486,7 +220,7 @@ function TickerGroup({
   const hasSnapshot = latest.priceAtAnalysis != null && currentPrice != null;
 
   // Stored fairValues are MoS-adjusted buy targets; intrinsic = target / (1 - mos).
-  const grossUp = (v: number) => (mos > 0 ? v / (1 - mos) : v);
+  const grossUp = (v: number) => grossUpToIntrinsic(v, mos);
 
   // Everything below is only meaningful when the latest analysis carries fair values.
   const ruler = hasFV

@@ -30,10 +30,13 @@ lib/               # Business logic and utilities (Yahoo quote adapter, AI promp
   watchlist-analysis.ts    # Server-only: per-user/all-users watchlist cron runner
   email.ts                 # Resend email sender
   format.ts                # Formatting utilities
+  report/
+    verdict.ts              # getVerdict() + VERDICT_BADGE/VERDICT_TEXT maps (shared: analyses + watchlist)
+    valuation.ts             # grossUpToIntrinsic() (shared: analyses + watchlist)
 components/        # React components (all client-side, all "use client")
   report/          # Shared report-rendering pieces (types, method-badges, fair-value-cards,
-                   # recap-table, report-body, report-shell) — used identically by the live
-                   # Deep Value panel and the saved-analysis detail page
+                   # recap-table, report-body, report-shell, valuation-ruler) — used identically
+                   # by the live Deep Value panel, the saved-analysis detail page, and the watchlist
   download-pdf-button.tsx  # Client-only "Download PDF" button (window.print()), for use in server components
 app/api/           # API route handlers
 app/analyses/      # Saved analyses list + detail pages
@@ -416,12 +419,26 @@ App supports EN and IT via `context/language-context.tsx` + `lib/i18n/translatio
 - **Primary buttons**: `bg-accent text-slate-950 hover:brightness-110` — not `bg-sky-500 text-white`
 - **Active nav link**: `usePathname()` from `next/navigation`; compare `pathname === href` to apply `font-medium text-slate-100`
 
-### Saved-analyses card — unified valuation ruler (`components/analyses-list.tsx`)
+### Shared valuation ruler module (`components/report/valuation-ruler.tsx` + `lib/report/{verdict,valuation}.ts`)
 
-The ticker card is compact by default (ticker · price · verdict badge · thin `ValuationRuler compact`) and expands to the full ruler + `ComparisonTable`. One `ValuationRuler` (a single bear→bull axis, intrinsic scale) replaces the old number-cards + dual bars + consensus rows:
+`ValuationRuler` / `ComparisonTable` / `axisFraction` / `Triple` live in `components/report/valuation-ruler.tsx`; `getVerdict` / `Verdict` / `VERDICT_BADGE` / `VERDICT_TEXT` in `lib/report/verdict.ts`; `grossUpToIntrinsic` in `lib/report/valuation.ts`. Originally private to `components/analyses-list.tsx`, extracted so `watchlist-client.tsx` could reuse the identical ruler/consensus UI. **`/analyses` is the reference implementation — regression-test it after touching these modules.**
+
 - **Zones encode the decision**: emerald buy (≤ buy target), amber watch (buy target→FV), neutral rich (≥ FV). `getVerdict(price, buyTargetBase, intrinsicBase)` → `buy | watch | over`, styled via the static `VERDICT_BADGE` / `VERDICT_TEXT` maps (never assemble class strings — see purge rule below).
-- **The axis stays on the intrinsic scale**; the shared `level` state (`"intrinsic" | "buyTarget"`, owned by `TickerGroup`) only moves the marks/values. `ComparisonTable` is **controlled** by that `level` so the ruler and the table toggle together — don't reintroduce local toggle state.
+- **The axis stays on the intrinsic scale**; a `level` state (`"intrinsic" | "buyTarget"`, owned by the caller — `TickerGroup` in analyses, `WatchlistCard` in watchlist) only moves the marks/values. `ComparisonTable` is **controlled** by that `level` so the ruler and the table toggle together — don't reintroduce local toggle state.
 - **Marks carry no inline value labels** (they collide when FV/reviewer/consensus sit close). Values live in a legend row under the bar (`● price · │ FV/Buy target · ╎ reviewer · ◆ consensus`), keyed by glyph. Position a mark with a plain `` `${pct}%` ``; for a label that must stay inside the bar bounds use `clamp()` inline (`left: clamp(16px, ${pct}%, calc(100% - 16px))`).
+- **`currency?` prop is optional and retro-compatible** — added for the watchlist (which shows native per-ticker currency); `/analyses` doesn't pass it, so its output is unchanged.
+
+### Watchlist card + ruler (`components/watchlist-client.tsx`)
+
+Card-per-ticker (`WatchlistCard`), compact→expandable, reusing `ValuationRuler` + `ComparisonTable` from the shared module above — same buy/watch/rich zones, price dot, analysis-FV + reviewer ticks, consensus diamond, and a Fair value ↔ Buy target toggle. Sourced from `latestAnalyses: Record<string, SavedAnalysis>` (the user's latest saved Deep Value analysis per ticker) rather than a derived "last run" row — this is what carries the reviewer/consensus values into the card.
+
+**Key difference from `/analyses`: the watchlist buy target uses the MoS of the *watchlist item*, not the MoS stored on the analysis.** The analysis still drives the verdict/Δ% (it's the source of the intrinsic value); the watchlist item's own `mosPercent` slider re-derives the buy target from that intrinsic value. Reviewer/consensus are markers only, same as `/analyses`.
+
+### Watchlist is cadence-agnostic — daily for everyone, no AI in the cron
+
+The watchlist/email digest **never runs AI** — it's a read-model over the user's latest saved Deep Value `Analysis` per ticker (`lib/watchlist-analysis.ts`, `import "server-only"`) plus a live price. The Vercel Cron (`app/api/cron/watchlist-analysis`) fires **daily at 08:00 UTC** for all users with `watchlistEnabled`. There is no per-user frequency setting anymore — `watchlistFreq` was removed from `types/watchlist.ts` and the settings route/UI; the `User.watchlistFreq` DB column is left in place unused (avoids a Turso migration) and the legacy `WatchlistRun` table/model is fully dead (the GET route no longer reads it — no `lastRun` in the response).
+
+`email.ts`'s `sendWatchlistDigest()` renders a card-per-ticker ledger-themed email per `DigestItem`: price, Δ% vs. buy target, a static "below buy target" note, a Bear/Base/Bull table split by Analysis / Reviewer / Consensus, buy target, and the analysis date. `watchlist-analysis.ts` computes the reviewer/consensus numbers via `grossUpToIntrinsic` from `lib/report/valuation.ts` — same helper the ruler uses, so the email and the UI never disagree on the math.
 
 ### Stored `fairValueBase` is the buy target, not the intrinsic value
 
