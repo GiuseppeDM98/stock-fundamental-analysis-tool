@@ -241,8 +241,6 @@ export type Translations = {
   watchlistMosPercent: string;
   watchlistNotes: string;
   watchlistLastRun: string;
-  watchlistFreqBiweekly: string;
-  watchlistFreqMonthly: string;
   watchlistNotifEmail: string;
   watchlistSaveSettings: string;
   watchlistManualRun: string;
@@ -253,6 +251,8 @@ export type Translations = {
   watchlistEnabled: string;
   watchlistEnabledHint: string;
   watchlistSettingsTitle: string;
+  watchlistDailyNote: string;
+  watchlistRulerHint: string;
   watchlistNoLastRun: string;
   watchlistConfirmDelete: string;
   watchlistEditItem: string;
@@ -642,8 +642,6 @@ const en: Translations = {
   watchlistMosPercent: "Margin of safety",
   watchlistNotes: "Notes",
   watchlistLastRun: "Last update",
-  watchlistFreqBiweekly: "Every 2 weeks",
-  watchlistFreqMonthly: "Monthly",
   watchlistNotifEmail: "Notification email",
   watchlistSaveSettings: "Save settings",
   watchlistManualRun: "Update now",
@@ -654,6 +652,8 @@ const en: Translations = {
   watchlistEnabled: "Enable analysis",
   watchlistEnabledHint: "When disabled, the cron will not analyze your watchlist and no emails will be sent.",
   watchlistSettingsTitle: "Settings",
+  watchlistDailyNote: "The digest email is sent daily, every morning after market data updates.",
+  watchlistRulerHint: "The ruler shows the intrinsic fair value (bear→bull) with your buy zone; the price dot, reviewer tick and consensus diamond appear when available. Toggle Fair value / Buy target to switch the marks.",
   watchlistNoLastRun: "Not yet analyzed",
   watchlistConfirmDelete: "Remove from watchlist?",
   watchlistEditItem: "Edit",
@@ -1042,8 +1042,6 @@ const it: Translations = {
   watchlistMosPercent: "Margine di sicurezza",
   watchlistNotes: "Note",
   watchlistLastRun: "Ultimo aggiornamento",
-  watchlistFreqBiweekly: "Ogni 2 settimane",
-  watchlistFreqMonthly: "Mensile",
   watchlistNotifEmail: "Email notifiche",
   watchlistSaveSettings: "Salva impostazioni",
   watchlistManualRun: "Aggiorna ora",
@@ -1054,6 +1052,8 @@ const it: Translations = {
   watchlistEnabled: "Abilita analisi",
   watchlistEnabledHint: "Se disabilitato, il cron non analizzerà la tua watchlist e non verranno inviate email.",
   watchlistSettingsTitle: "Impostazioni",
+  watchlistDailyNote: "L'email di riepilogo viene inviata ogni giorno, ogni mattina dopo l'aggiornamento dei dati di mercato.",
+  watchlistRulerHint: "Il righello mostra il fair value intrinseco (bear→bull) con la tua zona d'acquisto; il pallino del prezzo, il tick del revisore e il diamante del consenso compaiono quando disponibili. Usa Valore intrinseco / Buy target per spostare i marcatori.",
   watchlistNoLastRun: "Non ancora analizzato",
   watchlistConfirmDelete: "Rimuovere dalla watchlist?",
   watchlistEditItem: "Modifica",
