@@ -1,5 +1,8 @@
-// GET  /api/watchlist — list items + last run + settings for current user
+// GET  /api/watchlist — list items + settings for current user
 // POST /api/watchlist — add a ticker to the watchlist
+//
+// Values are sourced client-side from each ticker's latest saved Deep Value analysis (see
+// watchlist-client.tsx). The legacy per-item WatchlistRun table is no longer read here.
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
@@ -21,7 +24,7 @@ export async function GET() {
   const [user, items] = await Promise.all([
     db.user.findUnique({
       where: { id: userId },
-      select: { watchlistEmail: true, watchlistFreq: true, watchlistEnabled: true },
+      select: { watchlistEmail: true, watchlistEnabled: true },
     }),
     db.watchlistItem.findMany({
       where: { userId },
@@ -31,48 +34,19 @@ export async function GET() {
 
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-  // Fetch the most recent WatchlistRun for each item in one query
-  const tickers = items.map((i) => i.ticker);
-  const recentRuns = await db.watchlistRun.findMany({
-    where: { userId, ticker: { in: tickers } },
-    orderBy: { runAt: "desc" },
-  });
-
-  // Build a map of ticker → most recent run
-  const lastRunByTicker = new Map<string, (typeof recentRuns)[0]>();
-  for (const run of recentRuns) {
-    if (!lastRunByTicker.has(run.ticker)) {
-      lastRunByTicker.set(run.ticker, run);
-    }
-  }
-
-  const responseItems = items.map((item) => {
-    const run = lastRunByTicker.get(item.ticker) ?? null;
-    return {
-      id: item.id,
-      ticker: item.ticker,
-      companyName: item.companyName,
-      mosPercent: item.mosPercent,
-      notes: item.notes,
-      addedAt: item.addedAt.toISOString(),
-      lastRun: run
-        ? {
-            runAt: run.runAt.toISOString(),
-            fairValueBull: run.fairValueBull,
-            fairValueBase: run.fairValueBase,
-            fairValueBear: run.fairValueBear,
-            method: run.method,
-            currency: run.currency,
-          }
-        : null,
-    };
-  });
+  const responseItems = items.map((item) => ({
+    id: item.id,
+    ticker: item.ticker,
+    companyName: item.companyName,
+    mosPercent: item.mosPercent,
+    notes: item.notes,
+    addedAt: item.addedAt.toISOString(),
+  }));
 
   return NextResponse.json({
     items: responseItems,
     settings: {
       watchlistEmail: user.watchlistEmail,
-      watchlistFreq: user.watchlistFreq,
       watchlistEnabled: user.watchlistEnabled,
     },
   });

@@ -8,7 +8,7 @@ Current project state and context for AI assistants.
 
 **Version**: `1.0.0`
 **Status**: Active Development
-**Last Updated**: July 7, 2026 — **Reviewer valuation + consensus, and a rebuilt saved-analyses card**: (1) The **Analyst Review now proposes its own bull/base/bear valuation** (a leading JSON block, same MoS-adjusted schema as Deep Value) alongside its critique. The verify route takes `mosPercent` and buffers pre-JSON reasoning like the Deep Value route. The reviewer's numbers persist in new nullable columns `reviewFairValue{Bull,Base,Bear}` + `reviewValuationMethod` (migration `20260707073713_add_analysis_review_fair_values`, applied to Turso). The JSON parser was extracted to the shared `lib/report/parse-deep-value-json.ts`. (2) The **saved-analyses ticker card was rebuilt** (`components/analyses-list.tsx`): compact by default (ticker · price · BUY/WATCH/OVER-FV verdict · mini ruler), expanding to a single **valuation ruler** — one bear→bull axis with buy/watch/rich zones, price dot, analysis-FV + reviewer ticks, a consensus diamond, and a value legend — plus a compact **Analysis / Reviewer / Consensus table** and a shared **Fair value ↔ Buy target toggle** that drives both ruler and table. Consensus = mean(base, reviewer) per scenario; the disagreement Δ% is shown once (identical at either level). This replaces the old number-cards + dual `PriceVsFVBar` bars + `ConsensusRow` (all removed).
+**Last Updated**: July 7, 2026 — **Watchlist redesign: shared valuation ruler, reviewer-aware daily email, daily cadence for everyone**: (1) The `ValuationRuler`/`ComparisonTable` UI, `getVerdict` + verdict maps, and `grossUpToIntrinsic` were extracted out of `components/analyses-list.tsx` into shared modules (`components/report/valuation-ruler.tsx`, `lib/report/verdict.ts`, `lib/report/valuation.ts`) so the watchlist could reuse them. (2) **`watchlist-client.tsx` rebuilt** from a dense table to compact→expandable **cards per ticker**, each showing the same bear→bull ruler (buy/watch/rich zones, price dot, analysis-FV + reviewer tick, consensus diamond) and Analysis/Reviewer/Consensus table as `/analyses`, plus a Fair value ↔ Buy target toggle and a BUY/WATCH/OVER verdict badge — sourced from the user's latest saved `Analysis` per ticker (reviewer + consensus values now reach the watchlist for the first time). The watchlist's own MoS% (not the analysis's) drives its buy target. (3) **Email digest is richer and daily**: `email.ts` renders a card-per-ticker ledger email with price, Δ% vs. buy target, a "below buy target" note, and a Bear/Base/Bull table split Analysis/Reviewer/Consensus; `vercel.json`'s watchlist cron is now `0 8 * * *` (was 1st/15th monthly) for **all** users — the per-user biweekly/monthly frequency toggle was removed entirely (`watchlistFreq` dropped from types + settings route/UI; `User.watchlistFreq` column left unused, no migration needed). The now-fully-dead `WatchlistRun` table is no longer read by the GET route.
 
 ---
 
@@ -146,15 +146,16 @@ The Compare page and its lite/Sonnet valuation engine were removed entirely (pag
 
 ### Watchlist + Email Digest
 - Users maintain a personal watchlist of tickers at `/watchlist`
-- **Price Proximity Badge**: shown in each row's Ticker cell. `priceDist = (currentPrice − adjustedBase) / adjustedBase × 100`. `>= 0` → emerald "AT TARGET"; `|dist| ≤ 10%` → amber "+X% to target"; `> 10%` → slate "+X% to target". Omitted when `adjustedBase` or `currentPrice` is null.
-- **Quick-action button**: each row has "Analyze" → `window.location.href = '/analyze?ticker=X'`, styled as a `Quick-Action Button` (see DESIGN.md §6). Rendered above Edit/Delete in the Actions column. _(The "Add to Compare" quick-action was removed with the Compare page.)_
-- `WatchlistItem`: `id, userId, ticker, companyName, mosPercent, notes, addedAt` — `@@unique([userId, ticker])`
-- `WatchlistRun`: **no longer written** — the lite analysis was removed from the watchlist. The watchlist UI + email digest now source from the user's latest saved Deep Value `Analysis` per ticker. Model left in the schema, unused (no migration).
-- **User-level toggle** `watchlistEnabled Boolean @default(true)` — when false, the cron skips the user entirely.
+- **Card-per-ticker UI** (`components/watchlist-client.tsx`, `WatchlistCard`): compact by default (ticker · price · BUY/WATCH/OVER verdict · mini ruler), expands to the same **`ValuationRuler`** + **`ComparisonTable`** used on `/analyses` (shared modules — see Project Structure) — bear→bull axis with buy/watch/rich zones, price dot, analysis-FV + reviewer ticks, a consensus diamond, and a Fair value ↔ Buy target toggle. State is keyed off `latestAnalyses: Record<string, SavedAnalysis>` (each ticker's latest saved Deep Value analysis), so reviewer + consensus values reach the watchlist card exactly as they do on `/analyses`.
+- **Buy target uses the watchlist item's own MoS%**, not the analysis's stored MoS — the intrinsic value is reconstructed from the analysis, then the item's MoS slider re-derives the target. Verdict/Δ% are driven by the analysis; reviewer/consensus are markers only.
+- **Quick-action button**: "Analyze" → `window.location.href = '/analyze?ticker=X'`.
+- `WatchlistItem`: `id, userId, ticker, companyName, mosPercent, notes, addedAt` — `@@unique([userId, ticker])`. No per-item frequency field.
+- `WatchlistRun`: **fully dead** — model left in the schema unused (no migration); the GET route no longer reads it (`lastRun` removed from the type and response).
+- **User-level toggle** `watchlistEnabled Boolean @default(true)` — when false, the cron skips the user entirely. `User.watchlistFreq` column also still exists but is unused (the biweekly/monthly toggle was removed app-wide — see below); left in place to avoid a Turso migration.
 - **Manual trigger**: `POST /api/watchlist/run` — rate-limited to once per 24h via `lastManualWatchlistRun DateTime?` on the User model
-- **Cron**: Vercel Cron fires `GET /api/cron/watchlist-analysis` on the 1st and 15th of each month at 08:00 UTC. Monthly-frequency users are skipped on the 15th.
-- **Source of values**: the watchlist row + email digest read the user's latest saved Deep Value `Analysis` per ticker (reconstruct the intrinsic from the stored buy target, then apply the item's own MoS). No AI runs in the cron. Tickers without a saved Deep Value analysis show no values (use the row's Deep Value button to analyze). _(Lite analysis was removed entirely with the Compare page.)_
-- **Email**: sent via Resend — dark-themed HTML table with bear/base(MoS-adjusted)/bull/price/upside/status. Native currency per row.
+- **Cron: daily for everyone.** Vercel Cron fires `GET /api/cron/watchlist-analysis` at `0 8 * * *` (08:00 UTC daily). There is no more per-user frequency — `watchlistFreq` was removed from `types/watchlist.ts`, the settings PATCH route, and the settings UI.
+- **Source of values**: the watchlist card + email digest read the user's latest saved Deep Value `Analysis` per ticker (reconstruct the intrinsic from the stored buy target, then apply the item's own MoS), plus the reviewer's fair values and their consensus (mean of base + reviewer per scenario) via `grossUpToIntrinsic`. No AI runs in the cron. Tickers without a saved Deep Value analysis show no values.
+- **Email**: sent via Resend — a card-per-ticker, ledger-themed HTML email (`lib/email.ts`) per ticker: price, Δ% vs. buy target, a static "below buy target" note when applicable, a Bear/Base/Bull table split Analysis/Reviewer/Consensus, the buy target, and the analysis date. Native currency per row.
 - `lib/watchlist-analysis.ts` — `import "server-only"`, exports `runWatchlistAnalysisForAllUsers()` and `runWatchlistAnalysisForUser(userId)`
 - `lib/email.ts` — Resend client (lazily initialized to avoid build-time throw), exports `sendWatchlistDigest()`
 - Types in `types/watchlist.ts`
@@ -204,7 +205,7 @@ app/api/
   positions/           positions/[id]/
   portfolio/snapshots/     # GET last 90 days of snapshots
   cron/portfolio-snapshot/ # GET — Vercel Cron endpoint
-  cron/watchlist-analysis/ # GET — Vercel Cron endpoint (1st + 15th monthly)
+  cron/watchlist-analysis/ # GET — Vercel Cron endpoint (daily, 08:00 UTC)
   watchlist/               # GET + POST
   watchlist/[id]/          # DELETE + PATCH
   watchlist/settings/      # PATCH
@@ -227,7 +228,10 @@ components/            # hub-client, analyze-client, ticker-search, price-summar
                        # session-provider, page-header, pwa-register, advisor-client,
                        # download-pdf-button, saved-analyst-review, saved-valuation-summary
   report/              # types, method-badges, fair-value-cards, recap-table, report-body,
-                       # report-shell — shared "equity research" report UI (live + saved)
+                       # report-shell — shared "equity research" report UI (live + saved);
+                       # valuation-ruler — shared ValuationRuler/ComparisonTable (analyses + watchlist)
+lib/report/verdict.ts      # getVerdict() + VERDICT_BADGE/VERDICT_TEXT maps (shared: analyses + watchlist)
+lib/report/valuation.ts    # grossUpToIntrinsic() (shared: analyses + watchlist)
 lib/i18n/translations.ts   # EN/IT translation dictionary (~200 keys)
 context/language-context.tsx  # LanguageProvider + useLanguage() hook
 public/

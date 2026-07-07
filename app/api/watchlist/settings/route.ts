@@ -1,4 +1,6 @@
-// PATCH /api/watchlist/settings — update watchlistEmail, watchlistFreq, watchlistEnabled
+// PATCH /api/watchlist/settings — update watchlistEmail, watchlistEnabled
+// (the digest is sent daily for everyone, so there is no per-user frequency setting; the
+//  legacy `watchlistFreq` column is left in the schema, unused).
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
@@ -6,7 +8,6 @@ import { db } from "@/lib/db";
 
 const settingsSchema = z.object({
   watchlistEmail: z.string().email().nullable().optional(),
-  watchlistFreq: z.enum(["biweekly", "monthly"]).optional(),
   watchlistEnabled: z.boolean().optional(),
 });
 
@@ -28,10 +29,9 @@ export async function PATCH(request: Request) {
     where: { id: session.user.id },
     data: {
       ...(body.watchlistEmail !== undefined && { watchlistEmail: body.watchlistEmail }),
-      ...(body.watchlistFreq !== undefined && { watchlistFreq: body.watchlistFreq }),
       ...(body.watchlistEnabled !== undefined && { watchlistEnabled: body.watchlistEnabled }),
     },
-    select: { watchlistEmail: true, watchlistFreq: true, watchlistEnabled: true },
+    select: { watchlistEmail: true, watchlistEnabled: true },
   });
 
   return NextResponse.json(updated);

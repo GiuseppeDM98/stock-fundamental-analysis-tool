@@ -2,6 +2,7 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { sendWatchlistDigest, type DigestItem } from "@/lib/email";
+import { grossUpToIntrinsic } from "@/lib/report/valuation";
 
 // ─── Current price helper ─────────────────────────────────────────────────────
 
@@ -27,7 +28,6 @@ interface UserForWatchlist {
   id: string;
   email: string;
   watchlistEmail: string | null;
-  watchlistFreq: string;
 }
 
 async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Promise<void> {
@@ -49,15 +49,26 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
     });
     if (!analysis) continue;
 
-    // Stored fair values are MoS-adjusted buy targets — gross them back up to the intrinsic
-    // fair value, then re-apply the watchlist item's own MoS below.
+    // Stored fair values (analysis + reviewer) are MoS-adjusted buy targets discounted by the
+    // analysis's own MoS — gross them back up to the intrinsic fair value. The digest then
+    // re-applies the *watchlist item's* own MoS to the base to get the buy target.
     const aMos = (analysis.mosPercent ?? 0) / 100;
-    const gross = (v: number | null): number | null => (v == null ? null : aMos > 0 ? v / (1 - aMos) : v);
+    const gross = (v: number | null): number | null => (v == null ? null : grossUpToIntrinsic(v, aMos));
     const intrinsicBear = gross(analysis.fairValueBear);
     const intrinsicBase = gross(analysis.fairValueBase);
     const intrinsicBull = gross(analysis.fairValueBull);
     // The digest needs a complete bear/base/bull set; skip incomplete analyses.
     if (intrinsicBear == null || intrinsicBase == null || intrinsicBull == null) continue;
+
+    // Reviewer's own independent valuation (from a red-team Analyst Review), if present.
+    const reviewBear = gross(analysis.reviewFairValueBear);
+    const reviewBase = gross(analysis.reviewFairValueBase);
+    const reviewBull = gross(analysis.reviewFairValueBull);
+    const hasReviewer = reviewBear != null && reviewBase != null && reviewBull != null;
+    // Consensus = per-scenario mean of analysis and reviewer intrinsic values.
+    const consensusBear = hasReviewer ? (intrinsicBear + reviewBear!) / 2 : null;
+    const consensusBase = hasReviewer ? (intrinsicBase + reviewBase!) / 2 : null;
+    const consensusBull = hasReviewer ? (intrinsicBull + reviewBull!) / 2 : null;
 
     const { price: currentPrice, currency } = await fetchQuote(item.ticker);
     const adjustedBase = intrinsicBase * (1 - item.mosPercent);
@@ -78,11 +89,18 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
       fairValueBear: intrinsicBear,
       fairValueBase: intrinsicBase,
       fairValueBull: intrinsicBull,
+      reviewFairValueBear: reviewBear,
+      reviewFairValueBase: reviewBase,
+      reviewFairValueBull: reviewBull,
+      consensusBear,
+      consensusBase,
+      consensusBull,
       currentPrice,
       mosPercent: item.mosPercent,
       adjustedBase,
       upside,
       status,
+      analysisDate: analysis.createdAt.toISOString(),
     });
 
     // Small delay between quote fetches to respect Yahoo rate limits (no AI calls now)
@@ -111,7 +129,7 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
 export async function runWatchlistAnalysisForUser(userId: string): Promise<void> {
   const user = await db.user.findUnique({
     where: { id: userId },
-    select: { id: true, email: true, watchlistEmail: true, watchlistFreq: true, watchlistEnabled: true },
+    select: { id: true, email: true, watchlistEmail: true, watchlistEnabled: true },
   });
   if (!user || !user.watchlistEnabled) return;
   await runWatchlistAnalysisForUserInternal(user);
@@ -119,12 +137,10 @@ export async function runWatchlistAnalysisForUser(userId: string): Promise<void>
 
 /**
  * Iterates all users with at least one watchlist item and watchlistEnabled=true.
- * Monthly users are skipped unless today is the 1st of the month.
+ * The digest is sent daily to every enabled user (no per-user frequency).
  * Sequential processing with 3s delay between users to respect rate limits.
  */
 export async function runWatchlistAnalysisForAllUsers(): Promise<void> {
-  const today = new Date().getDate();
-
   const users = await db.user.findMany({
     where: {
       watchlistEnabled: true,
@@ -134,14 +150,10 @@ export async function runWatchlistAnalysisForAllUsers(): Promise<void> {
       id: true,
       email: true,
       watchlistEmail: true,
-      watchlistFreq: true,
     },
   });
 
   for (const user of users) {
-    // Monthly users only run on the 1st
-    if (user.watchlistFreq === "monthly" && today !== 1) continue;
-
     await runWatchlistAnalysisForUserInternal(user);
 
     // Wait 3s between users to respect external rate limits
