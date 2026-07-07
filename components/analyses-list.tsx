@@ -1,10 +1,12 @@
 "use client";
 
 // Client component for the saved analyses page.
-// Analyses are grouped by ticker; each group shows the latest analysis with
-// bull/base/bear cards and a price-vs-FV bar, plus a collapsible history of
-// older saves for the same ticker.
-import { useState, useEffect, useMemo } from "react";
+// Analyses are grouped by ticker. Each ticker is a card that is compact by default
+// (ticker, live price, buy/watch verdict, mini valuation ruler) and expands to a full
+// valuation ruler (one bear→bull axis carrying price, buy zone, analysis FV, reviewer
+// FV and consensus), a compact Analysis/Reviewer/Consensus table, P&L metadata, and a
+// collapsible history of older saves for the same ticker.
+import { useState, useEffect, useMemo, Fragment, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { fetchAnalyses, deleteAnalysis } from "@/lib/analyses";
 import { fetchPositions } from "@/lib/portfolio";
@@ -49,302 +51,278 @@ function groupByTicker(analyses: SavedAnalysis[]): Map<string, SavedAnalysis[]> 
   return map;
 }
 
-// Returns a value in [0, 1] representing where `price` falls in the bear–bull range.
-function pricePosition(price: number, bear: number, bull: number): number {
-  if (bull <= bear) return 0.5;
-  return Math.min(1, Math.max(0, (price - bear) / (bull - bear)));
+// Returns a value in [0, 1] representing where `value` falls in [min, max], clamped.
+function axisFraction(value: number, min: number, max: number): number {
+  if (max <= min) return 0.5;
+  return Math.min(1, Math.max(0, (value - min) / (max - min)));
 }
 
+type Triple = { bear: number; base: number; bull: number };
 type SortMode = "recent" | "ticker" | "performance";
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── Verdict ─────────────────────────────────────────────────────────────────
 
-/** Three scenario badges: Bear / Base / Bull. `baseVariant` tints the base card. */
-function FairValueTriple({
-  bear,
-  base,
-  bull,
-  bearLabel,
-  baseLabel,
-  bullLabel,
-  baseVariant = "default",
-}: {
-  bear?: number | null;
-  base?: number | null;
-  bull?: number | null;
-  bearLabel: string;
-  baseLabel: string;
-  bullLabel: string;
-  baseVariant?: "default" | "violet";
-}) {
-  const dash = "—";
-  const baseCard =
-    baseVariant === "violet"
-      ? "bg-violet-500/10 border-violet-500/20"
-      : "bg-slate-700/50 border-slate-600/40";
-  const baseTextLabel = baseVariant === "violet" ? "text-violet-400" : "text-slate-400";
-  const baseTextValue = baseVariant === "violet" ? "text-violet-200" : "text-slate-100";
+// Where the live price sits relative to the (MoS-adjusted) buy target and the
+// intrinsic base fair value — the one thing the card exists to answer.
+type Verdict = "buy" | "watch" | "over";
 
-  return (
-    <div className="flex gap-2 flex-wrap">
-      <div className="flex flex-col items-center rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2 min-w-[72px]">
-        <span className="text-[10px] font-medium text-red-400 uppercase tracking-wide mb-0.5">
-          {bearLabel}
-        </span>
-        <span className="text-sm font-bold text-red-300">
-          {bear != null ? formatPrice(bear) : dash}
-        </span>
-      </div>
-      <div className={`flex flex-col items-center rounded-lg border px-3 py-2 min-w-[72px] ${baseCard}`}>
-        <span className={`text-[10px] font-medium uppercase tracking-wide mb-0.5 ${baseTextLabel}`}>
-          {baseLabel}
-        </span>
-        <span className={`text-sm font-bold ${baseTextValue}`}>
-          {base != null ? formatPrice(base) : dash}
-        </span>
-      </div>
-      <div className="flex flex-col items-center rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 min-w-[72px]">
-        <span className="text-[10px] font-medium text-emerald-400 uppercase tracking-wide mb-0.5">
-          {bullLabel}
-        </span>
-        <span className="text-sm font-bold text-emerald-300">
-          {bull != null ? formatPrice(bull) : dash}
-        </span>
-      </div>
-    </div>
-  );
+function getVerdict(price: number, buyTargetBase: number, intrinsicBase: number): Verdict {
+  if (price <= buyTargetBase) return "buy";
+  if (price <= intrinsicBase) return "watch";
+  return "over";
 }
 
-type BarVariant = "violet" | "yellow";
+// Static class maps — Tailwind purges runtime-assembled class strings, so the full
+// literal must appear here (never `bg-${...}`).
+const VERDICT_BADGE: Record<Verdict, string> = {
+  buy: "bg-emerald-500/15 text-emerald-300",
+  watch: "bg-amber-500/15 text-amber-300",
+  over: "bg-slate-700/60 text-slate-300",
+};
+const VERDICT_TEXT: Record<Verdict, string> = {
+  buy: "text-emerald-300",
+  watch: "text-amber-300",
+  over: "text-slate-400",
+};
 
-// Separate bg-* and text-* classes per variant — Tailwind requires static strings for
-// purging. text-* colors the label spans; bg-* colors the tick mark div.
-const VARIANT_TICK_BG: Record<BarVariant, string> = {
-  violet: "bg-violet-400",
-  yellow: "bg-yellow-400",
-};
-const VARIANT_LABEL_TEXT: Record<BarVariant, string> = {
-  violet: "text-violet-400",
-  yellow: "text-yellow-400",
-};
+// ─── Valuation ruler ─────────────────────────────────────────────────────────
 
 /**
- * Single horizontal gradient bar showing where `currentPrice` sits in a given
- * bear–bull range, with a reference tick for the base FV and a dot for price.
- * `showPriceLabel` can be set to false on a second bar where the price label
- * would duplicate the value already visible on the bar above.
+ * The card's hero: one bear→bull axis (intrinsic scale) that replaces the old
+ * number-cards + dual bars + consensus rows. Three zones encode the decision —
+ * emerald = buy (≤ buy target), amber = watch (buy target→FV), neutral = rich (≥ FV) —
+ * so the price dot's zone matches the verdict badge. When a review exists a slate tick
+ * marks the reviewer's FV and an accent diamond marks the consensus (midpoint of the
+ * two), making the red-team disagreement legible spatially. `compact` renders the thin
+ * collapsed variant (zones + price only, no ticks/labels).
  */
-function FvBar({
-  currentPrice,
-  bear,
-  base,
-  bull,
-  variant,
-  underLabel,
-  overLabel,
-  showPriceLabel = true,
+function ValuationRuler({
+  min,
+  max,
+  price,
+  buyTargetEdge,
+  fvEdge,
+  markers,
+  priceLabel,
+  compact = false,
 }: {
-  currentPrice: number;
-  bear: number;
-  base: number;
-  bull: number;
-  variant: BarVariant;
-  underLabel: string;
-  overLabel: string;
-  showPriceLabel?: boolean;
+  min: number;
+  max: number;
+  price?: number;
+  // Zone edges (fixed on the intrinsic axis, independent of the level toggle):
+  // buy zone runs to buyTargetEdge, watch zone from there to fvEdge.
+  buyTargetEdge: number;
+  fvEdge: number;
+  // Marks + their current values (already projected to the selected level). Absent in
+  // the compact variant and when the analysis carries no fair values.
+  markers?: {
+    analysisLabel: string;
+    analysis: number;
+    reviewerLabel: string;
+    reviewer?: number;
+    consensusLabel: string;
+    consensus?: number;
+  };
+  priceLabel: string;
+  compact?: boolean;
 }) {
-  const pct = pricePosition(currentPrice, bear, bull) * 100;
-  const basePct = pricePosition(base, bear, bull) * 100;
-  const belowBase = currentPrice < base;
+  const pct = (v: number) => axisFraction(v, min, max) * 100;
+  const buyPct = pct(buyTargetEdge);
+  const fvPct = pct(fvEdge);
+  const pricePct = price != null ? pct(price) : null;
 
-  // When price and base labels are within 8 pct-points, move price label below
-  // the bar so they don't overlap — base label stays above, price goes below.
-  // tooClose only matters when we're showing the price label.
-  const tooClose = showPriceLabel && Math.abs(pct - basePct) < 8;
-
-  const tickBg = VARIANT_TICK_BG[variant];
-  const labelText = VARIANT_LABEL_TEXT[variant];
-
-  return (
-    <div>
-      {/* Labels above the bar */}
-      <div
-        className="relative mb-1"
-        style={{ height: !showPriceLabel || tooClose ? "1.5rem" : "2.5rem" }}
-      >
-        {/* Base FV label */}
+  const zones = (
+    <>
+      {/* Buy zone (cheap enough, incl. margin of safety) */}
+      <div className="absolute inset-y-0 left-0 bg-emerald-500/25" style={{ width: `${buyPct}%` }} />
+      {/* Watch zone (between buy target and fair value) — only when MoS opens a gap */}
+      {fvPct > buyPct + 0.5 && (
         <div
-          className="absolute -translate-x-1/2 flex flex-col items-center pointer-events-none"
-          style={{ left: `clamp(12px, ${basePct}%, calc(100% - 12px))` }}
-        >
-          <span className={`text-[9px] whitespace-nowrap leading-none ${labelText} opacity-70`}>Base</span>
-          <span className={`text-[10px] font-medium whitespace-nowrap leading-none ${labelText}`}>
-            {formatPrice(base)}
-          </span>
-          <span className={`text-[8px] leading-none ${labelText} opacity-60`}>▼</span>
-        </div>
-
-        {/* Current price label — above bar, only when shown and labels won't overlap */}
-        {showPriceLabel && !tooClose && (
-          <div
-            className="absolute bottom-0 -translate-x-1/2 flex flex-col items-center pointer-events-none"
-            style={{ left: `clamp(12px, ${pct}%, calc(100% - 12px))` }}
-          >
-            <span className="text-[9px] text-slate-400 whitespace-nowrap leading-none">Prezzo</span>
-            <span className="text-[10px] font-semibold text-slate-200 whitespace-nowrap leading-none">
-              {formatPrice(currentPrice)}
-            </span>
-            <span className="text-[8px] text-slate-500 leading-none">▼</span>
-          </div>
-        )}
-      </div>
-
-      {/* Gradient track */}
-      <div className="relative h-2 rounded-full overflow-visible bg-gradient-to-r from-red-500/70 via-yellow-500/60 to-emerald-500/70">
-        {/* Base FV tick — uses bg-* so the div itself is colored */}
-        <div
-          className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-0.5 h-4 rounded-full opacity-60 ${tickBg}`}
-          style={{ left: `${basePct}%` }}
+          className="absolute inset-y-0 bg-amber-500/20"
+          style={{ left: `${buyPct}%`, width: `${fvPct - buyPct}%` }}
         />
-        {/* Current price dot */}
-        <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full border-2 border-slate-900 bg-white shadow"
-          style={{ left: `${pct}%` }}
-        />
-      </div>
-
-      {/* Price label below — only when shown and it would overlap the base label above */}
-      {tooClose && (
-        <div className="relative mt-0.5" style={{ height: "1.5rem" }}>
-          <div
-            className="absolute -translate-x-1/2 flex flex-col items-center pointer-events-none"
-            style={{ left: `clamp(12px, ${pct}%, calc(100% - 12px))` }}
-          >
-            <span className="text-[8px] text-slate-500 leading-none">▲</span>
-            <span className="text-[10px] font-semibold text-slate-200 whitespace-nowrap leading-none">
-              {formatPrice(currentPrice)}
-            </span>
-            <span className="text-[9px] text-slate-400 whitespace-nowrap leading-none">Prezzo</span>
-          </div>
-        </div>
       )}
-
-      {/* Bear / status badge / Bull footer */}
-      <div className="flex justify-between items-center mt-1.5">
-        <span className="text-[10px] text-red-400 font-medium">{formatPrice(bear)}</span>
-        <span
-          className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-            belowBase
-              ? "bg-emerald-500/15 text-success"
-              : "bg-slate-700/60 text-slate-400"
-          }`}
-        >
-          {belowBase ? underLabel : overLabel}
-        </span>
-        <span className="text-[10px] text-emerald-400 font-medium">{formatPrice(bull)}</span>
-      </div>
-    </div>
+    </>
   );
-}
 
-/**
- * Horizontal bar(s) showing where the current price sits relative to fair values.
- * When mosPercent > 0, renders two stacked bars: intrinsic value (top) and
- * MoS-adjusted buy target (bottom). When MoS is 0 or no intrinsic values are
- * provided, renders a single bar using the stored (buy target) values.
- */
-function PriceVsFVBar({
-  currentPrice,
-  bear,
-  base,
-  bull,
-  intrinsicBear,
-  intrinsicBase,
-  intrinsicBull,
-  mosPercent,
-  intrinsicBarLabel,
-  buyTargetBarLabel,
-  aboveIntrinsicFv,
-  underIntrinsicFv,
-  aboveBuyTarget,
-  underBuyTarget,
-  aboveFv,
-  underFv,
-}: {
-  currentPrice: number;
-  bear: number;
-  base: number;
-  bull: number;
-  intrinsicBear?: number;
-  intrinsicBase?: number;
-  intrinsicBull?: number;
-  mosPercent?: number;
-  intrinsicBarLabel: string;
-  buyTargetBarLabel: string;
-  aboveIntrinsicFv: string;
-  underIntrinsicFv: string;
-  aboveBuyTarget: string;
-  underBuyTarget: string;
-  aboveFv: string;
-  underFv: string;
-}) {
-  const showDual =
-    mosPercent != null && mosPercent > 0 &&
-    intrinsicBear != null && intrinsicBase != null && intrinsicBull != null;
-
-  if (showDual) {
+  if (compact) {
     return (
-      <div className="mt-3">
-        {/* Intrinsic value bar — shows price label and value */}
-        <p className="mb-1.5 text-[10px] font-semibold text-violet-400/70 uppercase tracking-wider">
-          {intrinsicBarLabel}
-        </p>
-        <FvBar
-          currentPrice={currentPrice}
-          bear={intrinsicBear!}
-          base={intrinsicBase!}
-          bull={intrinsicBull!}
-          variant="violet"
-          underLabel={underIntrinsicFv}
-          overLabel={aboveIntrinsicFv}
-          showPriceLabel={true}
-        />
-
-        {/* Thin rule separating the two bar contexts */}
-        <div className="my-3 border-t border-slate-800/60" />
-
-        {/* Buy target bar — price dot visible, label suppressed (same value shown above) */}
-        <p className="mb-1.5 text-[10px] font-semibold text-yellow-400/70 uppercase tracking-wider">
-          {buyTargetBarLabel} · MoS {mosPercent}%
-        </p>
-        <FvBar
-          currentPrice={currentPrice}
-          bear={bear}
-          base={base}
-          bull={bull}
-          variant="yellow"
-          underLabel={underBuyTarget}
-          overLabel={aboveBuyTarget}
-          showPriceLabel={true}
-        />
+      <div className="relative h-1.5 overflow-hidden rounded-full bg-slate-700/40">
+        {zones}
+        {pricePct != null && (
+          <div
+            className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-slate-900 bg-white"
+            style={{ left: `${pricePct}%` }}
+          />
+        )}
       </div>
     );
   }
 
+  // Values live in a legend row (labelling the marks in place would collide when
+  // FV/reviewer/consensus sit close together); each legend key re-decodes a mark by
+  // glyph, and the whole set updates when the level toggle flips FV ↔ buy target.
+  const priceGlyph = <span className="inline-block h-2 w-2 rounded-full border border-slate-900 bg-white" />;
+  const analysisGlyph = <span className="inline-block h-3 w-0.5 bg-slate-100" />;
+  const reviewerGlyph = <span className="inline-block h-3 w-0.5 bg-slate-400" />;
+  const consensusGlyph = <span className="inline-block h-2 w-2 rotate-45 bg-sky-400" />;
+
+  const legend: { key: string; glyph: ReactNode; label: string; value: number }[] = [];
+  if (price != null) legend.push({ key: "p", glyph: priceGlyph, label: priceLabel, value: price });
+  if (markers) {
+    legend.push({ key: "a", glyph: analysisGlyph, label: markers.analysisLabel, value: markers.analysis });
+    if (markers.reviewer != null)
+      legend.push({ key: "r", glyph: reviewerGlyph, label: markers.reviewerLabel, value: markers.reviewer });
+    if (markers.consensus != null)
+      legend.push({ key: "c", glyph: consensusGlyph, label: markers.consensusLabel, value: markers.consensus });
+  }
+
   return (
-    <div className="mt-3">
-      <FvBar
-        currentPrice={currentPrice}
-        bear={bear}
-        base={base}
-        bull={bull}
-        variant="yellow"
-        underLabel={underFv}
-        overLabel={aboveFv}
-      />
+    <div>
+      {/* Zoned track */}
+      <div className="relative h-2.5 overflow-hidden rounded-full bg-slate-700/40">{zones}</div>
+
+      {/* Tick layer overlaid on the track (negative margin) so the tall ticks aren't
+          clipped by the track's overflow-hidden. */}
+      <div className="relative -mt-2.5 h-2.5">
+        {markers && (
+          <>
+            <div
+              className="absolute top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 bg-slate-100"
+              style={{ left: `${pct(markers.analysis)}%` }}
+            />
+            {markers.reviewer != null && (
+              <div
+                className="absolute top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 bg-slate-400"
+                style={{ left: `${pct(markers.reviewer)}%` }}
+              />
+            )}
+            {markers.consensus != null && (
+              <div
+                className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-slate-900 bg-sky-400"
+                style={{ left: `${pct(markers.consensus)}%` }}
+              />
+            )}
+          </>
+        )}
+        {pricePct != null && (
+          <div
+            className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-slate-900 bg-white shadow"
+            style={{ left: `${pricePct}%` }}
+          />
+        )}
+      </div>
+
+      {/* Endpoints — neutral axis scale (intrinsic bear→bull). */}
+      <div className="mt-1.5 flex justify-between text-[10px] font-medium tabular-nums text-slate-500">
+        <span>{formatPrice(min)}</span>
+        <span>{formatPrice(max)}</span>
+      </div>
+
+      {/* Legend with values — decodes each mark and updates with the level toggle. */}
+      {legend.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px]">
+          {legend.map((item) => (
+            <span key={item.key} className="flex items-center gap-1">
+              {item.glyph}
+              <span className="text-slate-500">{item.label}</span>
+              <span className="font-semibold text-slate-200 tabular-nums">{formatPrice(item.value)}</span>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
+
+// ─── Comparison table ────────────────────────────────────────────────────────
+
+/**
+ * Compact figures behind the ruler: rows Bull/Base/Bear, columns Analysis /
+ * Reviewer / Consensus. Reviewer + Consensus appear only when a review exists. The
+ * `level` (intrinsic value vs MoS-adjusted buy target) is controlled by the parent so
+ * the ruler and the table stay in sync. Inputs are the stored buy-target triples;
+ * intrinsic is reconstructed as target / (1 - mos).
+ */
+function ComparisonTable({
+  analysis,
+  reviewer,
+  consensus,
+  mos,
+  level,
+  labels,
+}: {
+  analysis: Triple;
+  reviewer?: Triple;
+  consensus?: Triple;
+  mos: number;
+  level: "intrinsic" | "buyTarget";
+  labels: {
+    analysis: string;
+    reviewer: string;
+    consensus: string;
+    bear: string;
+    base: string;
+    bull: string;
+  };
+}) {
+  const project = (t: Triple): Triple =>
+    level === "intrinsic" && mos > 0
+      ? { bear: t.bear / (1 - mos), base: t.base / (1 - mos), bull: t.bull / (1 - mos) }
+      : t;
+
+  const cols: { key: string; label: string; triple: Triple; emphasize?: boolean }[] = [
+    { key: "a", label: labels.analysis, triple: project(analysis) },
+    ...(reviewer ? [{ key: "r", label: labels.reviewer, triple: project(reviewer) }] : []),
+    ...(consensus ? [{ key: "c", label: labels.consensus, triple: project(consensus), emphasize: true }] : []),
+  ];
+
+  const rows: { key: keyof Triple; label: string; tone: string; emphasize?: boolean }[] = [
+    { key: "bull", label: labels.bull, tone: "text-emerald-400" },
+    { key: "base", label: labels.base, tone: "text-slate-200", emphasize: true },
+    { key: "bear", label: labels.bear, tone: "text-rose-400" },
+  ];
+
+  const gridCols = `minmax(2.5rem, auto) repeat(${cols.length}, minmax(0, 1fr))`;
+
+  return (
+    <div className="mt-3">
+      <div
+        className="grid items-center gap-x-2 text-xs tabular-nums"
+        style={{ gridTemplateColumns: gridCols }}
+      >
+        <span />
+        {cols.map((c) => (
+          <span
+            key={c.key}
+            className={`px-1 py-1 text-right text-[10px] font-semibold uppercase tracking-wide ${
+              c.emphasize ? "text-sky-300" : "text-slate-500"
+            }`}
+          >
+            {c.label}
+          </span>
+        ))}
+
+        {rows.map((r) => (
+          <Fragment key={r.key}>
+            <span className={`py-1 text-[11px] font-medium ${r.tone}`}>{r.label}</span>
+            {cols.map((c) => {
+              const color = c.emphasize ? "text-slate-100" : r.emphasize ? "text-slate-200" : "text-slate-400";
+              const weight = r.emphasize || c.emphasize ? "font-semibold" : "";
+              return (
+                <span key={c.key} className={`px-1 py-1 text-right ${color} ${weight}`}>
+                  {formatPrice(c.triple[r.key])}
+                </span>
+              );
+            })}
+          </Fragment>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Metadata badges ─────────────────────────────────────────────────────────
 
 /** Price-change badge since the analysis was saved. */
 function PerformanceBadge({
@@ -357,18 +335,17 @@ function PerformanceBadge({
   const delta = (currentPrice / priceAtAnalysis - 1) * 100;
   const isPositive = delta >= 0;
   return (
-    <div className="flex items-center gap-2 mt-1 flex-wrap">
+    <div className="mt-1 flex flex-wrap items-center gap-2">
       <span className="text-xs text-muted">
         {formatPrice(priceAtAnalysis)} → {formatPrice(currentPrice)}
       </span>
       <span
         className={`rounded px-1.5 py-0.5 text-xs font-semibold ${
-          isPositive
-            ? "bg-emerald-500/15 text-success"
-            : "bg-red-500/15 text-danger"
+          isPositive ? "bg-emerald-500/15 text-success" : "bg-red-500/15 text-danger"
         }`}
       >
-        {isPositive ? "+" : ""}{delta.toFixed(1)}%
+        {isPositive ? "+" : ""}
+        {delta.toFixed(1)}%
       </span>
     </div>
   );
@@ -395,7 +372,7 @@ function OpenPositionBadge({
   const isPositive = pnl != null && pnl >= 0;
 
   return (
-    <div className="mt-1 flex items-center gap-2 flex-wrap">
+    <div className="mt-1 flex flex-wrap items-center gap-2">
       <span className="text-xs text-slate-500">
         {t("positionLabel")} {totalShares} {t("sharesUnit")} @ {formatPrice(wac, currency)}
       </span>
@@ -407,7 +384,8 @@ function OpenPositionBadge({
         >
           {isPositive ? "+" : ""}
           {pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
-          ({isPositive ? "+" : ""}{returnPct!.toFixed(1)}%)
+          ({isPositive ? "+" : ""}
+          {returnPct!.toFixed(1)}%)
         </span>
       )}
     </div>
@@ -438,27 +416,27 @@ function AnalysisRow({
   const fmtFv = (v?: number | null) => (v != null ? formatPrice(v) : dash);
 
   return (
-    <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-lg bg-slate-800/50 border border-slate-700/40">
-      <div className="flex items-center gap-3 flex-wrap text-xs text-slate-400 min-w-0">
-        <span className="text-slate-500 shrink-0">{formatDate(analysis.createdAt)}</span>
-        <span className="text-red-400 shrink-0">{bearLabel} {fmtFv(analysis.fairValueBear)}</span>
-        <span className="text-slate-300 shrink-0">{baseLabel} {fmtFv(analysis.fairValueBase)}</span>
-        <span className="text-emerald-400 shrink-0">{bullLabel} {fmtFv(analysis.fairValueBull)}</span>
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-700/40 bg-slate-800/50 px-3 py-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-3 text-xs text-slate-400">
+        <span className="shrink-0 text-slate-500">{formatDate(analysis.createdAt)}</span>
+        <span className="shrink-0 text-red-400 tabular-nums">{bearLabel} {fmtFv(analysis.fairValueBear)}</span>
+        <span className="shrink-0 text-slate-300 tabular-nums">{baseLabel} {fmtFv(analysis.fairValueBase)}</span>
+        <span className="shrink-0 text-emerald-400 tabular-nums">{bullLabel} {fmtFv(analysis.fairValueBull)}</span>
         {analysis.mosPercent > 0 && (
-          <span className="text-slate-600 shrink-0">MoS {analysis.mosPercent}%</span>
+          <span className="shrink-0 text-slate-600">MoS {analysis.mosPercent}%</span>
         )}
       </div>
-      <div className="flex items-center gap-1.5 shrink-0">
+      <div className="flex shrink-0 items-center gap-1.5">
         <button
           onClick={onView}
-          className="tap rounded px-2 py-1 text-xs text-accent border border-slate-700 hover:border-sky-400/40 transition"
+          className="tap rounded border border-slate-700 px-2 py-1 text-xs text-accent transition hover:border-sky-400/40"
         >
           →
         </button>
         <button
           onClick={onDelete}
           disabled={isDeleting}
-          className="tap rounded px-2 py-1 text-xs text-muted border border-slate-700 hover:border-red-500/50 hover:text-danger transition disabled:opacity-50"
+          className="tap rounded border border-slate-700 px-2 py-1 text-xs text-muted transition hover:border-red-500/50 hover:text-danger disabled:opacity-50"
         >
           {isDeleting ? "…" : deleteLabel}
         </button>
@@ -467,7 +445,9 @@ function AnalysisRow({
   );
 }
 
-/** Card for a single ticker showing its latest analysis and collapsible older ones. */
+// ─── Ticker card ─────────────────────────────────────────────────────────────
+
+/** A single ticker: compact by default, expands to the full valuation ruler + table. */
 function TickerGroup({
   ticker,
   analyses,
@@ -475,20 +455,7 @@ function TickerGroup({
   positions,
   deleting,
   onDelete,
-  bearLabel,
-  baseLabel,
-  bullLabel,
-  deleteLabel,
-  reviewedLabel,
   olderLabel,
-  intrinsicBarLabel,
-  buyTargetBarLabel,
-  aboveIntrinsicFv,
-  underIntrinsicFv,
-  aboveBuyTarget,
-  underBuyTarget,
-  aboveFv,
-  underFv,
 }: {
   ticker: string;
   analyses: SavedAnalysis[];
@@ -496,205 +463,281 @@ function TickerGroup({
   positions: Position[];
   deleting: string | null;
   onDelete: (id: string) => void;
-  bearLabel: string;
-  baseLabel: string;
-  bullLabel: string;
-  deleteLabel: string;
-  reviewedLabel: string;
   olderLabel: (n: number) => string;
-  intrinsicBarLabel: string;
-  buyTargetBarLabel: string;
-  aboveIntrinsicFv: string;
-  underIntrinsicFv: string;
-  aboveBuyTarget: string;
-  underBuyTarget: string;
-  aboveFv: string;
-  underFv: string;
 }) {
   const router = useRouter();
+  const { t } = useLanguage();
+  const [expanded, setExpanded] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  // Shared level for the ruler + table: fair value (intrinsic) vs MoS-adjusted buy target.
+  const [level, setLevel] = useState<"intrinsic" | "buyTarget">("intrinsic");
 
   const latest = analyses[0];
   const older = analyses.slice(1);
-  const companyName = latest.companyName;
-
-  const hasSnapshot = latest.priceAtAnalysis != null && currentPrice != null;
-  const hasFullFvBar =
-    currentPrice != null &&
-    latest.fairValueBear != null &&
-    latest.fairValueBase != null &&
-    latest.fairValueBull != null;
-
-  // Reconstruct intrinsic values from buy targets when MoS > 0.
-  // Stored fairValues are already buy targets: intrinsic = stored / (1 - mos).
   const mos = (latest.mosPercent ?? 0) / 100;
-  const intrinsicBear = mos > 0 && latest.fairValueBear != null ? latest.fairValueBear / (1 - mos) : undefined;
-  const intrinsicBase = mos > 0 && latest.fairValueBase != null ? latest.fairValueBase / (1 - mos) : undefined;
-  const intrinsicBull = mos > 0 && latest.fairValueBull != null ? latest.fairValueBull / (1 - mos) : undefined;
+
+  const hasFV =
+    latest.fairValueBear != null && latest.fairValueBase != null && latest.fairValueBull != null;
+  const hasReviewerFv =
+    hasFV &&
+    latest.reviewFairValueBear != null &&
+    latest.reviewFairValueBase != null &&
+    latest.reviewFairValueBull != null;
+  const hasSnapshot = latest.priceAtAnalysis != null && currentPrice != null;
+
+  // Stored fairValues are MoS-adjusted buy targets; intrinsic = target / (1 - mos).
+  const grossUp = (v: number) => (mos > 0 ? v / (1 - mos) : v);
+
+  // Everything below is only meaningful when the latest analysis carries fair values.
+  const ruler = hasFV
+    ? {
+        buyTargetBase: latest.fairValueBase!,
+        intrinsicBase: grossUp(latest.fairValueBase!),
+        min: grossUp(latest.fairValueBear!),
+        max: grossUp(latest.fairValueBull!),
+      }
+    : null;
+
+  const verdict =
+    ruler && currentPrice != null
+      ? getVerdict(currentPrice, ruler.buyTargetBase, ruler.intrinsicBase)
+      : null;
+  // Distance of the price from the buy target (the actionable reference).
+  const buyTargetPct =
+    ruler && currentPrice != null
+      ? ((currentPrice - ruler.buyTargetBase) / ruler.buyTargetBase) * 100
+      : null;
+
+  const verdictLabel = (v: Verdict) =>
+    v === "buy" ? t("verdictBuy") : v === "watch" ? t("verdictWatch") : t("verdictOver");
+
+  // Ruler marks, projected to the selected level (FV = intrinsic, or MoS-adjusted buy
+  // target). The axis + zones stay on the intrinsic scale; only the marks/values move.
+  const project = (v: number) => (level === "intrinsic" && mos > 0 ? grossUp(v) : v);
+  const markers = ruler
+    ? {
+        analysisLabel: level === "intrinsic" ? t("fvShort") : t("buyTargetBarLabel"),
+        analysis: project(latest.fairValueBase!),
+        reviewerLabel: t("reviewerLabel"),
+        reviewer: hasReviewerFv ? project(latest.reviewFairValueBase!) : undefined,
+        consensusLabel: t("consensusLabel"),
+        consensus: hasReviewerFv
+          ? (project(latest.fairValueBase!) + project(latest.reviewFairValueBase!)) / 2
+          : undefined,
+      }
+    : null;
 
   return (
     <div className="card">
-      {/* Ticker header */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="font-mono text-base font-bold text-accent shrink-0">{ticker}</span>
-          <span className="text-sm text-slate-400 truncate">{companyName}</span>
-          {latest.valuationMethod && (
-            <span className="rounded bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-medium text-slate-400 shrink-0">
-              {latest.valuationMethod}
-            </span>
-          )}
-          {/* Marks tickers whose latest analysis carries an Analyst Review. */}
-          {latest.reviewMd && (
-            <span className="rounded bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-medium text-violet-300 shrink-0">
-              ✓ {reviewedLabel}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            onClick={() => { window.location.href = `/analyze?ticker=${encodeURIComponent(ticker)}`; }}
-            className="tap rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-accent hover:border-sky-400/40 hover:text-sky-300 transition"
-          >
-            Re-run
-          </button>
-          {/* Delete the latest/only analysis — the collapsible history below only covers older ones,
-              so without this the single most-recent analysis (and a ticker's sole analysis) can't be removed. */}
-          <button
-            onClick={() => onDelete(latest.id)}
-            disabled={deleting === latest.id}
-            aria-label={deleteLabel}
-            className="tap rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-muted hover:border-red-500/50 hover:text-danger transition disabled:opacity-50"
-          >
-            {deleting === latest.id ? "…" : deleteLabel}
-          </button>
-        </div>
-      </div>
-
-      {/* Latest analysis metadata */}
-      <p className="mt-1 text-xs text-slate-500">
-        {formatDate(latest.createdAt)}
-        {latest.mosPercent > 0 && ` · MoS ${latest.mosPercent}%`}
-      </p>
-
-      {/* Fair value cards — dual section when MoS > 0 */}
-      <div className="mt-3">
-        {mos > 0 && intrinsicBear != null && intrinsicBase != null && intrinsicBull != null ? (
-          <div className="space-y-2.5">
-            <div>
-              <p className="mb-1.5 text-[10px] font-semibold text-violet-400/70 uppercase tracking-wider">
-                {intrinsicBarLabel}
-              </p>
-              <FairValueTriple
-                bear={intrinsicBear}
-                base={intrinsicBase}
-                bull={intrinsicBull}
-                bearLabel={bearLabel}
-                baseLabel={baseLabel}
-                bullLabel={bullLabel}
-                baseVariant="violet"
-              />
-            </div>
-            <div className="border-t border-slate-800/60" />
-            <div>
-              <p className="mb-1.5 text-[10px] font-semibold text-yellow-400/70 uppercase tracking-wider">
-                {buyTargetBarLabel} · MoS {latest.mosPercent}%
-              </p>
-              <FairValueTriple
-                bear={latest.fairValueBear}
-                base={latest.fairValueBase}
-                bull={latest.fairValueBull}
-                bearLabel={bearLabel}
-                baseLabel={baseLabel}
-                bullLabel={bullLabel}
-              />
-            </div>
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          className="min-w-0 flex-1 text-left"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="shrink-0 font-mono text-base font-bold text-accent">{ticker}</span>
+            <span className="truncate text-sm text-slate-400">{latest.companyName}</span>
+            {latest.valuationMethod && (
+              <span className="shrink-0 rounded bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-medium text-slate-400">
+                {latest.valuationMethod}
+              </span>
+            )}
+            {latest.reviewMd && (
+              <span className="shrink-0 rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-300">
+                ✓ {t("analystReviewBadge")}
+              </span>
+            )}
           </div>
-        ) : (
-          <FairValueTriple
-            bear={latest.fairValueBear}
-            base={latest.fairValueBase}
-            bull={latest.fairValueBull}
-            bearLabel={bearLabel}
-            baseLabel={baseLabel}
-            bullLabel={bullLabel}
-          />
-        )}
+
+          {/* Collapsed summary: price + verdict at a glance */}
+          {!expanded && (
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+              {currentPrice != null ? (
+                <span className="tabular-nums text-slate-300">{formatPrice(currentPrice)}</span>
+              ) : (
+                <span className="text-slate-600">{t("priceNa")}</span>
+              )}
+              {verdict && buyTargetPct != null && (
+                <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${VERDICT_BADGE[verdict]}`}>
+                  {verdictLabel(verdict)} {buyTargetPct > 0 ? "+" : ""}
+                  {buyTargetPct.toFixed(0)}%
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Expanded meta */}
+          {expanded && (
+            <p className="mt-1 text-xs text-slate-500">
+              {formatDate(latest.createdAt)}
+              {latest.mosPercent > 0 && ` · MoS ${latest.mosPercent}%`}
+            </p>
+          )}
+        </button>
+
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          aria-label={expanded ? "Collapse" : "Expand"}
+          className="tap shrink-0 rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-slate-600 hover:text-slate-200"
+        >
+          <span className={`inline-block transition-transform duration-150 ${expanded ? "rotate-180" : ""}`}>▾</span>
+        </button>
       </div>
 
-      {/* Price-vs-FV bar */}
-      {hasFullFvBar && (
-        <PriceVsFVBar
-          currentPrice={currentPrice!}
-          bear={latest.fairValueBear!}
-          base={latest.fairValueBase!}
-          bull={latest.fairValueBull!}
-          intrinsicBear={intrinsicBear}
-          intrinsicBase={intrinsicBase}
-          intrinsicBull={intrinsicBull}
-          mosPercent={latest.mosPercent}
-          intrinsicBarLabel={intrinsicBarLabel}
-          buyTargetBarLabel={buyTargetBarLabel}
-          aboveIntrinsicFv={aboveIntrinsicFv}
-          underIntrinsicFv={underIntrinsicFv}
-          aboveBuyTarget={aboveBuyTarget}
-          underBuyTarget={underBuyTarget}
-          aboveFv={aboveFv}
-          underFv={underFv}
-        />
+      {/* Collapsed mini ruler */}
+      {!expanded && ruler && (
+        <div className="mt-2">
+          <ValuationRuler
+            compact
+            min={ruler.min}
+            max={ruler.max}
+            price={currentPrice}
+            buyTargetEdge={ruler.buyTargetBase}
+            fvEdge={ruler.intrinsicBase}
+            priceLabel={t("priceShort")}
+          />
+        </div>
       )}
 
-      {/* Performance badge */}
-      {hasSnapshot && (
-        <PerformanceBadge
-          priceAtAnalysis={latest.priceAtAnalysis!}
-          currentPrice={currentPrice!}
-        />
-      )}
+      {/* Expanded body */}
+      {expanded && (
+        <div className="mt-3">
+          {ruler ? (
+            <>
+              {/* Verdict line */}
+              {verdict && buyTargetPct != null && (
+                <p className="mb-3 text-xs">
+                  <span className={`font-semibold ${VERDICT_TEXT[verdict]}`}>{verdictLabel(verdict)}</span>
+                  <span className="text-slate-400">
+                    {" · "}
+                    {Math.abs(buyTargetPct).toFixed(0)}%{" "}
+                    {buyTargetPct <= 0 ? t("belowBuyTargetPhrase") : t("aboveBuyTargetPhrase")}
+                  </span>
+                </p>
+              )}
 
-      {/* Open position */}
-      <OpenPositionBadge positions={positions} currentPrice={currentPrice} />
+              <ValuationRuler
+                min={ruler.min}
+                max={ruler.max}
+                price={currentPrice}
+                buyTargetEdge={ruler.buyTargetBase}
+                fvEdge={ruler.intrinsicBase}
+                markers={markers ?? undefined}
+                priceLabel={t("priceShort")}
+              />
 
-      {/* View report button */}
-      <button
-        onClick={() => router.push(`/analyses/${latest.id}`)}
-        className="mt-3 w-full rounded-lg border border-slate-700/60 py-1.5 text-xs text-slate-400 hover:border-slate-600 hover:text-slate-300 transition text-center"
-      >
-        View report →
-      </button>
+              {/* Level toggle — drives both the ruler marks and the table (only when a
+                  margin of safety separates intrinsic value from the buy target). */}
+              {mos > 0 && (
+                <div className="mt-3 inline-flex rounded-md border border-slate-700 p-0.5 text-[11px]">
+                  {(["intrinsic", "buyTarget"] as const).map((lv) => (
+                    <button
+                      key={lv}
+                      onClick={() => setLevel(lv)}
+                      aria-pressed={level === lv}
+                      className={`tap rounded px-2 py-0.5 transition ${
+                        level === lv ? "bg-sky-500/15 text-sky-300" : "text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      {lv === "intrinsic" ? t("intrinsicBarLabel") : t("buyTargetBarLabel")}
+                    </button>
+                  ))}
+                </div>
+              )}
 
-      {/* Collapsible older analyses */}
-      {older.length > 0 && (
-        <div className="mt-3 border-t border-slate-700/50 pt-3">
-          <button
-            onClick={() => setHistoryOpen((v) => !v)}
-            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition"
-          >
-            <span
-              className={`inline-block transition-transform duration-150 ${
-                historyOpen ? "rotate-90" : ""
-              }`}
+              <ComparisonTable
+                analysis={{ bear: latest.fairValueBear!, base: latest.fairValueBase!, bull: latest.fairValueBull! }}
+                reviewer={
+                  hasReviewerFv
+                    ? { bear: latest.reviewFairValueBear!, base: latest.reviewFairValueBase!, bull: latest.reviewFairValueBull! }
+                    : undefined
+                }
+                consensus={
+                  hasReviewerFv
+                    ? {
+                        bear: (latest.fairValueBear! + latest.reviewFairValueBear!) / 2,
+                        base: (latest.fairValueBase! + latest.reviewFairValueBase!) / 2,
+                        bull: (latest.fairValueBull! + latest.reviewFairValueBull!) / 2,
+                      }
+                    : undefined
+                }
+                mos={mos}
+                level={level}
+                labels={{
+                  analysis: t("analysisLabel"),
+                  reviewer: t("reviewerLabel"),
+                  consensus: t("consensusLabel"),
+                  bear: t("bearLabel"),
+                  base: t("baseLabel"),
+                  bull: t("bullLabel"),
+                }}
+              />
+            </>
+          ) : (
+            <p className="text-xs text-slate-500">{t("noValuationData")}</p>
+          )}
+
+          {/* Metadata: performance + open position */}
+          {hasSnapshot && (
+            <PerformanceBadge priceAtAnalysis={latest.priceAtAnalysis!} currentPrice={currentPrice!} />
+          )}
+          <OpenPositionBadge positions={positions} currentPrice={currentPrice} />
+
+          {/* Actions */}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => router.push(`/analyses/${latest.id}`)}
+              className="tap rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:brightness-110"
             >
-              ▶
-            </span>
-            {olderLabel(older.length)}
-          </button>
+              {t("viewReportBtn")} →
+            </button>
+            <button
+              onClick={() => {
+                window.location.href = `/analyze?ticker=${encodeURIComponent(ticker)}`;
+              }}
+              className="tap rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-accent transition hover:border-sky-400/40 hover:text-sky-300"
+            >
+              {t("reAnalyzeBtn")}
+            </button>
+            <button
+              onClick={() => onDelete(latest.id)}
+              disabled={deleting === latest.id}
+              className="tap rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-muted transition hover:border-red-500/50 hover:text-danger disabled:opacity-50"
+            >
+              {deleting === latest.id ? "…" : t("deleteBtn")}
+            </button>
+          </div>
 
-          {historyOpen && (
-            <div className="mt-2 space-y-1.5">
-              {older.map((a) => (
-                <AnalysisRow
-                  key={a.id}
-                  analysis={a}
-                  onView={() => router.push(`/analyses/${a.id}`)}
-                  onDelete={() => onDelete(a.id)}
-                  isDeleting={deleting === a.id}
-                  bearLabel={bearLabel}
-                  baseLabel={baseLabel}
-                  bullLabel={bullLabel}
-                  deleteLabel={deleteLabel}
-                />
-              ))}
+          {/* Collapsible older analyses */}
+          {older.length > 0 && (
+            <div className="mt-3 border-t border-slate-700/50 pt-3">
+              <button
+                onClick={() => setHistoryOpen((v) => !v)}
+                className="flex items-center gap-1.5 text-xs text-slate-500 transition hover:text-slate-300"
+              >
+                <span className={`inline-block transition-transform duration-150 ${historyOpen ? "rotate-90" : ""}`}>▶</span>
+                {olderLabel(older.length)}
+              </button>
+
+              {historyOpen && (
+                <div className="mt-2 space-y-1.5">
+                  {older.map((a) => (
+                    <AnalysisRow
+                      key={a.id}
+                      analysis={a}
+                      onView={() => router.push(`/analyses/${a.id}`)}
+                      onDelete={() => onDelete(a.id)}
+                      isDeleting={deleting === a.id}
+                      bearLabel={t("bearLabel")}
+                      baseLabel={t("baseLabel")}
+                      bullLabel={t("bullLabel")}
+                      deleteLabel={t("deleteBtn")}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -732,9 +775,9 @@ export default function AnalysesList() {
         setPositionsByTicker(posMap);
 
         // Fetch live prices for all tickers that need a current price:
-        // - full FV data available → PriceVsFVBar
-        // - priceAtAnalysis saved → PerformanceBadge
-        // - open position → OpenPositionBadge
+        // - full FV data available → valuation ruler
+        // - priceAtAnalysis saved → performance badge
+        // - open position → position badge
         const tickers = [
           ...new Set([
             ...data
@@ -872,7 +915,7 @@ export default function AnalysesList() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t("searchPlaceholder")}
-          className="flex-1 min-w-[180px] rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm text-slate-200 placeholder:text-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
+          className="min-w-[180px] flex-1 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm text-slate-200 placeholder:text-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
         />
 
         {/* Under FV toggle */}
@@ -923,20 +966,7 @@ export default function AnalysesList() {
               positions={positionsByTicker[ticker] ?? []}
               deleting={deleting}
               onDelete={handleDelete}
-              bearLabel={t("bearLabel")}
-              baseLabel={t("baseLabel")}
-              bullLabel={t("bullLabel")}
-              deleteLabel={t("deleteBtn")}
-              reviewedLabel={t("analystReviewBadge")}
               olderLabel={olderLabel}
-              intrinsicBarLabel={t("intrinsicBarLabel")}
-              buyTargetBarLabel={t("buyTargetBarLabel")}
-              aboveIntrinsicFv={t("aboveIntrinsicFv")}
-              underIntrinsicFv={t("underIntrinsicFv")}
-              aboveBuyTarget={t("aboveBuyTarget")}
-              underBuyTarget={t("underBuyTarget")}
-              aboveFv={t("aboveFv")}
-              underFv={t("underFv")}
             />
           ))}
         </div>

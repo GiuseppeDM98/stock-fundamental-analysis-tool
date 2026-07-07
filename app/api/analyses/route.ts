@@ -18,6 +18,11 @@ const saveSchema = z.object({
   valuationMethod: z.string().optional(),
   // Optional Analyst Review critique, attached when run before saving.
   reviewMd: z.string().max(60000).optional(),
+  // The reviewer's own valuation (MoS-adjusted buy targets), when it emitted JSON.
+  reviewFairValueBull: z.number().positive().optional(),
+  reviewFairValueBase: z.number().positive().optional(),
+  reviewFairValueBear: z.number().positive().optional(),
+  reviewValuationMethod: z.string().optional(),
 });
 
 export async function GET() {
@@ -40,6 +45,10 @@ export async function GET() {
       fairValueBear: true,
       valuationMethod: true,
       reviewMd: true,
+      reviewFairValueBull: true,
+      reviewFairValueBase: true,
+      reviewFairValueBear: true,
+      reviewValuationMethod: true,
     },
   });
 
@@ -73,6 +82,10 @@ export async function POST(request: Request) {
       fairValueBear: body.fairValueBear,
       valuationMethod: body.valuationMethod,
       reviewMd: body.reviewMd,
+      reviewFairValueBull: body.reviewFairValueBull,
+      reviewFairValueBase: body.reviewFairValueBase,
+      reviewFairValueBear: body.reviewFairValueBear,
+      reviewValuationMethod: body.reviewValuationMethod,
     },
   });
 

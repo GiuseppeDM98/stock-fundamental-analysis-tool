@@ -109,6 +109,20 @@ export type Translations = {
   underBuyTarget: string;
   aboveFv: string;
   underFv: string;
+  consensusLabel: string;
+  reviewerLabel: string;
+  analysisLabel: string;
+  verdictBuy: string;
+  verdictWatch: string;
+  verdictOver: string;
+  belowBuyTargetPhrase: string;
+  aboveBuyTargetPhrase: string;
+  priceShort: string;
+  priceNa: string;
+  fvShort: string;
+  viewReportBtn: string;
+  reAnalyzeBtn: string;
+  noValuationData: string;
   olderAnalyses: string;
   noAnalysesMatchFilter: string;
   analysesCountLabel: string;
@@ -496,6 +510,20 @@ const en: Translations = {
   underBuyTarget: "Under Buy Target",
   aboveFv: "Above FV",
   underFv: "Under FV",
+  consensusLabel: "Consensus",
+  reviewerLabel: "Reviewer",
+  analysisLabel: "Analysis",
+  verdictBuy: "BUY",
+  verdictWatch: "WATCH",
+  verdictOver: "OVER FV",
+  belowBuyTargetPhrase: "below buy target",
+  aboveBuyTargetPhrase: "above buy target",
+  priceShort: "Price",
+  priceNa: "Price n/a",
+  fvShort: "FV",
+  viewReportBtn: "Open report",
+  reAnalyzeBtn: "Re-analyze",
+  noValuationData: "No valuation data for this analysis.",
   olderAnalyses: "older analysis|older analyses",
   noAnalysesMatchFilter: "No analyses match the current filter.",
   analysesCountLabel: "analyses",
@@ -882,6 +910,20 @@ const it: Translations = {
   underBuyTarget: "Sotto Buy Target",
   aboveFv: "Sopra FV",
   underFv: "Sotto FV",
+  consensusLabel: "Consenso",
+  reviewerLabel: "Revisore",
+  analysisLabel: "Analisi",
+  verdictBuy: "BUY",
+  verdictWatch: "WATCH",
+  verdictOver: "SOPRA FV",
+  belowBuyTargetPhrase: "sotto il buy target",
+  aboveBuyTargetPhrase: "sopra il buy target",
+  priceShort: "Prezzo",
+  priceNa: "Prezzo n/d",
+  fvShort: "FV",
+  viewReportBtn: "Apri report",
+  reAnalyzeBtn: "Ri-analizza",
+  noValuationData: "Nessun dato di valutazione per questa analisi.",
   olderAnalyses: "analisi precedente|analisi precedenti",
   noAnalysesMatchFilter: "Nessuna analisi corrisponde al filtro.",
   analysesCountLabel: "analisi",
