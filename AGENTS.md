@@ -243,13 +243,13 @@ The classic `lib/valuation/*` engine (sector detection + DCF/DDM/EV-EBITDA + sce
 
 ## Anthropic AI Integration
 
-- **Model split**: `claude-opus-4-8` for Deep Value (`/api/ai/deep-value`, `max_tokens: 64000`, `effort: "xhigh"`) and its Analyst Review pass (`/api/ai/deep-value/verify`, `max_tokens: 16000`, `effort: "xhigh"`) — the heaviest, least-frequent analysis, worth the higher cost for deeper agentic reasoning. `claude-sonnet-5` for Advisor (`/api/ai/advisor`, `max_tokens: 4096`, `effort: "high"`) — runs more often and doesn't need Opus-tier depth.
+- **Model split**: `claude-opus-4-8` for Deep Value (`/api/ai/deep-value`, `max_tokens: 64000`, `effort: "xhigh"`) and its Analyst Review pass (`/api/ai/deep-value/verify`, `max_tokens: 64000`, `effort: "xhigh"`) — the heaviest, least-frequent analysis, worth the higher cost for deeper agentic reasoning. `claude-sonnet-5` for Advisor (`/api/ai/advisor`, `max_tokens: 16000`, `effort: "high"`) — runs more often and doesn't need Opus-tier depth.
 - **Every call** sets `thinking: { type: "adaptive" }`. Deep Value + verify use `effort: "xhigh"`, Advisor uses `"high"`.
 - **`"xhigh"` effort caveat**: valid on Opus 4.8 at the API level but not yet in the pinned SDK's (`^0.78`) effort union (`low|medium|high|max`). Both Deep Value routes cast it (`output_config: { effort: "xhigh" as unknown as "high" }`) — the string serializes through unchanged; the cast is compile-time only. Remove the cast if/when the SDK is bumped to a version that types `xhigh`.
 - **Sonnet 5 rejects non-default sampling params** (`temperature`, `top_p`, `top_k` → 400 error) and has adaptive thinking on by default — do not add `temperature` to any Sonnet 5 call.
 - Web search: `tools: [{ type: "web_search_20260209" as const, name: "web_search" }]` (dynamic-filtering variant — current-gen models only; use `web_search_20250305` for older models)
 - Stream via `client.messages.stream()` — listen for `content_block_delta` + `text_delta` events
-- **`max_tokens` must budget for thinking + web-search reasoning, not just the visible answer.** With adaptive thinking + web search, reasoning tokens count toward `max_tokens`. The Advisor was at `4096` and long multi-candidate Discovery replies exhausted it → the model stopped with `stop_reason: "max_tokens"` mid-word. It's now `16000`. `max_tokens` is a ceiling, not a target — raising it doesn't increase cost on normal replies (they close at `end_turn`). Deep Value is `64000`, verify `16000`.
+- **`max_tokens` must budget for thinking + web-search reasoning, not just the visible answer.** With adaptive thinking + web search, reasoning tokens count toward `max_tokens`. The Advisor was at `4096` and long multi-candidate Discovery replies exhausted it → the model stopped with `stop_reason: "max_tokens"` mid-word. It's now `16000`. `max_tokens` is a ceiling, not a target — raising it doesn't increase cost on normal replies (they close at `end_turn`). Deep Value + verify are `64000`, Advisor `16000`.
 - **Surface `stop_reason: "max_tokens"` — never truncate silently.** A clean mid-word cut is indistinguishable from a normal end. Track it from `message_delta` events (`event.delta.stop_reason`) and, on `"max_tokens"`, enqueue a visible marker before closing the stream (see `/api/ai/advisor`).
 - **Advisor/Discovery must verify a ticker is currently listed before recommending it.** Injecting `Today is ${currentDate}` alone does NOT prevent suggesting delisted stocks — training data lists them as active (it once suggested Reno De Medici / RM.MI, delisted 2021). Both `buildAdvisorSystemPrompt` and `buildDiscoverySystemPrompt` carry an explicit rule to web-search-verify active listing and drop delisted/acquired/suspended names. This is a prompt-level mitigation, not a hard guarantee — a deterministic `/api/quote` check on each `[[TICKER]]` would be more robust (not yet implemented).
 - Always inject language in both system + user prompt
@@ -259,12 +259,13 @@ The classic `lib/valuation/*` engine (sector detection + DCF/DDM/EV-EBITDA + sce
 
 After a Deep Value report completes, a **"Run Analyst Review"** button in `deep-value-panel.tsx` streams an independent second-opinion critique from `/api/ai/deep-value/verify`. Design notes:
 - **Fresh context, separate endpoint** — a distinct Opus 4.8 call that receives only the finished report (`stripJsonBlock(report)`), NOT the original conversation. This is the "independent verifier" pattern: a clean context red-teaming the output outperforms self-critique in the same context.
-- **It critiques, it does not rewrite** — the system prompt (`buildVerificationSystemPrompt`) frames the model as a skeptical second analyst that stress-tests numbers/assumptions, spot-checks figures via web search, and gives a verdict. Output is **plain Markdown, no JSON block** — rendered directly via the shared `<ReportBody>`.
-- **Client state** (`reviewText`, `reviewStatus`, `reviewAbortRef`) lives in `deep-value-panel.tsx` and is reset on every `handleGenerate()` — a new analysis invalidates any prior review; the in-flight review is aborted.
-- Same `ReadableStream` + `TextEncoder` streaming shape as the other AI routes; no JSON buffering (nothing to suppress).
-- **`max_tokens: 64000` + `stop_reason` tracking** — `xhigh` thinking + web search count toward the budget; 16k truncated real critiques mid-word. Matched to Deep Value's 64k and, like `/api/ai/advisor`, the route tracks `stop_reason` from `message_delta` and appends a visible truncation marker (never cut silently).
+- **It critiques AND commits to its own valuation** — `buildVerificationSystemPrompt` frames the model as a skeptical second analyst that stress-tests numbers/assumptions and gives a verdict, and ALSO requires it to emit its **own** bull/base/bear fair values as a **leading JSON block** (same schema/unit as Deep Value — MoS-adjusted buy targets). It takes `mosPercent` so its JSON is directly comparable to the base analysis. The critique Markdown follows the JSON; the JSON is stripped before render via the shared `<ReportBody>`.
+- **The verify route buffers pre-JSON text** (ported from `/api/ai/deep-value`) — `jsonBlockStarted` + `preJsonBuffer`, forwards only from the ` ```json ` marker, with a failsafe flush if the model never emits a fence (so the critique is never swallowed).
+- **Client state** (`reviewText`, `reviewStatus`, `reviewResult`, `reviewAbortRef`) lives in `deep-value-panel.tsx`, reset on every `handleGenerate()`. `reviewResult` is `parseDeepValueJson(reviewText)` after the stream completes (null when no valid JSON — the critique still stands).
+- **`max_tokens: 64000` + `stop_reason` tracking** — `xhigh` thinking + web search count toward the budget; 16k truncated real critiques mid-word. Like `/api/ai/advisor`, tracks `stop_reason` from `message_delta` and appends a visible truncation marker (never cut silently).
 - **Authoritative price injection** — the verify route calls `getQuote(ticker)` (best-effort, non-fatal) and passes the live price to `buildVerificationUserPrompt`; the system prompt marks it authoritative so the reviewer does NOT "correct" a valid price with stale/delayed web-searched quotes (a real failure mode). The Deep Value + Review Position user prompts carry the same "authoritative price, don't override" clause.
-- **Persistence (savable review)** — stored in the nullable `Analysis.reviewMd` column. `deep-value-panel.tsx` attaches `reviewMd` in `handleSave()` when the review already ran; `components/saved-analyst-review.tsx` on the detail page runs it fresh (streaming from the verify route) and persists via `PATCH /api/analyses/[id]` + `updateAnalysisReview()`, so review order (before/after save) is irrelevant. `SavedAnalystReview` renders an existing review directly (init `status: "done"`) or the run button when `reviewMd` is null.
+- **Persistence (savable review + reviewer valuation)** — `Analysis.reviewMd` (the critique, JSON-stripped) plus nullable `reviewFairValue{Bull,Base,Bear}` + `reviewValuationMethod` (the reviewer's own numbers, same MoS-adjusted unit as `fairValue*`). `deep-value-panel.tsx` attaches all of these in `handleSave()`; `components/saved-analyst-review.tsx` runs the review fresh on the detail page and persists via `PATCH /api/analyses/[id]` + `updateAnalysisReview(id, reviewMd, reviewFvs?)`, so review order (before/after save) is irrelevant. **Mirror any new persisted field across all contract points**: Zod (POST create + PATCH), the GET `select` whitelist (silently drops unlisted columns), `types/analysis.ts`, and `updateAnalysisReview`.
+- **Consensus** — the saved-analyses card averages base + reviewer per scenario (`(base + reviewer) / 2`); the disagreement Δ% is identical at intrinsic and buy-target level (MoS scales both linearly), so compute it once. See the valuation-ruler note under Design System.
 
 ### Shared prompt constant — `ANALYTICAL_RIGOR_BLOCK`
 
@@ -273,12 +274,7 @@ After a Deep Value report completes, a **"Run Analyst Review"** button in `deep-
 ### Deep Value pattern (autonomous valuation)
 
 - JSON block first, then Markdown — parse on client after streaming completes
-- **Parse on the client, not the server** — incremental streaming makes server-side extraction fragile:
-  ```typescript
-  const match = text.match(/```json\n([\s\S]*?)\n```/);
-  const result = match ? JSON.parse(match[1]) : null;
-  const markdown = text.replace(/```json\n[\s\S]*?\n```\n?/, "");
-  ```
+- **Parse on the client, not the server** — incremental streaming makes server-side extraction fragile. Use the shared helper `lib/report/parse-deep-value-json.ts` (`parseDeepValueJson` / `stripJsonBlock`), reused by the Deep Value panel and the saved Analyst Review. _The saved-analysis detail page keeps its own guarded parser (`parseValuationMeta`, with runtime type-guards) because it runs in a server component._
 - Server buffers pre-JSON text — discards reasoning emitted between tool calls before the JSON block appears
 - Always inject `currentDate` from server — Claude anchors to training year (Aug 2025) without it
 - **DeepValuePanel must receive `mosPercent` as prop** — it was previously hardcoded to 0. Also save `fairValueBull/Base/Bear` from the parsed `result` object at save time.
@@ -420,15 +416,12 @@ App supports EN and IT via `context/language-context.tsx` + `lib/i18n/translatio
 - **Primary buttons**: `bg-accent text-slate-950 hover:brightness-110` — not `bg-sky-500 text-white`
 - **Active nav link**: `usePathname()` from `next/navigation`; compare `pathname === href` to apply `font-medium text-slate-100`
 
-### Floating labels on a range bar
+### Saved-analyses card — unified valuation ruler (`components/analyses-list.tsx`)
 
-When a label must stay within the bounds of a bar (e.g. a price marker on a bear–bull gradient), use `clamp()` inline rather than bare `${pct}%`:
-
-```tsx
-style={{ left: `clamp(12px, ${pct}%, calc(100% - 12px))` }}
-```
-
-This prevents overflow/clipping when the value is near 0% or 100% without any JS-side clamping logic.
+The ticker card is compact by default (ticker · price · verdict badge · thin `ValuationRuler compact`) and expands to the full ruler + `ComparisonTable`. One `ValuationRuler` (a single bear→bull axis, intrinsic scale) replaces the old number-cards + dual bars + consensus rows:
+- **Zones encode the decision**: emerald buy (≤ buy target), amber watch (buy target→FV), neutral rich (≥ FV). `getVerdict(price, buyTargetBase, intrinsicBase)` → `buy | watch | over`, styled via the static `VERDICT_BADGE` / `VERDICT_TEXT` maps (never assemble class strings — see purge rule below).
+- **The axis stays on the intrinsic scale**; the shared `level` state (`"intrinsic" | "buyTarget"`, owned by `TickerGroup`) only moves the marks/values. `ComparisonTable` is **controlled** by that `level` so the ruler and the table toggle together — don't reintroduce local toggle state.
+- **Marks carry no inline value labels** (they collide when FV/reviewer/consensus sit close). Values live in a legend row under the bar (`● price · │ FV/Buy target · ╎ reviewer · ◆ consensus`), keyed by glyph. Position a mark with a plain `` `${pct}%` ``; for a label that must stay inside the bar bounds use `clamp()` inline (`left: clamp(16px, ${pct}%, calc(100% - 16px))`).
 
 ### Stored `fairValueBase` is the buy target, not the intrinsic value
 

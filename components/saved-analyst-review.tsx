@@ -13,6 +13,7 @@ import { useState, useRef } from "react";
 import { useLanguage } from "@/context/language-context";
 import { APP_TO_AI_LANGUAGE } from "@/lib/i18n/translations";
 import { updateAnalysisReview } from "@/lib/analyses";
+import { parseDeepValueJson, stripJsonBlock } from "@/lib/report/parse-deep-value-json";
 import ReportBody from "@/components/report/report-body";
 
 type Status = "idle" | "loading" | "streaming" | "done" | "error";
@@ -22,11 +23,14 @@ type Props = {
   ticker: string;
   // The report Markdown WITHOUT its JSON block — what the reviewer critiques.
   reportMd: string;
+  // Margin of safety of the saved analysis — passed so the reviewer emits its own
+  // fair values in the same (MoS-adjusted) unit, making them directly comparable.
+  mosPercent: number;
   // Existing review, if this analysis already has one.
   initialReviewMd: string | null;
 };
 
-export default function SavedAnalystReview({ analysisId, ticker, reportMd, initialReviewMd }: Props) {
+export default function SavedAnalystReview({ analysisId, ticker, reportMd, mosPercent, initialReviewMd }: Props) {
   const { language: globalLanguage, t } = useLanguage();
 
   const [reviewText, setReviewText] = useState<string>(initialReviewMd ?? "");
@@ -50,6 +54,7 @@ export default function SavedAnalystReview({ analysisId, ticker, reportMd, initi
           ticker,
           reportMd,
           language: APP_TO_AI_LANGUAGE[globalLanguage] ?? "English",
+          mosPercent,
         }),
         signal: controller.signal,
       });
@@ -74,10 +79,17 @@ export default function SavedAnalystReview({ analysisId, ticker, reportMd, initi
 
       setStatus("done");
 
-      // Persist the completed review. A save failure is non-fatal — the review is
-      // still shown; the user can re-run to retry persistence.
+      // Persist the completed review: the critique without its JSON block, plus the
+      // reviewer's own fair values (null-safe — omitted when no valid JSON was emitted).
+      // A save failure is non-fatal — the review is still shown; re-run to retry.
+      const parsed = parseDeepValueJson(accumulated);
       try {
-        await updateAnalysisReview(analysisId, accumulated);
+        await updateAnalysisReview(analysisId, stripJsonBlock(accumulated), {
+          reviewFairValueBull: parsed?.bull.fairValue,
+          reviewFairValueBase: parsed?.base.fairValue,
+          reviewFairValueBear: parsed?.bear.fairValue,
+          reviewValuationMethod: parsed?.method,
+        });
       } catch (saveErr) {
         console.error("Failed to persist analyst review:", saveErr);
       }
@@ -152,7 +164,7 @@ export default function SavedAnalystReview({ analysisId, ticker, reportMd, initi
           {status === "streaming" && (
             <span className="mb-2 inline-block h-3 w-1.5 animate-pulse bg-violet-400 print:hidden" />
           )}
-          <ReportBody markdown={reviewText} />
+          <ReportBody markdown={stripJsonBlock(reviewText)} />
         </div>
       )}
     </div>

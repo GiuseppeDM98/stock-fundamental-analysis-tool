@@ -48,6 +48,13 @@ model Analysis {
   // Null until the user runs the review (either before saving or later from the
   // saved-analysis detail page). Stored as plain Markdown (no JSON block).
   reviewMd         String?
+  // The reviewer's own independent valuation, parsed from the review's leading JSON
+  // block. Same unit as fairValue* above (MoS-adjusted buy targets), so the two can be
+  // averaged into a consensus. Null when no review was run or it emitted no valid JSON.
+  reviewFairValueBull   Float?
+  reviewFairValueBase   Float?
+  reviewFairValueBear   Float?
+  reviewValuationMethod String?
   createdAt        DateTime @default(now())
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 

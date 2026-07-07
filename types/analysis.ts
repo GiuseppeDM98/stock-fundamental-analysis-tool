@@ -14,7 +14,21 @@ export type SavedAnalysis = {
   valuationMethod?: string | null;
   // Independent "Analyst Review" critique — null until the user runs it.
   reviewMd?: string | null;
+  // The reviewer's own independent valuation (same MoS-adjusted unit as fairValue*),
+  // used to compute a base/reviewer consensus. Null until a review with valid JSON runs.
+  reviewFairValueBull?: number | null;
+  reviewFairValueBase?: number | null;
+  reviewFairValueBear?: number | null;
+  reviewValuationMethod?: string | null;
   createdAt: string; // ISO 8601 string (JSON serialized from Date)
+};
+
+/** The reviewer's own fair values, attached when the Analyst Review emits a JSON block. */
+export type ReviewFairValues = {
+  reviewFairValueBull?: number;
+  reviewFairValueBase?: number;
+  reviewFairValueBear?: number;
+  reviewValuationMethod?: string;
 };
 
 /** Payload required to save a new analysis. */
@@ -30,4 +44,8 @@ export type SaveAnalysisRequest = {
   valuationMethod?: string;
   // Attached only when the Analyst Review was run before saving.
   reviewMd?: string;
+  reviewFairValueBull?: number;
+  reviewFairValueBase?: number;
+  reviewFairValueBear?: number;
+  reviewValuationMethod?: string;
 };

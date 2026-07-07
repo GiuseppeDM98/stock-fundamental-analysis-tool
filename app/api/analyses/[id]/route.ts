@@ -12,9 +12,14 @@ import { db } from "@/lib/db";
 type RouteContext = { params: Promise<{ id: string }> };
 
 // Only the Analyst Review can be patched onto a saved analysis; the report
-// itself is immutable once generated.
+// itself is immutable once generated. The review carries its critique Markdown and,
+// when it emitted a JSON block, the reviewer's own fair values (MoS-adjusted).
 const patchSchema = z.object({
   reviewMd: z.string().min(1).max(60000),
+  reviewFairValueBull: z.number().positive().optional(),
+  reviewFairValueBase: z.number().positive().optional(),
+  reviewFairValueBear: z.number().positive().optional(),
+  reviewValuationMethod: z.string().optional(),
 });
 
 export async function GET(_request: Request, context: RouteContext) {
@@ -56,7 +61,13 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   const updated = await db.analysis.update({
     where: { id },
-    data: { reviewMd: body.reviewMd },
+    data: {
+      reviewMd: body.reviewMd,
+      reviewFairValueBull: body.reviewFairValueBull,
+      reviewFairValueBase: body.reviewFairValueBase,
+      reviewFairValueBear: body.reviewFairValueBear,
+      reviewValuationMethod: body.reviewValuationMethod,
+    },
   });
 
   return NextResponse.json(updated);

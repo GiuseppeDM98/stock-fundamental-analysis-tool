@@ -347,15 +347,21 @@ Use web search to find the financial data, choose the appropriate valuation meth
 // A second, independent Opus pass that critiques a completed Deep Value report.
 // It does NOT rewrite the report — it stress-tests the numbers and assumptions,
 // so the user gets a "second opinion" before acting on a money decision.
-// Output is plain Markdown (no JSON block) — rendered directly via <ReportBody>.
+// As part of the red-team it now ALSO commits to its OWN independent bull/base/bear
+// valuation, emitted as a leading JSON block (same schema/unit as Deep Value —
+// MoS-adjusted buy targets), so the app can average the two into a "consensus" and
+// surface the disagreement. The JSON is stripped before the critique is rendered
+// via <ReportBody>.
 
 /**
  * System prompt for the Analyst Review pass.
  *
  * @param language - Report language (e.g. "English", "Italiano")
  * @param currentDate - Today's date string injected from the server
+ * @param mosPercent - Margin of safety to apply to the reviewer's own fair values,
+ *   so its JSON buy targets are directly comparable to the base analysis's.
  */
-export function buildVerificationSystemPrompt(language = "English", currentDate = ""): string {
+export function buildVerificationSystemPrompt(language = "English", currentDate = "", mosPercent = 0): string {
   const dateClause = currentDate
     ? `\n**Today's date: ${currentDate}.** Do NOT assume the current year is 2025; verify recency via web search.\n`
     : "";
@@ -373,14 +379,32 @@ Focus your review on:
 4. **The single biggest risk to the thesis** — what would most likely make this valuation wrong?
 5. **Verdict** — does the base-case fair value hold up, or should it be revised up/down? State it plainly.
 
+## Your own independent valuation (MANDATORY)
+Beyond critiquing, commit to your OWN independent bull/base/bear fair value for the stock, based on the figures you consider defensible after your review. This is your second opinion in numbers — do NOT simply copy the report's values; where you disagree, your numbers should reflect that disagreement.
+
+Emit it as a JSON block that MUST be the very FIRST thing you output, before any critique text:
+
+\`\`\`json
+{
+  "method": "<DCF|DDM|EV/EBITDA|P/B>",
+  "sector": "<sector name>",
+  "currency": "<ISO currency code, e.g. USD, EUR>",
+  "bull": { "fairValue": <buy target after ${mosPercent}% MoS> },
+  "base": { "fairValue": <buy target after ${mosPercent}% MoS> },
+  "bear": { "fairValue": <buy target after ${mosPercent}% MoS> }
+}
+\`\`\`
+
+Each \`fairValue\` is your intrinsic estimate AFTER applying a margin of safety of ${mosPercent}% (buy target = intrinsic × (1 − ${mosPercent}/100)) — same convention as the report under review, so the two are directly comparable. After the JSON block, write the critique.
+
 Rules:
-- Write entirely in ${language}.
+- Write the critique entirely in ${language}.
 - Be specific and cite sources for any figure you challenge (e.g. "According to [source]...").
 - Be concise: this is a review, not a second full report. Use short sections and bullet points.
-- Do NOT emit a JSON block and do NOT restate the whole report — only the critique.
-- If the report is sound, say so clearly and briefly rather than inventing problems.
+- The ONLY JSON you emit is the single valuation block above; do NOT restate the whole report.
+- If the report is sound, say so clearly and briefly rather than inventing problems (your JSON may then closely match the report's).
 - End with: "⚠️ This review is for informational purposes only and does not constitute financial advice."
-- Do not write any preamble (no "Let me review...", "I'll start by...").`;
+- Do not write any preamble before the JSON block (no "Let me review...", "I'll start by...").`;
 }
 
 /**
@@ -397,13 +421,17 @@ export function buildVerificationUserPrompt(
   currentDate = "",
   currentPrice?: number,
   currency = "",
+  mosPercent = 0,
 ): string {
   const dateClause = currentDate ? ` Today's date: ${currentDate}.` : "";
   const priceClause =
     currentPrice != null
       ? ` Authoritative current price (live market feed${currentDate ? `, as of ${currentDate}` : ""}): ${currentPrice.toFixed(2)} ${currency}. Treat this as the true current price; do not override it with web-searched quotes.`
       : "";
-  return `Independently review the following Deep Value report on ${ticker}.${dateClause}${priceClause} Red-team its numbers and assumptions, spot-check key figures via web search, and give your verdict in ${language} following the required format.
+  const mosClause = mosPercent > 0
+    ? ` Apply a margin of safety of ${mosPercent}% to your own fair values in the JSON block (buy target = intrinsic value × ${(1 - mosPercent / 100).toFixed(2)}).`
+    : "";
+  return `Independently review the following Deep Value report on ${ticker}.${dateClause}${priceClause}${mosClause} Red-team its numbers and assumptions, spot-check key figures via web search, commit to your own bull/base/bear valuation in the JSON block, and give your verdict in ${language} following the required format.
 
 --- REPORT UNDER REVIEW ---
 ${reportMd}
