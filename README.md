@@ -27,6 +27,7 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **Portfolio tracker** — track real purchases with live P&L, multi-currency FX conversion, DCA aggregation (Weighted Average Cost per ticker), and cross-links to saved analyses per ticker
 - **Dividend tracking** — add an ISIN to any portfolio position and dividends paid on Borsa Italiana are automatically recorded at each daily snapshot; cumulative total shown in the summary bar
 - **Portfolio P&L history** — line chart showing portfolio value vs. cost basis over time, updated automatically every weekday after market close; dividend payment days marked with a green vertical line; days when new capital was invested marked with an amber line (hover to see the amount)
+- **Close a position** — sell all or part of a holding; closed positions are archived with realized P&L, and the P&L history chart marks the sale date so it's distinguishable from a market drop
 - **Daily price change** — each portfolio position shows today's % move vs. the previous close, inline next to the current price
 - **Capital gains tax** — set an optional tax rate per position to see estimated taxes and net P&L alongside gross gains; dividend totals also show gross and estimated net amounts
 - **Analysis performance tracking** — see how the stock price moved since you saved each analysis vs. fair value
@@ -69,6 +70,7 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - 📋 **Saved Analyses by Ticker**: Analyses page groups reports by stock as compact cards with a **Buy / Watch / Over-FV verdict** and live price; expand for a single **valuation ruler** (current price on the Bear→Bull range with buy/watch zones, your fair value, the reviewer's, and the consensus) plus an Analysis / Reviewer / Consensus table. Search, filter (Under FV), and sort across all your saved research
 - 🧮 **Valuation Metrics**: P/E, P/FCF, FCF Yield, Earnings Yield cards with YoY trend and educational tooltips
 - 💼 **Portfolio Tracker**: Track real purchases with live P&L per position + DCA aggregation (Weighted Average Cost per ticker) + multi-currency aggregate summary (EUR conversion via Frankfurter) + cross-links to saved analyses per ticker
+- 🔖 **Close Position**: Sell all or part of a holding — closed positions archive with realized P&L, and a violet marker on the P&L chart flags the sale date
 - 💸 **Dividend Tracking**: Add an ISIN to any position and dividends paid on Borsa Italiana are auto-recorded at each daily snapshot — cumulative total in the summary bar, payment days marked on the chart
 - 📉 **Portfolio P&L History**: Line chart showing total portfolio value vs. cost basis over time — updated automatically every weekday after market close; amber markers on days new capital was invested, green markers on dividend days
 - 📊 **Daily Price Change**: Each portfolio position shows today's % move vs. previous close (green/red), inline next to the current price

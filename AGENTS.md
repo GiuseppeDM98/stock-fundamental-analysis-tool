@@ -30,6 +30,8 @@ lib/               # Business logic and utilities (Yahoo quote adapter, AI promp
   watchlist-analysis.ts    # Server-only: per-user/all-users watchlist cron runner
   email.ts                 # Resend email sender
   format.ts                # Formatting utilities
+  positions.ts             # Server-only: closePosition() (full/partial position close)
+  portfolio-math.ts        # Pure: realizedPnlNative(), holdingDays() — no server-only, shared client+server
   report/
     verdict.ts              # getVerdict() + VERDICT_BADGE/VERDICT_TEXT maps (shared: analyses + watchlist)
     valuation.ts             # grossUpToIntrinsic() (shared: analyses + watchlist)
@@ -92,7 +94,7 @@ if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 
 // Use session.user.id — typed via declaration merge in types/auth.ts
 ```
 
-**Endpoints:** `/api/quote`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/PATCH/DELETE — PATCH attaches an Analyst Review `reviewMd`), `/api/positions` (GET/POST), `/api/positions/[id]` (DELETE), `/api/ai/deep-value` (POST, streaming), `/api/ai/deep-value/verify` (POST, streaming — Analyst Review red-team pass), `/api/ai/advisor` (POST, streaming conversational), `/api/advisor/sessions` (GET/POST), `/api/advisor/sessions/[id]` (GET/DELETE), `/api/advisor/sessions/[id]/messages` (POST, full replace), `/api/portfolio/snapshots` (GET), `/api/cron/portfolio-snapshot` (GET, Vercel Cron), `/api/watchlist` (GET/POST), `/api/watchlist/[id]` (DELETE/PATCH), `/api/watchlist/settings` (PATCH), `/api/watchlist/run` (POST), `/api/cron/watchlist-analysis` (GET, Vercel Cron)
+**Endpoints:** `/api/quote`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/PATCH/DELETE — PATCH attaches an Analyst Review `reviewMd`), `/api/positions` (GET/POST), `/api/positions/[id]` (DELETE, PATCH — close/sell a position, full or partial), `/api/ai/deep-value` (POST, streaming), `/api/ai/deep-value/verify` (POST, streaming — Analyst Review red-team pass), `/api/ai/advisor` (POST, streaming conversational), `/api/advisor/sessions` (GET/POST), `/api/advisor/sessions/[id]` (GET/DELETE), `/api/advisor/sessions/[id]/messages` (POST, full replace), `/api/portfolio/snapshots` (GET), `/api/cron/portfolio-snapshot` (GET, Vercel Cron), `/api/watchlist` (GET/POST), `/api/watchlist/[id]` (DELETE/PATCH), `/api/watchlist/settings` (PATCH), `/api/watchlist/run` (POST), `/api/cron/watchlist-analysis` (GET, Vercel Cron)
 
 ---
 
@@ -358,6 +360,20 @@ Headers: Azioni | Div. Cda | Div. Ass. | Divisa | Stacco | Pagamento | Tipo Divi
 - We check the **Pagamento** column (payment date), never Stacco (ex-div date).
 - Failures (network, parse error, structure change) return `null` silently — snapshot must never be blocked by a dividend check failure.
 
+### Close Position (full/partial sale) — result-union + record-exactly-once
+
+`closePosition(userId, id, req)` in `lib/positions.ts` (server-only) closes a `Position` by setting `closedAt`/`sellPrice`. It returns a discriminated union instead of throwing, so the route (`app/api/positions/[id]/route.ts`, `PATCH`) stays a thin controller that maps the result to an HTTP status:
+
+```typescript
+export type CloseResult =
+  | { ok: true; positions: NonNullable<PositionRow>[] }
+  | { ok: false; status: 404 | 400; error: string };
+```
+
+- **Full close** (no `sharesToSell`, or it covers the whole lot within `EPS = 1e-9` float tolerance): a single `update` sets `closedAt`/`sellPrice`.
+- **Partial close**: splits the lot in one `$transaction` — the open row shrinks by the sold shares, a new row is `create`d for the sold shares carrying `closedAt`/`sellPrice`. This preserves realized P&L on the sold slice while the remainder keeps being valued as an open holding (WAC recomputes automatically since aggregation is a pure re-derivation over open positions).
+- **Record realized P&L exactly once, not via a time window**: `sellDate`/`closedAt` can be backdated (the user closing a position today for a sale that happened last week). `lib/portfolio-snapshots.ts` uses a `realizedRecorded` boolean flag set in the same transaction as the snapshot write, instead of "closed in the last N days" — a window would silently miss a backdated sale and leave the cost/value drop on the chart unexplained. Prefer this pattern anywhere a snapshot/cron job needs to account for an event exactly once regardless of when its timestamp falls.
+
 ### WAC/DCA Aggregation Pattern
 
 Client-side aggregation of flat `Position[]` by ticker — no DB involvement:
@@ -455,6 +471,10 @@ const TICK_BG = { violet: "bg-violet-400", yellow: "bg-yellow-400" } as const;
 ```
 
 Also: `text-*` classes do not color `div` backgrounds — use `bg-*` for any element without text content.
+
+### Chart event-marker colors — literal, not tokens, when they're semantic events
+
+The P&L history chart (`portfolio-history-chart.tsx`) marks discrete events (dividend paid, capital deployed, position sold) with dedicated literal colors — green (dividend), amber (capital deployed), violet `#a78bfa` (sold) — rather than the semantic `--success`/`--danger` tokens, because these are event categories, not gain/loss judgments. When adding a new event-color, register it as an intentional exception in `.impeccable/config.json` (`detector.ignoreRules`/`ignoreValues`) with a `reason` — otherwise the impeccable design-consistency check flags it as an ad-hoc color on every future audit.
 
 ### Tailwind Opacity Modifiers on CSS Vars — DO NOT USE
 `text-accent/80`, `bg-success/15`, `border-accent/40` **silently fail**. CSS custom properties (`var(--accent)`) resolve to hex strings at runtime; Tailwind cannot extract RGB channels for opacity math.

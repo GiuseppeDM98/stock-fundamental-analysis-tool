@@ -87,6 +87,26 @@ export type Translations = {
   exitSignalReviewReached: string;
   exitSignalReviewConsider: string;
   exitSignalCta: string;
+  // Close position (sale) flow
+  closePositionBtn: string;
+  closePositionTitle: string;
+  sellPriceField: string;
+  sellDateField: string;
+  sharesToSellField: string;
+  closePartialHint: string;
+  realizedPreview: string;
+  confirmCloseBtn: string;
+  closeErrorShares: string;
+  closedPositionsTitle: string;
+  soldOn: string;
+  heldFor: string;
+  daysUnit: string;
+  noOpenPositions: string;
+  unrealizedPnL: string;
+  realizedPnL: string;
+  totalReturn: string;
+  totalReturnHint: string;
+  soldMarkerLabel: string;
 
   // ─── Analyses ───────────────────────────────────────────────────────────────
   noAnalysesYet: string;
@@ -395,6 +415,7 @@ export type Translations = {
   hubRecentTitle: string;
   hubRecentAnalysesTitle: string;
   hubRecentPortfolioTitle: string;
+  hubPortfolioAsOf: string;
   hubRecentWatchlistTitle: string;
   hubViewAll: string;
   hubRecentEmpty: string;
@@ -488,6 +509,25 @@ const en: Translations = {
   exitSignalReviewReached: "Price has reached the base fair value",
   exitSignalReviewConsider: "Review the thesis — hold (e.g. for dividends), add, or exit.",
   exitSignalCta: "Re-analyze",
+  closePositionBtn: "Close",
+  closePositionTitle: "Close Position",
+  sellPriceField: "Sell Price",
+  sellDateField: "Sell Date",
+  sharesToSellField: "Shares to Sell",
+  closePartialHint: "Partial sale — the lot will be split, keeping the remaining shares open.",
+  realizedPreview: "Realized P&L",
+  confirmCloseBtn: "Close Position",
+  closeErrorShares: "Shares to sell must be between 0 and the lot's shares.",
+  closedPositionsTitle: "Closed Positions",
+  soldOn: "Sold",
+  heldFor: "held",
+  daysUnit: "days",
+  noOpenPositions: "No open positions.",
+  unrealizedPnL: "Unrealized P&L",
+  realizedPnL: "Realized P&L",
+  totalReturn: "Total Return",
+  totalReturnHint: "unrealized + realized",
+  soldMarkerLabel: "Sold",
 
   // Analyses
   noAnalysesYet: "No saved analyses yet.",
@@ -794,6 +834,7 @@ const en: Translations = {
   hubRecentTitle: "Pick up where you left off",
   hubRecentAnalysesTitle: "Recent analyses",
   hubRecentPortfolioTitle: "Portfolio",
+  hubPortfolioAsOf: "as of",
   hubRecentWatchlistTitle: "Watchlist",
   hubViewAll: "View all →",
   hubRecentEmpty: "Nothing yet",
@@ -887,6 +928,25 @@ const it: Translations = {
   exitSignalReviewReached: "Il prezzo ha raggiunto il fair value base",
   exitSignalReviewConsider: "Valuta se la tesi regge: tieni (es. per i dividendi), aggiungi o esci.",
   exitSignalCta: "Ri-analizza",
+  closePositionBtn: "Chiudi",
+  closePositionTitle: "Chiudi Posizione",
+  sellPriceField: "Prezzo di Vendita",
+  sellDateField: "Data di Vendita",
+  sharesToSellField: "Quote da Vendere",
+  closePartialHint: "Vendita parziale — il lotto verrà diviso, mantenendo aperte le quote restanti.",
+  realizedPreview: "P&L Realizzato",
+  confirmCloseBtn: "Chiudi Posizione",
+  closeErrorShares: "Le quote da vendere devono essere tra 0 e le quote del lotto.",
+  closedPositionsTitle: "Posizioni Chiuse",
+  soldOn: "Venduto il",
+  heldFor: "detenuto",
+  daysUnit: "giorni",
+  noOpenPositions: "Nessuna posizione aperta.",
+  unrealizedPnL: "P&L Non Realizzato",
+  realizedPnL: "P&L Realizzato",
+  totalReturn: "Rendimento Totale",
+  totalReturnHint: "non realizzato + realizzato",
+  soldMarkerLabel: "Venduto",
 
   // Analyses
   noAnalysesYet: "Nessuna analisi salvata.",
@@ -1193,6 +1253,7 @@ const it: Translations = {
   hubRecentTitle: "Riprendi da dove eri rimasto",
   hubRecentAnalysesTitle: "Ultime analisi",
   hubRecentPortfolioTitle: "Portfolio",
+  hubPortfolioAsOf: "al",
   hubRecentWatchlistTitle: "Watchlist",
   hubViewAll: "Vedi tutte →",
   hubRecentEmpty: "Ancora niente",

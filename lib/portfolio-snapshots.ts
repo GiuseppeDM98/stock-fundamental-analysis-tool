@@ -4,7 +4,8 @@ import "server-only";
 import { db } from "@/lib/db";
 import { getQuote } from "@/lib/yahoo-client";
 import { fetchDividendPaidToday } from "@/lib/dividends";
-import type { Position, SnapshotData } from "@/types/portfolio";
+import { realizedPnlNative } from "@/lib/portfolio-math";
+import type { Position, SnapshotData, RealizedEntry } from "@/types/portfolio";
 
 // ─── FX helpers ───────────────────────────────────────────────────────────────
 
@@ -43,9 +44,14 @@ async function snapshotExistsToday(userId: string): Promise<boolean> {
  * Creates a portfolio value snapshot for one user.
  *
  * Idempotent: silently returns if today's snapshot already exists (UTC).
- * Positions with unresolvable price or FX rate are excluded from totals
- * but recorded in data JSON with null fields for auditability.
- * Positions with an ISIN are checked on Borsa Italiana for dividend payments today.
+ * Only OPEN lots are valued as current holdings; sold lots are excluded from
+ * totalEur/costEur (so the value line steps down when a position is closed).
+ * Sales not yet recorded on any snapshot are captured as realizedEntries and
+ * flagged (realizedRecorded) so each sale is counted exactly once — this powers
+ * the chart's "Sold" marker that explains the value drop.
+ * Positions with unresolvable price or FX rate are excluded from totals but
+ * recorded in data JSON with null fields for auditability.
+ * Open positions with an ISIN are checked on Borsa Italiana for dividends today.
  */
 export async function createSnapshotForUser(
   userId: string,
@@ -54,18 +60,34 @@ export async function createSnapshotForUser(
   if (positions.length === 0) return;
   if (await snapshotExistsToday(userId)) return;
 
+  // Only open lots are current holdings; sold lots are no longer valued.
+  const openPositions = positions.filter((p) => !p.closedAt);
+
+  // Sales not yet reflected on any snapshot. Recorded exactly once via realizedRecorded,
+  // which is robust even when the user back-dates sellDate (a time window would miss those).
+  const unrecordedClosed = await db.position.findMany({
+    where: { userId, closedAt: { not: null }, realizedRecorded: false },
+  });
+
+  // Nothing to value and no new sale to record → skip (no empty snapshot for idle users).
+  if (openPositions.length === 0 && unrecordedClosed.length === 0) return;
+
   const today = new Date().toISOString().slice(0, 10);
   const foreignCurrencies = [
-    ...new Set(positions.map((p) => p.currency).filter((c) => c !== "EUR")),
+    ...new Set(
+      [...openPositions, ...unrecordedClosed]
+        .map((p) => p.currency)
+        .filter((c) => c !== "EUR")
+    ),
   ];
 
-  // Collect unique ISINs for dividend lookups
+  // Collect unique ISINs for dividend lookups (open holdings only — sold shares earn no dividend)
   const uniqueIsins = [
-    ...new Set(positions.map((p) => p.isin).filter((isin): isin is string => !!isin)),
+    ...new Set(openPositions.map((p) => p.isin).filter((isin): isin is string => !!isin)),
   ];
 
   // Fetch FX rates, ticker prices, and today's dividends in parallel
-  const uniqueTickers = [...new Set(positions.map((p) => p.ticker))];
+  const uniqueTickers = [...new Set(openPositions.map((p) => p.ticker))];
   const [fxRates, priceResults, dividendResults] = await Promise.all([
     fetchFxRates(foreignCurrencies),
     Promise.allSettled(
@@ -101,7 +123,7 @@ export async function createSnapshotForUser(
   let costEur = 0;
   let dividendsEur = 0;
 
-  const entries = positions.map((p) => {
+  const entries = openPositions.map((p) => {
     const currentPrice = prices[p.ticker] ?? null;
     // EUR positions use rate 1; foreign positions need the Frankfurter rate
     const fxRate = p.currency === "EUR" ? 1 : (fxRates[p.currency] ?? null);
@@ -144,17 +166,51 @@ export async function createSnapshotForUser(
     };
   });
 
-  const data: SnapshotData = { dividendsEur, entries };
+  // Record realized P&L for sales not yet on a snapshot. FX-convert at today's rate; a sale
+  // whose currency has no rate is left unrecorded (realizedRecorded stays false) for a later run.
+  let realizedEur = 0;
+  const realizedEntries: RealizedEntry[] = [];
+  const recordedIds: string[] = [];
+  for (const p of unrecordedClosed) {
+    const fxRate = p.currency === "EUR" ? 1 : (fxRates[p.currency] ?? null);
+    if (fxRate === null || p.sellPrice === null) continue;
+    const realizedInEur = realizedPnlNative(p.sellPrice, p.purchasePrice, p.shares) / fxRate;
+    const proceedsInEur = (p.sellPrice * p.shares) / fxRate;
+    realizedEur += realizedInEur;
+    realizedEntries.push({
+      ticker: p.ticker,
+      sharesSold: p.shares,
+      sellPrice: p.sellPrice,
+      currency: p.currency,
+      realizedEur: realizedInEur,
+      proceedsEur: proceedsInEur,
+    });
+    recordedIds.push(p.id);
+  }
 
-  await db.portfolioSnapshot.create({
-    data: {
-      userId,
-      takenAt: new Date(),
-      totalEur,
-      costEur,
-      data: JSON.stringify(data),
-    },
-  });
+  const data: SnapshotData = { dividendsEur, entries, realizedEur, realizedEntries };
+
+  // Write the snapshot and flag the recorded sales atomically, so a sale is never
+  // double-counted (flagged) without its realized P&L landing on a snapshot.
+  await db.$transaction([
+    db.portfolioSnapshot.create({
+      data: {
+        userId,
+        takenAt: new Date(),
+        totalEur,
+        costEur,
+        data: JSON.stringify(data),
+      },
+    }),
+    ...(recordedIds.length > 0
+      ? [
+          db.position.updateMany({
+            where: { id: { in: recordedIds } },
+            data: { realizedRecorded: true },
+          }),
+        ]
+      : []),
+  ]);
 }
 
 /**
@@ -199,6 +255,9 @@ export async function createSnapshotsForAllUsers(): Promise<{
         currency: p.currency,
         purchasedAt: p.purchasedAt.toISOString(),
         notes: p.notes,
+        // closedAt drives the open/closed split in createSnapshotForUser — must not be dropped.
+        closedAt: p.closedAt ? p.closedAt.toISOString() : null,
+        sellPrice: p.sellPrice,
         createdAt: p.createdAt.toISOString(),
       }));
 

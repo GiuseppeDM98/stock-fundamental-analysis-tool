@@ -8,7 +8,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: July 8, 2026 — **Advisor: authoritative live prices + anti-fabrication grounding.** The Portfolio-mode Advisor had web search enabled but *no* authoritative current price in context (only historical `priceAtAnalysis` + purchase price), so it filled the gap from a stale web quote or memory (reported 2.28 for a stock trading at 2.16) and invented a dated causal narrative for a price move. Fix (mirrors the `/verify` pattern): the route `getQuote`s the unique position tickers (`Promise.allSettled`, best-effort) and passes `livePrices` into `buildAdvisorSystemPrompt`, rendered as a `LIVE PRICES (authoritative …)` block. A shared `GROUNDING_RULES_BLOCK` const (`lib/ai/advisor-prompts.ts`, in both advisor + discovery builders) anchors prices to that block, bans quoting `priceAtAnalysis` as current, and requires web-verifying any cited cause/event/guidance with a date (else "unconfirmed"). No DB/migration/i18n change; the position-blind valuation invariant is untouched (only a *market price* fact + rules were added to the advisor, which already reads positions/analyses read-only).
+**Last Updated**: July 8, 2026 — **Close Position + `/portfolio` redesign.** Positions can now be closed (fully or partially sold) instead of only deleted: `PATCH /api/positions/[id]` (`lib/positions.ts` → `closePosition()`, full close updates the row, partial close splits the lot in a `$transaction`) records `closedAt`/`sellPrice` and realized P&L (`lib/portfolio-math.ts`, pure). Closed positions move to an archived "Closed positions" section; the P&L history chart marks sale dates with a violet "Sold" marker so a sale reads as a tracked event, not an unexplained value drop. `portfolio-snapshots.ts` values only open positions and records realized P&L exactly once via a `realizedRecorded` flag (robust to backdated `sellDate`). `/portfolio`'s SummaryBar was redesigned into a ledger-style header (primary current value + P&L, ruled cost/realized/total/dividends row) and the chart gained a legend; both follow the "Investor's Ledger" design system. Turso schema applied via `ALTER TABLE ADD COLUMN`. The Hub's Portfolio card now labels its P&L figure "as of &lt;date&gt;" since it reflects the last snapshot, not live prices.
 
 ---
 
@@ -43,7 +43,7 @@ _Removed with the classic engine / Compare page: `/api/compare/*`, valuation / f
 ## Current Features
 
 ### Hub (`/`)
-Adaptive landing framing Discover→Decide→Monitor: 3 pipeline cards + "Start with the Advisor" CTA + quick ticker box → `/analyze?ticker=` (full `window.location` nav — Router-Cache gotcha). `app/page.tsx` calls `auth()` **without redirect** (renders logged-out too). Logged-in recent-activity strip: last 3 analyses, portfolio P&L, watchlist count — fetched once via a `ranRef` guard (avoids `useSession` re-render loop), each degrades to empty on failure. `components/hub-client.tsx`.
+Adaptive landing framing Discover→Decide→Monitor: 3 pipeline cards + "Start with the Advisor" CTA + quick ticker box → `/analyze?ticker=` (full `window.location` nav — Router-Cache gotcha). `app/page.tsx` calls `auth()` **without redirect** (renders logged-out too). Logged-in recent-activity strip: last 3 analyses, portfolio P&L, watchlist count — fetched once via a `ranRef` guard (avoids `useSession` re-render loop), each degrades to empty on failure. The Portfolio P&L figure is the **last `PortfolioSnapshot`** (cron), not a live price — labeled "as of &lt;date&gt;" so it doesn't read as disagreeing with the live P&L shown on `/portfolio` itself. `components/hub-client.tsx`.
 
 ### Deep Dive — `/analyze`
 Slim, single path: ticker search → `GET /api/quote` (price header + reference price) → MoS slider (0–80%, `sfa:mosPercent`) → **Deep Value** panel. No Yahoo fundamentals fetch. `analyze-client.tsx` reads only `?ticker=` on mount then `replaceState` clears it. **Always position-blind** — no WAC/prevFv from URL or props.
@@ -67,16 +67,17 @@ Slim, single path: ticker search → `GET /api/quote` (price header + reference 
 - **Open-position banner** on the detail page: server `db.position.findMany` + client live price.
 
 ### Portfolio Tracker (`/portfolio`)
-- `Position`: `ticker`, `isin?`, `companyName`, `purchasePrice`, `shares`, `currency`, `purchasedAt`, `notes`, `capitalGainsTaxRate?`.
-- **WAC/DCA**: positions grouped by ticker (`AggregatedPosition` — `weightedAvgCost`, `totalShares`, `totalCost`), expandable per-purchase drill-down; toggle Aggregated/Per-Purchase. WAC P&L = `(price − WAC) × totalShares`.
-- Multi-currency (EUR/USD/GBP/CHF/JPY/CAD/AUD/SEK/NOK/DKK) → EUR via Frankfurter. Summary bar (renders only when a live price + FX resolve): total cost/value/P&L (+ estimated tax + net when a rate is set), dividends received (>0). "Converted to EUR" attribution only when a non-EUR position exists.
+- `Position`: `ticker`, `isin?`, `companyName`, `purchasePrice`, `shares`, `currency`, `purchasedAt`, `notes`, `capitalGainsTaxRate?`, `closedAt?`, `sellPrice?`.
+- **WAC/DCA**: positions grouped by ticker (`AggregatedPosition` — `weightedAvgCost`, `totalShares`, `totalCost`), expandable per-purchase drill-down; toggle Aggregated/Per-Purchase. WAC P&L = `(price − WAC) × totalShares`. Only open positions are aggregated.
+- Multi-currency (EUR/USD/GBP/CHF/JPY/CAD/AUD/SEK/NOK/DKK) → EUR via Frankfurter. Ledger-style **SummaryBar**: primary current value + unrealized P&L, then a ruled row (cost/realized/total/dividends, + estimated tax + net when a rate is set). "Converted to EUR" attribution only when a non-EUR position exists.
 - Per-row daily change (`regularMarketChange%`), capital-gains tax + net P&L on gains only. Add-position modal (portal), ISIN auto-fill for same ticker. Live prices via `/api/quote/[ticker]` (parallel at mount).
 - **Portfolio ↔ Analyses**: each row shows "N saved analyses ▼" (date, MoS%, buy target + intrinsic, link). Via `Promise.all([fetchPositions, fetchAnalyses, fetchSnapshots])`.
 - **Exit signal**: `getExitSignal(price, analyses)` (module-level) — `price >= intrinsicBase` of the latest analysis → amber `⚠ At Fair Value` pill + always-visible "Re-analyze →". **Monitor only**: both buttons → clean `/analyze?ticker=X` (no position params). Hold/exit reasoning → Advisor.
-- **P&L history chart**: Recharts line of value vs cost over time (from `PortfolioSnapshot`, placeholder <2 snapshots). Green markers = dividend day; amber markers = capital deployed (`costEur` delta > €50). `SnapshotChartPoint = SnapshotPoint & { capitalDelta? }`.
+- **Close position (full/partial sale)**: `PATCH /api/positions/[id]` → `closePosition()` in `lib/positions.ts` (server-only). Full close (no `sharesToSell` or ≈ the whole lot) sets `closedAt`/`sellPrice` on the row. Partial close splits the lot in one `$transaction`: the open row shrinks by the sold shares, a new closed row is created holding the sold shares — preserves realized P&L on the sold portion while the remainder stays a live holding. Returns a discriminated `CloseResult` (`{ok:true, positions}` / `{ok:false, status:404|400, error}`) so the route stays a thin controller. `lib/portfolio-math.ts` (pure, shared client+server) has `realizedPnlNative()` and `holdingDays()`. Closed positions render in an archived "Closed positions" section, separate from the open list; realized P&L rolls into the SummaryBar's "Realized" figure.
+- **P&L history chart**: Recharts line of value vs cost over time (from `PortfolioSnapshot`, placeholder <2 snapshots), with a legend. Green markers = dividend day; amber markers = capital deployed (`costEur` delta > €50); **violet `#a78bfa` "Sold" markers** = a close event, so a value/cost drop reads as a tracked sale, not an unexplained crash (registered as an intentional design-system event color in `.impeccable/config.json`). `SnapshotChartPoint = SnapshotPoint & { capitalDelta? }`.
 
 ### Portfolio Snapshots (cron)
-`PortfolioSnapshot`: `totalEur`, `costEur`, `takenAt`, `data` (JSON `SnapshotData` — `dividendsEur` + per-position `SnapshotEntry[]`). Vercel Cron `0 20 * * 1-5` → GET `/api/cron/portfolio-snapshot`, secured by `CRON_SECRET`. Idempotent per UTC day, sequential users (Yahoo rate limits), FX stored in JSON. Dividends: positions with `isin` checked on Borsa Italiana (`lib/dividends.ts`, MTAA only). `lib/portfolio-snapshots.ts` is `server-only`; client helper `fetchSnapshots()` in `lib/portfolio.ts`.
+`PortfolioSnapshot`: `totalEur`, `costEur`, `takenAt`, `data` (JSON `SnapshotData` — `dividendsEur` + `realizedEur` + `realizedEntries` + per-position `SnapshotEntry[]`). Vercel Cron `0 20 * * 1-5` → GET `/api/cron/portfolio-snapshot`, secured by `CRON_SECRET`. Idempotent per UTC day, sequential users (Yahoo rate limits), FX stored in JSON. Values only **open** positions; records each closed position's realized P&L **exactly once** via a `realizedRecorded` flag set in the same transaction as the snapshot write (robust to a backdated `sellDate` — a time-window check would miss it). Dividends: positions with `isin` checked on Borsa Italiana (`lib/dividends.ts`, MTAA only). `lib/portfolio-snapshots.ts` is `server-only`; client helper `fetchSnapshots()` in `lib/portfolio.ts`.
 
 ### AI Portfolio Advisor (`/advisor`)
 - Conversational chat with full context of the user's portfolio + saved analyses. Builders in `lib/ai/advisor-prompts.ts`, endpoint `/api/ai/advisor`. Request: `{ messages, language, mode: "portfolio" | "discovery" = "portfolio" }`.
@@ -128,6 +129,8 @@ lib/
   dividends.ts               # server-only: Borsa Italiana dividend fetcher
   watchlist-analysis.ts      # server-only: cron/email digest from saved analyses (no AI)
   email.ts                   # Resend — sendWatchlistDigest()
+  positions.ts                # server-only: closePosition() — full/partial position close
+  portfolio-math.ts           # pure: realizedPnlNative(), holdingDays() (shared client+server)
   report/verdict.ts          # getVerdict() + VERDICT_BADGE/VERDICT_TEXT (shared)
   report/valuation.ts        # grossUpToIntrinsic() (shared)
   report/evolution.ts        # computeEvolution() — deterministic diff (no AI)
@@ -135,7 +138,7 @@ lib/
 app/
   page.tsx (Hub)  analyze/  login/  register/  analyses/(+[id])  portfolio/  watchlist/  advisor/
   manifest.ts  icon.tsx  print.css
-  api/ quote/[ticker]  auth/*  analyses(+/[id])  positions(+/[id])
+  api/ quote/[ticker]  auth/*  analyses(+/[id])  positions(+/[id], PATCH closes/sells)
       portfolio/snapshots  cron/{portfolio-snapshot,watchlist-analysis}
       watchlist(+/[id],/settings,/run)
       ai/deep-value(+/verify)  ai/advisor  advisor/sessions(+/[id](+/messages))
@@ -147,7 +150,7 @@ components/                  # hub-client, analyze-client, deep-value-panel, ana
 context/language-context.tsx
 public/sw.js  public/icons/
 prisma/  generated/prisma/ (gitignored)  vercel.json  docs/
-__tests__/                   # yahoo-client.test.ts + evolution.test.ts
+__tests__/                   # yahoo-client.test.ts + evolution.test.ts + portfolio-math.test.ts
 ```
 
 ---

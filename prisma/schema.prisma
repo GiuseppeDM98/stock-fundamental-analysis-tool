@@ -127,6 +127,16 @@ model Position {
   // User's applicable capital gains tax rate for this position (e.g. 26.0 for Italy).
   // Used client-side to show estimated tax on unrealized gains and net dividend amounts.
   capitalGainsTaxRate Float?
+  // Position close (sale) tracking. Both null = still open. When the user sells a lot,
+  // closedAt + sellPrice are set (sellPrice in the position's own currency). A partial sale
+  // splits the lot: the open row keeps the remaining shares, a new closed row holds the sold shares.
+  // Closed positions are archived (kept for realized-P&L history), never valued as current holdings.
+  closedAt      DateTime?
+  sellPrice     Float?
+  // Set true once a daily snapshot has recorded this sale's realized P&L (the chart's "Sold"
+  // marker), so it is counted exactly once — regardless of a back-dated sellDate. Open lots
+  // stay false and are never recorded until closed.
+  realizedRecorded Boolean @default(false)
   createdAt     DateTime @default(now())
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
