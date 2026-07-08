@@ -190,6 +190,7 @@ type AggregatedPositionRowProps = {
   dailyChange?: DailyChange;
   onDelete: (id: string) => void;
   onClose: (position: Position) => void;
+  onAddPurchase: (agg: AggregatedPosition) => void;
   deleting: string | null;
   pricesLoading: boolean;
   tickerAnalyses: SavedAnalysis[];
@@ -201,6 +202,7 @@ function AggregatedPositionRow({
   dailyChange,
   onDelete,
   onClose,
+  onAddPurchase,
   deleting,
   pricesLoading,
   tickerAnalyses,
@@ -322,6 +324,12 @@ function AggregatedPositionRow({
           >
             {t("analyzeBtn")}
           </a>
+          <button
+            onClick={() => onAddPurchase(agg)}
+            className="tap rounded-lg border border-slate-700 px-2 py-1 text-xs text-muted transition hover:border-sky-400/40 hover:text-sky-300"
+          >
+            {t("addPurchaseBtn")}
+          </button>
           {/* Close/Delete only shown for single-purchase tickers; multi-purchase uses drill-down */}
           {!hasMultiple && (
             <>
@@ -380,9 +388,12 @@ type AddPositionModalProps = {
   onClose: () => void;
   onSave: (pos: Position) => void;
   existingPositions: Position[];
+  // Pre-fills ticker/companyName/currency/isin/capitalGainsTaxRate when adding a
+  // purchase to a ticker already held — date/price/shares/notes stay blank/today.
+  prefill?: Partial<CreatePositionRequest>;
 };
 
-function AddPositionModal({ onClose, onSave, existingPositions }: AddPositionModalProps) {
+function AddPositionModal({ onClose, onSave, existingPositions, prefill }: AddPositionModalProps) {
   const { t } = useLanguage();
   const [form, setForm] = useState<CreatePositionRequest>({
     ticker: "",
@@ -394,6 +405,7 @@ function AddPositionModal({ onClose, onSave, existingPositions }: AddPositionMod
     purchasedAt: new Date().toISOString().slice(0, 10),
     notes: "",
     capitalGainsTaxRate: undefined,
+    ...prefill,
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1021,6 +1033,9 @@ export default function PortfolioList() {
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  // Pre-fills the Add Position modal when opened via a row's "+ Purchase" button
+  // (ticker/companyName/currency/isin/capitalGainsTaxRate); null = a blank "new position" form.
+  const [prefill, setPrefill] = useState<Partial<CreatePositionRequest> | null>(null);
   // The lot currently being closed (drives the Close modal); null = modal hidden.
   const [closingPosition, setClosingPosition] = useState<Position | null>(null);
   const [viewMode, setViewMode] = useState<"aggregated" | "flat">("aggregated");
@@ -1103,8 +1118,23 @@ export default function PortfolioList() {
   function handlePositionSaved(pos: Position) {
     setPositions((prev) => [pos, ...prev]);
     setShowModal(false);
+    setPrefill(null);
     if (currentPrices[pos.ticker] == null) loadPrices([pos.ticker]);
     if (pos.currency !== "EUR" && fxRates[pos.currency] == null) loadFxRates([pos.currency]);
+  }
+
+  // Opens the Add Position modal pre-filled with an existing ticker's metadata —
+  // avoids retyping company name/currency (and a mismatch typo silently breaking
+  // aggregateByTicker's grouping) when recording an additional purchase.
+  function handleAddPurchase(agg: AggregatedPosition) {
+    setPrefill({
+      ticker: agg.ticker,
+      companyName: agg.companyName,
+      currency: agg.currency,
+      isin: agg.purchases[0].isin ?? undefined,
+      capitalGainsTaxRate: agg.capitalGainsTaxRate ?? undefined,
+    });
+    setShowModal(true);
   }
 
   async function handleDelete(id: string) {
@@ -1211,6 +1241,7 @@ export default function PortfolioList() {
               dailyChange={dailyChanges[agg.ticker]}
               onDelete={handleDelete}
               onClose={setClosingPosition}
+              onAddPurchase={handleAddPurchase}
               deleting={deleting}
               pricesLoading={pricesLoading}
               tickerAnalyses={analysesByTicker[agg.ticker] ?? []}
@@ -1336,9 +1367,10 @@ export default function PortfolioList() {
 
       {showModal && (
         <AddPositionModal
-          onClose={() => setShowModal(false)}
+          onClose={() => { setShowModal(false); setPrefill(null); }}
           onSave={handlePositionSaved}
           existingPositions={positions}
+          prefill={prefill ?? undefined}
         />
       )}
 

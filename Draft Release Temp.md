@@ -108,6 +108,8 @@
 
 - **Navigation highlights the current page**, and form inputs show a visible focus ring for clearer keyboard navigation.
 
+- **Quicker follow-on purchases in the Portfolio** — a new **"+ Purchase"** button on each holding opens the Add Position form pre-filled with that stock's name, currency, and ISIN, so buying more of something you already own no longer means retyping it from scratch (and risking a typo that would otherwise split it into a separate line).
+
 ## 🔒 Security
 
 - Registration can be disabled via the `DISABLE_REGISTRATION=true` environment variable — useful to lock down the app after initial setup.
