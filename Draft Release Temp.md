@@ -14,7 +14,7 @@
 
 - **AI Portfolio Advisor** — a conversational `/advisor` page with two modes. **Portfolio mode** knows your holdings, weighted average costs, and saved fair values, so you can ask "which of my positions has the most upside left?" **Discovery mode** starts clean and is purpose-built for finding new ideas — ask for quality compounders, undervalued dividend growers, or sector opportunities and get 3–5 concrete tickers with a thesis, ROIC, valuation setup, and key risk each. When the AI names a stock, it appears as a clickable chip that launches a Deep Value analysis. Conversations are saved and listed in a sidebar. Your selected mode is remembered.
 
-- **Review Position (AI)** — when a holding reaches fair value, launch a dedicated analysis that answers a different question: *"I already own this — should I hold, add, or exit?"* The report factors in your weighted average cost and unrealized gain/loss, weighs dividend yield and safety, and ends with a Hold / Add / Exit recommendation.
+- **See how your estimate evolved** — when you have more than one saved analysis for a ticker, the saved-analyses card shows an evolution panel comparing your latest fair values to the previous save: Analysis, Reviewer, and Consensus base values side by side with the % change. It's a plain, exact calculation from your saved numbers — so you can watch the thesis strengthen or weaken over time at a glance.
 
 - **Adaptive Hub home** — the home page frames the full pipeline (Discover → Decide → Monitor) with a card per stage, a "Start with the Advisor" call-to-action, and a quick ticker box that jumps straight into an analysis. When logged in it surfaces a recent-activity strip: latest analyses, portfolio P&L, and watchlist count.
 
@@ -28,7 +28,7 @@
 
 - **Portfolio P&L History chart** — a line chart of portfolio value vs. cost basis over time, captured automatically every weekday after market close. Amber vertical markers flag days you deployed new capital (new position or DCA); hover to see the amount.
 
-- **Exit signal — "At Fair Value"** — when a holding's price reaches the intrinsic base fair value from your most recent saved analysis, an amber ⚠ At Fair Value badge appears in the position row with a Re-analyze → shortcut that carries your position context into a Review Position analysis. The threshold is the point where your original margin of safety is fully consumed.
+- **Exit signal — "At Fair Value"** — when a holding's price reaches the intrinsic base fair value from your most recent saved analysis, an amber ⚠ At Fair Value badge appears in the position row with a Re-analyze → shortcut that runs a fresh, independent Deep Value analysis. The threshold is the point where your original margin of safety is fully consumed; use the Advisor afterwards to decide whether to hold, add, or exit.
 
 - **Portfolio ↔ analyses cross-linking** — each position shows how many saved analyses exist for its ticker, expandable inline with date, MoS%, buy target and intrinsic value, and a link to the full report. Each saved analysis conversely shows an open-position badge with shares, WAC, and live P&L.
 
@@ -90,7 +90,7 @@
 
 - **Deep Value analyses dig deeper** — they run at a higher reasoning effort with far more room to work, sourcing up to 5 years of financial data, so reports are more thorough and less likely to be cut short on complex companies.
 
-- **The "at fair value" exit signal is dividend-aware** — reaching fair value is a checkpoint, not an automatic sell. "Hold (e.g. for dividends)" is a first-class option, and the position review weighs dividend yield, yield-on-cost, and dividend safety before recommending hold / add / exit.
+- **Every analysis is independent of your position** — a Deep Value analysis (and its Analyst Review) is never told what you paid or what a previous run estimated, so its fair values can't be unconsciously anchored to your cost basis or nudged to justify holding. Reaching fair value is a checkpoint, not an automatic sell — take the fresh, unbiased numbers to the Advisor, which knows your holdings and can weigh hold / add / exit (including dividend considerations) for you.
 
 - **Cleaner P&L presentation** — performance and P&L deltas appear as colored pill badges with a tinted background, and positions display as `shares × buy price → current price` with an inline P&L badge.
 

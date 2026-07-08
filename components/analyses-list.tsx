@@ -16,6 +16,7 @@ import { useLanguage } from "@/context/language-context";
 import { ValuationRuler, ComparisonTable } from "@/components/report/valuation-ruler";
 import { getVerdict, VERDICT_BADGE, VERDICT_TEXT, type Verdict } from "@/lib/report/verdict";
 import { grossUpToIntrinsic } from "@/lib/report/valuation";
+import { computeEvolution, type Evolution, type SourceDelta } from "@/lib/report/evolution";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -182,6 +183,58 @@ function AnalysisRow({
 // ─── Ticker card ─────────────────────────────────────────────────────────────
 
 /** A single ticker: compact by default, expands to the full valuation ruler + table. */
+// Static badge classes for the evolution %Δ — kept as a lookup so Tailwind's purge
+// can see them (runtime-built class strings get stripped). Near-zero moves stay neutral.
+function deltaBadgeClass(pctDelta: number): string {
+  if (pctDelta > 0.0005) return "bg-emerald-500/15 text-success";
+  if (pctDelta < -0.0005) return "bg-red-500/15 text-danger";
+  // Near-zero move: plain (uncolored) chip — avoids washed-out gray-on-tint.
+  return "text-slate-400";
+}
+
+/**
+ * Deterministic estimate-evolution diff for a ticker (base scenario, intrinsic scale).
+ * Purely presentational — the numbers come from computeEvolution and never touch an
+ * AI prompt; this only lets the user see how the thesis moved vs. the previous save.
+ */
+function EvolutionDiff({
+  evolution,
+  title,
+  labels,
+}: {
+  evolution: Evolution;
+  title: string;
+  labels: { analysis: string; reviewer: string; consensus: string };
+}) {
+  const rows: { label: string; delta: SourceDelta }[] = [
+    { label: labels.analysis, delta: evolution.base },
+    ...(evolution.reviewer ? [{ label: labels.reviewer, delta: evolution.reviewer }] : []),
+    ...(evolution.consensus ? [{ label: labels.consensus, delta: evolution.consensus }] : []),
+  ];
+
+  return (
+    <div className="mt-3 rounded-lg border border-slate-700/50 bg-slate-800/30 p-3">
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+        {title} {formatDate(evolution.prevDate)}
+      </p>
+      <div className="space-y-1">
+        {rows.map((row) => (
+          <div key={row.label} className="flex items-center justify-between gap-2 text-xs">
+            <span className="text-slate-400">{row.label}</span>
+            <span className="flex items-center gap-1.5 font-mono text-slate-300">
+              {row.delta.prev.toFixed(2)} → {row.delta.curr.toFixed(2)}
+              <span className={`rounded px-1.5 py-0.5 font-sans font-semibold ${deltaBadgeClass(row.delta.pctDelta)}`}>
+                {row.delta.pctDelta >= 0 ? "+" : ""}
+                {(row.delta.pctDelta * 100).toFixed(1)}%
+              </span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TickerGroup({
   ticker,
   analyses,
@@ -209,6 +262,11 @@ function TickerGroup({
   const latest = analyses[0];
   const older = analyses.slice(1);
   const mos = (latest.mosPercent ?? 0) / 100;
+
+  // Deterministic evolution of the estimate vs. the previous saved analysis (base
+  // scenario). Null when there's no prior save or no comparable base value — never
+  // fed to an AI prompt, purely a display of how the thesis moved over time.
+  const evolution = older.length > 0 ? computeEvolution(older[0], latest) : null;
 
   const hasFV =
     latest.fairValueBear != null && latest.fairValueBase != null && latest.fairValueBull != null;
@@ -411,6 +469,19 @@ function TickerGroup({
             </>
           ) : (
             <p className="text-xs text-slate-500">{t("noValuationData")}</p>
+          )}
+
+          {/* Estimate evolution vs the previous saved analysis — deterministic, no AI */}
+          {evolution && (
+            <EvolutionDiff
+              evolution={evolution}
+              title={t("evolutionTitle")}
+              labels={{
+                analysis: t("analysisLabel"),
+                reviewer: t("reviewerLabel"),
+                consensus: t("consensusLabel"),
+              }}
+            />
           )}
 
           {/* Metadata: performance + open position */}

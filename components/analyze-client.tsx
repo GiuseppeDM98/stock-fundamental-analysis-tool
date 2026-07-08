@@ -47,7 +47,10 @@ function getStorageItem<T>(key: string, parser: (value: unknown) => T, fallback:
  *
  * Uses the SSR-safe hydration guard to read localStorage and the `?ticker=` URL
  * param (set by advisor chips, watchlist, analyses re-run, and the
- * portfolio exit signal) only on the client.
+ * portfolio exit signal) only on the client. The analysis is always
+ * position-blind — no portfolio position or prior estimate is ever passed to the
+ * Deep Value panel, so the valuation stays independent (hold/exit reasoning lives
+ * in the Advisor; estimate evolution is a deterministic diff on /analyses).
  */
 export function AnalyzeClient() {
   const { t } = useLanguage();
@@ -58,8 +61,6 @@ export function AnalyzeClient() {
   const [mosPercent, setMosPercent] = useState(25);
   // Tracks whether client-side hydration has completed to prevent localStorage reads during SSR
   const [isHydrated, setIsHydrated] = useState(false);
-  // Context injected when navigating from the portfolio exit signal (⚠ At Fair Value → Re-analyze)
-  const [exitReviewContext, setExitReviewContext] = useState<{ wac: number; prevFv: number } | null>(null);
 
   // Holds a ticker from ?ticker= URL param so the post-hydration effect can auto-fetch it
   const urlTickerRef = useRef<string | null>(null);
@@ -68,26 +69,13 @@ export function AnalyzeClient() {
 
   // SSR hydration: read URL params + persisted state on client mount only.
   useEffect(() => {
-    // Read ALL URL params before clearing the URL — replaceState wipes them together.
-    const searchParams = new URLSearchParams(window.location.search);
-    const urlParam = searchParams.get("ticker");
-    const exitReviewFlag = searchParams.get("exitReview");
-    const wacParam = searchParams.get("wac");
-    const prevFvParam = searchParams.get("prevFv");
-
-    // ?ticker= (from re-run, advisor chip, or exit signal) takes precedence over localStorage
+    // ?ticker= (from re-run, advisor chip, watchlist, or exit signal) takes precedence
+    // over localStorage. It's the only param this page reads — the analysis is always
+    // position-blind, so no WAC/prevFv is accepted from the URL.
+    const urlParam = new URLSearchParams(window.location.search).get("ticker");
     if (urlParam) {
       urlTickerRef.current = urlParam.toUpperCase();
       window.history.replaceState({}, "", window.location.pathname);
-    }
-
-    // Inject position context when navigating from the portfolio exit signal
-    if (exitReviewFlag === "1" && wacParam && prevFvParam) {
-      const wac = parseFloat(wacParam);
-      const prevFv = parseFloat(prevFvParam);
-      if (Number.isFinite(wac) && wac > 0 && Number.isFinite(prevFv) && prevFv > 0) {
-        setExitReviewContext({ wac, prevFv });
-      }
     }
 
     const storedTicker = urlTickerRef.current ?? getStorageItem("sfa:lastTicker", (value) => String(value), "AAPL");
@@ -221,7 +209,6 @@ export function AnalyzeClient() {
               companyName={quote.shortName}
               mosPercent={mosPercent}
               currentPrice={quote.regularMarketPrice}
-              exitReviewContext={exitReviewContext}
             />
           </motion.div>
         )}
