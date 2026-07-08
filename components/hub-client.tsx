@@ -155,13 +155,23 @@ function RecentActivity({ t }: { t: (key: keyof Translations) => string }) {
         <Link href="/portfolio" className="card transition hover:border-sky-500/40">
           <span className="text-sm font-semibold text-slate-100">{t("hubRecentPortfolioTitle")}</span>
           {pnl != null ? (
-            <p className={`mt-2 font-display text-xl font-bold ${pnl >= 0 ? "text-success" : "text-danger"}`}>
-              {pnl >= 0 ? "+" : ""}
-              {formatCurrency(pnl, "EUR")}
-              {pnlPct != null && (
-                <span className="ml-1 text-xs">({pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%)</span>
+            <>
+              <p className={`mt-2 font-display text-xl font-bold ${pnl >= 0 ? "text-success" : "text-danger"}`}>
+                {pnl >= 0 ? "+" : ""}
+                {formatCurrency(pnl, "EUR")}
+                {pnlPct != null && (
+                  <span className="ml-1 text-xs">({pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%)</span>
+                )}
+              </p>
+              {/* This figure is the last daily snapshot, not a live quote — label the date so it
+                  doesn't read as "wrong" against the live P&L on the portfolio page. */}
+              {last && (
+                <p className="mt-0.5 text-[10px] text-slate-600">
+                  {t("hubPortfolioAsOf")}{" "}
+                  {new Date(last.takenAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+                </p>
               )}
-            </p>
+            </>
           ) : (
             <p className="mt-2 text-xs text-muted">{t("hubRecentEmpty")}</p>
           )}

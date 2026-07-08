@@ -30,17 +30,20 @@ export async function GET() {
 
   const response: SnapshotPoint[] = snapshots.map((s) => {
     let dividendsEur = 0;
+    let realizedEur = 0;
     try {
       const parsed = JSON.parse(s.data) as Partial<SnapshotData>;
       dividendsEur = parsed.dividendsEur ?? 0;
+      realizedEur = parsed.realizedEur ?? 0;
     } catch {
-      // Older snapshots without the dividendsEur field: treat as 0
+      // Older snapshots without these fields: treat as 0
     }
     return {
       takenAt: s.takenAt.toISOString(),
       totalEur: s.totalEur,
       costEur: s.costEur,
       dividendsEur,
+      realizedEur,
     };
   });
 

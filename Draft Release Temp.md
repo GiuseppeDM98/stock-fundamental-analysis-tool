@@ -20,6 +20,10 @@
 
 - **Portfolio Tracker** — track real purchases with live P&L at `/portfolio`. Supports EUR, USD, GBP, CHF, JPY, CAD, AUD, SEK, NOK, DKK with automatic FX conversion to EUR (via [Frankfurter API](https://api.frankfurter.app)). Positions for the same ticker are grouped into a single Weighted Average Cost (DCA) row with an expandable per-purchase breakdown, toggleable to a flat per-purchase view.
 
+- **Close a position (full or partial sale)** — sell all or part of a holding directly from the portfolio, recording the sale price and date. Closed positions move to an archived "Closed positions" section showing realized profit/loss, while the P&L history chart marks the sale date with a violet "Sold" marker — so a drop in value or cost basis reads as a tracked sale, not an unexplained market crash. Selling part of a position splits it cleanly: the remainder keeps tracking live P&L as before, and the sold portion is archived with its own realized result.
+
+- **Portfolio summary, redesigned** — the top of `/portfolio` now leads with your current value and unrealized P&L, followed by a compact ledger row of cost basis, realized P&L, total, and dividends received. The P&L history chart gained a legend.
+
 - **Daily price change in Portfolio** — each position shows today's % and absolute move vs. the previous close, in green or red, next to the current price.
 
 - **Capital gains tax & net P&L** — set an optional tax rate (%) per position and the portfolio shows estimated taxes and net P&L alongside the gross gain, both per position and in the summary bar (useful for the Italian 26% rate or any jurisdiction). Taxes are applied only to gains, never to losses.
@@ -83,6 +87,8 @@
 - Fixed the saved-analysis detail page and analyses previews not rendering markdown correctly (tables/headings, and a raw JSON block leaking into previews).
 
 - Fixed a **crash on certain tickers** (some European stocks) that data providers return as unavailable — a clear error message is shown instead.
+
+- Fixed the **home page's Portfolio P&L looking out of sync** with the live figure on `/portfolio` — the home value is a daily snapshot, so it's now labeled "as of &lt;date&gt;" to make that clear.
 
 ## 🔧 Improvements
 

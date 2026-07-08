@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "design-system-color",
+        "value": "#a78bfa",
+        "reason": "User-confirmed violet 'Sold' chart event marker (chosen in the close-position design decision); parallels amber Invested / green Dividend event hues",
+        "createdAt": "2026-07-08T08:24:33.125Z"
+      }
+    ]
+  }
+}
