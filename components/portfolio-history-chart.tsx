@@ -90,12 +90,53 @@ function ChartTooltip({
         </p>
       )}
       {(raw?.dividendsEur ?? 0) > 0 && (
-        <p style={{ color: "#34d399" }} className="mt-1 border-t border-slate-700/40 pt-1">
+        <p style={{ color: "#22c55e" }} className="mt-1 border-t border-slate-700/40 pt-1">
           {t("dividendMarkerLabel")}:{" "}
           <span className="font-semibold">+{formatEurFull(raw!.dividendsEur!, locale)}</span>
         </p>
       )}
+      {(raw?.realizedEur ?? 0) !== 0 && (
+        <p style={{ color: "#a78bfa" }} className="mt-1 border-t border-slate-700/40 pt-1">
+          {t("soldMarkerLabel")}:{" "}
+          <span className="font-semibold">
+            {raw!.realizedEur! >= 0 ? "+" : ""}{formatEurFull(raw!.realizedEur!, locale)}
+          </span>
+        </p>
+      )}
     </div>
+  );
+}
+
+// ─── Legend ───────────────────────────────────────────────────────────────────
+
+// One legend entry: a swatch matching how the series/marker is drawn (solid line,
+// dashed line, or a vertical event tick) followed by its label.
+function LegendItem({
+  variant,
+  color,
+  label,
+}: {
+  variant: "line" | "dash" | "tick";
+  color: string;
+  label: string;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {variant === "tick" ? (
+        <span aria-hidden className="inline-block h-2.5 w-[2px] rounded-full" style={{ background: color }} />
+      ) : (
+        <span
+          aria-hidden
+          className="inline-block h-[2px] w-3.5 rounded-full"
+          style={
+            variant === "dash"
+              ? { backgroundImage: `repeating-linear-gradient(to right, ${color} 0 3px, transparent 3px 5px)` }
+              : { background: color }
+          }
+        />
+      )}
+      {label}
+    </span>
   );
 }
 
@@ -150,13 +191,31 @@ export default function PortfolioHistoryChart() {
 
   const dividendDays = chartData.filter((s) => (s.dividendsEur ?? 0) > 0);
   const capitalEventDays = chartData.filter((s) => s.capitalDelta !== undefined);
+  // Days a position was sold — explains the step-down in value/cost so it doesn't read as a crash.
+  const soldDays = chartData.filter((s) => (s.realizedEur ?? 0) !== 0);
 
   return (
-    <div className="card mb-6" style={{ height: 272 }}>
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">
-        {t("portfolioValueOverTime")}
-      </p>
-      <ResponsiveContainer width="100%" height="88%">
+    <div className="card mb-6">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted">
+          {t("portfolioValueOverTime")}
+        </p>
+        {/* Legend: the two lines always, plus a marker key only for event types actually present. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted">
+          <LegendItem variant="line" color="#38bdf8" label={t("valueLabel")} />
+          <LegendItem variant="dash" color="#64748b" label={t("costLabel")} />
+          {capitalEventDays.length > 0 && (
+            <LegendItem variant="tick" color="#f59e0b" label={t("capitalDeployedMarkerLabel")} />
+          )}
+          {dividendDays.length > 0 && (
+            <LegendItem variant="tick" color="#22c55e" label={t("dividendMarkerLabel")} />
+          )}
+          {soldDays.length > 0 && (
+            <LegendItem variant="tick" color="#a78bfa" label={t("soldMarkerLabel")} />
+          )}
+        </div>
+      </div>
+      <ResponsiveContainer width="100%" height={210}>
         <LineChart
           data={chartData}
           margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
@@ -183,13 +242,13 @@ export default function PortfolioHistoryChart() {
             <ReferenceLine
               key={s.takenAt}
               x={s.takenAt}
-              stroke="#34d399"
+              stroke="#22c55e"
               strokeWidth={1.5}
               strokeDasharray="3 3"
               label={{
                 value: `${t("dividendMarkerLabel")} +${formatEurFull(s.dividendsEur!, locale)}`,
                 position: "insideTopRight",
-                fill: "#34d399",
+                fill: "#22c55e",
                 fontSize: 10,
               }}
             />
@@ -203,6 +262,23 @@ export default function PortfolioHistoryChart() {
               stroke="#f59e0b"
               strokeWidth={1.5}
               strokeDasharray="3 3"
+            />
+          ))}
+          {/* Vertical markers for days a position was sold — inline label carries the realized P&L,
+              so a step-down in value/cost reads as a sale, not a market crash. */}
+          {soldDays.map((s) => (
+            <ReferenceLine
+              key={`sold-${s.takenAt}`}
+              x={s.takenAt}
+              stroke="#a78bfa"
+              strokeWidth={1.5}
+              strokeDasharray="3 3"
+              label={{
+                value: `${t("soldMarkerLabel")} ${s.realizedEur! >= 0 ? "+" : ""}${formatEurFull(s.realizedEur!, locale)}`,
+                position: "insideBottomRight",
+                fill: "#a78bfa",
+                fontSize: 10,
+              }}
             />
           ))}
           {/* Market value of the portfolio */}

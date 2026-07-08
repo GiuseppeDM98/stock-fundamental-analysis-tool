@@ -14,11 +14,15 @@
 
 - **AI Portfolio Advisor** — a conversational `/advisor` page with two modes. **Portfolio mode** knows your holdings, weighted average costs, and saved fair values, so you can ask "which of my positions has the most upside left?" **Discovery mode** starts clean and is purpose-built for finding new ideas — ask for quality compounders, undervalued dividend growers, or sector opportunities and get 3–5 concrete tickers with a thesis, ROIC, valuation setup, and key risk each. When the AI names a stock, it appears as a clickable chip that launches a Deep Value analysis. Conversations are saved and listed in a sidebar. Your selected mode is remembered.
 
-- **Review Position (AI)** — when a holding reaches fair value, launch a dedicated analysis that answers a different question: *"I already own this — should I hold, add, or exit?"* The report factors in your weighted average cost and unrealized gain/loss, weighs dividend yield and safety, and ends with a Hold / Add / Exit recommendation.
+- **See how your estimate evolved** — when you have more than one saved analysis for a ticker, the saved-analyses card shows an evolution panel comparing your latest fair values to the previous save: Analysis, Reviewer, and Consensus base values side by side with the % change. It's a plain, exact calculation from your saved numbers — so you can watch the thesis strengthen or weaken over time at a glance.
 
 - **Adaptive Hub home** — the home page frames the full pipeline (Discover → Decide → Monitor) with a card per stage, a "Start with the Advisor" call-to-action, and a quick ticker box that jumps straight into an analysis. When logged in it surfaces a recent-activity strip: latest analyses, portfolio P&L, and watchlist count.
 
 - **Portfolio Tracker** — track real purchases with live P&L at `/portfolio`. Supports EUR, USD, GBP, CHF, JPY, CAD, AUD, SEK, NOK, DKK with automatic FX conversion to EUR (via [Frankfurter API](https://api.frankfurter.app)). Positions for the same ticker are grouped into a single Weighted Average Cost (DCA) row with an expandable per-purchase breakdown, toggleable to a flat per-purchase view.
+
+- **Close a position (full or partial sale)** — sell all or part of a holding directly from the portfolio, recording the sale price and date. Closed positions move to an archived "Closed positions" section showing realized profit/loss, while the P&L history chart marks the sale date with a violet "Sold" marker — so a drop in value or cost basis reads as a tracked sale, not an unexplained market crash. Selling part of a position splits it cleanly: the remainder keeps tracking live P&L as before, and the sold portion is archived with its own realized result.
+
+- **Portfolio summary, redesigned** — the top of `/portfolio` now leads with your current value and unrealized P&L, followed by a compact ledger row of cost basis, realized P&L, total, and dividends received. The P&L history chart gained a legend.
 
 - **Daily price change in Portfolio** — each position shows today's % and absolute move vs. the previous close, in green or red, next to the current price.
 
@@ -28,7 +32,7 @@
 
 - **Portfolio P&L History chart** — a line chart of portfolio value vs. cost basis over time, captured automatically every weekday after market close. Amber vertical markers flag days you deployed new capital (new position or DCA); hover to see the amount.
 
-- **Exit signal — "At Fair Value"** — when a holding's price reaches the intrinsic base fair value from your most recent saved analysis, an amber ⚠ At Fair Value badge appears in the position row with a Re-analyze → shortcut that carries your position context into a Review Position analysis. The threshold is the point where your original margin of safety is fully consumed.
+- **Exit signal — "At Fair Value"** — when a holding's price reaches the intrinsic base fair value from your most recent saved analysis, an amber ⚠ At Fair Value badge appears in the position row with a Re-analyze → shortcut that runs a fresh, independent Deep Value analysis. The threshold is the point where your original margin of safety is fully consumed; use the Advisor afterwards to decide whether to hold, add, or exit.
 
 - **Portfolio ↔ analyses cross-linking** — each position shows how many saved analyses exist for its ticker, expandable inline with date, MoS%, buy target and intrinsic value, and a link to the full report. Each saved analysis conversely shows an open-position badge with shares, WAC, and live P&L.
 
@@ -56,6 +60,10 @@
 
 - Fixed the **Advisor suggesting stocks that are no longer traded** — it once recommended a company delisted years ago. The Advisor now verifies via web search that a ticker is currently listed and actively traded before recommending it.
 
+- Fixed the **Advisor quoting a wrong, stale price** for a portfolio holding (e.g. showing ~2.28 for a stock actually trading at 2.16). The Advisor now receives the real current price of each of your holdings as authoritative ground truth, so its numbers match the live market.
+
+- Fixed the **Advisor inventing reasons for a price move** — it would state a cause (a "vague guidance", a "fund rotation") as established fact without checking. It now must verify any cited cause, news, or event via a dated web search, or explicitly flag the driver as unconfirmed instead of guessing.
+
 - Fixed **upside/downside percentages** in Deep Value being wildly understated (a base value 143% above price showed as "+1.4%") — they are now computed directly from fair value vs. the live price.
 
 - Fixed the **Watchlist showing prices in dollars** for EUR-listed tickers that hadn't been analyzed yet — rows now use the live quote's actual currency.
@@ -80,6 +88,8 @@
 
 - Fixed a **crash on certain tickers** (some European stocks) that data providers return as unavailable — a clear error message is shown instead.
 
+- Fixed the **home page's Portfolio P&L looking out of sync** with the live figure on `/portfolio` — the home value is a daily snapshot, so it's now labeled "as of &lt;date&gt;" to make that clear.
+
 ## 🔧 Improvements
 
 - **Deep Value analyses are more rigorous** — reports now incorporate the latest quarterly results (not just annual figures), verify that any cited guidance or business plan is the current version, separate official guidance from estimates, use normalized (recurring) earnings for valuation multiples, differentiate the Bull/Base/Bear scenarios on real fundamentals, and benchmark against the closest comparable companies rather than only large global peers. These directly address blind spots a second opinion used to catch.
@@ -90,13 +100,15 @@
 
 - **Deep Value analyses dig deeper** — they run at a higher reasoning effort with far more room to work, sourcing up to 5 years of financial data, so reports are more thorough and less likely to be cut short on complex companies.
 
-- **The "at fair value" exit signal is dividend-aware** — reaching fair value is a checkpoint, not an automatic sell. "Hold (e.g. for dividends)" is a first-class option, and the position review weighs dividend yield, yield-on-cost, and dividend safety before recommending hold / add / exit.
+- **Every analysis is independent of your position** — a Deep Value analysis (and its Analyst Review) is never told what you paid or what a previous run estimated, so its fair values can't be unconsciously anchored to your cost basis or nudged to justify holding. Reaching fair value is a checkpoint, not an automatic sell — take the fresh, unbiased numbers to the Advisor, which knows your holdings and can weigh hold / add / exit (including dividend considerations) for you.
 
 - **Cleaner P&L presentation** — performance and P&L deltas appear as colored pill badges with a tinted background, and positions display as `shares × buy price → current price` with an inline P&L badge.
 
 - **Fully responsive** — the app is optimized for phones and tablets: the navigation and Advisor sidebar become slide-in drawers, dense tables collapse into cards, and touch targets are finger-sized.
 
 - **Navigation highlights the current page**, and form inputs show a visible focus ring for clearer keyboard navigation.
+
+- **Quicker follow-on purchases in the Portfolio** — a new **"+ Purchase"** button on each holding opens the Add Position form pre-filled with that stock's name, currency, and ISIN, so buying more of something you already own no longer means retyping it from scratch (and risking a typo that would otherwise split it into a separate line).
 
 ## 🔒 Security
 

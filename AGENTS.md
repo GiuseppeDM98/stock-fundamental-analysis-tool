@@ -18,8 +18,8 @@ Next.js 15 stock fundamental analysis tool with AI-generated investment analysis
 types/             # fundamentals.ts, market.ts, analysis.ts, auth.ts, portfolio.ts, watchlist.ts
 lib/               # Business logic and utilities (Yahoo quote adapter, AI prompts, snapshots, dividends, formatters)
   ai/
-    deep-value-prompts.ts   # Prompt builders for streaming deep value analysis + Analyst Review (verify) + Review Position
-    advisor-prompts.ts      # buildAdvisorSystemPrompt() — injects portfolio + analyses context
+    deep-value-prompts.ts   # Prompt builders for streaming deep value analysis + Analyst Review (verify) — always position-blind
+    advisor-prompts.ts      # buildAdvisorSystemPrompt() — injects portfolio + analyses + live prices + GROUNDING_RULES_BLOCK
   yahoo-client.ts  # Yahoo Finance API adapter
   auth.ts          # Auth.js v5 config
   db.ts            # Prisma singleton client
@@ -30,6 +30,8 @@ lib/               # Business logic and utilities (Yahoo quote adapter, AI promp
   watchlist-analysis.ts    # Server-only: per-user/all-users watchlist cron runner
   email.ts                 # Resend email sender
   format.ts                # Formatting utilities
+  positions.ts             # Server-only: closePosition() (full/partial position close)
+  portfolio-math.ts        # Pure: realizedPnlNative(), holdingDays() — no server-only, shared client+server
   report/
     verdict.ts              # getVerdict() + VERDICT_BADGE/VERDICT_TEXT maps (shared: analyses + watchlist)
     valuation.ts             # grossUpToIntrinsic() (shared: analyses + watchlist)
@@ -92,7 +94,7 @@ if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 
 // Use session.user.id — typed via declaration merge in types/auth.ts
 ```
 
-**Endpoints:** `/api/quote`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/PATCH/DELETE — PATCH attaches an Analyst Review `reviewMd`), `/api/positions` (GET/POST), `/api/positions/[id]` (DELETE), `/api/ai/deep-value` (POST, streaming), `/api/ai/deep-value/verify` (POST, streaming — Analyst Review red-team pass), `/api/ai/advisor` (POST, streaming conversational), `/api/advisor/sessions` (GET/POST), `/api/advisor/sessions/[id]` (GET/DELETE), `/api/advisor/sessions/[id]/messages` (POST, full replace), `/api/portfolio/snapshots` (GET), `/api/cron/portfolio-snapshot` (GET, Vercel Cron), `/api/watchlist` (GET/POST), `/api/watchlist/[id]` (DELETE/PATCH), `/api/watchlist/settings` (PATCH), `/api/watchlist/run` (POST), `/api/cron/watchlist-analysis` (GET, Vercel Cron)
+**Endpoints:** `/api/quote`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/PATCH/DELETE — PATCH attaches an Analyst Review `reviewMd`), `/api/positions` (GET/POST), `/api/positions/[id]` (DELETE, PATCH — close/sell a position, full or partial), `/api/ai/deep-value` (POST, streaming), `/api/ai/deep-value/verify` (POST, streaming — Analyst Review red-team pass), `/api/ai/advisor` (POST, streaming conversational), `/api/advisor/sessions` (GET/POST), `/api/advisor/sessions/[id]` (GET/DELETE), `/api/advisor/sessions/[id]/messages` (POST, full replace), `/api/portfolio/snapshots` (GET), `/api/cron/portfolio-snapshot` (GET, Vercel Cron), `/api/watchlist` (GET/POST), `/api/watchlist/[id]` (DELETE/PATCH), `/api/watchlist/settings` (PATCH), `/api/watchlist/run` (POST), `/api/cron/watchlist-analysis` (GET, Vercel Cron)
 
 ---
 
@@ -129,9 +131,7 @@ Read `?param=` inside the hydration `useEffect` (not a separate effect) to avoid
 ```typescript
 const searchParams = new URLSearchParams(window.location.search);
 const tickerParam = searchParams.get("ticker");
-const exitReviewFlag = searchParams.get("exitReview");
-const wacParam = searchParams.get("wac");
-const prevFvParam = searchParams.get("prevFv");
+const langParam = searchParams.get("lang"); // pull every param you need first
 // All extracted — now safe to wipe the URL
 if (tickerParam) window.history.replaceState({}, "", window.location.pathname);
 // Now act on extracted values
@@ -255,6 +255,7 @@ The classic `lib/valuation/*` engine (sector detection + DCF/DDM/EV-EBITDA + sce
 - **`max_tokens` must budget for thinking + web-search reasoning, not just the visible answer.** With adaptive thinking + web search, reasoning tokens count toward `max_tokens`. The Advisor was at `4096` and long multi-candidate Discovery replies exhausted it → the model stopped with `stop_reason: "max_tokens"` mid-word. It's now `16000`. `max_tokens` is a ceiling, not a target — raising it doesn't increase cost on normal replies (they close at `end_turn`). Deep Value + verify are `64000`, Advisor `16000`.
 - **Surface `stop_reason: "max_tokens"` — never truncate silently.** A clean mid-word cut is indistinguishable from a normal end. Track it from `message_delta` events (`event.delta.stop_reason`) and, on `"max_tokens"`, enqueue a visible marker before closing the stream (see `/api/ai/advisor`).
 - **Advisor/Discovery must verify a ticker is currently listed before recommending it.** Injecting `Today is ${currentDate}` alone does NOT prevent suggesting delisted stocks — training data lists them as active (it once suggested Reno De Medici / RM.MI, delisted 2021). Both `buildAdvisorSystemPrompt` and `buildDiscoverySystemPrompt` carry an explicit rule to web-search-verify active listing and drop delisted/acquired/suspended names. This is a prompt-level mitigation, not a hard guarantee — a deterministic `/api/quote` check on each `[[TICKER]]` would be more robust (not yet implemented).
+- **Grounding against fabricated causes — `GROUNDING_RULES_BLOCK`.** The Advisor once reported a stale price *and* invented a dated causal story for a price move ("guidance vaga / rotazione fondi", never verified). A module-level `GROUNDING_RULES_BLOCK` const in `lib/ai/advisor-prompts.ts` — interpolated into BOTH `buildAdvisorSystemPrompt` and `buildDiscoverySystemPrompt` — anchors current prices to the LIVE PRICES block, bans quoting historical `priceAtAnalysis` as current, and requires web-verifying (with a date) any cited cause/event/guidance, else labeling the driver "unconfirmed". Enabling web search is not enough: nothing forces the model to use it, so the *requirement* must live in the prompt. Follows the same module-constant pattern as `ANALYTICAL_RIGOR_BLOCK`.
 - Always inject language in both system + user prompt
 - **Prompt caching (`cache_control`) was evaluated and rejected** for this app: single-user usage (~1 analysis/day) never produces a second request against the same cached prefix within the 5-minute TTL, so it would only pay the ~1.25× write premium with no offsetting reads. Revisit only if usage patterns change (e.g. multi-user deployment, or Advisor conversations with turns closer than 5 minutes apart).
 
@@ -266,13 +267,13 @@ After a Deep Value report completes, a **"Run Analyst Review"** button in `deep-
 - **The verify route buffers pre-JSON text** (ported from `/api/ai/deep-value`) — `jsonBlockStarted` + `preJsonBuffer`, forwards only from the ` ```json ` marker, with a failsafe flush if the model never emits a fence (so the critique is never swallowed).
 - **Client state** (`reviewText`, `reviewStatus`, `reviewResult`, `reviewAbortRef`) lives in `deep-value-panel.tsx`, reset on every `handleGenerate()`. `reviewResult` is `parseDeepValueJson(reviewText)` after the stream completes (null when no valid JSON — the critique still stands).
 - **`max_tokens: 64000` + `stop_reason` tracking** — `xhigh` thinking + web search count toward the budget; 16k truncated real critiques mid-word. Like `/api/ai/advisor`, tracks `stop_reason` from `message_delta` and appends a visible truncation marker (never cut silently).
-- **Authoritative price injection** — the verify route calls `getQuote(ticker)` (best-effort, non-fatal) and passes the live price to `buildVerificationUserPrompt`; the system prompt marks it authoritative so the reviewer does NOT "correct" a valid price with stale/delayed web-searched quotes (a real failure mode). The Deep Value + Review Position user prompts carry the same "authoritative price, don't override" clause.
+- **Authoritative price injection** — the verify route calls `getQuote(ticker)` (best-effort, non-fatal) and passes the live price to `buildVerificationUserPrompt`; the system prompt marks it authoritative so the reviewer does NOT "correct" a valid price with stale/delayed web-searched quotes (a real failure mode). The Deep Value user prompt carries the same "authoritative price, don't override" clause. **The Advisor route reuses this pattern** (`/api/ai/advisor`, Portfolio mode): it `getQuote`s the unique position tickers via `Promise.allSettled` (multiple tickers → partial failures dropped, never fatal) and injects `livePrices` as a `LIVE PRICES (authoritative …)` block. Any prompt reasoning over a current price should be anchored to a server-fetched quote, not the model's web search or memory.
 - **Persistence (savable review + reviewer valuation)** — `Analysis.reviewMd` (the critique, JSON-stripped) plus nullable `reviewFairValue{Bull,Base,Bear}` + `reviewValuationMethod` (the reviewer's own numbers, same MoS-adjusted unit as `fairValue*`). `deep-value-panel.tsx` attaches all of these in `handleSave()`; `components/saved-analyst-review.tsx` runs the review fresh on the detail page and persists via `PATCH /api/analyses/[id]` + `updateAnalysisReview(id, reviewMd, reviewFvs?)`, so review order (before/after save) is irrelevant. **Mirror any new persisted field across all contract points**: Zod (POST create + PATCH), the GET `select` whitelist (silently drops unlisted columns), `types/analysis.ts`, and `updateAnalysisReview`.
 - **Consensus** — the saved-analyses card averages base + reviewer per scenario (`(base + reviewer) / 2`); the disagreement Δ% is identical at intrinsic and buy-target level (MoS scales both linearly), so compute it once. See the valuation-ruler note under Design System.
 
 ### Shared prompt constant — `ANALYTICAL_RIGOR_BLOCK`
 
-`buildDeepValueSystemPrompt` and `buildReviewPositionSystemPrompt` are near-identical and share `ANALYTICAL_RIGOR_BLOCK` (a module-level const in `lib/ai/deep-value-prompts.ts`, interpolated between the scenario step and the output step). It carries 8 mandatory rigor checks distilled from real Analyst-Review findings (latest quarter not just annual, current guidance only + dated, guidance-vs-estimate labeling, normalized/recurring EBITDA for multiples, fundamentals-differentiated scenarios, central base case, closest-comparables + structural-discount test, narrative↔formula consistency). **Edit the constant, not the two builders** — that's the whole point of extracting it (they must not drift apart).
+`buildDeepValueSystemPrompt` injects `ANALYTICAL_RIGOR_BLOCK` (a module-level const in `lib/ai/deep-value-prompts.ts`, interpolated between the scenario step and the output step). It carries 8 mandatory rigor checks distilled from real Analyst-Review findings (latest quarter not just annual, current guidance only + dated, guidance-vs-estimate labeling, normalized/recurring EBITDA for multiples, fundamentals-differentiated scenarios, central base case, closest-comparables + structural-discount test, narrative↔formula consistency).
 
 ### Deep Value pattern (autonomous valuation)
 
@@ -282,13 +283,12 @@ After a Deep Value report completes, a **"Run Analyst Review"** button in `deep-
 - Always inject `currentDate` from server — Claude anchors to training year (Aug 2025) without it
 - **DeepValuePanel must receive `mosPercent` as prop** — it was previously hardcoded to 0. Also save `fairValueBull/Base/Bear` from the parsed `result` object at save time.
 
-### Review Position prompt (hold / add / exit)
+### The valuation is always position-blind (hard invariant)
 
-When `reviewContext: { wac, prevFv }` is present in the POST body, `buildReviewPositionSystemPrompt` + `buildReviewPositionUserPrompt` are used instead of the standard builders. **The JSON output schema must be identical** (`method`, `sector`, `currency`, `bull/base/bear` each with just `fairValue` — the buy target) so the existing client parser, `RecapTable`, and save flow work without modification. _Upside/downside is computed client-side as `(fairValue − currentPrice) / currentPrice` — never read from the AI (it emitted the value in the wrong scale); the JSON has no `upside` field._ Only the report framing changes: section 10 becomes "Hold, Add, or Exit Recommendation" and the prompt injects WAC, prevFv, and computed gain/loss % into the user message.
+**Never inject the user's portfolio position (WAC, shares, P&L) or a prior estimate into the Deep Value or Analyst Review prompts.** The valuation's whole worth is its independence — anchoring it to what the user paid or to a previous run is motivated-reasoning on a money decision, and it contaminates the saved report used for later comparison. A position-aware "Review Position (AI)" path existed and was removed for exactly this reason (July 2026); do not re-add a `reviewContext`/`prevFv`/`wac` field to `/api/ai/deep-value`. The two legitimate needs are met **outside** the valuation:
 
-**`prevFv` must be the intrinsic base fair value, not the buy target.** The prompts describe `prevFv` as "the previous base fair value estimate" and compare the new intrinsic value against it. Passing the MoS-adjusted buy target (which is what `fairValueBase` stores) breaks this framing — the AI would compare a new intrinsic value against a discounted entry price, which is meaningless. Always pass `fairValueBase / (1 - mos)` as `prevFv`.
-
-**`isReviewMode` pattern**: when two buttons can trigger the same streaming flow, track which one fired with a boolean state (`isReviewMode`) set at the top of the handler. Reset is implicit — it is overwritten on the next call to `handleGenerate()`.
+- **Hold / add / exit reasoning → the Advisor** (`/advisor`), which reads positions + saved analyses read-only and never emits a valuation.
+- **Estimate evolution over time → a deterministic diff, not the AI.** `computeEvolution(prev, curr)` in `lib/report/evolution.ts` compares two saved analyses on the intrinsic scale (gross up each with its own MoS via `grossUpToIntrinsic`), base scenario only; reviewer/consensus rows appear only when both saves carry reviewer FVs. Rendered by `EvolutionDiff` on the expanded `/analyses` card. Prefer this pattern generally: if a "how did X change" feature can be pure arithmetic over stored numbers, compute it — don't ask the model (no anchoring, no hallucination, no token cost).
 
 ### Pure helper functions — module-level placement
 
@@ -360,6 +360,20 @@ Headers: Azioni | Div. Cda | Div. Ass. | Divisa | Stacco | Pagamento | Tipo Divi
 - We check the **Pagamento** column (payment date), never Stacco (ex-div date).
 - Failures (network, parse error, structure change) return `null` silently — snapshot must never be blocked by a dividend check failure.
 
+### Close Position (full/partial sale) — result-union + record-exactly-once
+
+`closePosition(userId, id, req)` in `lib/positions.ts` (server-only) closes a `Position` by setting `closedAt`/`sellPrice`. It returns a discriminated union instead of throwing, so the route (`app/api/positions/[id]/route.ts`, `PATCH`) stays a thin controller that maps the result to an HTTP status:
+
+```typescript
+export type CloseResult =
+  | { ok: true; positions: NonNullable<PositionRow>[] }
+  | { ok: false; status: 404 | 400; error: string };
+```
+
+- **Full close** (no `sharesToSell`, or it covers the whole lot within `EPS = 1e-9` float tolerance): a single `update` sets `closedAt`/`sellPrice`.
+- **Partial close**: splits the lot in one `$transaction` — the open row shrinks by the sold shares, a new row is `create`d for the sold shares carrying `closedAt`/`sellPrice`. This preserves realized P&L on the sold slice while the remainder keeps being valued as an open holding (WAC recomputes automatically since aggregation is a pure re-derivation over open positions).
+- **Record realized P&L exactly once, not via a time window**: `sellDate`/`closedAt` can be backdated (the user closing a position today for a sale that happened last week). `lib/portfolio-snapshots.ts` uses a `realizedRecorded` boolean flag set in the same transaction as the snapshot write, instead of "closed in the last N days" — a window would silently miss a backdated sale and leave the cost/value drop on the chart unexplained. Prefer this pattern anywhere a snapshot/cron job needs to account for an event exactly once regardless of when its timestamp falls.
+
 ### WAC/DCA Aggregation Pattern
 
 Client-side aggregation of flat `Position[]` by ticker — no DB involvement:
@@ -379,6 +393,8 @@ Key invariants:
 - Deleting a purchase from drill-down triggers a re-render; `aggregateByTicker` re-derives WAC automatically with no extra state
 - Single-purchase tickers render identically to the old flat row (no expand toggle)
 - P&L on the aggregated row: `(currentPrice − WAC) × totalShares`
+
+**Modal-prefill pattern for "add another purchase" on an existing ticker**: `AggregatedPositionRow`'s "+ Purchase" button calls a parent handler that derives a `Partial<CreatePositionRequest>` from the aggregated row (`companyName`/`currency`/`isin`/`capitalGainsTaxRate` — taken from `sorted[0]`, same source as the aggregated display) and stores it in a `prefill` state; `AddPositionModal` spreads it (`...prefill`) into its `useState<CreatePositionRequest>` initializer. Only spread the *identity* fields — leave `purchasePrice`/`shares`/`purchasedAt`/`notes` at their normal blank/today defaults, since it's a new buy, not an edit. Because `aggregateByTicker` groups by the raw ticker string, this prefill is the main defense against a company-name/currency typo on a follow-on purchase silently splitting the aggregation for that ticker.
 
 ---
 
@@ -444,7 +460,7 @@ The watchlist/email digest **never runs AI** — it's a read-model over the user
 
 `Analysis.fairValueBase` (and `fairValueBear`, `fairValueBull`) stored in the DB are **MoS-adjusted buy targets**: `intrinsic × (1 − mosPercent/100)`. The intrinsic value is NOT stored separately. Reconstruct on the fly: `intrinsic = stored / (1 - mosPercent / 100)`. When `mosPercent = 0`, stored = intrinsic.
 
-This matters anywhere you display or compare against the "actual fair value" — e.g. the exit signal threshold, the `prevFv` passed to the Review Position prompt, and any visualization labeled "Fair Value" vs "Buy Target".
+This matters anywhere you display or compare against the "actual fair value" — e.g. the exit signal threshold, the intrinsic values in `computeEvolution` (`lib/report/evolution.ts`), and any visualization labeled "Fair Value" vs "Buy Target".
 
 ### Tailwind dynamic classes require static strings for purging
 
@@ -457,6 +473,10 @@ const TICK_BG = { violet: "bg-violet-400", yellow: "bg-yellow-400" } as const;
 ```
 
 Also: `text-*` classes do not color `div` backgrounds — use `bg-*` for any element without text content.
+
+### Chart event-marker colors — literal, not tokens, when they're semantic events
+
+The P&L history chart (`portfolio-history-chart.tsx`) marks discrete events (dividend paid, capital deployed, position sold) with dedicated literal colors — green (dividend), amber (capital deployed), violet `#a78bfa` (sold) — rather than the semantic `--success`/`--danger` tokens, because these are event categories, not gain/loss judgments. When adding a new event-color, register it as an intentional exception in `.impeccable/config.json` (`detector.ignoreRules`/`ignoreValues`) with a `reason` — otherwise the impeccable design-consistency check flags it as an ad-hoc color on every future audit.
 
 ### Tailwind Opacity Modifiers on CSS Vars — DO NOT USE
 `text-accent/80`, `bg-success/15`, `border-accent/40` **silently fail**. CSS custom properties (`var(--accent)`) resolve to hex strings at runtime; Tailwind cannot extract RGB channels for opacity math.

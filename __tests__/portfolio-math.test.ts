@@ -1,0 +1,47 @@
+import { describe, it, expect } from "vitest";
+import { realizedPnlNative, holdingDays } from "@/lib/portfolio-math";
+
+describe("realizedPnlNative", () => {
+  it("returns a positive gain when sold above cost", () => {
+    // Bought 100 @ 120, sold @ 195 → (195 − 120) × 100 = 7500
+    expect(realizedPnlNative(195, 120, 100)).toBe(7500);
+  });
+
+  it("returns a negative loss when sold below cost", () => {
+    expect(realizedPnlNative(80, 120, 50)).toBe(-2000);
+  });
+
+  it("returns zero at breakeven", () => {
+    expect(realizedPnlNative(120, 120, 10)).toBe(0);
+  });
+
+  it("scales with a partial share count", () => {
+    // Selling half the lot realizes half the P&L
+    const full = realizedPnlNative(195, 120, 100);
+    const half = realizedPnlNative(195, 120, 50);
+    expect(half).toBe(full / 2);
+  });
+
+  it("supports fractional shares", () => {
+    expect(realizedPnlNative(10, 8, 2.5)).toBeCloseTo(5, 10);
+  });
+});
+
+describe("holdingDays", () => {
+  it("counts whole days between purchase and sale", () => {
+    expect(holdingDays("2026-01-01T00:00:00.000Z", "2026-01-11T00:00:00.000Z")).toBe(10);
+  });
+
+  it("floors partial days", () => {
+    expect(holdingDays("2026-01-01T00:00:00.000Z", "2026-01-02T18:00:00.000Z")).toBe(1);
+  });
+
+  it("never returns a negative count when sold before purchase date", () => {
+    expect(holdingDays("2026-01-10T00:00:00.000Z", "2026-01-01T00:00:00.000Z")).toBe(0);
+  });
+
+  it("measures against now when still open (no closedAt)", () => {
+    const tenDaysAgo = new Date(Date.now() - 10 * 86_400_000).toISOString();
+    expect(holdingDays(tenDaysAgo, null)).toBe(10);
+  });
+});

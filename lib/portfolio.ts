@@ -1,6 +1,11 @@
 // Client-side fetch helpers for portfolio positions and history.
 // Thin wrappers over the API routes — keeps components clean.
-import type { Position, CreatePositionRequest, SnapshotPoint } from "@/types/portfolio";
+import type {
+  Position,
+  CreatePositionRequest,
+  ClosePositionRequest,
+  SnapshotPoint,
+} from "@/types/portfolio";
 
 export async function fetchPositions(): Promise<Position[]> {
   const res = await fetch("/api/positions");
@@ -24,6 +29,26 @@ export async function createPosition(data: CreatePositionRequest): Promise<Posit
 export async function deletePosition(id: string): Promise<void> {
   const res = await fetch(`/api/positions/${id}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Failed to delete position");
+}
+
+/**
+ * Closes (sells) a position. Returns the affected rows: one row on a full close,
+ * or [updatedOpenLot, newClosedLot] on a partial close.
+ */
+export async function closePosition(
+  id: string,
+  payload: ClosePositionRequest
+): Promise<Position[]> {
+  const res = await fetch(`/api/positions/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? "Failed to close position");
+  }
+  return res.json();
 }
 
 export async function fetchSnapshots(): Promise<SnapshotPoint[]> {

@@ -5,9 +5,21 @@
 // Summary bar converts all positions to EUR via frankfurter.app (free, no key needed).
 import { useState, useEffect, useRef } from "react";
 import ReactDOM from "react-dom";
-import { fetchPositions, createPosition, deletePosition, fetchSnapshots } from "@/lib/portfolio";
+import {
+  fetchPositions,
+  createPosition,
+  deletePosition,
+  closePosition,
+  fetchSnapshots,
+} from "@/lib/portfolio";
 import { fetchAnalyses } from "@/lib/analyses";
-import type { Position, CreatePositionRequest, AggregatedPosition } from "@/types/portfolio";
+import { realizedPnlNative, holdingDays } from "@/lib/portfolio-math";
+import type {
+  Position,
+  CreatePositionRequest,
+  ClosePositionRequest,
+  AggregatedPosition,
+} from "@/types/portfolio";
 import type { SavedAnalysis } from "@/types/analysis";
 import { useLanguage } from "@/context/language-context";
 
@@ -101,12 +113,10 @@ function TickerAnalysesInline({
   analyses,
   ticker,
   currentPrice,
-  wac,
 }: {
   analyses: SavedAnalysis[];
   ticker: string;
   currentPrice?: number;
-  wac?: number;
 }) {
   const [open, setOpen] = useState(false);
   const { t } = useLanguage();
@@ -136,12 +146,10 @@ function TickerAnalysesInline({
               </p>
               <button
                 onClick={() => {
-                  const url = new URL("/analyze", window.location.origin);
-                  url.searchParams.set("ticker", ticker);
-                  url.searchParams.set("exitReview", "1");
-                  if (exitSignal.fairValueBase != null) url.searchParams.set("prevFv", exitSignal.fairValueBase.toFixed(4));
-                  if (wac != null) url.searchParams.set("wac", wac.toFixed(4));
-                  window.location.href = url.toString();
+                  // Re-analyze always means a clean, position-blind Deep Value run —
+                  // no WAC/prevFv is passed, so the new valuation stays independent.
+                  // Hold/exit reasoning is done afterwards in the Advisor.
+                  window.location.href = `/analyze?ticker=${encodeURIComponent(ticker)}`;
                 }}
                 className="mt-1.5 rounded border border-amber-500/40 px-2 py-0.5 text-xs text-amber-400 transition hover:border-amber-400 hover:text-amber-300"
               >
@@ -181,6 +189,8 @@ type AggregatedPositionRowProps = {
   currentPrice?: number;
   dailyChange?: DailyChange;
   onDelete: (id: string) => void;
+  onClose: (position: Position) => void;
+  onAddPurchase: (agg: AggregatedPosition) => void;
   deleting: string | null;
   pricesLoading: boolean;
   tickerAnalyses: SavedAnalysis[];
@@ -191,6 +201,8 @@ function AggregatedPositionRow({
   currentPrice,
   dailyChange,
   onDelete,
+  onClose,
+  onAddPurchase,
   deleting,
   pricesLoading,
   tickerAnalyses,
@@ -280,12 +292,8 @@ function AggregatedPositionRow({
                 </span>
                 <button
                   onClick={() => {
-                    const url = new URL("/analyze", window.location.origin);
-                    url.searchParams.set("ticker", agg.ticker);
-                    url.searchParams.set("exitReview", "1");
-                    url.searchParams.set("wac", agg.weightedAvgCost.toFixed(4));
-                    if (exitSignal.fairValueBase != null) url.searchParams.set("prevFv", exitSignal.fairValueBase.toFixed(4));
-                    window.location.href = url.toString();
+                    // Clean, position-blind re-analysis (see TickerAnalysesInline).
+                    window.location.href = `/analyze?ticker=${encodeURIComponent(agg.ticker)}`;
                   }}
                   className="rounded border border-amber-500/30 px-1.5 py-0.5 text-[11px] text-amber-400 transition hover:border-amber-400 hover:text-amber-300"
                 >
@@ -306,7 +314,6 @@ function AggregatedPositionRow({
             analyses={tickerAnalyses}
             ticker={agg.ticker}
             currentPrice={currentPrice}
-            wac={agg.weightedAvgCost}
           />
         </div>
 
@@ -317,15 +324,29 @@ function AggregatedPositionRow({
           >
             {t("analyzeBtn")}
           </a>
-          {/* Delete only shown for single-purchase tickers; multi-purchase uses drill-down */}
+          <button
+            onClick={() => onAddPurchase(agg)}
+            className="tap rounded-lg border border-slate-700 px-2 py-1 text-xs text-muted transition hover:border-sky-400/40 hover:text-sky-300"
+          >
+            {t("addPurchaseBtn")}
+          </button>
+          {/* Close/Delete only shown for single-purchase tickers; multi-purchase uses drill-down */}
           {!hasMultiple && (
-            <button
-              onClick={() => onDelete(agg.purchases[0].id)}
-              disabled={deleting === agg.purchases[0].id}
-              className="tap rounded-lg border border-slate-700 px-2 py-1 text-xs text-muted transition hover:border-red-500/50 hover:text-danger disabled:opacity-50"
-            >
-              {deleting === agg.purchases[0].id ? "…" : t("deleteBtn")}
-            </button>
+            <>
+              <button
+                onClick={() => onClose(agg.purchases[0])}
+                className="tap rounded-lg border border-slate-700 px-2 py-1 text-xs text-muted transition hover:border-sky-400/40 hover:text-sky-300"
+              >
+                {t("closePositionBtn")}
+              </button>
+              <button
+                onClick={() => onDelete(agg.purchases[0].id)}
+                disabled={deleting === agg.purchases[0].id}
+                className="tap rounded-lg border border-slate-700 px-2 py-1 text-xs text-muted transition hover:border-red-500/50 hover:text-danger disabled:opacity-50"
+              >
+                {deleting === agg.purchases[0].id ? "…" : t("deleteBtn")}
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -338,13 +359,21 @@ function AggregatedPositionRow({
               <span>
                 {formatDate(p.purchasedAt)} · {p.shares} @ {formatPrice(p.purchasePrice, p.currency)}
               </span>
-              <button
-                onClick={() => onDelete(p.id)}
-                disabled={deleting === p.id}
-                className="ml-4 rounded border border-slate-700 px-1.5 py-0.5 text-muted transition hover:border-red-500/50 hover:text-danger disabled:opacity-50"
-              >
-                {deleting === p.id ? "…" : "×"}
-              </button>
+              <span className="ml-4 flex items-center gap-1.5">
+                <button
+                  onClick={() => onClose(p)}
+                  className="rounded border border-slate-700 px-1.5 py-0.5 text-muted transition hover:border-sky-400/40 hover:text-sky-300"
+                >
+                  {t("closePositionBtn")}
+                </button>
+                <button
+                  onClick={() => onDelete(p.id)}
+                  disabled={deleting === p.id}
+                  className="rounded border border-slate-700 px-1.5 py-0.5 text-muted transition hover:border-red-500/50 hover:text-danger disabled:opacity-50"
+                >
+                  {deleting === p.id ? "…" : "×"}
+                </button>
+              </span>
             </li>
           ))}
         </ul>
@@ -359,9 +388,12 @@ type AddPositionModalProps = {
   onClose: () => void;
   onSave: (pos: Position) => void;
   existingPositions: Position[];
+  // Pre-fills ticker/companyName/currency/isin/capitalGainsTaxRate when adding a
+  // purchase to a ticker already held — date/price/shares/notes stay blank/today.
+  prefill?: Partial<CreatePositionRequest>;
 };
 
-function AddPositionModal({ onClose, onSave, existingPositions }: AddPositionModalProps) {
+function AddPositionModal({ onClose, onSave, existingPositions, prefill }: AddPositionModalProps) {
   const { t } = useLanguage();
   const [form, setForm] = useState<CreatePositionRequest>({
     ticker: "",
@@ -373,6 +405,7 @@ function AddPositionModal({ onClose, onSave, existingPositions }: AddPositionMod
     purchasedAt: new Date().toISOString().slice(0, 10),
     notes: "",
     capitalGainsTaxRate: undefined,
+    ...prefill,
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -572,17 +605,253 @@ function AddPositionModal({ onClose, onSave, existingPositions }: AddPositionMod
   return ReactDOM.createPortal(modal, document.body);
 }
 
+// ─── Close Position Modal ─────────────────────────────────────────────────────
+
+// Records a sale of a lot. Sell price pre-fills from the live price when available.
+// Shares-to-sell defaults to the whole lot; a smaller value performs a partial close
+// (the API splits the lot). A live realized-P&L preview is shown in the lot's currency.
+type ClosePositionModalProps = {
+  position: Position;
+  currentPrice?: number;
+  onCancel: () => void;
+  onClosed: (rows: Position[]) => void;
+};
+
+function ClosePositionModal({ position, currentPrice, onCancel, onClosed }: ClosePositionModalProps) {
+  const { t } = useLanguage();
+  const [sellPrice, setSellPrice] = useState<number>(currentPrice ?? position.purchasePrice);
+  const [sellDate, setSellDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [sharesToSell, setSharesToSell] = useState<number>(position.shares);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isPartial = sharesToSell > 0 && sharesToSell < position.shares;
+  const realized =
+    sellPrice > 0 && sharesToSell > 0
+      ? realizedPnlNative(sellPrice, position.purchasePrice, sharesToSell)
+      : null;
+  const realizedPositive = realized != null && realized >= 0;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (sellPrice <= 0) {
+      setError(t("errorFillFields"));
+      return;
+    }
+    if (sharesToSell <= 0 || sharesToSell > position.shares) {
+      setError(t("closeErrorShares"));
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const payload: ClosePositionRequest = {
+        sellPrice,
+        sellDate,
+        // Omit sharesToSell on a full close so the server updates in place (no lot split).
+        ...(isPartial ? { sharesToSell } : {}),
+      };
+      const rows = await closePosition(position.id, payload);
+      onClosed(rows);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("errorFailedSave"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const modal = (
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm">
+      <div
+        className="my-auto max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-700/60 bg-[var(--card)] p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-lg font-semibold text-slate-100 mb-1">{t("closePositionTitle")}</h2>
+        <p className="mb-4 text-xs text-muted">
+          <span className="font-mono text-accent">{position.ticker}</span> · {position.companyName} ·{" "}
+          {position.shares} {t("sharesUnit")} @ {formatPrice(position.purchasePrice, position.currency)}
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">{t("sellPriceField")} *</label>
+              <input
+                type="number"
+                min="0.0001"
+                step="0.0001"
+                value={sellPrice || ""}
+                onChange={(e) => setSellPrice(parseFloat(e.target.value) || 0)}
+                className={inputClass}
+                required
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">{t("sellDateField")} *</label>
+              <input
+                type="date"
+                value={sellDate}
+                onChange={(e) => setSellDate(e.target.value)}
+                className={inputClass}
+                required
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">
+              {t("sharesToSellField")} * <span className="text-slate-600 normal-case">/ {position.shares}</span>
+            </label>
+            <input
+              type="number"
+              min="0.001"
+              max={position.shares}
+              step="0.001"
+              value={sharesToSell || ""}
+              onChange={(e) => setSharesToSell(parseFloat(e.target.value) || 0)}
+              className={inputClass}
+              required
+            />
+            {isPartial && (
+              <p className="mt-1 text-[11px] text-slate-500">{t("closePartialHint")}</p>
+            )}
+          </div>
+
+          {realized != null && (
+            <div className="rounded-lg border border-slate-700/60 bg-slate-900/40 px-3 py-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-0.5">{t("realizedPreview")}</p>
+              <p className={`text-base font-semibold ${realizedPositive ? "text-success" : "text-danger"}`}>
+                {realizedPositive ? "+" : ""}{formatAmount(realized, position.currency)}
+              </p>
+            </div>
+          )}
+
+          {error && (
+            <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-danger">{error}</p>
+          )}
+
+          <div className="flex gap-3 pt-1">
+            <button
+              type="submit"
+              disabled={saving}
+              className="tap flex-1 rounded-lg bg-accent py-2.5 text-sm font-semibold text-slate-950 transition hover:brightness-110 disabled:opacity-50"
+            >
+              {saving ? t("savingState") : t("confirmCloseBtn")}
+            </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              className="tap rounded-lg border border-slate-700 px-4 py-2.5 text-sm text-muted transition hover:border-slate-500 hover:text-slate-100"
+            >
+              {t("cancelBtn")}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+
+  return ReactDOM.createPortal(modal, document.body);
+}
+
+// ─── Closed Positions Section ─────────────────────────────────────────────────
+
+// Archive of sold lots with realized P&L (in each lot's own currency) and holding period.
+// Collapsible; kept separate from the open holdings so current-value math stays clean.
+function ClosedPositionsSection({
+  closed,
+  onDelete,
+  deleting,
+}: {
+  closed: Position[];
+  onDelete: (id: string) => void;
+  deleting: string | null;
+}) {
+  const { t } = useLanguage();
+  const [open, setOpen] = useState(false);
+  if (closed.length === 0) return null;
+
+  // Newest sales first.
+  const sorted = [...closed].sort(
+    (a, b) => new Date(b.closedAt!).getTime() - new Date(a.closedAt!).getTime()
+  );
+
+  return (
+    <div className="mt-6">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="tap text-xs font-semibold uppercase tracking-wider text-muted transition hover:text-slate-300"
+      >
+        {open ? "▲" : "▼"} {t("closedPositionsTitle")} ({closed.length})
+      </button>
+      {open && (
+        <ul className="mt-3 space-y-3">
+          {sorted.map((p) => {
+            const realized = realizedPnlNative(p.sellPrice!, p.purchasePrice, p.shares);
+            const returnPct = (p.sellPrice! / p.purchasePrice - 1) * 100;
+            const positive = realized >= 0;
+            const days = holdingDays(p.purchasedAt, p.closedAt);
+            return (
+              <li key={p.id} className="card">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-sm font-bold text-slate-300">{p.ticker}</span>
+                      <span className="text-xs text-muted">{p.companyName}</span>
+                      <span className="rounded bg-slate-700/60 px-1.5 py-0.5 text-[11px] text-slate-400">
+                        {p.currency}
+                      </span>
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-2 flex-wrap text-xs text-muted">
+                      <span>
+                        {p.shares} {t("sharesUnit")} · {formatPrice(p.purchasePrice, p.currency)} →{" "}
+                        {formatPrice(p.sellPrice!, p.currency)}
+                      </span>
+                      <span
+                        className={`rounded px-1.5 py-0.5 font-semibold ${
+                          positive ? "bg-emerald-500/15 text-success" : "bg-red-500/15 text-danger"
+                        }`}
+                      >
+                        {positive ? "+" : ""}{formatAmount(realized, p.currency)}{" "}
+                        ({positive ? "+" : ""}{returnPct.toFixed(1)}%)
+                      </span>
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-500">
+                      {t("soldOn")} {formatDate(p.closedAt!)} · {t("heldFor")} {days} {t("daysUnit")}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => onDelete(p.id)}
+                    disabled={deleting === p.id}
+                    className="tap shrink-0 rounded-lg border border-slate-700 px-2 py-1 text-xs text-muted transition hover:border-red-500/50 hover:text-danger disabled:opacity-50"
+                  >
+                    {deleting === p.id ? "…" : t("deleteBtn")}
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 // ─── Portfolio Summary Bar ────────────────────────────────────────────────────
 
-// Converts all positions to EUR using Frankfurter rates and shows aggregate P&L.
+// Converts open positions to EUR using Frankfurter rates and shows aggregate P&L.
+// Realized P&L is summed from closed lots (sold), so the bar separates unrealized
+// (open holdings) from realized (booked) and shows their total.
 // totalDividendsEur is summed from historical snapshots — it accumulates over time.
 function SummaryBar({
   positions,
+  closedPositions,
   currentPrices,
   fxRates,
   totalDividendsEur,
 }: {
-  positions: Position[];
+  positions: Position[]; // open positions only
+  closedPositions: Position[];
   currentPrices: Record<string, number>;
   // Map currency → rate vs EUR (e.g. USD: 1.08 means 1 EUR = 1.08 USD)
   fxRates: Record<string, number>;
@@ -593,6 +862,19 @@ function SummaryBar({
   let totalValueEur = 0;
   let totalTaxEur = 0;
   let resolved = 0;
+
+  // Realized P&L across closed lots, converted to EUR at current FX (approximation;
+  // realized figures are not stored in EUR on the position).
+  let realizedEur = 0;
+  let realizedResolved = 0;
+  for (const p of closedPositions) {
+    if (p.sellPrice == null) continue;
+    const rate = p.currency === "EUR" ? 1 : (fxRates[p.currency] ?? null);
+    if (rate == null) continue;
+    realizedEur += realizedPnlNative(p.sellPrice, p.purchasePrice, p.shares) / rate;
+    realizedResolved++;
+  }
+  const hasRealized = realizedResolved > 0;
 
   for (const p of positions) {
     const cp = currentPrices[p.ticker];
@@ -614,16 +896,23 @@ function SummaryBar({
     resolved++;
   }
 
-  if (resolved === 0) return null;
+  // Render if there are open holdings to value OR realized results to show.
+  if (resolved === 0 && !hasRealized) return null;
 
   // Only show the Frankfurter attribution when conversion actually happened
-  const hasNonEurPositions = positions.some((p) => p.currency !== "EUR");
+  const hasNonEurPositions =
+    positions.some((p) => p.currency !== "EUR") ||
+    closedPositions.some((p) => p.currency !== "EUR");
   const pnlEur = totalValueEur - totalCostEur;
-  const totalReturn = (totalValueEur / totalCostEur - 1) * 100;
+  const totalReturn = resolved > 0 ? (totalValueEur / totalCostEur - 1) * 100 : 0;
   const isPositive = pnlEur >= 0;
   const hasTaxEstimate = totalTaxEur > 0;
   const netPnlEur = pnlEur - totalTaxEur;
   const hasDividends = totalDividendsEur > 0;
+  // Total = unrealized (open) + realized (closed). Shown only when there are realized results.
+  const totalPnlEur = pnlEur + realizedEur;
+  const realizedPositive = realizedEur >= 0;
+  const totalPositive = totalPnlEur >= 0;
 
   // Compute net dividends using a simple average tax rate across positions that have one set.
   const positionsWithTax = positions.filter((p) => p.capitalGainsTaxRate != null && p.capitalGainsTaxRate > 0);
@@ -632,49 +921,104 @@ function SummaryBar({
     : null;
   const netDividendsEur = avgTaxRate != null ? totalDividendsEur * (1 - avgTaxRate / 100) : null;
 
+  // Secondary ledger cells beneath the headline figure. Built in one array so the
+  // ruled row adapts its column count to whatever data is present.
+  const TONE = {
+    neutral: "text-slate-100",
+    pos: "text-success",
+    neg: "text-danger",
+    div: "text-emerald-400",
+  } as const;
+  type LedgerCell = { key: string; label: string; value: string; tone: keyof typeof TONE; hint?: string };
+  const cells: LedgerCell[] = [
+    { key: "cost", label: t("totalCost"), value: formatAmount(totalCostEur, "EUR"), tone: "neutral" },
+  ];
+  if (hasRealized) {
+    cells.push({
+      key: "realized",
+      label: t("realizedPnL"),
+      value: `${realizedPositive ? "+" : ""}${formatAmount(realizedEur, "EUR")}`,
+      tone: realizedPositive ? "pos" : "neg",
+    });
+    cells.push({
+      key: "total",
+      label: t("totalReturn"),
+      value: `${totalPositive ? "+" : ""}${formatAmount(totalPnlEur, "EUR")}`,
+      tone: totalPositive ? "pos" : "neg",
+      hint: t("totalReturnHint"),
+    });
+  }
+  if (hasDividends) {
+    cells.push({
+      key: "div",
+      label: t("totalDividends"),
+      value: `+${formatAmount(totalDividendsEur, "EUR")}`,
+      tone: "div",
+      hint:
+        netDividendsEur != null
+          ? `${t("dividendsNet")}: +${formatAmount(netDividendsEur, "EUR")} (${avgTaxRate!.toFixed(0)}%)`
+          : `Borsa Italiana · ${t("dividendsGross")}`,
+    });
+  }
+  // Static column map so Tailwind can purge the classes (no dynamic string interpolation).
+  const SM_COLS: Record<number, string> = {
+    1: "sm:grid-cols-1",
+    2: "sm:grid-cols-2",
+    3: "sm:grid-cols-3",
+    4: "sm:grid-cols-4",
+  };
+  const sign = isPositive ? "+" : "";
+
   return (
-    <div className={`card mb-4 grid grid-cols-2 gap-4 text-center ${hasDividends ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-1">{t("totalCost")}</p>
-        <p className="text-lg font-semibold text-slate-100">{formatAmount(totalCostEur, "EUR")}</p>
-      </div>
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-1">{t("currentValue")}</p>
-        <p className="text-lg font-semibold text-slate-100">{formatAmount(totalValueEur, "EUR")}</p>
-      </div>
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-1">{t("totalPnL")}</p>
-        <p className={`text-lg font-semibold ${isPositive ? "text-success" : "text-danger"}`}>
-          {isPositive ? "+" : ""}{formatAmount(pnlEur, "EUR")}{" "}
-          <span className="text-sm">
-            ({isPositive ? "+" : ""}{totalReturn.toFixed(1)}%)
-          </span>
-        </p>
-        {hasTaxEstimate && (
-          <p className="text-[11px] text-slate-500 mt-0.5">
-            {t("estimatedTax")} {formatAmount(-totalTaxEur, "EUR")} · {t("netPnl")}{" "}
-            <span className={netPnlEur >= 0 ? "text-success" : "text-danger"}>
-              {netPnlEur >= 0 ? "+" : ""}{formatAmount(netPnlEur, "EUR")}
-            </span>
-          </p>
-        )}
-        {hasNonEurPositions && (
-          <p className="text-[10px] text-slate-600 mt-0.5">{t("convertedToEur")}</p>
-        )}
-      </div>
-      {hasDividends && (
+    <div className="card mb-4">
+      {/* Headline: portfolio value on the left, live unrealized P&L on the right — the two
+          figures the investor opens the page to read. */}
+      <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-1">{t("totalDividends")}</p>
-          <p className="text-lg font-semibold text-emerald-400">+{formatAmount(totalDividendsEur, "EUR")}</p>
-          {netDividendsEur != null ? (
-            <p className="text-[10px] text-slate-500 mt-0.5">
-              {t("dividendsGross")} · {t("dividendsNet")}: +{formatAmount(netDividendsEur, "EUR")}{" "}
-              ({t("dividendsAvgRate")} {avgTaxRate!.toFixed(0)}%)
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted">{t("currentValue")}</p>
+          <p className="mt-1.5 font-display text-3xl font-bold leading-none text-slate-50 tabular-nums">
+            {formatAmount(totalValueEur, "EUR")}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted">
+            {hasRealized ? t("unrealizedPnL") : t("totalPnL")}
+          </p>
+          <p
+            className={`mt-1.5 font-display text-2xl font-bold leading-none tabular-nums ${
+              isPositive ? "text-success" : "text-danger"
+            }`}
+          >
+            {sign}{formatAmount(pnlEur, "EUR")}{" "}
+            <span className="text-base font-semibold">({sign}{totalReturn.toFixed(1)}%)</span>
+          </p>
+          {hasTaxEstimate && (
+            <p className="mt-1 text-[11px] text-slate-500">
+              {t("estimatedTax")} {formatAmount(-totalTaxEur, "EUR")} · {t("netPnl")}{" "}
+              <span className={netPnlEur >= 0 ? "text-success" : "text-danger"}>
+                {netPnlEur >= 0 ? "+" : ""}{formatAmount(netPnlEur, "EUR")}
+              </span>
             </p>
-          ) : (
-            <p className="text-[10px] text-slate-600 mt-0.5">Borsa Italiana · {t("dividendsGross")}</p>
           )}
         </div>
+      </div>
+
+      {/* Ruled secondary figures — 1px gaps over a slate fill read as ledger column rules,
+          not floating stat cards. */}
+      <div
+        className={`mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-slate-800/60 bg-slate-800/50 ${SM_COLS[cells.length]}`}
+      >
+        {cells.map((c) => (
+          <div key={c.key} className="bg-[var(--card)] px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">{c.label}</p>
+            <p className={`mt-1 text-base font-semibold tabular-nums ${TONE[c.tone]}`}>{c.value}</p>
+            {c.hint && <p className="mt-0.5 text-[10px] text-slate-600">{c.hint}</p>}
+          </div>
+        ))}
+      </div>
+
+      {hasNonEurPositions && (
+        <p className="mt-2 text-right text-[10px] text-slate-600">{t("convertedToEur")}</p>
       )}
     </div>
   );
@@ -689,6 +1033,11 @@ export default function PortfolioList() {
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  // Pre-fills the Add Position modal when opened via a row's "+ Purchase" button
+  // (ticker/companyName/currency/isin/capitalGainsTaxRate); null = a blank "new position" form.
+  const [prefill, setPrefill] = useState<Partial<CreatePositionRequest> | null>(null);
+  // The lot currently being closed (drives the Close modal); null = modal hidden.
+  const [closingPosition, setClosingPosition] = useState<Position | null>(null);
   const [viewMode, setViewMode] = useState<"aggregated" | "flat">("aggregated");
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({});
   const [dailyChanges, setDailyChanges] = useState<Record<string, DailyChange>>({});
@@ -769,8 +1118,23 @@ export default function PortfolioList() {
   function handlePositionSaved(pos: Position) {
     setPositions((prev) => [pos, ...prev]);
     setShowModal(false);
+    setPrefill(null);
     if (currentPrices[pos.ticker] == null) loadPrices([pos.ticker]);
     if (pos.currency !== "EUR" && fxRates[pos.currency] == null) loadFxRates([pos.currency]);
+  }
+
+  // Opens the Add Position modal pre-filled with an existing ticker's metadata —
+  // avoids retyping company name/currency (and a mismatch typo silently breaking
+  // aggregateByTicker's grouping) when recording an additional purchase.
+  function handleAddPurchase(agg: AggregatedPosition) {
+    setPrefill({
+      ticker: agg.ticker,
+      companyName: agg.companyName,
+      currency: agg.currency,
+      isin: agg.purchases[0].isin ?? undefined,
+      capitalGainsTaxRate: agg.capitalGainsTaxRate ?? undefined,
+    });
+    setShowModal(true);
   }
 
   async function handleDelete(id: string) {
@@ -785,6 +1149,20 @@ export default function PortfolioList() {
     }
   }
 
+  // Merge the rows returned by a close: a full close returns [updatedRow] (same id),
+  // a partial close returns [shrunkOpenLot, newClosedLot]. Replace by id, add any new row.
+  function handleClosed(rows: Position[]) {
+    setPositions((prev) => {
+      const returnedIds = new Set(rows.map((r) => r.id));
+      return [...rows, ...prev.filter((p) => !returnedIds.has(p.id))];
+    });
+    setClosingPosition(null);
+  }
+
+  // Split open vs closed once — used across the summary bar, lists, and archive section.
+  const openPositions = positions.filter((p) => !p.closedAt);
+  const closedPositions = positions.filter((p) => p.closedAt);
+
   if (loading) {
     return <div className="flex items-center justify-center py-16 text-muted">{t("loadingState")}</div>;
   }
@@ -797,7 +1175,8 @@ export default function PortfolioList() {
 
       {positions.length > 0 && (
         <SummaryBar
-          positions={positions}
+          positions={openPositions}
+          closedPositions={closedPositions}
           currentPrices={currentPrices}
           fxRates={fxRates}
           totalDividendsEur={totalDividendsEur}
@@ -806,14 +1185,16 @@ export default function PortfolioList() {
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted">
-          {positions.length === 0
-            ? t("noPositionsYet")
+          {openPositions.length === 0
+            ? positions.length === 0
+              ? t("noPositionsYet")
+              : t("noOpenPositions")
             : viewMode === "aggregated"
             ? (() => {
-                const tickers = new Set(positions.map((p) => p.ticker)).size;
-                return `${tickers} ticker${tickers !== 1 ? "s" : ""}, ${positions.length} purchase${positions.length !== 1 ? "s" : ""}`;
+                const tickers = new Set(openPositions.map((p) => p.ticker)).size;
+                return `${tickers} ticker${tickers !== 1 ? "s" : ""}, ${openPositions.length} purchase${openPositions.length !== 1 ? "s" : ""}`;
               })()
-            : `${positions.length} position${positions.length !== 1 ? "s" : ""}`}
+            : `${openPositions.length} position${openPositions.length !== 1 ? "s" : ""}`}
           {pricesLoading && <span className="ml-2 text-xs text-slate-600">{t("loadingPrices")}</span>}
         </p>
         <div className="flex items-center gap-2">
@@ -850,15 +1231,17 @@ export default function PortfolioList() {
         </div>
       </div>
 
-      {positions.length > 0 && viewMode === "aggregated" && (
+      {openPositions.length > 0 && viewMode === "aggregated" && (
         <ul className="space-y-3">
-          {aggregateByTicker(positions).map((agg) => (
+          {aggregateByTicker(openPositions).map((agg) => (
             <AggregatedPositionRow
               key={agg.ticker}
               agg={agg}
               currentPrice={currentPrices[agg.ticker]}
               dailyChange={dailyChanges[agg.ticker]}
               onDelete={handleDelete}
+              onClose={setClosingPosition}
+              onAddPurchase={handleAddPurchase}
               deleting={deleting}
               pricesLoading={pricesLoading}
               tickerAnalyses={analysesByTicker[agg.ticker] ?? []}
@@ -867,9 +1250,9 @@ export default function PortfolioList() {
         </ul>
       )}
 
-      {positions.length > 0 && viewMode === "flat" && (
+      {openPositions.length > 0 && viewMode === "flat" && (
         <ul className="space-y-3">
-          {positions.map((pos) => {
+          {openPositions.map((pos) => {
             const cp = currentPrices[pos.ticker];
             const costBasis = pos.purchasePrice * pos.shares;
             const currentValue = cp != null ? cp * pos.shares : null;
@@ -946,7 +1329,6 @@ export default function PortfolioList() {
                     analyses={analysesByTicker[pos.ticker] ?? []}
                     ticker={pos.ticker}
                     currentPrice={currentPrices[pos.ticker]}
-                    wac={pos.purchasePrice}
                   />
                 </div>
 
@@ -957,6 +1339,12 @@ export default function PortfolioList() {
                   >
                     {t("analyzeBtn")}
                   </a>
+                  <button
+                    onClick={() => setClosingPosition(pos)}
+                    className="tap rounded-lg border border-slate-700 px-2 py-1 text-xs text-muted transition hover:border-sky-400/40 hover:text-sky-300"
+                  >
+                    {t("closePositionBtn")}
+                  </button>
                   <button
                     onClick={() => handleDelete(pos.id)}
                     disabled={deleting === pos.id}
@@ -971,11 +1359,27 @@ export default function PortfolioList() {
         </ul>
       )}
 
+      <ClosedPositionsSection
+        closed={closedPositions}
+        onDelete={handleDelete}
+        deleting={deleting}
+      />
+
       {showModal && (
         <AddPositionModal
-          onClose={() => setShowModal(false)}
+          onClose={() => { setShowModal(false); setPrefill(null); }}
           onSave={handlePositionSaved}
           existingPositions={positions}
+          prefill={prefill ?? undefined}
+        />
+      )}
+
+      {closingPosition && (
+        <ClosePositionModal
+          position={closingPosition}
+          currentPrice={currentPrices[closingPosition.ticker]}
+          onCancel={() => setClosingPosition(null)}
+          onClosed={handleClosed}
         />
       )}
     </div>

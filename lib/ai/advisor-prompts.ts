@@ -23,12 +23,43 @@ type AnalysisSnippet = {
   createdAt: string;
 };
 
+// A live, authoritative market price for one ticker, fetched server-side just
+// before the prompt is built. Injected as ground truth so the model reports the
+// real current price instead of a stale web-searched or remembered quote.
+type LivePrice = {
+  ticker: string;
+  price: number;
+  currency: string;
+  changePercent?: number;
+};
+
 export type AdvisorContext = {
   positions: PositionSnippet[];
   analyses: AnalysisSnippet[];
+  livePrices: LivePrice[];
   currentDate: string;
   language: string;
 };
+
+// Shared grounding rules injected into BOTH advisor modes. They exist because the
+// advisor once reported a stale price (2.28 vs a real 2.16) and invented a dated
+// causal narrative for a price move. The fix is twofold: anchor current prices to
+// the authoritative LIVE PRICES block, and forbid presenting any unverified
+// cause/event as fact.
+const GROUNDING_RULES_BLOCK = `GROUNDING RULES (mandatory):
+- The LIVE PRICES block (when present) is the single source of truth for the current price of an owned ticker. Never state a current/last price from memory or from a web-searched quote that conflicts with it.
+- "price at analysis" values in the analysis history are HISTORICAL — the price when the analysis was saved. Never quote them as the current price.
+- Before attributing a price move to a cause, or citing any recent event, news, guidance, or earnings release, verify it via web search and give the date. If you cannot verify it, state that the driver is UNCONFIRMED — do not invent a plausible-sounding narrative.
+- Separate verified facts (cite the date/source) from your own inference. Never present speculation or a "market reconstruction" as established fact.
+- When the user asks about adding to, holding, or exiting a position, first read the current price from LIVE PRICES and search for material recent news before advising.`;
+
+/** Summarise one live price into a compact authoritative line. */
+function formatLivePrice(lp: LivePrice): string {
+  const base = `- ${lp.ticker}: ${lp.price.toFixed(2)} ${lp.currency}`;
+  if (lp.changePercent == null) return base;
+  const sign = lp.changePercent >= 0 ? "+" : "";
+  return `${base} (today ${sign}${lp.changePercent.toFixed(2)}%)`;
+}
 
 /** Summarise one position into a compact line for the system prompt. */
 function formatPosition(p: PositionSnippet): string {
@@ -72,12 +103,17 @@ function formatAnalysis(a: AnalysisSnippet): string {
 }
 
 export function buildAdvisorSystemPrompt(ctx: AdvisorContext): string {
-  const { positions, analyses, currentDate, language } = ctx;
+  const { positions, analyses, livePrices, currentDate, language } = ctx;
 
   const portfolioSection =
     positions.length > 0
       ? positions.map(formatPosition).join("\n")
       : "  (no positions yet)";
+
+  const livePricesSection =
+    livePrices.length > 0
+      ? livePrices.map(formatLivePrice).join("\n")
+      : "  (no live prices available — verify current prices via web search)";
 
   // Deduplicate analyses by ticker: keep only the most recent per ticker.
   const latestByTicker = new Map<string, AnalysisSnippet>();
@@ -100,8 +136,13 @@ You have full context of the user's investment portfolio and their previously sa
 USER'S PORTFOLIO (${positions.length} position${positions.length !== 1 ? "s" : ""}):
 ${portfolioSection}
 
+LIVE PRICES (authoritative — current market, as of ${currentDate}):
+${livePricesSection}
+
 PREVIOUSLY SAVED DEEP VALUE ANALYSES (most recent per ticker):
 ${analysesSection}
+
+${GROUNDING_RULES_BLOCK}
 
 IMPORTANT RULES:
 1. When you recommend a specific stock ticker to investigate further, always wrap it in double square brackets, e.g. [[ENI.MI]] or [[AAPL]]. This lets the user launch a Deep Value analysis with one click. Only wrap actual tickers — not company names.
@@ -135,6 +176,8 @@ HOW TO RESPOND:
 - Use web search to find current data: recent P/E or EV/EBITDA multiples, ROIC, analyst consensus, and any material recent news.
 - Before proposing any ticker, verify via web search that it is CURRENTLY listed and actively traded as of ${currentDate}. Never suggest a company that has been delisted, acquired, taken private, merged away, or had trading suspended — your training data may still list it as active when it is not. If a candidate is no longer publicly tradable, drop it and pick another.
 - Be direct and specific. Avoid generic statements.
+
+${GROUNDING_RULES_BLOCK}
 
 DISCOVERY FOCUS AREAS (adapt based on user's request):
 - Quality compounders: ROIC > 12%, consistent revenue/FCF growth, durable competitive moat
