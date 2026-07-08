@@ -56,6 +56,10 @@
 
 - Fixed the **Advisor suggesting stocks that are no longer traded** — it once recommended a company delisted years ago. The Advisor now verifies via web search that a ticker is currently listed and actively traded before recommending it.
 
+- Fixed the **Advisor quoting a wrong, stale price** for a portfolio holding (e.g. showing ~2.28 for a stock actually trading at 2.16). The Advisor now receives the real current price of each of your holdings as authoritative ground truth, so its numbers match the live market.
+
+- Fixed the **Advisor inventing reasons for a price move** — it would state a cause (a "vague guidance", a "fund rotation") as established fact without checking. It now must verify any cited cause, news, or event via a dated web search, or explicitly flag the driver as unconfirmed instead of guessing.
+
 - Fixed **upside/downside percentages** in Deep Value being wildly understated (a base value 143% above price showed as "+1.4%") — they are now computed directly from fair value vs. the live price.
 
 - Fixed the **Watchlist showing prices in dollars** for EUR-listed tickers that hadn't been analyzed yet — rows now use the live quote's actual currency.

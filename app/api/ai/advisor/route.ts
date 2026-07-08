@@ -6,6 +6,7 @@ import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getQuote } from "@/lib/yahoo-client";
 import { buildAdvisorSystemPrompt, buildAdvisorUserPrompt, buildDiscoverySystemPrompt } from "@/lib/ai/advisor-prompts";
 
 const messageSchema = z.object({
@@ -84,10 +85,31 @@ export async function POST(request: Request) {
         }),
       ]);
 
+      // Fetch authoritative live prices for the owned tickers and inject them as
+      // ground truth. Without this the model has no current price in context (only
+      // the historical priceAtAnalysis + purchase price) and fills the gap from a
+      // stale web quote or memory — the real failure that reported a price of 2.28
+      // for a stock actually trading at 2.16. Mirrors the /verify route's approach.
+      // Best-effort: Yahoo can 429 (known issue), so a failed quote for one ticker
+      // must not abort the reply — allSettled keeps the others.
+      const uniqueTickers = [...new Set(positions.map((p) => p.ticker))];
+      const quoteResults = await Promise.allSettled(uniqueTickers.map((t) => getQuote(t)));
+      const livePrices = quoteResults.flatMap((r) =>
+        r.status === "fulfilled"
+          ? [{
+              ticker: r.value.ticker,
+              price: r.value.regularMarketPrice,
+              currency: r.value.currency,
+              changePercent: r.value.regularMarketChangePercent,
+            }]
+          : [],
+      );
+
       systemPrompt = buildAdvisorSystemPrompt({
         positions,
         // Serialise Date → ISO string to match AnalysisSnippet.createdAt: string
         analyses: analyses.map((a) => ({ ...a, createdAt: a.createdAt.toISOString() })),
+        livePrices,
         currentDate,
         language: body.language,
       });
