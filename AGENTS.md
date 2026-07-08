@@ -394,6 +394,8 @@ Key invariants:
 - Single-purchase tickers render identically to the old flat row (no expand toggle)
 - P&L on the aggregated row: `(currentPrice − WAC) × totalShares`
 
+**Modal-prefill pattern for "add another purchase" on an existing ticker**: `AggregatedPositionRow`'s "+ Purchase" button calls a parent handler that derives a `Partial<CreatePositionRequest>` from the aggregated row (`companyName`/`currency`/`isin`/`capitalGainsTaxRate` — taken from `sorted[0]`, same source as the aggregated display) and stores it in a `prefill` state; `AddPositionModal` spreads it (`...prefill`) into its `useState<CreatePositionRequest>` initializer. Only spread the *identity* fields — leave `purchasePrice`/`shares`/`purchasedAt`/`notes` at their normal blank/today defaults, since it's a new buy, not an edit. Because `aggregateByTicker` groups by the raw ticker string, this prefill is the main defense against a company-name/currency typo on a follow-on purchase silently splitting the aggregation for that ticker.
+
 ---
 
 ## Internationalisation (i18n)

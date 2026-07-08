@@ -55,6 +55,7 @@ export type Translations = {
   aggregatedView: string;
   perPurchaseView: string;
   addPositionBtn: string;
+  addPurchaseBtn: string;
   addPositionTitle: string;
   noPositionsYet: string;
   loadingPrices: string;
@@ -477,6 +478,7 @@ const en: Translations = {
   aggregatedView: "Aggregated",
   perPurchaseView: "Per Purchase",
   addPositionBtn: "+ Add Position",
+  addPurchaseBtn: "+ Purchase",
   addPositionTitle: "Add Position",
   noPositionsYet: "No positions yet — add your first purchase.",
   loadingPrices: "Loading prices…",
@@ -896,6 +898,7 @@ const it: Translations = {
   aggregatedView: "Aggregato",
   perPurchaseView: "Per Acquisto",
   addPositionBtn: "+ Aggiungi Posizione",
+  addPurchaseBtn: "+ Acquisto",
   addPositionTitle: "Aggiungi Posizione",
   noPositionsYet: "Nessuna posizione — aggiungi il primo acquisto.",
   loadingPrices: "Caricamento prezzi…",
