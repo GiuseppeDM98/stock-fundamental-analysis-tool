@@ -34,8 +34,8 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **English / Italian UI** — switch the entire interface language from the navigation bar; preference is saved automatically
 - **AI Portfolio Advisor** — conversational AI at `/advisor` in two modes: **Portfolio** (knows your holdings and saved analyses) and **Discovery** (idea generation — finds quality compounders, undervalued stocks, or sector opportunities with no portfolio context). Recommended tickers appear as one-click chips that launch a Deep Value analysis. Conversations saved to your account.
 - **Decision Panel** — after every Deep Value Analysis completes, an **Add to Watchlist** button appears (pre-fills ticker + MoS). Every analysis ends with a deliberate next step, not a dead end.
-- **Exit signal ("At Fair Value")** — when a position's current price reaches the **intrinsic base fair value** from your most recent saved analysis (i.e. the margin of safety is fully consumed), an amber ⚠ badge appears in the portfolio row (always visible). A "Re-analyze →" button navigates to the dashboard with your position context pre-loaded
-- **Review Position (AI)** — after an exit signal, a dedicated amber "Review Position (AI)" button on the dashboard runs a modified AI prompt focused on "hold, add, or exit?" — includes your weighted average cost, previous fair value, and an explicit recommendation section. Saves and renders identically to a standard Deep Value analysis
+- **Exit signal ("At Fair Value")** — when a position's current price reaches the **intrinsic base fair value** from your most recent saved analysis (i.e. the margin of safety is fully consumed), an amber ⚠ badge appears in the portfolio row (always visible). Its "Re-analyze →" button runs a fresh, **position-blind** Deep Value analysis (no cost basis is ever fed to the AI, so the valuation stays independent); use the Advisor afterwards to decide hold / add / exit
+- **Estimate-evolution diff** — when a ticker has two or more saved analyses, its saved-analyses card shows how the estimate moved vs. the previous save (Δ Analysis / Reviewer / Consensus base fair value). Pure arithmetic on your saved numbers — never sent to the AI
 
 ### What Problem Does It Solve?
 
@@ -79,8 +79,8 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - 📬 **Watchlist + Daily AI Email Digest**: Add any ticker to your watchlist — a valuation-ruler card per ticker (same UI as saved analyses) plus a daily email with Bear/Base/Bull broken down by Analysis/Reviewer/Consensus, current price, upside vs. your buy target, and status badges — pause with a toggle when not actively investing
 - 📱 **Installable PWA**: Install the app on Android or iOS for a native-like experience — standalone mode, home screen icon, no browser chrome
 - 💬 **AI Portfolio Advisor**: Conversational AI at `/advisor` that knows your portfolio and saved analyses — ask free-form questions, receive stock recommendations as one-click Deep Value chips, with full conversation history saved to your account
-- ⚠️ **Exit Signal**: Amber "At Fair Value" badge appears in the portfolio row when price ≥ base fair value from the most recent saved analysis — signals when the margin of safety is consumed; one click pre-loads context for re-analysis
-- 🔁 **Review Position (AI)**: Dedicated "hold, add, or exit?" AI analysis triggered from an exit signal — includes WAC, previous fair value, unrealized gain/loss, and an explicit Hold / Add / Exit Recommendation section
+- ⚠️ **Exit Signal**: Amber "At Fair Value" badge appears in the portfolio row when price ≥ base fair value from the most recent saved analysis — signals when the margin of safety is consumed; one click runs a fresh, position-blind re-analysis
+- 📈 **Estimate-Evolution Diff**: When a ticker has ≥2 saved analyses, its card shows Δ Analysis / Reviewer / Consensus base fair value vs. the previous save — deterministic, never sent to the AI
 - 🧪 **Fully Tested**: Vitest + Testing Library coverage for calculations and UI
 
 ---

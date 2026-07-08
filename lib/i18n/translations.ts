@@ -112,6 +112,8 @@ export type Translations = {
   consensusLabel: string;
   reviewerLabel: string;
   analysisLabel: string;
+  // Deterministic estimate-evolution diff on the analyses card.
+  evolutionTitle: string;
   verdictBuy: string;
   verdictWatch: string;
   verdictOver: string;
@@ -147,8 +149,6 @@ export type Translations = {
   deepValueTitle: string;
   deepValueDesc: string;
   deepAnalysisBtn: string;
-  reviewPositionBtn: string;
-  reviewPositionBtnHint: string;
 
   // ─── Scenario panels ────────────────────────────────────────────────────────
   scenarioControls: string;
@@ -513,6 +513,7 @@ const en: Translations = {
   consensusLabel: "Consensus",
   reviewerLabel: "Reviewer",
   analysisLabel: "Analysis",
+  evolutionTitle: "Evolution vs analysis of",
   verdictBuy: "BUY",
   verdictWatch: "WATCH",
   verdictOver: "OVER FV",
@@ -548,8 +549,6 @@ const en: Translations = {
   deepValueTitle: "Deep Value Analysis",
   deepValueDesc: "Claude picks the valuation method and sources all data via web search",
   deepAnalysisBtn: "Deep Analysis (AI)",
-  reviewPositionBtn: "Review Position (AI)",
-  reviewPositionBtnHint: "Hold, add, or exit? Re-analyze with your position context",
 
   // Scenario panels
   scenarioControls: "Scenario controls",
@@ -913,6 +912,7 @@ const it: Translations = {
   consensusLabel: "Consenso",
   reviewerLabel: "Revisore",
   analysisLabel: "Analisi",
+  evolutionTitle: "Evoluzione vs analisi del",
   verdictBuy: "BUY",
   verdictWatch: "WATCH",
   verdictOver: "SOPRA FV",
@@ -948,8 +948,6 @@ const it: Translations = {
   deepValueTitle: "Analisi Deep Value",
   deepValueDesc: "Claude sceglie il metodo di valutazione e raccoglie i dati via web search",
   deepAnalysisBtn: "Analisi Profonda (AI)",
-  reviewPositionBtn: "Rivedi Posizione (AI)",
-  reviewPositionBtnHint: "Tenere, aggiungere o uscire? Rianalizza con il contesto della tua posizione",
 
   // Scenario panels
   scenarioControls: "Parametri scenario",

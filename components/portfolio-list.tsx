@@ -101,12 +101,10 @@ function TickerAnalysesInline({
   analyses,
   ticker,
   currentPrice,
-  wac,
 }: {
   analyses: SavedAnalysis[];
   ticker: string;
   currentPrice?: number;
-  wac?: number;
 }) {
   const [open, setOpen] = useState(false);
   const { t } = useLanguage();
@@ -136,12 +134,10 @@ function TickerAnalysesInline({
               </p>
               <button
                 onClick={() => {
-                  const url = new URL("/analyze", window.location.origin);
-                  url.searchParams.set("ticker", ticker);
-                  url.searchParams.set("exitReview", "1");
-                  if (exitSignal.fairValueBase != null) url.searchParams.set("prevFv", exitSignal.fairValueBase.toFixed(4));
-                  if (wac != null) url.searchParams.set("wac", wac.toFixed(4));
-                  window.location.href = url.toString();
+                  // Re-analyze always means a clean, position-blind Deep Value run —
+                  // no WAC/prevFv is passed, so the new valuation stays independent.
+                  // Hold/exit reasoning is done afterwards in the Advisor.
+                  window.location.href = `/analyze?ticker=${encodeURIComponent(ticker)}`;
                 }}
                 className="mt-1.5 rounded border border-amber-500/40 px-2 py-0.5 text-xs text-amber-400 transition hover:border-amber-400 hover:text-amber-300"
               >
@@ -280,12 +276,8 @@ function AggregatedPositionRow({
                 </span>
                 <button
                   onClick={() => {
-                    const url = new URL("/analyze", window.location.origin);
-                    url.searchParams.set("ticker", agg.ticker);
-                    url.searchParams.set("exitReview", "1");
-                    url.searchParams.set("wac", agg.weightedAvgCost.toFixed(4));
-                    if (exitSignal.fairValueBase != null) url.searchParams.set("prevFv", exitSignal.fairValueBase.toFixed(4));
-                    window.location.href = url.toString();
+                    // Clean, position-blind re-analysis (see TickerAnalysesInline).
+                    window.location.href = `/analyze?ticker=${encodeURIComponent(agg.ticker)}`;
                   }}
                   className="rounded border border-amber-500/30 px-1.5 py-0.5 text-[11px] text-amber-400 transition hover:border-amber-400 hover:text-amber-300"
                 >
@@ -306,7 +298,6 @@ function AggregatedPositionRow({
             analyses={tickerAnalyses}
             ticker={agg.ticker}
             currentPrice={currentPrice}
-            wac={agg.weightedAvgCost}
           />
         </div>
 
@@ -946,7 +937,6 @@ export default function PortfolioList() {
                     analyses={analysesByTicker[pos.ticker] ?? []}
                     ticker={pos.ticker}
                     currentPrice={currentPrices[pos.ticker]}
-                    wac={pos.purchasePrice}
                   />
                 </div>
 

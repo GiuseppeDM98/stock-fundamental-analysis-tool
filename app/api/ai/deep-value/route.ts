@@ -10,18 +10,12 @@ import { getQuote } from "@/lib/yahoo-client";
 import {
   buildDeepValueSystemPrompt,
   buildDeepValueUserPrompt,
-  buildReviewPositionSystemPrompt,
-  buildReviewPositionUserPrompt,
 } from "@/lib/ai/deep-value-prompts";
 
 const requestSchema = z.object({
   ticker: z.string().min(1).max(20),
   language: z.string().min(1).max(30).default("English"),
   mosPercent: z.number().min(0).max(80).default(0),
-  reviewContext: z.object({
-    wac: z.number().positive(),
-    prevFv: z.number().positive(),
-  }).optional(),
 });
 
 export async function POST(request: Request) {
@@ -52,12 +46,13 @@ export async function POST(request: Request) {
       day: "numeric",
     });
 
-    const systemPrompt = body.reviewContext
-      ? buildReviewPositionSystemPrompt(body.language, currentDate, body.mosPercent, body.reviewContext)
-      : buildDeepValueSystemPrompt(body.language, currentDate, body.mosPercent);
-    const userPrompt = body.reviewContext
-      ? buildReviewPositionUserPrompt(body.ticker, currentPrice, currency, body.language, currentDate, body.mosPercent, body.reviewContext)
-      : buildDeepValueUserPrompt(body.ticker, currentPrice, currency, body.language, currentDate, body.mosPercent);
+    // The valuation is always independent/position-blind — no portfolio position or
+    // prior estimate is ever injected into the prompt, so the fair values can't be
+    // anchored to what the user paid or to a previous run. Position-aware hold/exit
+    // reasoning happens separately in the Advisor; estimate evolution is shown as a
+    // deterministic diff on /analyses (never fed back into a prompt).
+    const systemPrompt = buildDeepValueSystemPrompt(body.language, currentDate, body.mosPercent);
+    const userPrompt = buildDeepValueUserPrompt(body.ticker, currentPrice, currency, body.language, currentDate, body.mosPercent);
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
