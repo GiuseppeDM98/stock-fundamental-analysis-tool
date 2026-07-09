@@ -31,7 +31,7 @@ lib/               # Business logic and utilities (Yahoo quote adapter, AI promp
   email.ts                 # Resend email sender
   format.ts                # Formatting utilities
   positions.ts             # Server-only: closePosition() (full/partial position close)
-  portfolio-math.ts        # Pure: realizedPnlNative(), holdingDays() — no server-only, shared client+server
+  portfolio-math.ts        # Pure: realizedPnlNative(), holdingDays(), estimateCapitalGainsTax() — no server-only, shared client+server
   report/
     verdict.ts              # getVerdict() + VERDICT_BADGE/VERDICT_TEXT maps (shared: analyses + watchlist)
     valuation.ts             # grossUpToIntrinsic() (shared: analyses + watchlist)
@@ -335,8 +335,9 @@ Never export server-only functions from the same file as client helpers — Next
 
 ## Portfolio Tracker
 
-- `Position` model: `id, userId, ticker, isin, companyName, purchasePrice, shares, currency, purchasedAt, notes, capitalGainsTaxRate` — `isin` is optional (Borsa Italiana dividends); `capitalGainsTaxRate Float?` is an optional % (e.g. 26.0) used client-side to compute estimated taxes and net P&L on unrealized gains
-- Tax display rules: taxes are computed per-position, applied only to gains (pnl > 0), never to losses. SummaryBar computes total tax by looping positions — not using an average rate. In aggregated rows, `capitalGainsTaxRate` comes from `purchases[0]` (same user = same rate across DCA).
+- `Position` model: `id, userId, ticker, isin, companyName, purchasePrice, shares, currency, purchasedAt, notes, capitalGainsTaxRate` — `isin` is optional (Borsa Italiana dividends); `capitalGainsTaxRate Float?` is an optional % (e.g. 26.0), set at position creation, used client-side to compute estimated taxes and net P&L on both unrealized **and realized** gains.
+- **Tax display rules**: taxes are computed per-position/per-lot via the shared pure helper `estimateCapitalGainsTax(pnl, taxRate)` (`lib/portfolio-math.ts`) — 0 on a loss or missing rate, else `pnl * rate/100`; never averaged, `SummaryBar` loops positions/closed lots individually (in aggregated rows, `capitalGainsTaxRate` comes from `purchases[0]`, same user = same rate across DCA). Applies equally to unrealized (open positions) and **realized** gains (`ClosedPositionsSection` per closed lot, `SummaryBar`'s "Realized P&L" cell via `hint`) — `realizedPnlNative()` itself stays pure/gross; net is always a display-time subtraction, never persisted.
+- **Tax-estimate display gates on the portfolio-level total, not a single winning row**: a winning position/lot can make `estimateCapitalGainsTax` return `> 0` while the overall unrealized (or realized) total is a net loss because other positions drag it down — showing an estimated tax next to a net loss reads as wrong. `SummaryBar` gates each "Est. tax / Net" line on `total > 0 && totalTax > 0` (`hasTaxEstimate`, `hasRealizedTaxEstimate`), never on the accumulated tax alone.
 - Types: `Position`, `CreatePositionRequest`, `AggregatedPosition`, `SnapshotPoint`, `SnapshotEntry`, `SnapshotData` — all in `types/portfolio.ts`
 - Client helpers in `lib/portfolio.ts` — same pattern as `lib/analyses.ts`; includes `fetchSnapshots()` for chart data
 - Live prices fetched client-side via `/api/quote/[ticker]` in parallel for all unique tickers

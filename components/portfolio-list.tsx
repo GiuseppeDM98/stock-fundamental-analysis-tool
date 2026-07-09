@@ -13,7 +13,7 @@ import {
   fetchSnapshots,
 } from "@/lib/portfolio";
 import { fetchAnalyses } from "@/lib/analyses";
-import { realizedPnlNative, holdingDays } from "@/lib/portfolio-math";
+import { realizedPnlNative, holdingDays, estimateCapitalGainsTax } from "@/lib/portfolio-math";
 import type {
   Position,
   CreatePositionRequest,
@@ -214,10 +214,9 @@ function AggregatedPositionRow({
   const returnPct = pnl != null ? (currentValue! / agg.totalCost - 1) * 100 : null;
   const isPositive = pnl != null && pnl >= 0;
   const hasMultiple = agg.purchases.length > 1;
-  const taxRate = agg.capitalGainsTaxRate;
-  const hasTax = taxRate != null && taxRate > 0 && pnl != null && pnl > 0;
-  const taxAmount = hasTax ? pnl! * (taxRate! / 100) : null;
-  const netPnl = hasTax ? pnl! - taxAmount! : null;
+  const taxAmount = pnl != null ? estimateCapitalGainsTax(pnl, agg.capitalGainsTaxRate) : 0;
+  const hasTax = taxAmount > 0;
+  const netPnl = hasTax ? pnl! - taxAmount : null;
   const exitSignal = getExitSignal(currentPrice, tickerAnalyses);
 
   return (
@@ -305,7 +304,7 @@ function AggregatedPositionRow({
 
           {hasTax && (
             <div className="mt-1 text-[11px] text-slate-500">
-              {t("estimatedTax")} {formatAmount(-taxAmount!, agg.currency)} · {t("netPnl")}{" "}
+              {t("estimatedTax")} {formatAmount(-taxAmount, agg.currency)} · {t("netPnl")}{" "}
               <span className="text-success">+{formatAmount(netPnl!, agg.currency)}</span>
             </div>
           )}
@@ -791,6 +790,8 @@ function ClosedPositionsSection({
             const returnPct = (p.sellPrice! / p.purchasePrice - 1) * 100;
             const positive = realized >= 0;
             const days = holdingDays(p.purchasedAt, p.closedAt);
+            const taxAmount = estimateCapitalGainsTax(realized, p.capitalGainsTaxRate);
+            const hasTax = taxAmount > 0;
             return (
               <li key={p.id} className="card">
                 <div className="flex items-start justify-between gap-4">
@@ -819,6 +820,12 @@ function ClosedPositionsSection({
                     <div className="mt-1 text-[11px] text-slate-500">
                       {t("soldOn")} {formatDate(p.closedAt!)} · {t("heldFor")} {days} {t("daysUnit")}
                     </div>
+                    {hasTax && (
+                      <div className="mt-1 text-[11px] text-slate-500">
+                        {t("estimatedTax")} {formatAmount(-taxAmount, p.currency)} · {t("netPnl")}{" "}
+                        <span className="text-success">+{formatAmount(realized - taxAmount, p.currency)}</span>
+                      </div>
+                    )}
                   </div>
                   <button
                     onClick={() => onDelete(p.id)}
@@ -866,15 +873,20 @@ function SummaryBar({
   // Realized P&L across closed lots, converted to EUR at current FX (approximation;
   // realized figures are not stored in EUR on the position).
   let realizedEur = 0;
+  let realizedTaxEur = 0;
   let realizedResolved = 0;
   for (const p of closedPositions) {
     if (p.sellPrice == null) continue;
     const rate = p.currency === "EUR" ? 1 : (fxRates[p.currency] ?? null);
     if (rate == null) continue;
-    realizedEur += realizedPnlNative(p.sellPrice, p.purchasePrice, p.shares) / rate;
+    const lotRealizedNative = realizedPnlNative(p.sellPrice, p.purchasePrice, p.shares);
+    realizedEur += lotRealizedNative / rate;
+    realizedTaxEur += estimateCapitalGainsTax(lotRealizedNative, p.capitalGainsTaxRate) / rate;
     realizedResolved++;
   }
   const hasRealized = realizedResolved > 0;
+  const netRealizedEur = realizedEur - realizedTaxEur;
+  const hasRealizedTaxEstimate = realizedEur > 0 && realizedTaxEur > 0;
 
   for (const p of positions) {
     const cp = currentPrices[p.ticker];
@@ -888,11 +900,8 @@ function SummaryBar({
     const valueEur = (cp * p.shares) / rate;
     totalCostEur += costEur;
     totalValueEur += valueEur;
-    // Apply tax only on gains (not on losses) and only when the rate is set
     const positionPnlEur = valueEur - costEur;
-    if (p.capitalGainsTaxRate != null && p.capitalGainsTaxRate > 0 && positionPnlEur > 0) {
-      totalTaxEur += positionPnlEur * (p.capitalGainsTaxRate / 100);
-    }
+    totalTaxEur += estimateCapitalGainsTax(positionPnlEur, p.capitalGainsTaxRate);
     resolved++;
   }
 
@@ -906,7 +915,11 @@ function SummaryBar({
   const pnlEur = totalValueEur - totalCostEur;
   const totalReturn = resolved > 0 ? (totalValueEur / totalCostEur - 1) * 100 : 0;
   const isPositive = pnlEur >= 0;
-  const hasTaxEstimate = totalTaxEur > 0;
+  // Gated on the portfolio-level total, not just per-position sign: a single winning
+  // position can contribute to totalTaxEur while other losing positions drag the
+  // overall unrealized P&L negative — showing an estimated tax against a net loss
+  // would be misleading, so hide it whenever the total isn't itself a net gain.
+  const hasTaxEstimate = pnlEur > 0 && totalTaxEur > 0;
   const netPnlEur = pnlEur - totalTaxEur;
   const hasDividends = totalDividendsEur > 0;
   // Total = unrealized (open) + realized (closed). Shown only when there are realized results.
@@ -939,6 +952,9 @@ function SummaryBar({
       label: t("realizedPnL"),
       value: `${realizedPositive ? "+" : ""}${formatAmount(realizedEur, "EUR")}`,
       tone: realizedPositive ? "pos" : "neg",
+      hint: hasRealizedTaxEstimate
+        ? `${t("estimatedTax")} -${formatAmount(realizedTaxEur, "EUR")} · ${t("netPnl")} +${formatAmount(netRealizedEur, "EUR")}`
+        : undefined,
     });
     cells.push({
       key: "total",
@@ -1314,12 +1330,15 @@ export default function PortfolioList() {
                       </span>
                     )}
                   </div>
-                  {pos.capitalGainsTaxRate != null && pos.capitalGainsTaxRate > 0 && pnl != null && pnl > 0 && (
-                    <div className="mt-1 text-[11px] text-slate-500">
-                      {t("estimatedTax")} {formatAmount(-(pnl * pos.capitalGainsTaxRate / 100), pos.currency)} · {t("netPnl")}{" "}
-                      <span className="text-success">+{formatAmount(pnl * (1 - pos.capitalGainsTaxRate / 100), pos.currency)}</span>
-                    </div>
-                  )}
+                  {(() => {
+                    const flatTaxAmount = pnl != null ? estimateCapitalGainsTax(pnl, pos.capitalGainsTaxRate) : 0;
+                    return flatTaxAmount > 0 ? (
+                      <div className="mt-1 text-[11px] text-slate-500">
+                        {t("estimatedTax")} {formatAmount(-flatTaxAmount, pos.currency)} · {t("netPnl")}{" "}
+                        <span className="text-success">+{formatAmount(pnl! - flatTaxAmount, pos.currency)}</span>
+                      </div>
+                    ) : null;
+                  })()}
 
                   {pos.notes && (
                     <p className="mt-1 text-xs text-slate-600 italic">{pos.notes}</p>
