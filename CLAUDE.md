@@ -8,7 +8,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: July 8, 2026 — **"+ Purchase" quick-add for existing holdings.** `AggregatedPositionRow` (`components/portfolio-list.tsx`) now has a "+ Purchase" button that opens `AddPositionModal` pre-filled with the ticker's `companyName`/`currency`/`isin`/`capitalGainsTaxRate` (from the earliest purchase); date/price/shares/notes stay blank since it's a new buy. Purely a client-side form-prefill — no DB/API change, still a plain `POST /api/positions` → `db.position.create()`. Reduces the risk of a company-name/currency typo silently breaking `aggregateByTicker()`'s ticker-string grouping when averaging into a position you already hold.
+**Last Updated**: July 9, 2026 — **Next-earnings calendar (AI-sourced, per-stock button).** A new feature to know when a company next reports, so you know when to re-run an analysis. `/analyses`, watchlist and portfolio each show a per-ticker button that runs **Claude Sonnet 5 + web search** (`POST /api/earnings`) to find the next results-release date, persisted in the new `EarningsEstimate` model (upsert per user/ticker) and read back via `GET /api/earnings`. On `/analyses` an "Upcoming earnings" strip lists future dates nearest-first, and an amber "New data since last analysis" pill nudges a re-run when the saved analysis predates the last report (`isAnalysisStalePreEarnings`). Pure helpers in `lib/earnings.ts` (`isFutureEarnings`, staleness, formatting); shared `<EarningsBadge>`; prompt in `lib/ai/earnings-prompt.ts` (**cadence-neutral** — quarterly/half-year/annual, so it doesn't skip EU/IT semi-annual reporters). **Yahoo was evaluated first and dropped**: `quote.earningsTimestamp` doesn't refresh for many Borsa Italiana tickers (returns the last reported quarter, not the next).
 
 ---
 
@@ -18,7 +18,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 - **yahoo-finance2** `3.13.2` + **Zod** `3.24.1`
 - **Prisma** `7.4.2` + **Turso** (libSQL) via `@prisma/adapter-libsql`
 - **Auth.js** `next-auth@5.0.0-beta.30` + **bcryptjs**
-- **Anthropic SDK** + **Claude Opus 4.8** (Deep Value + Analyst Review, `effort: "xhigh"`) / **Claude Sonnet 5** (Advisor, `effort: "high"`) — adaptive thinking, web search enabled
+- **Anthropic SDK** + **Claude Opus 4.8** (Deep Value + Analyst Review, `effort: "xhigh"`) / **Claude Sonnet 5** (Advisor `effort: "high"`; next-earnings lookup `effort: "medium"`) — adaptive thinking, web search enabled
 - **Tailwind** `3.4.17` + typography + **Framer Motion** `11.18.2` + **Recharts** `2.15.1` + react-markdown + remark-gfm + node-html-parser
 - **Vitest** `3.2.4` + Testing Library `16.2.0`
 
@@ -29,9 +29,9 @@ Current project state and context for AI assistants. Implementation patterns & g
 Next.js App Router with client-side interactivity and server-side API routes. Pipeline: **Discover (Advisor) → Decide (Deep Value) → Monitor (Watchlist/Portfolio)**.
 
 - **Frontend**: Hub home (`/`) + `/analyze` (Deep Value) + auth + `/analyses` + `/portfolio` + `/advisor` + `/watchlist`
-- **API**: `/api/quote/[ticker]` (only Yahoo data route), `/api/auth/*`, `/api/analyses(+/[id]` GET/PATCH/DELETE — PATCH attaches the Analyst Review), `/api/positions(+/[id])`, `/api/ai/deep-value` + `/verify` + `/api/ai/advisor` (all POST streaming), `/api/advisor/sessions(+/[id](+/messages))`, `/api/portfolio/snapshots`, `/api/watchlist(+/[id], /settings, /run)`, `/api/cron/{portfolio-snapshot,watchlist-analysis}`
-- **Business logic**: pure TS in `lib/` (Yahoo adapter, deep-value/verify/advisor prompts, snapshots, dividends, formatters)
-- **DB**: SQLite via Prisma 7 — `User`, `Analysis`, `Position`, `PortfolioSnapshot`, `WatchlistItem`, `WatchlistRun` (dead), `AdvisorSession`, `AdvisorMessage`
+- **API**: `/api/quote/[ticker]` (only Yahoo data route), `/api/auth/*`, `/api/analyses(+/[id]` GET/PATCH/DELETE — PATCH attaches the Analyst Review), `/api/positions(+/[id])`, `/api/earnings` GET/POST (POST = Sonnet 5 + web search next-earnings lookup, upsert), `/api/ai/deep-value` + `/verify` + `/api/ai/advisor` (all POST streaming), `/api/advisor/sessions(+/[id](+/messages))`, `/api/portfolio/snapshots`, `/api/watchlist(+/[id], /settings, /run)`, `/api/cron/{portfolio-snapshot,watchlist-analysis}`
+- **Business logic**: pure TS in `lib/` (Yahoo adapter, deep-value/verify/advisor/earnings prompts, snapshots, dividends, formatters)
+- **DB**: SQLite via Prisma 7 — `User`, `Analysis`, `Position`, `PortfolioSnapshot`, `WatchlistItem`, `WatchlistRun` (dead), `EarningsEstimate`, `AdvisorSession`, `AdvisorMessage`
 - **Auth**: Auth.js v5 credentials provider, JWT sessions (no DB session table)
 - **Types**: `types/` — fundamentals, market, analysis, auth, portfolio, watchlist
 - **Cron**: Vercel — portfolio snapshot weekdays 20:00 UTC, watchlist digest daily 08:00 UTC
@@ -69,11 +69,11 @@ Slim, single path: ticker search → `GET /api/quote` (price header + reference 
 ### Portfolio Tracker (`/portfolio`)
 - `Position`: `ticker`, `isin?`, `companyName`, `purchasePrice`, `shares`, `currency`, `purchasedAt`, `notes`, `capitalGainsTaxRate?`, `closedAt?`, `sellPrice?`.
 - **WAC/DCA**: positions grouped by ticker (`AggregatedPosition` — `weightedAvgCost`, `totalShares`, `totalCost`), expandable per-purchase drill-down; toggle Aggregated/Per-Purchase. WAC P&L = `(price − WAC) × totalShares`. Only open positions are aggregated.
-- Multi-currency (EUR/USD/GBP/CHF/JPY/CAD/AUD/SEK/NOK/DKK) → EUR via Frankfurter. Ledger-style **SummaryBar**: primary current value + unrealized P&L, then a ruled row (cost/realized/total/dividends, + estimated tax + net when a rate is set). "Converted to EUR" attribution only when a non-EUR position exists.
+- Multi-currency (EUR/USD/GBP/CHF/JPY/CAD/AUD/SEK/NOK/DKK) → EUR via Frankfurter. Ledger-style **SummaryBar**: primary current value + unrealized P&L, then a ruled row (cost/realized/total/dividends). Gross/net-of-tax figures (via `estimateCapitalGainsTax()`, `lib/portfolio-math.ts`) appear on both unrealized P&L and the **realized** ("Closed positions" cards + the "Realized P&L" cell's `hint`) whenever `capitalGainsTaxRate` is set — but only when the relevant total (unrealized or realized) is itself a net gain, not merely because one winning position/lot has a positive estimate. "Converted to EUR" attribution only when a non-EUR position exists.
 - Per-row daily change (`regularMarketChange%`), capital-gains tax + net P&L on gains only. Add-position modal (portal), ISIN auto-fill for same ticker. **"+ Purchase"** button on each aggregated row pre-fills ticker/companyName/currency/isin/capitalGainsTaxRate for a follow-on buy (date/price/shares stay blank). Live prices via `/api/quote/[ticker]` (parallel at mount).
 - **Portfolio ↔ Analyses**: each row shows "N saved analyses ▼" (date, MoS%, buy target + intrinsic, link). Via `Promise.all([fetchPositions, fetchAnalyses, fetchSnapshots])`.
 - **Exit signal**: `getExitSignal(price, analyses)` (module-level) — `price >= intrinsicBase` of the latest analysis → amber `⚠ At Fair Value` pill + always-visible "Re-analyze →". **Monitor only**: both buttons → clean `/analyze?ticker=X` (no position params). Hold/exit reasoning → Advisor.
-- **Close position (full/partial sale)**: `PATCH /api/positions/[id]` → `closePosition()` in `lib/positions.ts` (server-only). Full close (no `sharesToSell` or ≈ the whole lot) sets `closedAt`/`sellPrice` on the row. Partial close splits the lot in one `$transaction`: the open row shrinks by the sold shares, a new closed row is created holding the sold shares — preserves realized P&L on the sold portion while the remainder stays a live holding. Returns a discriminated `CloseResult` (`{ok:true, positions}` / `{ok:false, status:404|400, error}`) so the route stays a thin controller. `lib/portfolio-math.ts` (pure, shared client+server) has `realizedPnlNative()` and `holdingDays()`. Closed positions render in an archived "Closed positions" section, separate from the open list; realized P&L rolls into the SummaryBar's "Realized" figure.
+- **Close position (full/partial sale)**: `PATCH /api/positions/[id]` → `closePosition()` in `lib/positions.ts` (server-only). Full close (no `sharesToSell` or ≈ the whole lot) sets `closedAt`/`sellPrice` on the row. Partial close splits the lot in one `$transaction`: the open row shrinks by the sold shares, a new closed row is created holding the sold shares — preserves realized P&L on the sold portion while the remainder stays a live holding. Returns a discriminated `CloseResult` (`{ok:true, positions}` / `{ok:false, status:404|400, error}`) so the route stays a thin controller. `lib/portfolio-math.ts` (pure, shared client+server) has `realizedPnlNative()`, `holdingDays()`, and `estimateCapitalGainsTax()`. Closed positions render in an archived "Closed positions" section, separate from the open list; realized P&L rolls into the SummaryBar's "Realized" figure, gross with a net-of-tax `hint` when applicable.
 - **P&L history chart**: Recharts line of value vs cost over time (from `PortfolioSnapshot`, placeholder <2 snapshots), with a legend. Green markers = dividend day; amber markers = capital deployed (`costEur` delta > €50); **violet `#a78bfa` "Sold" markers** = a close event, so a value/cost drop reads as a tracked sale, not an unexplained crash (registered as an intentional design-system event color in `.impeccable/config.json`). `SnapshotChartPoint = SnapshotPoint & { capitalDelta? }`.
 
 ### Portfolio Snapshots (cron)
@@ -95,6 +95,11 @@ Slim, single path: ticker search → `GET /api/quote` (price header + reference 
 - `WatchlistItem`: `id, userId, ticker, companyName, mosPercent, notes, addedAt` — `@@unique([userId, ticker])`. User-level `watchlistEnabled` toggle (cron skips when false). `WatchlistRun` model + `User.watchlistFreq` column are **dead** (left to avoid a Turso migration). Manual trigger `POST /api/watchlist/run` (rate-limited 24h via `lastManualWatchlistRun`).
 - **Cron: daily for everyone** — `GET /api/cron/watchlist-analysis` at `0 8 * * *`. No per-user frequency. **No AI in the cron**: reads the latest saved Deep Value `Analysis` per ticker + reviewer/consensus via `grossUpToIntrinsic`; tickers without an analysis show no values. `lib/watchlist-analysis.ts` (`server-only`).
 - **Email** via Resend (`lib/email.ts`, lazily init): ledger-themed card per ticker — price, Δ% vs buy target, Bear/Base/Bull split Analysis/Reviewer/Consensus, buy target, analysis date, native currency.
+
+### Next-Earnings Calendar (AI-sourced)
+- **Purpose**: know when a stock next reports results, so you know when to re-run its analysis. Sourced **on demand** from **Claude Sonnet 5 + web search** (not Yahoo — `quote.earningsTimestamp` is stale for many MTAA tickers, returning the last reported quarter). Manual (per-stock button), **persisted** so the calendar survives reloads without re-running the model.
+- **Data**: `EarningsEstimate` model — `@@unique([userId, ticker])`, `nextEarningsDate?`, `confidence` (`confirmed|estimated|unknown`), `sourceUrl?`, `fetchedAt`. `POST /api/earnings` runs the model **non-streaming** (`messages.create`, `effort: "medium"`, `max_tokens: 6000`), parses the JSON by concatenating **all** text blocks (web-search reasoning splits them — gotcha #13), validates with Zod, upserts. `GET /api/earnings` returns the user's store. Prompt in `lib/ai/earnings-prompt.ts` — grounded (web-verify, future-only, never fabricate) and **cadence-neutral** (quarterly/half-year/annual, so EU/IT semi-annual reporters aren't skipped).
+- **UI**: shared `<EarningsBadge>` (`components/earnings-badge.tsx`) on `/analyses`, watchlist and portfolio (open positions) — a "Find next earnings (AI)" button until fetched, then the date + "updated <fetchedAt>" + a 🔄 re-fetch button. Placed **outside** each card's header toggle `<button>` (its own refresh button would otherwise nest buttons → hydration error). Pure helpers in `lib/earnings.ts`: `isFutureEarnings` (only future dates shown/listed), `isAnalysisStalePreEarnings` (amber "New data since last analysis" pill — past date → stale if `createdAt < date`; future date → `createdAt < date − ~90d`), `formatEarningsDate`. `/analyses` also renders an "Upcoming earnings" strip (future dates, nearest-first). Client helpers `fetchEarnings`/`refreshEarnings` in `lib/earnings-client.ts` (kept out of the pure `lib/earnings.ts`).
 
 ### Interactive UI
 - **Responsive**: stacked below `lg` (1024px), full desktop at/above; `sm` (640px) phone↔tablet. NavBar + Advisor sidebar → portaled drawers below `lg`; Watchlist table → cards below `sm`; `.tap` helper = 44px touch targets; `viewport-fit=cover` + safe-area insets. See AGENTS.md › Responsive.
@@ -119,10 +124,13 @@ _Removed: Compare page + lite engine; Quality Scorecard / Valuation Cards / Hist
 ## Project Structure
 
 ```
-types/                       # fundamentals, market, analysis, auth, portfolio, watchlist
+types/                       # fundamentals, market, analysis, auth, portfolio, watchlist, earnings
 lib/
   ai/deep-value-prompts.ts   # Deep Value + Analyst Review builders — always position-blind
   ai/advisor-prompts.ts      # advisor + discovery builders — portfolio/analyses + live prices + GROUNDING_RULES_BLOCK
+  ai/earnings-prompt.ts      # next-earnings lookup (Sonnet 5 + web search) — cadence-neutral, grounded
+  earnings.ts                # pure: isFutureEarnings, isAnalysisStalePreEarnings, formatEarningsDate
+  earnings-client.ts         # client helpers: fetchEarnings / refreshEarnings
   yahoo-client.ts            # getQuote + extractRawNumber + mapFundamentalsFromTimeSeries
   auth.ts  db.ts  format.ts  analyses.ts  portfolio.ts
   portfolio-snapshots.ts     # server-only: snapshot creation
@@ -130,7 +138,7 @@ lib/
   watchlist-analysis.ts      # server-only: cron/email digest from saved analyses (no AI)
   email.ts                   # Resend — sendWatchlistDigest()
   positions.ts                # server-only: closePosition() — full/partial position close
-  portfolio-math.ts           # pure: realizedPnlNative(), holdingDays() (shared client+server)
+  portfolio-math.ts           # pure: realizedPnlNative(), holdingDays(), estimateCapitalGainsTax() (shared client+server)
   report/verdict.ts          # getVerdict() + VERDICT_BADGE/VERDICT_TEXT (shared)
   report/valuation.ts        # grossUpToIntrinsic() (shared)
   report/evolution.ts        # computeEvolution() — deterministic diff (no AI)
@@ -139,10 +147,11 @@ app/
   page.tsx (Hub)  analyze/  login/  register/  analyses/(+[id])  portfolio/  watchlist/  advisor/
   manifest.ts  icon.tsx  print.css
   api/ quote/[ticker]  auth/*  analyses(+/[id])  positions(+/[id], PATCH closes/sells)
-      portfolio/snapshots  cron/{portfolio-snapshot,watchlist-analysis}
-      watchlist(+/[id],/settings,/run)
+      earnings (GET/POST — AI next-earnings)  portfolio/snapshots
+      cron/{portfolio-snapshot,watchlist-analysis}  watchlist(+/[id],/settings,/run)
       ai/deep-value(+/verify)  ai/advisor  advisor/sessions(+/[id](+/messages))
 components/                  # hub-client, analyze-client, deep-value-panel, analyses-list,
+                             #   earnings-badge, …
   report/                    #   portfolio-list, portfolio-history-chart, watchlist-client,
                              #   advisor-client, nav-bar, saved-analyst-review, download-pdf-button, …
                              # report/: report-shell, recap-table, fair-value-cards, report-body,
@@ -150,7 +159,7 @@ components/                  # hub-client, analyze-client, deep-value-panel, ana
 context/language-context.tsx
 public/sw.js  public/icons/
 prisma/  generated/prisma/ (gitignored)  vercel.json  docs/
-__tests__/                   # yahoo-client.test.ts + evolution.test.ts + portfolio-math.test.ts
+__tests__/                   # yahoo-client + evolution + portfolio-math + earnings .test.ts
 ```
 
 ---

@@ -1,5 +1,7 @@
 ## ✨ New Features
 
+- **Next-earnings calendar for your stocks** — know when a company next reports, so you know when to re-run its analysis. On the Saved Analyses, Watchlist, and Portfolio pages, each stock has a **"Find next earnings (AI)"** button that looks up the next results date via AI web search and remembers it (with the date it was fetched and a 🔄 to refresh). The Saved Analyses page lists all upcoming dates nearest-first in an "Upcoming earnings" strip, and shows an amber **"New data since last analysis"** nudge when a company has reported since you last analysed it — a clear signal it's time for a fresh look. Works for companies that report quarterly, half-yearly, or annually.
+
 - **AI Deep Value analysis** — the core of the app. A single AI panel on `/analyze` produces a full equity-research report for any stock worldwide, including tickers where market data is incomplete. The AI autonomously picks the valuation method (DCF, DDM, EV/EBITDA, or P/B) based on the sector, sources all financial data via web search, and outputs Bull / Base / Bear fair values plus a structured report (Company Overview, Competitive Moat, Valuation Method, Key Financial Data & Quality Metrics, Bull/Base/Bear cases, Key Risks, Near-term Catalysts, Investment Summary). Available in 8 languages (EN, IT, ES, FR, DE, PT, ZH, JA).
 
 - **Analyst Review (second opinion)** — after a Deep Value report finishes, a **Run Analyst Review** button starts an independent red-team pass: a fresh AI analyst stress-tests the numbers and assumptions, spot-checks key figures via web search, and gives a verdict on whether the base fair value holds up. It reads as a concise critique below your report — a second set of eyes before you act.
@@ -27,6 +29,8 @@
 - **Daily price change in Portfolio** — each position shows today's % and absolute move vs. the previous close, in green or red, next to the current price.
 
 - **Capital gains tax & net P&L** — set an optional tax rate (%) per position and the portfolio shows estimated taxes and net P&L alongside the gross gain, both per position and in the summary bar (useful for the Italian 26% rate or any jurisdiction). Taxes are applied only to gains, never to losses.
+
+- **Net P&L on realized gains** — closed positions now show estimated capital-gains tax and net profit alongside the gross realized P&L, both on each closed position card and in the portfolio summary bar — matching the gross/net treatment already available for open positions.
 
 - **Dividend tracking** — add an ISIN to a position and dividends paid on Borsa Italiana are recorded automatically. The summary bar shows a cumulative "Dividends Received" total (gross and net when a tax rate is set), and the P&L history chart marks payment days with a green vertical line.
 
@@ -89,6 +93,8 @@
 - Fixed a **crash on certain tickers** (some European stocks) that data providers return as unavailable — a clear error message is shown instead.
 
 - Fixed the **home page's Portfolio P&L looking out of sync** with the live figure on `/portfolio` — the home value is a daily snapshot, so it's now labeled "as of &lt;date&gt;" to make that clear.
+
+- Fixed the **estimated tax figure showing even when your overall unrealized P&L was a net loss** — a single profitable position no longer triggers a tax estimate that made no sense against a portfolio down overall.
 
 ## 🔧 Improvements
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { realizedPnlNative, holdingDays } from "@/lib/portfolio-math";
+import { realizedPnlNative, holdingDays, estimateCapitalGainsTax } from "@/lib/portfolio-math";
 
 describe("realizedPnlNative", () => {
   it("returns a positive gain when sold above cost", () => {
@@ -43,5 +43,29 @@ describe("holdingDays", () => {
   it("measures against now when still open (no closedAt)", () => {
     const tenDaysAgo = new Date(Date.now() - 10 * 86_400_000).toISOString();
     expect(holdingDays(tenDaysAgo, null)).toBe(10);
+  });
+});
+
+describe("estimateCapitalGainsTax", () => {
+  it("returns zero on a loss, regardless of rate", () => {
+    expect(estimateCapitalGainsTax(-500, 26)).toBe(0);
+  });
+
+  it("returns zero at breakeven", () => {
+    expect(estimateCapitalGainsTax(0, 26)).toBe(0);
+  });
+
+  it("returns zero when no rate is set", () => {
+    expect(estimateCapitalGainsTax(1000, null)).toBe(0);
+    expect(estimateCapitalGainsTax(1000, undefined)).toBe(0);
+  });
+
+  it("returns zero when the rate is zero or negative", () => {
+    expect(estimateCapitalGainsTax(1000, 0)).toBe(0);
+    expect(estimateCapitalGainsTax(1000, -5)).toBe(0);
+  });
+
+  it("computes tax as pnl * rate/100 on a gain", () => {
+    expect(estimateCapitalGainsTax(1000, 26)).toBeCloseTo(260, 10);
   });
 });

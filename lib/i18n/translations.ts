@@ -145,6 +145,14 @@ export type Translations = {
   fvShort: string;
   viewReportBtn: string;
   reAnalyzeBtn: string;
+  // Earnings calendar
+  nextEarnings: string;
+  staleSinceEarnings: string;
+  upcomingEarnings: string;
+  findEarningsAi: string;
+  refreshEarnings: string;
+  earningsUpdatedAt: string;
+  noEarningsFound: string;
   noValuationData: string;
   olderAnalyses: string;
   noAnalysesMatchFilter: string;
@@ -566,6 +574,13 @@ const en: Translations = {
   fvShort: "FV",
   viewReportBtn: "Open report",
   reAnalyzeBtn: "Re-analyze",
+  nextEarnings: "Next earnings",
+  staleSinceEarnings: "New data since last analysis",
+  upcomingEarnings: "Upcoming earnings",
+  findEarningsAi: "Find next earnings (AI)",
+  refreshEarnings: "Refresh",
+  earningsUpdatedAt: "updated",
+  noEarningsFound: "No date found",
   noValuationData: "No valuation data for this analysis.",
   olderAnalyses: "older analysis|older analyses",
   noAnalysesMatchFilter: "No analyses match the current filter.",
@@ -986,6 +1001,13 @@ const it: Translations = {
   fvShort: "FV",
   viewReportBtn: "Apri report",
   reAnalyzeBtn: "Ri-analizza",
+  nextEarnings: "Prossimi risultati",
+  staleSinceEarnings: "Nuovi dati dall'ultima analisi",
+  upcomingEarnings: "Prossimi risultati",
+  findEarningsAi: "Trova prossimi risultati (AI)",
+  refreshEarnings: "Aggiorna",
+  earningsUpdatedAt: "aggiornato il",
+  noEarningsFound: "Nessuna data trovata",
   noValuationData: "Nessun dato di valutazione per questa analisi.",
   olderAnalyses: "analisi precedente|analisi precedenti",
   noAnalysesMatchFilter: "Nessuna analisi corrisponde al filtro.",

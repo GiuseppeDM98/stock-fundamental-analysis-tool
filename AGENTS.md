@@ -20,6 +20,9 @@ lib/               # Business logic and utilities (Yahoo quote adapter, AI promp
   ai/
     deep-value-prompts.ts   # Prompt builders for streaming deep value analysis + Analyst Review (verify) — always position-blind
     advisor-prompts.ts      # buildAdvisorSystemPrompt() — injects portfolio + analyses + live prices + GROUNDING_RULES_BLOCK
+    earnings-prompt.ts      # buildEarnings{System,User}Prompt() — next-earnings lookup (Sonnet 5 + web search), cadence-neutral
+  earnings.ts      # Pure: isFutureEarnings(), isAnalysisStalePreEarnings(), formatEarningsDate() — shared client (no server-only)
+  earnings-client.ts # Client fetch helpers: fetchEarnings() / refreshEarnings()
   yahoo-client.ts  # Yahoo Finance API adapter
   auth.ts          # Auth.js v5 config
   db.ts            # Prisma singleton client
@@ -31,7 +34,7 @@ lib/               # Business logic and utilities (Yahoo quote adapter, AI promp
   email.ts                 # Resend email sender
   format.ts                # Formatting utilities
   positions.ts             # Server-only: closePosition() (full/partial position close)
-  portfolio-math.ts        # Pure: realizedPnlNative(), holdingDays() — no server-only, shared client+server
+  portfolio-math.ts        # Pure: realizedPnlNative(), holdingDays(), estimateCapitalGainsTax() — no server-only, shared client+server
   report/
     verdict.ts              # getVerdict() + VERDICT_BADGE/VERDICT_TEXT maps (shared: analyses + watchlist)
     valuation.ts             # grossUpToIntrinsic() (shared: analyses + watchlist)
@@ -94,7 +97,7 @@ if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 
 // Use session.user.id — typed via declaration merge in types/auth.ts
 ```
 
-**Endpoints:** `/api/quote`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/PATCH/DELETE — PATCH attaches an Analyst Review `reviewMd`), `/api/positions` (GET/POST), `/api/positions/[id]` (DELETE, PATCH — close/sell a position, full or partial), `/api/ai/deep-value` (POST, streaming), `/api/ai/deep-value/verify` (POST, streaming — Analyst Review red-team pass), `/api/ai/advisor` (POST, streaming conversational), `/api/advisor/sessions` (GET/POST), `/api/advisor/sessions/[id]` (GET/DELETE), `/api/advisor/sessions/[id]/messages` (POST, full replace), `/api/portfolio/snapshots` (GET), `/api/cron/portfolio-snapshot` (GET, Vercel Cron), `/api/watchlist` (GET/POST), `/api/watchlist/[id]` (DELETE/PATCH), `/api/watchlist/settings` (PATCH), `/api/watchlist/run` (POST), `/api/cron/watchlist-analysis` (GET, Vercel Cron)
+**Endpoints:** `/api/quote`, `/api/auth/[...nextauth]`, `/api/auth/register`, `/api/analyses` (GET/POST), `/api/analyses/[id]` (GET/PATCH/DELETE — PATCH attaches an Analyst Review `reviewMd`), `/api/positions` (GET/POST), `/api/positions/[id]` (DELETE, PATCH — close/sell a position, full or partial), `/api/earnings` (GET store / POST — Sonnet 5 + web search next-earnings lookup, upsert per user/ticker), `/api/ai/deep-value` (POST, streaming), `/api/ai/deep-value/verify` (POST, streaming — Analyst Review red-team pass), `/api/ai/advisor` (POST, streaming conversational), `/api/advisor/sessions` (GET/POST), `/api/advisor/sessions/[id]` (GET/DELETE), `/api/advisor/sessions/[id]/messages` (POST, full replace), `/api/portfolio/snapshots` (GET), `/api/cron/portfolio-snapshot` (GET, Vercel Cron), `/api/watchlist` (GET/POST), `/api/watchlist/[id]` (DELETE/PATCH), `/api/watchlist/settings` (PATCH), `/api/watchlist/run` (POST), `/api/cron/watchlist-analysis` (GET, Vercel Cron)
 
 ---
 
@@ -205,7 +208,15 @@ Use `ReactDOM.createPortal(modal, document.body)` for any modal. The `.card` cla
   ```bash
   turso db shell stock-analysis < prisma/migrations/<name>/migration.sql
   ```
-- **Critical**: if you add a column and forget to apply to Turso, the app will crash at runtime with `no such column` even though local dev.db is fine.
+- **`prisma migrate dev` needs `DATABASE_URL`**: `prisma.config.ts` reads it via `dotenv/config`, which loads `.env` — but this repo keeps it in **`.env.local`**. So set it inline: `DATABASE_URL="file:./dev.db" npx prisma migrate dev --name <name>` (else: "The datasource.url property is required").
+- **No `turso` CLI (e.g. Windows — no native binary, WSL not installed)**: apply the migration to Turso from a Node script using the already-installed libSQL client and the creds in `.env.local`:
+  ```js
+  import { createClient } from "@libsql/client";
+  const c = createClient({ url: TURSO_DATABASE_URL, authToken: TURSO_AUTH_TOKEN });
+  // guard: skip if the table already exists, then run each CREATE statement from migration.sql
+  await c.execute(stmt);
+  ```
+- **Critical**: if you add a column/table and forget to apply to Turso, the app will crash at runtime with `no such column`/`no such table` even though local dev.db is fine. Restart the dev server after applying (stale Prisma client).
 
 ---
 
@@ -271,6 +282,14 @@ After a Deep Value report completes, a **"Run Analyst Review"** button in `deep-
 - **Persistence (savable review + reviewer valuation)** — `Analysis.reviewMd` (the critique, JSON-stripped) plus nullable `reviewFairValue{Bull,Base,Bear}` + `reviewValuationMethod` (the reviewer's own numbers, same MoS-adjusted unit as `fairValue*`). `deep-value-panel.tsx` attaches all of these in `handleSave()`; `components/saved-analyst-review.tsx` runs the review fresh on the detail page and persists via `PATCH /api/analyses/[id]` + `updateAnalysisReview(id, reviewMd, reviewFvs?)`, so review order (before/after save) is irrelevant. **Mirror any new persisted field across all contract points**: Zod (POST create + PATCH), the GET `select` whitelist (silently drops unlisted columns), `types/analysis.ts`, and `updateAnalysisReview`.
 - **Consensus** — the saved-analyses card averages base + reviewer per scenario (`(base + reviewer) / 2`); the disagreement Δ% is identical at intrinsic and buy-target level (MoS scales both linearly), so compute it once. See the valuation-ruler note under Design System.
 
+### On-demand structured AI lookup (non-streaming JSON) — next-earnings
+
+When an AI call must return a **single structured value** (not prose to stream), use `client.messages.create()` (non-streaming) and parse a JSON block — see `app/api/earnings/route.ts` (`POST`). Pattern:
+- **Model/config**: `claude-sonnet-5`, `thinking: { type: "adaptive" }`, `output_config: { effort: "medium" }` (a fact lookup doesn't need `high`), `max_tokens: 6000` (thinking + web-search tokens count), `tools: [web_search_20260209]`. No `temperature` (Sonnet 5 rejects it).
+- **Parse**: concatenate **all** `text` blocks before regex-matching the ` ```json ` block — web search splits the answer across blocks and the first is usually intermediate reasoning (gotcha #13). Validate the parsed object with Zod before persisting.
+- **Prompt grounding**: builders in `lib/ai/earnings-prompt.ts` inject `currentDate`, require web-verification (never answer from memory / the stale training year), require a **future** date or `null` (never fabricate), and are **cadence-neutral** — "next results release, quarterly *or half-year or annual*", because restricting to "quarterly" skips the semi-annual-only reporting of many EU/IT issuers.
+- **Persistence**: `EarningsEstimate` model, `upsert` on `@@unique([userId, ticker])`, `Date → ISO` on serialize (mirror the select whitelist — gotcha #20). On-demand + persisted (never auto-run on mount for every ticker: cost + 10–30s latency each).
+
 ### Shared prompt constant — `ANALYTICAL_RIGOR_BLOCK`
 
 `buildDeepValueSystemPrompt` injects `ANALYTICAL_RIGOR_BLOCK` (a module-level const in `lib/ai/deep-value-prompts.ts`, interpolated between the scenario step and the output step). It carries 8 mandatory rigor checks distilled from real Analyst-Review findings (latest quarter not just annual, current guidance only + dated, guidance-vs-estimate labeling, normalized/recurring EBITDA for multiples, fundamentals-differentiated scenarios, central base case, closest-comparables + structural-discount test, narrative↔formula consistency).
@@ -335,8 +354,9 @@ Never export server-only functions from the same file as client helpers — Next
 
 ## Portfolio Tracker
 
-- `Position` model: `id, userId, ticker, isin, companyName, purchasePrice, shares, currency, purchasedAt, notes, capitalGainsTaxRate` — `isin` is optional (Borsa Italiana dividends); `capitalGainsTaxRate Float?` is an optional % (e.g. 26.0) used client-side to compute estimated taxes and net P&L on unrealized gains
-- Tax display rules: taxes are computed per-position, applied only to gains (pnl > 0), never to losses. SummaryBar computes total tax by looping positions — not using an average rate. In aggregated rows, `capitalGainsTaxRate` comes from `purchases[0]` (same user = same rate across DCA).
+- `Position` model: `id, userId, ticker, isin, companyName, purchasePrice, shares, currency, purchasedAt, notes, capitalGainsTaxRate` — `isin` is optional (Borsa Italiana dividends); `capitalGainsTaxRate Float?` is an optional % (e.g. 26.0), set at position creation, used client-side to compute estimated taxes and net P&L on both unrealized **and realized** gains.
+- **Tax display rules**: taxes are computed per-position/per-lot via the shared pure helper `estimateCapitalGainsTax(pnl, taxRate)` (`lib/portfolio-math.ts`) — 0 on a loss or missing rate, else `pnl * rate/100`; never averaged, `SummaryBar` loops positions/closed lots individually (in aggregated rows, `capitalGainsTaxRate` comes from `purchases[0]`, same user = same rate across DCA). Applies equally to unrealized (open positions) and **realized** gains (`ClosedPositionsSection` per closed lot, `SummaryBar`'s "Realized P&L" cell via `hint`) — `realizedPnlNative()` itself stays pure/gross; net is always a display-time subtraction, never persisted.
+- **Tax-estimate display gates on the portfolio-level total, not a single winning row**: a winning position/lot can make `estimateCapitalGainsTax` return `> 0` while the overall unrealized (or realized) total is a net loss because other positions drag it down — showing an estimated tax next to a net loss reads as wrong. `SummaryBar` gates each "Est. tax / Net" line on `total > 0 && totalTax > 0` (`hasTaxEstimate`, `hasRealizedTaxEstimate`), never on the accumulated tax alone.
 - Types: `Position`, `CreatePositionRequest`, `AggregatedPosition`, `SnapshotPoint`, `SnapshotEntry`, `SnapshotData` — all in `types/portfolio.ts`
 - Client helpers in `lib/portfolio.ts` — same pattern as `lib/analyses.ts`; includes `fetchSnapshots()` for chart data
 - Live prices fetched client-side via `/api/quote/[ticker]` in parallel for all unique tickers
@@ -616,6 +636,7 @@ t: (key: keyof Translations) => string;
 21. **`getStorageItem` JSON.parses on read — so `JSON.stringify` non-JSON values on write**: the SSR-safe `getStorageItem(key, parser, fallback)` helper does `JSON.parse(raw)` before applying `parser`. Writing a bare string (`setItem("sfa:lastTicker", ticker)`) stores invalid JSON → `JSON.parse("MSFT")` throws → it silently returns the fallback (so the value never persists). Always `JSON.stringify` non-numeric values on write; numeric strings like `"25"` parse fine, which is why `sfa:mosPercent` worked by luck.
 22. **Tailwind `prose*` classes silently no-op without `@tailwindcss/typography` registered**: writing `prose prose-invert prose-headings:text-slate-100 ...` in JSX looks like it should work (valid-looking class names, no build error), but if the plugin isn't in `tailwind.config.ts`'s `plugins` array, none of it generates any CSS — the element renders with plain browser defaults. This went unnoticed for 3 components until a UI redesign surfaced it. If a "prose" block looks completely unstyled, check the plugin is installed and registered before debugging anything else.
 23. **The service worker must NOT proxy fetches — it truncates streaming AI responses**: `public/sw.js` must NOT call `event.respondWith(fetch(event.request))`. Proxying ties the response's lifetime to the service worker; the AI routes stream long-lived responses (web search runs 30–60s+) and Chrome kills idle SWs (~30s), aborting the proxied fetch mid-stream → `Failed to fetch` logged from `sw.js` + the client's response body closes prematurely (appears as a clean `done`, so partial text is kept/persisted with no error). The fetch handler must stay **empty** (`self.addEventListener("fetch", () => {})`) — an empty handler still satisfies the PWA install criteria (they only check for a fetch listener's *presence*) while letting the browser handle requests natively, tied to the document. **Deploy note**: the old SW stays registered in users' browsers until it updates — force an update (DevTools → Application → Service Workers → Unregister/Update) to verify a fix.
+24. **No interactive element inside a card's header toggle `<button>`**: the compact cards on `/analyses` and the watchlist wrap the whole header in a `<button onClick={setExpanded}>`. A child that itself contains a `<button>` (e.g. `<EarningsBadge>` with its refresh button) produces a nested `<button>` → hydration error / invalid DOM. Render such controls **outside** the header toggle (a sibling `<div>` after the header row), not inside it. Same root cause as the ReactMarkdown block-inside-inline rule (#17-area): interactive/block content can't nest inside an inline/interactive parent.
 
 ---
 

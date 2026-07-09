@@ -19,6 +19,10 @@ import type { Translations } from "@/lib/i18n/translations";
 import { ValuationRuler, ComparisonTable, type Triple } from "@/components/report/valuation-ruler";
 import { getVerdict, VERDICT_BADGE, VERDICT_TEXT, type Verdict } from "@/lib/report/verdict";
 import { grossUpToIntrinsic } from "@/lib/report/valuation";
+import { EarningsBadge } from "@/components/earnings-badge";
+import { isAnalysisStalePreEarnings, isFutureEarnings } from "@/lib/earnings";
+import { fetchEarnings, refreshEarnings } from "@/lib/earnings-client";
+import type { EarningsEstimate } from "@/types/earnings";
 
 // ─── Formatting ───────────────────────────────────────────────────────────────
 
@@ -151,6 +155,10 @@ interface CardProps {
   priceCurrency: string | null;
   // Latest saved Deep Value analysis for this ticker, or null if not analyzed yet.
   analysis: SavedAnalysis | null;
+  // AI-fetched next-earnings estimate for this ticker, or null if never fetched.
+  earnings: EarningsEstimate | null;
+  refreshingEarnings: boolean;
+  onRefreshEarnings: (ticker: string, companyName: string) => void;
   onDelete: (id: string) => void;
   onSave: (id: string, mosPercent: number, notes: string | null) => Promise<void>;
   t: (key: keyof Translations) => string;
@@ -163,7 +171,7 @@ interface CardProps {
  * per-ticker knob), distinct from the analysis's own MoS; reviewer + consensus are secondary
  * marks (verdict/Δ% are driven by the analysis buy target, matching /analyses).
  */
-function WatchlistCard({ item, currentPrice, priceCurrency, analysis, onDelete, onSave, t }: CardProps) {
+function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, refreshingEarnings, onRefreshEarnings, onDelete, onSave, t }: CardProps) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editMos, setEditMos] = useState(item.mosPercent);
@@ -322,6 +330,24 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, onDelete, 
         >
           <span className={`inline-block transition-transform duration-150 ${expanded ? "rotate-180" : ""}`}>▾</span>
         </button>
+      </div>
+
+      {/* Next-earnings row (AI-fetched). Outside the header toggle so its refresh button
+          isn't nested inside another button. Stale pill only when a saved analysis exists. */}
+      <div className="mt-1.5">
+        <EarningsBadge
+          nextEarningsDate={
+            isFutureEarnings(earnings?.nextEarningsDate ?? null) ? earnings!.nextEarningsDate : null
+          }
+          confidence={earnings?.confidence ?? null}
+          fetchedAt={earnings?.fetchedAt ?? null}
+          stale={
+            analysis != null &&
+            isAnalysisStalePreEarnings(analysis.createdAt, earnings?.nextEarningsDate ?? null)
+          }
+          refreshing={refreshingEarnings}
+          onRefresh={() => onRefreshEarnings(item.ticker, item.companyName)}
+        />
       </div>
 
       {/* Collapsed mini ruler */}
@@ -616,6 +642,9 @@ export default function WatchlistClient() {
   });
   const [prices, setPrices] = useState<Record<string, number>>({});
   const [currencies, setCurrencies] = useState<Record<string, string>>({});
+  // AI-fetched next-earnings estimates per ticker, loaded once from the DB store.
+  const [earnings, setEarnings] = useState<Record<string, EarningsEstimate>>({});
+  const [refreshingEarnings, setRefreshingEarnings] = useState<Record<string, boolean>>({});
   // Latest saved Deep Value analysis per ticker — the full row, so the card can read the
   // reviewer's fair values + consensus (not just a lossy derived shape).
   const [latestAnalyses, setLatestAnalyses] = useState<Record<string, SavedAnalysis>>({});
@@ -642,6 +671,30 @@ export default function WatchlistClient() {
       })
       .catch(() => {});
   }, []);
+
+  // Load AI-fetched earnings estimates once (independent — a failure must not block the list).
+  useEffect(() => {
+    fetchEarnings()
+      .then((estimates) => {
+        const map: Record<string, EarningsEstimate> = {};
+        for (const e of estimates) map[e.ticker] = e;
+        setEarnings(map);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Run the AI earnings lookup for one ticker (~10–30s) and store the fresh estimate.
+  async function handleRefreshEarnings(ticker: string, companyName: string) {
+    setRefreshingEarnings((prev) => ({ ...prev, [ticker]: true }));
+    try {
+      const estimate = await refreshEarnings(ticker, companyName);
+      setEarnings((prev) => ({ ...prev, [ticker]: estimate }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("errorUnexpected"));
+    } finally {
+      setRefreshingEarnings((prev) => ({ ...prev, [ticker]: false }));
+    }
+  }
 
   // Load watchlist on mount
   useEffect(() => {
@@ -677,7 +730,11 @@ export default function WatchlistClient() {
           const res = await fetch(`/api/quote/${encodeURIComponent(ticker)}`);
           if (!res.ok) return null;
           const data = await res.json();
-          return { ticker, price: data.regularMarketPrice as number, currency: data.currency as string };
+          return {
+            ticker,
+            price: data.regularMarketPrice as number,
+            currency: data.currency as string,
+          };
         } catch {
           return null;
         }
@@ -791,6 +848,9 @@ export default function WatchlistClient() {
               currentPrice={prices[item.ticker] ?? null}
               priceCurrency={currencies[item.ticker] ?? null}
               analysis={latestAnalyses[item.ticker] ?? null}
+              earnings={earnings[item.ticker] ?? null}
+              refreshingEarnings={refreshingEarnings[item.ticker] ?? false}
+              onRefreshEarnings={handleRefreshEarnings}
               onDelete={handleDelete}
               onSave={handleSaveItem}
               t={t}

@@ -20,3 +20,12 @@ export function holdingDays(purchasedAt: string, closedAt?: string | null): numb
   const end = closedAt ? new Date(closedAt).getTime() : Date.now();
   return Math.max(0, Math.floor((end - start) / 86_400_000));
 }
+
+/**
+ * Estimated capital-gains tax on a gain, in the same currency as `pnl`.
+ * 0 when there's no gain or no rate set — taxes never apply to losses.
+ */
+export function estimateCapitalGainsTax(pnl: number, taxRate: number | null | undefined): number {
+  if (taxRate == null || taxRate <= 0 || pnl <= 0) return 0;
+  return pnl * (taxRate / 100);
+}
