@@ -29,3 +29,20 @@ export function estimateCapitalGainsTax(pnl: number, taxRate: number | null | un
   if (taxRate == null || taxRate <= 0 || pnl <= 0) return 0;
   return pnl * (taxRate / 100);
 }
+
+export interface OpenLot {
+  shares: number;
+  purchasePrice: number;
+}
+
+/**
+ * Aggregates open lots into total shares and weighted-average cost.
+ * Returns null when there are no shares (no lots, or a degenerate zero-share
+ * aggregate) — callers should treat null as "no position", not divide by zero.
+ */
+export function aggregateOpenLots(lots: OpenLot[]): { totalShares: number; weightedAvgCost: number } | null {
+  const totalShares = lots.reduce((s, l) => s + l.shares, 0);
+  if (totalShares <= 0) return null;
+  const totalCost = lots.reduce((s, l) => s + l.shares * l.purchasePrice, 0);
+  return { totalShares, weightedAvgCost: totalCost / totalShares };
+}

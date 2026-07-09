@@ -8,7 +8,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: July 9, 2026 — **Next-earnings calendar (AI-sourced, per-stock button).** A new feature to know when a company next reports, so you know when to re-run an analysis. `/analyses`, watchlist and portfolio each show a per-ticker button that runs **Claude Sonnet 5 + web search** (`POST /api/earnings`) to find the next results-release date, persisted in the new `EarningsEstimate` model (upsert per user/ticker) and read back via `GET /api/earnings`. On `/analyses` an "Upcoming earnings" strip lists future dates nearest-first, and an amber "New data since last analysis" pill nudges a re-run when the saved analysis predates the last report (`isAnalysisStalePreEarnings`). Pure helpers in `lib/earnings.ts` (`isFutureEarnings`, staleness, formatting); shared `<EarningsBadge>`; prompt in `lib/ai/earnings-prompt.ts` (**cadence-neutral** — quarterly/half-year/annual, so it doesn't skip EU/IT semi-annual reporters). **Yahoo was evaluated first and dropped**: `quote.earningsTimestamp` doesn't refresh for many Borsa Italiana tickers (returns the last reported quarter, not the next).
+**Last Updated**: July 9, 2026 — **Watchlist digest email is now portfolio-aware.** Previously the daily digest always framed a below-buy-target ticker as "potenziale opportunità di acquisto" (a fresh buying opportunity), even when the user already held an open position in it. `runWatchlistAnalysisForUserInternal` (`lib/watchlist-analysis.ts`) now runs one batched `Position` query per user (`closedAt: null`), aggregates open lots per ticker via the new pure `aggregateOpenLots()` (`lib/portfolio-math.ts` — total shares + weighted-avg cost), and threads `holdingShares`/`holdingWeightedAvgCost` onto each `DigestItem`. The email (`lib/email.ts`) shows a compact "In portafoglio: N az. · PMC · P&L%" line whenever a holding exists (regardless of buy/watch status), and swaps the under-target note to "valuta se incrementare la posizione" instead of the generic buying-opportunity copy when already held. Email-only change this session — the `/watchlist` UI is untouched.
 
 ---
 
@@ -34,7 +34,7 @@ Next.js App Router with client-side interactivity and server-side API routes. Pi
 - **DB**: SQLite via Prisma 7 — `User`, `Analysis`, `Position`, `PortfolioSnapshot`, `WatchlistItem`, `WatchlistRun` (dead), `EarningsEstimate`, `AdvisorSession`, `AdvisorMessage`
 - **Auth**: Auth.js v5 credentials provider, JWT sessions (no DB session table)
 - **Types**: `types/` — fundamentals, market, analysis, auth, portfolio, watchlist
-- **Cron**: Vercel — portfolio snapshot weekdays 20:00 UTC, watchlist digest daily 08:00 UTC
+- **Cron**: Vercel — portfolio snapshot weekdays 20:00 UTC, watchlist digest daily 08:00 Europe/Rome (fires at 06:00 + 07:00 UTC to survive CET/CEST, handler no-ops the non-matching hour)
 
 _Removed with the classic engine / Compare page: `/api/compare/*`, valuation / fundamentals / analyst-estimates / historical-multiples / macro routes, `lib/valuation/*`, `lib/ai/lite-analysis.ts`, `types/valuation.ts` + `ai.ts`, `LiteAnalysisResult`, `CompareResult` model._
 
@@ -93,8 +93,9 @@ Slim, single path: ticker search → `GET /api/quote` (price header + reference 
 ### Watchlist + Email Digest (`/watchlist`)
 - **Card-per-ticker** (`watchlist-client.tsx`): compact (ticker · price · verdict · mini ruler) → same **`ValuationRuler`** + **`ComparisonTable`** as `/analyses`, keyed off `latestAnalyses: Record<ticker, SavedAnalysis>`. **Buy target uses the item's own MoS%** (intrinsic reconstructed from the analysis, then re-derived). "Analyze" → `/analyze?ticker=X`.
 - `WatchlistItem`: `id, userId, ticker, companyName, mosPercent, notes, addedAt` — `@@unique([userId, ticker])`. User-level `watchlistEnabled` toggle (cron skips when false). `WatchlistRun` model + `User.watchlistFreq` column are **dead** (left to avoid a Turso migration). Manual trigger `POST /api/watchlist/run` (rate-limited 24h via `lastManualWatchlistRun`).
-- **Cron: daily for everyone** — `GET /api/cron/watchlist-analysis` at `0 8 * * *`. No per-user frequency. **No AI in the cron**: reads the latest saved Deep Value `Analysis` per ticker + reviewer/consensus via `grossUpToIntrinsic`; tickers without an analysis show no values. `lib/watchlist-analysis.ts` (`server-only`).
+- **Cron: daily for everyone** — `GET /api/cron/watchlist-analysis` fires at `0 6 * * *` and `0 7 * * *` (two Vercel cron entries, same path); the handler runs `runWatchlistAnalysisForAllUsers()` only when `Europe/Rome` local time is 8am, no-op otherwise — keeps the digest at 8am Italian time across the CET/CEST switch since Vercel cron has no timezone support. No per-user frequency. **No AI in the cron**: reads the latest saved Deep Value `Analysis` per ticker + reviewer/consensus via `grossUpToIntrinsic`; tickers without an analysis show no values. `lib/watchlist-analysis.ts` (`server-only`).
 - **Email** via Resend (`lib/email.ts`, lazily init): ledger-themed card per ticker — price, Δ% vs buy target, Bear/Base/Bull split Analysis/Reviewer/Consensus, buy target, analysis date, native currency.
+- **Portfolio-aware digest copy**: `runWatchlistAnalysisForUserInternal` batches one `Position` query per user (`closedAt: null`) and aggregates open lots per ticker via `aggregateOpenLots()` (`lib/portfolio-math.ts`, pure — total shares + weighted-avg cost). Each `DigestItem` carries `holdingShares`/`holdingWeightedAvgCost` (both `null` when no open position). The email shows an "In portafoglio: N az. · PMC · P&L%" line whenever a holding exists — regardless of buy/watch status — and the under-target note reads "valuta se incrementare la posizione" instead of "potenziale opportunità di acquisto" when the ticker is already held, so the copy never frames topping up an existing position as a fresh buy.
 
 ### Next-Earnings Calendar (AI-sourced)
 - **Purpose**: know when a stock next reports results, so you know when to re-run its analysis. Sourced **on demand** from **Claude Sonnet 5 + web search** (not Yahoo — `quote.earningsTimestamp` is stale for many MTAA tickers, returning the last reported quarter). Manual (per-stock button), **persisted** so the calendar survives reloads without re-running the model.
@@ -138,7 +139,7 @@ lib/
   watchlist-analysis.ts      # server-only: cron/email digest from saved analyses (no AI)
   email.ts                   # Resend — sendWatchlistDigest()
   positions.ts                # server-only: closePosition() — full/partial position close
-  portfolio-math.ts           # pure: realizedPnlNative(), holdingDays(), estimateCapitalGainsTax() (shared client+server)
+  portfolio-math.ts           # pure: realizedPnlNative(), holdingDays(), estimateCapitalGainsTax(), aggregateOpenLots() (shared client+server)
   report/verdict.ts          # getVerdict() + VERDICT_BADGE/VERDICT_TEXT (shared)
   report/valuation.ts        # grossUpToIntrinsic() (shared)
   report/evolution.ts        # computeEvolution() — deterministic diff (no AI)

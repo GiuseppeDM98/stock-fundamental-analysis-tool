@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { realizedPnlNative, holdingDays, estimateCapitalGainsTax } from "@/lib/portfolio-math";
+import { realizedPnlNative, holdingDays, estimateCapitalGainsTax, aggregateOpenLots } from "@/lib/portfolio-math";
 
 describe("realizedPnlNative", () => {
   it("returns a positive gain when sold above cost", () => {
@@ -67,5 +67,47 @@ describe("estimateCapitalGainsTax", () => {
 
   it("computes tax as pnl * rate/100 on a gain", () => {
     expect(estimateCapitalGainsTax(1000, 26)).toBeCloseTo(260, 10);
+  });
+});
+
+describe("aggregateOpenLots", () => {
+  it("returns null for an empty lot list", () => {
+    expect(aggregateOpenLots([])).toBeNull();
+  });
+
+  it("returns shares and cost unchanged for a single lot", () => {
+    expect(aggregateOpenLots([{ shares: 10, purchasePrice: 100 }])).toEqual({
+      totalShares: 10,
+      weightedAvgCost: 100,
+    });
+  });
+
+  it("computes weighted-average cost across multiple DCA lots", () => {
+    // 10 @ 100 + 10 @ 200 → 20 shares, (1000+2000)/20 = 150 WAC
+    expect(
+      aggregateOpenLots([
+        { shares: 10, purchasePrice: 100 },
+        { shares: 10, purchasePrice: 200 },
+      ])
+    ).toEqual({ totalShares: 20, weightedAvgCost: 150 });
+  });
+
+  it("weights unevenly sized lots correctly", () => {
+    // 5 @ 100 + 15 @ 300 → 20 shares, (500+4500)/20 = 250 WAC
+    expect(
+      aggregateOpenLots([
+        { shares: 5, purchasePrice: 100 },
+        { shares: 15, purchasePrice: 300 },
+      ])
+    ).toEqual({ totalShares: 20, weightedAvgCost: 250 });
+  });
+
+  it("returns null when total shares is zero (guards division by zero)", () => {
+    expect(aggregateOpenLots([{ shares: 0, purchasePrice: 100 }])).toBeNull();
+  });
+
+  it("supports fractional shares", () => {
+    const r = aggregateOpenLots([{ shares: 2.5, purchasePrice: 40 }]);
+    expect(r?.weightedAvgCost).toBeCloseTo(40, 10);
   });
 });

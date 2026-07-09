@@ -37,6 +37,11 @@ export interface DigestItem {
   status: "under" | "over" | "unknown";
   // ISO timestamp of the analysis the values come from
   analysisDate: string;
+  // User's open-position holding for this ticker, aggregated across all open lots —
+  // null when the user holds no open position. WAC is assumed to share `currency`
+  // (same ticker, same instrument).
+  holdingShares: number | null;
+  holdingWeightedAvgCost: number | null;
 }
 
 // ─── Ledger palette (inline for email clients) ────────────────────────────────
@@ -114,10 +119,27 @@ function buildCard(item: DigestItem): string {
 
   const priceStr = item.currentPrice !== null ? formatPrice(item.currentPrice, item.currency) : "—";
 
+  const hasPosition = item.holdingShares !== null && item.holdingWeightedAvgCost !== null;
+  const pnlPercent =
+    hasPosition && item.currentPrice !== null
+      ? ((item.currentPrice - item.holdingWeightedAvgCost!) / item.holdingWeightedAvgCost!) * 100
+      : null;
+
+  // Shown whenever the user already holds this ticker, regardless of buy-target status —
+  // live P&L context is useful even when the price is currently above the buy target.
+  const positionLine = hasPosition
+    ? `<div style="margin-top:6px;font-size:12px;color:${C.muted};">
+         In portafoglio: <span style="color:${C.text};">${item.holdingShares}</span> az. · PMC ${formatPrice(item.holdingWeightedAvgCost!, item.currency)}
+         ${pnlPercent !== null ? `· <span style="color:${pnlPercent >= 0 ? C.emerald : C.rose};font-weight:600;">${pnlPercent >= 0 ? "+" : ""}${pnlPercent.toFixed(1)}%</span>` : ""}
+       </div>`
+    : "";
+
+  // Framing differs when the user already holds the ticker: an under-target price on an
+  // existing position is a "top up" decision, not a fresh "buying opportunity".
   const underNote =
     item.status === "under"
       ? `<p style="margin:10px 0 0;padding:8px 10px;background:rgba(16,185,129,0.12);border-radius:8px;color:${C.emerald};font-size:12px;">
-           ⚠ Il prezzo è sotto il buy target base — potenziale opportunità di acquisto.
+           ⚠ Il prezzo è sotto il buy target base — ${hasPosition ? "valuta se incrementare la posizione." : "potenziale opportunità di acquisto."}
          </p>`
       : "";
 
@@ -146,6 +168,8 @@ function buildCard(item: DigestItem): string {
         <span style="font-weight:600;">${priceStr}</span>
         &nbsp;·&nbsp; ${priceVsTargetCell(item)}
       </div>
+
+      ${positionLine}
 
       ${underNote}
 
