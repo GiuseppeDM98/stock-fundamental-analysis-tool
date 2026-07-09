@@ -21,6 +21,7 @@ model User {
   watchlistItems          WatchlistItem[]
   watchlistRuns           WatchlistRun[]
   advisorSessions         AdvisorSession[]
+  earningsEstimates       EarningsEstimate[]
   // null = use account email
   watchlistEmail          String?
   // "biweekly" | "monthly"
@@ -142,6 +143,27 @@ model Position {
 
   @@index([userId])
   @@index([userId, ticker])
+}
+
+// AI-fetched next-earnings date per ticker, populated on demand by the user (a button
+// that runs Claude Sonnet 5 with web search). Persisted so the calendar survives reloads
+// without re-running the model. One row per user per ticker (upserted on refresh).
+model EarningsEstimate {
+  id               String    @id @default(cuid())
+  userId           String
+  ticker           String
+  // Next quarterly report date the AI found; null when it couldn't verify a future one.
+  nextEarningsDate DateTime?
+  // AI-declared confidence: "confirmed" | "estimated" | "unknown".
+  confidence       String    @default("unknown")
+  // Optional citation the AI used, kept for transparency/debugging.
+  sourceUrl        String?
+  // When the AI last ran for this ticker — the UI shows "updated <date>".
+  fetchedAt        DateTime  @default(now())
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, ticker])
+  @@index([userId])
 }
 
 // AI Portfolio Advisor chat sessions.

@@ -22,6 +22,10 @@ import type {
 } from "@/types/portfolio";
 import type { SavedAnalysis } from "@/types/analysis";
 import { useLanguage } from "@/context/language-context";
+import { EarningsBadge } from "@/components/earnings-badge";
+import { isFutureEarnings } from "@/lib/earnings";
+import { fetchEarnings, refreshEarnings } from "@/lib/earnings-client";
+import type { EarningsEstimate } from "@/types/earnings";
 
 const CURRENCIES = ["EUR", "USD", "GBP", "CHF", "JPY", "CAD", "AUD", "SEK", "NOK", "DKK"];
 
@@ -188,6 +192,9 @@ type AggregatedPositionRowProps = {
   agg: AggregatedPosition;
   currentPrice?: number;
   dailyChange?: DailyChange;
+  earnings?: EarningsEstimate;
+  refreshingEarnings?: boolean;
+  onRefreshEarnings: (ticker: string, companyName: string) => void;
   onDelete: (id: string) => void;
   onClose: (position: Position) => void;
   onAddPurchase: (agg: AggregatedPosition) => void;
@@ -200,6 +207,9 @@ function AggregatedPositionRow({
   agg,
   currentPrice,
   dailyChange,
+  earnings,
+  refreshingEarnings,
+  onRefreshEarnings,
   onDelete,
   onClose,
   onAddPurchase,
@@ -308,6 +318,21 @@ function AggregatedPositionRow({
               <span className="text-success">+{formatAmount(netPnl!, agg.currency)}</span>
             </div>
           )}
+
+          {/* Next-earnings date for this holding (AI-fetched, via the badge's button). No
+              stale nudge here: the portfolio has no reference analysis per ticker (that
+              lives on /analyses). Only a future date is shown as "next earnings". */}
+          <div className="mt-1">
+            <EarningsBadge
+              nextEarningsDate={
+                isFutureEarnings(earnings?.nextEarningsDate ?? null) ? earnings!.nextEarningsDate : null
+              }
+              confidence={earnings?.confidence ?? null}
+              fetchedAt={earnings?.fetchedAt ?? null}
+              refreshing={refreshingEarnings}
+              onRefresh={() => onRefreshEarnings(agg.ticker, agg.companyName)}
+            />
+          </div>
 
           <TickerAnalysesInline
             analyses={tickerAnalyses}
@@ -1057,6 +1082,9 @@ export default function PortfolioList() {
   const [viewMode, setViewMode] = useState<"aggregated" | "flat">("aggregated");
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({});
   const [dailyChanges, setDailyChanges] = useState<Record<string, DailyChange>>({});
+  // AI-fetched next-earnings estimates per ticker, loaded once from the DB store.
+  const [earnings, setEarnings] = useState<Record<string, EarningsEstimate>>({});
+  const [refreshingEarnings, setRefreshingEarnings] = useState<Record<string, boolean>>({});
   const [pricesLoading, setPricesLoading] = useState(false);
   // EUR-based FX rates from frankfurter.app: { USD: 1.08, GBP: 0.85, ... }
   const [fxRates, setFxRates] = useState<Record<string, number>>({});
@@ -1114,6 +1142,30 @@ export default function PortfolioList() {
     setCurrentPrices((prev) => ({ ...prev, ...prices }));
     setDailyChanges((prev) => ({ ...prev, ...changes }));
     setPricesLoading(false);
+  }
+
+  // Load AI-fetched earnings estimates once (independent — a failure must not block the list).
+  useEffect(() => {
+    fetchEarnings()
+      .then((estimates) => {
+        const map: Record<string, EarningsEstimate> = {};
+        for (const e of estimates) map[e.ticker] = e;
+        setEarnings(map);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Run the AI earnings lookup for one ticker (~10–30s) and store the fresh estimate.
+  async function handleRefreshEarnings(ticker: string, companyName: string) {
+    setRefreshingEarnings((prev) => ({ ...prev, [ticker]: true }));
+    try {
+      const estimate = await refreshEarnings(ticker, companyName);
+      setEarnings((prev) => ({ ...prev, [ticker]: estimate }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Earnings lookup failed.");
+    } finally {
+      setRefreshingEarnings((prev) => ({ ...prev, [ticker]: false }));
+    }
   }
 
   // Fetch EUR-based exchange rates from Frankfurter for the currencies in use.
@@ -1255,6 +1307,9 @@ export default function PortfolioList() {
               agg={agg}
               currentPrice={currentPrices[agg.ticker]}
               dailyChange={dailyChanges[agg.ticker]}
+              earnings={earnings[agg.ticker]}
+              refreshingEarnings={refreshingEarnings[agg.ticker] ?? false}
+              onRefreshEarnings={handleRefreshEarnings}
               onDelete={handleDelete}
               onClose={setClosingPosition}
               onAddPurchase={handleAddPurchase}

@@ -17,6 +17,10 @@ import { ValuationRuler, ComparisonTable } from "@/components/report/valuation-r
 import { getVerdict, VERDICT_BADGE, VERDICT_TEXT, type Verdict } from "@/lib/report/verdict";
 import { grossUpToIntrinsic } from "@/lib/report/valuation";
 import { computeEvolution, type Evolution, type SourceDelta } from "@/lib/report/evolution";
+import { EarningsBadge } from "@/components/earnings-badge";
+import { isAnalysisStalePreEarnings, isFutureEarnings, formatEarningsDate } from "@/lib/earnings";
+import { fetchEarnings, refreshEarnings } from "@/lib/earnings-client";
+import type { EarningsEstimate } from "@/types/earnings";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -239,6 +243,9 @@ function TickerGroup({
   ticker,
   analyses,
   currentPrice,
+  earnings,
+  refreshingEarnings,
+  onRefreshEarnings,
   positions,
   deleting,
   onDelete,
@@ -247,6 +254,9 @@ function TickerGroup({
   ticker: string;
   analyses: SavedAnalysis[];
   currentPrice?: number;
+  earnings?: EarningsEstimate;
+  refreshingEarnings: boolean;
+  onRefreshEarnings: (ticker: string, companyName: string) => void;
   positions: Position[];
   deleting: string | null;
   onDelete: (id: string) => void;
@@ -262,6 +272,14 @@ function TickerGroup({
   const latest = analyses[0];
   const older = analyses.slice(1);
   const mos = (latest.mosPercent ?? 0) / 100;
+
+  // Nudge to re-run when a fresh quarter has likely been reported since the latest save.
+  const earningsStale = isAnalysisStalePreEarnings(latest.createdAt, earnings?.nextEarningsDate ?? null);
+  // Only a genuinely future date is a real "next earnings" — display that; the stale pill
+  // covers the case where the AI could only find a just-passed report.
+  const futureEarningsDate = isFutureEarnings(earnings?.nextEarningsDate ?? null)
+    ? earnings!.nextEarningsDate
+    : null;
 
   // Deterministic evolution of the estimate vs. the previous saved analysis (base
   // scenario). Null when there's no prior save or no comparable base value — never
@@ -376,6 +394,19 @@ function TickerGroup({
         >
           <span className={`inline-block transition-transform duration-150 ${expanded ? "rotate-180" : ""}`}>▾</span>
         </button>
+      </div>
+
+      {/* Next-earnings row (AI-fetched). Sits outside the header toggle button so its own
+          refresh button isn't a nested interactive element. Amber pill nudges a re-run. */}
+      <div className="mt-1.5">
+        <EarningsBadge
+          nextEarningsDate={futureEarningsDate}
+          confidence={earnings?.confidence ?? null}
+          fetchedAt={earnings?.fetchedAt ?? null}
+          stale={earningsStale}
+          refreshing={refreshingEarnings}
+          onRefresh={() => onRefreshEarnings(ticker, latest.companyName)}
+        />
       </div>
 
       {/* Collapsed mini ruler */}
@@ -555,12 +586,16 @@ function TickerGroup({
 
 export default function AnalysesList() {
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const [analyses, setAnalyses] = useState<SavedAnalysis[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({});
+  // AI-fetched next-earnings estimates per ticker, loaded once from the DB store.
+  const [earningsByTicker, setEarningsByTicker] = useState<Record<string, EarningsEstimate>>({});
+  // Per-ticker in-flight flag for the "refresh via AI" button.
+  const [refreshingEarnings, setRefreshingEarnings] = useState<Record<string, boolean>>({});
   const [positionsByTicker, setPositionsByTicker] = useState<Record<string, Position[]>>({});
 
   // Filter / sort state
@@ -569,6 +604,15 @@ export default function AnalysesList() {
   const [sortMode, setSortMode] = useState<SortMode>("recent");
 
   useEffect(() => {
+    // Earnings estimates load independently — a failure there must not block the list.
+    fetchEarnings()
+      .then((estimates) => {
+        const map: Record<string, EarningsEstimate> = {};
+        for (const e of estimates) map[e.ticker] = e;
+        setEarningsByTicker(map);
+      })
+      .catch(() => {});
+
     Promise.all([fetchAnalyses(), fetchPositions()])
       .then(([data, posData]) => {
         setAnalyses(data);
@@ -613,6 +657,19 @@ export default function AnalysesList() {
       if (r.status === "fulfilled") prices[r.value.ticker] = r.value.price;
     }
     setCurrentPrices(prices);
+  }
+
+  // Run the AI earnings lookup for one ticker (~10–30s) and store the fresh estimate.
+  async function handleRefreshEarnings(ticker: string, companyName: string) {
+    setRefreshingEarnings((prev) => ({ ...prev, [ticker]: true }));
+    try {
+      const estimate = await refreshEarnings(ticker, companyName);
+      setEarningsByTicker((prev) => ({ ...prev, [ticker]: estimate }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("errorFailedSave"));
+    } finally {
+      setRefreshingEarnings((prev) => ({ ...prev, [ticker]: false }));
+    }
   }
 
   async function handleDelete(id: string) {
@@ -669,6 +726,25 @@ export default function AnalysesList() {
 
     return filtered;
   }, [analyses, search, underFvOnly, sortMode, currentPrices]);
+
+  // Upcoming-earnings calendar: one entry per analyzed ticker that has a future AI-fetched
+  // date, sorted nearest-first, with the per-ticker stale flag from its latest analysis.
+  const upcomingEarnings = useMemo(() => {
+    const latestByTicker = groupByTicker(analyses); // group[0] = latest save per ticker
+    const rows: Array<{ ticker: string; date: string; estimate: boolean; stale: boolean }> = [];
+    for (const [ticker, group] of latestByTicker) {
+      const info = earningsByTicker[ticker];
+      if (!info?.nextEarningsDate || !isFutureEarnings(info.nextEarningsDate)) continue;
+      rows.push({
+        ticker,
+        date: info.nextEarningsDate,
+        estimate: info.confidence !== "confirmed",
+        stale: isAnalysisStalePreEarnings(group[0].createdAt, info.nextEarningsDate),
+      });
+    }
+    rows.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    return rows;
+  }, [analyses, earningsByTicker]);
 
   const olderLabel = (n: number) => {
     const parts = t("olderAnalyses").split("|");
@@ -755,6 +831,34 @@ export default function AnalysesList() {
         {totalTickers} {t("tickerCountLabel")} · {totalAnalyses} {t("analysesCountLabel")}
       </p>
 
+      {/* Upcoming-earnings calendar strip — nearest first, amber when the analysis is stale */}
+      {upcomingEarnings.length > 0 && (
+        <div className="rounded-xl border border-slate-800 bg-slate-800/30 px-3 py-2.5">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            {t("upcomingEarnings")}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {upcomingEarnings.map((e) => (
+              <span
+                key={e.ticker}
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${
+                  e.stale
+                    ? "bg-amber-500/15 font-medium text-amber-400"
+                    : "bg-slate-700/50 text-slate-300"
+                }`}
+              >
+                <span className="font-mono font-semibold">{e.ticker}</span>
+                <span className="text-slate-500">·</span>
+                <span className="tabular-nums">
+                  {e.estimate ? "~" : ""}
+                  {formatEarningsDate(e.date, locale)}
+                </span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Ticker groups */}
       {visibleGroups.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-700 py-10 text-center text-sm text-muted">
@@ -768,6 +872,9 @@ export default function AnalysesList() {
               ticker={ticker}
               analyses={group}
               currentPrice={currentPrices[ticker]}
+              earnings={earningsByTicker[ticker]}
+              refreshingEarnings={refreshingEarnings[ticker] ?? false}
+              onRefreshEarnings={handleRefreshEarnings}
               positions={positionsByTicker[ticker] ?? []}
               deleting={deleting}
               onDelete={handleDelete}
