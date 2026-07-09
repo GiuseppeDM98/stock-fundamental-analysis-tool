@@ -3,6 +3,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { sendWatchlistDigest, type DigestItem } from "@/lib/email";
 import { grossUpToIntrinsic } from "@/lib/report/valuation";
+import { aggregateOpenLots } from "@/lib/portfolio-math";
 
 // ─── Current price helper ─────────────────────────────────────────────────────
 
@@ -37,6 +38,18 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
   });
 
   if (items.length === 0) return;
+
+  // Open positions, batched once per user (not per watchlist item) and grouped by
+  // ticker — lets each DigestItem show existing-holding context (shares/WAC/P&L)
+  // instead of unconditionally framing an under-target price as a fresh buy.
+  const openPositions = await db.position.findMany({
+    where: { userId: user.id, closedAt: null },
+    select: { ticker: true, shares: true, purchasePrice: true },
+  });
+  const lotsByTicker = new Map<string, { shares: number; purchasePrice: number }[]>();
+  for (const p of openPositions) {
+    lotsByTicker.set(p.ticker, [...(lotsByTicker.get(p.ticker) ?? []), { shares: p.shares, purchasePrice: p.purchasePrice }]);
+  }
 
   const digestItems: DigestItem[] = [];
 
@@ -81,6 +94,8 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
         ? "under"
         : "over";
 
+    const holding = aggregateOpenLots(lotsByTicker.get(item.ticker) ?? []);
+
     digestItems.push({
       ticker: item.ticker,
       companyName: item.companyName,
@@ -101,6 +116,8 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
       upside,
       status,
       analysisDate: analysis.createdAt.toISOString(),
+      holdingShares: holding?.totalShares ?? null,
+      holdingWeightedAvgCost: holding?.weightedAvgCost ?? null,
     });
 
     // Small delay between quote fetches to respect Yahoo rate limits (no AI calls now)

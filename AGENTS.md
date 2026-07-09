@@ -34,7 +34,7 @@ lib/               # Business logic and utilities (Yahoo quote adapter, AI promp
   email.ts                 # Resend email sender
   format.ts                # Formatting utilities
   positions.ts             # Server-only: closePosition() (full/partial position close)
-  portfolio-math.ts        # Pure: realizedPnlNative(), holdingDays(), estimateCapitalGainsTax() — no server-only, shared client+server
+  portfolio-math.ts        # Pure: realizedPnlNative(), holdingDays(), estimateCapitalGainsTax(), aggregateOpenLots() — no server-only, shared client+server
   report/
     verdict.ts              # getVerdict() + VERDICT_BADGE/VERDICT_TEXT maps (shared: analyses + watchlist)
     valuation.ts             # grossUpToIntrinsic() (shared: analyses + watchlist)
@@ -338,6 +338,16 @@ export async function GET(request: Request) {
 
 **Timezone note**: schedule crons away from midnight UTC to avoid date boundary ambiguity. 20:00 UTC = after EU + US market close and well within the same calendar day for European users.
 
+**DST-proof scheduling (fixed local time, no fixed UTC offset)**: Vercel Cron schedules are fixed UTC with no timezone support, but `Europe/Rome` (and most non-UTC zones) shifts by an hour between CET/CEST twice a year — a single fixed UTC cron drifts by an hour relative to local time across that switch. Pattern: add **two** cron entries pointing at the same route, one for each UTC offset the target zone can have, then have the handler itself decide whether to actually run:
+```typescript
+function isTargetLocalHour(hour: number, timeZone: string): boolean {
+  const localHour = new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", hourCycle: "h23" }).format(new Date());
+  return localHour === String(hour);
+}
+// route: if (!isTargetLocalHour(8, "Europe/Rome")) return NextResponse.json({ ok: true, skipped: true });
+```
+Two cron entries firing the same route on the same day is expected, not a duplicate — only the one matching local time actually runs the work. See `/api/cron/watchlist-analysis` (fires at `06:00` + `07:00` UTC to land on 08:00 `Europe/Rome` year-round).
+
 ---
 
 ## Server-Only Modules
@@ -472,9 +482,13 @@ Card-per-ticker (`WatchlistCard`), compact→expandable, reusing `ValuationRuler
 
 ### Watchlist is cadence-agnostic — daily for everyone, no AI in the cron
 
-The watchlist/email digest **never runs AI** — it's a read-model over the user's latest saved Deep Value `Analysis` per ticker (`lib/watchlist-analysis.ts`, `import "server-only"`) plus a live price. The Vercel Cron (`app/api/cron/watchlist-analysis`) fires **daily at 08:00 UTC** for all users with `watchlistEnabled`. There is no per-user frequency setting anymore — `watchlistFreq` was removed from `types/watchlist.ts` and the settings route/UI; the `User.watchlistFreq` DB column is left in place unused (avoids a Turso migration) and the legacy `WatchlistRun` table/model is fully dead (the GET route no longer reads it — no `lastRun` in the response).
+The watchlist/email digest **never runs AI** — it's a read-model over the user's latest saved Deep Value `Analysis` per ticker (`lib/watchlist-analysis.ts`, `import "server-only"`) plus a live price. The Vercel Cron (`app/api/cron/watchlist-analysis`) fires **daily at 08:00 `Europe/Rome`** (two UTC-fixed cron entries + an in-handler local-time check — see "DST-proof scheduling" below) for all users with `watchlistEnabled`. There is no per-user frequency setting anymore — `watchlistFreq` was removed from `types/watchlist.ts` and the settings route/UI; the `User.watchlistFreq` DB column is left in place unused (avoids a Turso migration) and the legacy `WatchlistRun` table/model is fully dead (the GET route no longer reads it — no `lastRun` in the response).
 
 `email.ts`'s `sendWatchlistDigest()` renders a card-per-ticker ledger-themed email per `DigestItem`: price, Δ% vs. buy target, a static "below buy target" note, a Bear/Base/Bull table split by Analysis / Reviewer / Consensus, buy target, and the analysis date. `watchlist-analysis.ts` computes the reviewer/consensus numbers via `grossUpToIntrinsic` from `lib/report/valuation.ts` — same helper the ruler uses, so the email and the UI never disagree on the math.
+
+**Portfolio-aware digest copy — batch the position query once per user, not once per item.** `runWatchlistAnalysisForUserInternal` fetches `db.position.findMany({ where: { userId, closedAt: null }, select: { ticker, shares, purchasePrice } })` **once**, before the per-watchlist-item loop, and groups the rows into a `Map<ticker, lots[]>` — the established N+1-avoidance shape already used for the `watchlistItem` fetch itself. Each ticker's lots are aggregated via `aggregateOpenLots()` (`lib/portfolio-math.ts`, pure — sums shares/cost, returns `{ totalShares, weightedAvgCost } | null`, `null` guards the zero-shares/div-by-zero case) and the result is threaded onto `DigestItem` as `holdingShares`/`holdingWeightedAvgCost`. `buildCard()` in `email.ts` uses this to (a) render an "In portafoglio: N az. · PMC · P&L%" line whenever a holding exists, independent of buy/watch status, and (b) swap the under-target note's copy — "valuta se incrementare la posizione" when already held vs. the generic "potenziale opportunità di acquisto" otherwise — so the email never frames topping up an existing position as a brand-new buy decision.
+
+**`aggregateOpenLots()` is deliberately NOT the same function as `aggregateByTicker()`** (the client-only WAC aggregator in `components/portfolio-list.tsx`). The client version needs the full `Position[]` shape (`companyName`/`currency`/per-purchase drill-down for the UI); the digest only needs `{ shares, purchasePrice }` for a lean server-side query. Don't force these into one abstraction — different consumers, different shapes, and merging them would mean either the DB query selects unused columns or the pure function grows UI-only fields it doesn't need. Revisit only if a third consumer with the same *narrow* shape shows up (Rule of Three).
 
 ### Stored `fairValueBase` is the buy target, not the intrinsic value
 

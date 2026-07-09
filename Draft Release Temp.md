@@ -116,6 +116,10 @@
 
 - **Quicker follow-on purchases in the Portfolio** — a new **"+ Purchase"** button on each holding opens the Add Position form pre-filled with that stock's name, currency, and ISIN, so buying more of something you already own no longer means retyping it from scratch (and risking a typo that would otherwise split it into a separate line).
 
+- **Watchlist digest now arrives at a consistent local time** — the daily email used to run on a fixed UTC schedule, so it landed an hour later (or earlier) in Italy depending on daylight saving time. It's now pinned to 8am Italian time year-round, ahead of market open, automatically adjusting across the seasonal clock change.
+
+- **Watchlist digest now knows what you already own** — if a watched ticker's price drops below your buy target and you already hold a position in it, the email no longer suggests it as a fresh "buying opportunity." Instead it shows your existing holding (shares, average cost, current P&L%) and nudges you to consider adding to the position rather than treating it as a new buy.
+
 ## 🔒 Security
 
 - Registration can be disabled via the `DISABLE_REGISTRATION=true` environment variable — useful to lock down the app after initial setup.
