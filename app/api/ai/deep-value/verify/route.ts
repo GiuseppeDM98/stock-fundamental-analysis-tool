@@ -125,7 +125,13 @@ export async function POST(request: Request) {
               } else {
                 controller.enqueue(new TextEncoder().encode(text));
               }
-            }
+            },
+            // Matches the Deep Value route's cap: this review does comparably
+            // web-search-heavy work (spot-checking figures/assumptions), so the
+            // shared default of 10 (lib/ai/tool-loop.ts) was too tight and tripped
+            // the "too many search rounds" cutoff under the client-executed DeepSeek
+            // search loop before the review finished.
+            25
           );
 
           // Failsafe: if the model never emitted a JSON fence (e.g. it opened straight
