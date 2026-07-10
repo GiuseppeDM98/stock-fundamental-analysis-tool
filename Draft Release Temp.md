@@ -46,6 +46,8 @@
 
 - **Installable app (PWA)** — install the app on your device. On Android, Chrome shows an "Install" banner; on iOS, use Share → Add to Home Screen. Once installed it opens in standalone mode with its own icon.
 
+- **Choose your AI model** — a new settings menu (gear icon in the nav bar) lets you pick which AI model powers every analysis: Claude Opus 4.8, Claude Sonnet 5, or the new **DeepSeek V4 Pro** — plus a reasoning-effort level and thinking on/off, as your default across the app. Deep Value, the Advisor, and the Analyst Panel each also show an inline selector so you can override the default for a single run. DeepSeek is a lower-cost alternative; note it's noticeably slower than Claude on a full Deep Value analysis, since it takes many more research steps to gather the same data.
+
 - **Earnings countdown in the watchlist digest** — if you've looked up a stock's next-earnings date (via the "Find next earnings (AI)" button on Saved Analyses, Watchlist, or Portfolio), the daily email now shows a countdown for it right on the ticker card: "results today," "N days until the next report," or, if you haven't refreshed it in a while, "N days since the expected date" — a nudge to update it.
 
 ## 🐛 Bug Fixes

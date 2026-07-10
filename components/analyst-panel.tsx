@@ -11,12 +11,15 @@
 //
 // Each analyst is on-demand (its own button) — never auto-run: each is an Opus xhigh + web
 // search pass that costs real tokens and takes 10–30s.
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useLanguage } from "@/context/language-context";
 import { APP_TO_AI_LANGUAGE } from "@/lib/i18n/translations";
 import { updateAnalystOpinion } from "@/lib/analyses";
 import { parseDeepValueJson, stripJsonBlock } from "@/lib/report/parse-deep-value-json";
 import ReportBody from "@/components/report/report-body";
+import { AiSettingsControl } from "@/components/ai-settings-control";
+import { fetchAiSettings } from "@/lib/ai-settings-client";
+import { DEFAULT_AI_SETTINGS, type AiSettings } from "@/types/ai-settings";
 import type { AnalystAngle } from "@/types/analysis";
 import { ANALYST_ANGLES } from "@/types/analysis";
 
@@ -36,6 +39,17 @@ type PanelProps = {
 
 export default function AnalystPanel({ analysisId, ticker, reportMd, mosPercent, initialCritiques }: PanelProps) {
   const { t } = useLanguage();
+  const [aiSettings, setAiSettings] = useState<AiSettings>(DEFAULT_AI_SETTINGS);
+
+  // Shared across all three lenses (not per-lens) — loaded once from the user's global
+  // default, overridable here before running whichever lens the user clicks next.
+  useEffect(() => {
+    fetchAiSettings()
+      .then(setAiSettings)
+      .catch(() => {
+        // Keep DEFAULT_AI_SETTINGS — non-fatal, review still works.
+      });
+  }, []);
 
   const angleLabel = (angle: AnalystAngle) =>
     angle === "skeptic" ? t("analystSkeptic") : angle === "optimist" ? t("analystOptimist") : t("analystQuality");
@@ -44,8 +58,13 @@ export default function AnalystPanel({ analysisId, ticker, reportMd, mosPercent,
 
   return (
     <div className="mt-6 rounded-xl border border-violet-500/20 bg-violet-500/5 p-5 print:break-inside-avoid">
-      <h3 className="text-sm font-semibold text-violet-300 print:text-violet-700">{t("analystPanelTitle")}</h3>
-      <p className="mt-1 text-xs text-slate-400 print:hidden">{t("analystPanelDesc")}</p>
+      <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
+        <div>
+          <h3 className="text-sm font-semibold text-violet-300">{t("analystPanelTitle")}</h3>
+          <p className="mt-1 text-xs text-slate-400">{t("analystPanelDesc")}</p>
+        </div>
+        <AiSettingsControl value={aiSettings} onChange={setAiSettings} />
+      </div>
 
       <div className="mt-4 space-y-4">
         {ANALYST_ANGLES.map((angle) => (
@@ -59,6 +78,7 @@ export default function AnalystPanel({ analysisId, ticker, reportMd, mosPercent,
             reportMd={reportMd}
             mosPercent={mosPercent}
             initialCritiqueMd={initialCritiques[angle] ?? null}
+            aiSettings={aiSettings}
           />
         ))}
       </div>
@@ -75,6 +95,7 @@ type SlotProps = {
   reportMd: string;
   mosPercent: number;
   initialCritiqueMd: string | null;
+  aiSettings: AiSettings;
 };
 
 function AnalystSlot({
@@ -86,6 +107,7 @@ function AnalystSlot({
   reportMd,
   mosPercent,
   initialCritiqueMd,
+  aiSettings,
 }: SlotProps) {
   const { language: globalLanguage, t } = useLanguage();
 
@@ -112,6 +134,9 @@ function AnalystSlot({
           angle,
           language: APP_TO_AI_LANGUAGE[globalLanguage] ?? "English",
           mosPercent,
+          model: aiSettings.model,
+          effort: aiSettings.effort,
+          thinking: aiSettings.thinking,
         }),
         signal: controller.signal,
       });

@@ -13,6 +13,9 @@ import ReportBody from "@/components/report/report-body";
 import ReportShell from "@/components/report/report-shell";
 import type { DeepValueResult } from "@/components/report/types";
 import { parseDeepValueJson, stripJsonBlock } from "@/lib/report/parse-deep-value-json";
+import { AiSettingsControl } from "@/components/ai-settings-control";
+import { fetchAiSettings } from "@/lib/ai-settings-client";
+import { DEFAULT_AI_SETTINGS, type AiSettings } from "@/types/ai-settings";
 
 type Props = {
   ticker: string | null;
@@ -61,6 +64,18 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [result, setResult] = useState<DeepValueResult | null>(null);
   const [watchlistStatus, setWatchlistStatus] = useState<WatchlistStatus>("idle");
+  const [aiSettings, setAiSettings] = useState<AiSettings>(DEFAULT_AI_SETTINGS);
+
+  // Load the user's global AI default once on mount; the panel's own selector then
+  // overrides it per-run without persisting (persisting happens via the NavBar modal).
+  useEffect(() => {
+    if (!session) return;
+    fetchAiSettings()
+      .then(setAiSettings)
+      .catch(() => {
+        // Keep DEFAULT_AI_SETTINGS — non-fatal, generation still works.
+      });
+  }, [session]);
 
   // The analyst panel (skeptic/optimist/quality reviews) runs on the SAVED-analysis detail
   // page, not here — the live panel only produces and saves the base analysis.
@@ -94,6 +109,9 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           ticker,
           language,
           mosPercent,
+          model: aiSettings.model,
+          effort: aiSettings.effort,
+          thinking: aiSettings.thinking,
         }),
         signal: controller.signal,
       });
@@ -125,6 +143,16 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           accumulated += chunk;
           setReport(accumulated);
         }
+      }
+
+      // Defends against a silent empty stream (e.g. the AI provider's tool-use loop
+      // hit its iteration cap before producing any output) — without this, status still
+      // flipped to "done" with an empty report and nothing rendered, so the button just
+      // went back to idle with no explanation.
+      if (!accumulated.trim()) {
+        setErrorMsg(t("deepValueEmptyResponse"));
+        setStatus("error");
+        return;
       }
 
       // Parse the JSON block once streaming is complete.
@@ -221,6 +249,8 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
               </option>
             ))}
           </select>
+
+          <AiSettingsControl value={aiSettings} onChange={setAiSettings} />
 
           <button
             onClick={() => handleGenerate()}

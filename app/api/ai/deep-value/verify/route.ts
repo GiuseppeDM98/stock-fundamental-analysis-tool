@@ -8,7 +8,6 @@
 // are identical, so all three analysts reuse this one route.
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import Anthropic from "@anthropic-ai/sdk";
 import { auth } from "@/lib/auth";
 import { getQuote } from "@/lib/yahoo-client";
 import { ANALYST_ANGLES } from "@/types/analysis";
@@ -16,6 +15,12 @@ import {
   buildAnalystSystemPrompt,
   buildAnalystUserPrompt,
 } from "@/lib/ai/deep-value-prompts";
+import { getAiClient, buildThinkingParam, buildEffortConfig, buildWebSearchTools } from "@/lib/ai/client";
+import { resolveAiSettings } from "@/lib/ai/ai-preferences";
+import { runStreamWithToolLoop } from "@/lib/ai/tool-loop";
+import { AI_MODEL_IDS, AI_EFFORT_LEVELS, type AiSettings } from "@/types/ai-settings";
+
+const DEFAULT_SETTINGS: AiSettings = { model: "claude-opus-4-8", effort: "xhigh", thinking: true };
 
 const requestSchema = z.object({
   ticker: z.string().min(1).max(20),
@@ -27,6 +32,9 @@ const requestSchema = z.object({
   // Applied to the analyst's own fair values so its JSON buy targets match the unit
   // of the base analysis (MoS-adjusted) and they can be averaged into a consensus.
   mosPercent: z.number().min(0).max(80).default(0),
+  model: z.enum(AI_MODEL_IDS).optional(),
+  effort: z.enum(AI_EFFORT_LEVELS).optional(),
+  thinking: z.boolean().optional(),
 });
 
 export async function POST(request: Request) {
@@ -71,42 +79,40 @@ export async function POST(request: Request) {
     const systemPrompt = buildAnalystSystemPrompt(angle, body.language, currentDate, body.mosPercent);
     const userPrompt = buildAnalystUserPrompt(angle, body.ticker, body.reportMd, body.language, currentDate, currentPrice, currency, body.mosPercent);
 
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const aiSettings = await resolveAiSettings(
+      session.user.id,
+      body.model ? { model: body.model, effort: body.effort ?? DEFAULT_SETTINGS.effort, thinking: body.thinking ?? DEFAULT_SETTINGS.thinking } : undefined,
+      DEFAULT_SETTINGS
+    );
+    const client = getAiClient(aiSettings.model);
 
     const readable = new ReadableStream({
       async start(controller) {
         try {
-          const stream = client.messages.stream({
-            model: "claude-opus-4-8",
-            // 16k was too low: with xhigh adaptive thinking + web search, the reasoning
-            // tokens (which count toward max_tokens) consumed almost the whole budget
-            // before the visible critique finished, so a real review truncated mid-word
-            // with stop_reason "max_tokens". Matched to the Deep Value route's 64k for a
-            // wide anti-truncation margin. Ceiling, not target — normal replies still stop
-            // at end_turn and cost the same. Streaming, so no HTTP-timeout risk.
-            max_tokens: 64000,
-            thinking: { type: "adaptive" },
-            // "xhigh" is valid on Opus 4.8 but not yet in the pinned SDK's effort union
-            // (^0.78 types low|medium|high|max); it serializes through unchanged — cast
-            // is compile-time only. See app/api/ai/deep-value/route.ts for the rationale.
-            output_config: { effort: "xhigh" as unknown as "high" },
-            system: systemPrompt,
-            tools: [{ type: "web_search_20260209" as const, name: "web_search" }],
-            messages: [{ role: "user", content: userPrompt }],
-          });
-
           // Buffer text before the JSON block to suppress reasoning text Claude emits
           // between web-search tool calls; only forward once ```json is seen. Mirrors
           // the Deep Value route now that the reviewer leads with its own valuation JSON.
           let jsonBlockStarted = false;
           let preJsonBuffer = "";
-          let stopReason: string | null = null;
-          for await (const event of stream) {
-            if (
-              event.type === "content_block_delta" &&
-              event.delta.type === "text_delta"
-            ) {
-              const text = event.delta.text;
+
+          const { stopReason, hitIterationCap } = await runStreamWithToolLoop(
+            client,
+            {
+              model: aiSettings.model,
+              // 16k was too low: with xhigh adaptive thinking + web search, the reasoning
+              // tokens (which count toward max_tokens) consumed almost the whole budget
+              // before the visible critique finished, so a real review truncated mid-word
+              // with stop_reason "max_tokens". Matched to the Deep Value route's 64k for a
+              // wide anti-truncation margin. Ceiling, not target — normal replies still
+              // stop at end_turn and cost the same. Streaming, so no HTTP-timeout risk.
+              max_tokens: 64000,
+              thinking: buildThinkingParam(aiSettings.thinking),
+              output_config: buildEffortConfig(aiSettings.effort),
+              system: systemPrompt,
+              tools: buildWebSearchTools(aiSettings.model),
+              messages: [{ role: "user", content: userPrompt }],
+            },
+            (text) => {
               if (!jsonBlockStarted) {
                 preJsonBuffer += text;
                 const jsonIdx = preJsonBuffer.indexOf("```json");
@@ -119,10 +125,8 @@ export async function POST(request: Request) {
               } else {
                 controller.enqueue(new TextEncoder().encode(text));
               }
-            } else if (event.type === "message_delta" && event.delta.stop_reason) {
-              stopReason = event.delta.stop_reason;
             }
-          }
+          );
 
           // Failsafe: if the model never emitted a JSON fence (e.g. it opened straight
           // into prose), flush the buffered text so the critique is not swallowed.
@@ -132,11 +136,16 @@ export async function POST(request: Request) {
 
           // Surface a hard token-cap cutoff instead of truncating silently — a clean
           // mid-word cut is indistinguishable from a normal end. Mirrors /api/ai/advisor.
+          const isItalian = body.language === "Italiano" || body.language === "Italian";
           if (stopReason === "max_tokens") {
-            const isItalian = body.language === "Italiano" || body.language === "Italian";
             const note = isItalian
               ? "_[Revisione troncata: raggiunto il limite di lunghezza. Riavviala per rigenerarla.]_"
               : "_[Review truncated: length limit reached. Re-run it to regenerate.]_";
+            controller.enqueue(new TextEncoder().encode(`\n\n${note}`));
+          } else if (hitIterationCap) {
+            const note = isItalian
+              ? "_[Revisione interrotta: troppi cicli di ricerca web. Riavviala per rigenerarla.]_"
+              : "_[Review stopped: too many web search rounds. Re-run it to regenerate.]_";
             controller.enqueue(new TextEncoder().encode(`\n\n${note}`));
           }
         } catch (streamErr) {

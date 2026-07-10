@@ -8,7 +8,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: July 10, 2026 — **Watchlist digest: weekdays only + a next/last-earnings note.** The cron (`vercel.json`) no longer fires on weekends — both `watchlist-analysis` entries gained a `1-5` day-of-week restriction (`0 6/7 * * 1-5`), same pattern as `portfolio-snapshot`; markets are closed Sat/Sun so a weekend email would just repeat Friday's numbers. Each `DigestItem` now also carries `nextEarningsDate`/`earningsConfidence`, batch-read (once per user) from the user's already-fetched `EarningsEstimate` rows — the cron still never calls the AI itself. `email.ts`'s `earningsNote()` renders one of three lines purely from comparing that stored date to today: today, "mancano N giorni", or "sono passati N giorni" (the AI only ever persists a future date, so a stored date that's since lapsed unrefreshed is itself the "N days ago" signal — no separate last-earnings field needed).
+**Last Updated**: July 10, 2026 — **Per-interaction AI model selection (+ DeepSeek V4 Pro as a second provider).** Every AI call site (Deep Value, Analyst panel, Advisor, earnings lookup) now resolves its model/effort/thinking from a global per-user default (gear icon in the NavBar → `<AiPreferencesModal>`) with a per-run override on the three main panels (`<AiSettingsControl>`; the Analyst panel uses one shared selector for all 3 lenses, not per-lens; the earnings-lookup button has no inline control and always honors the stored default). New provider: **DeepSeek V4 Pro**, reached via the same Anthropic SDK pointed at its Anthropic-compatible endpoint. Its *server-side* `web_search` tool proved unreliable in production (a failed tool-call parse leaked raw internal template syntax into the visible Advisor chat) — fixed by giving it a **client-executed custom web-search tool** instead (function-calling schema, resolved via Tavily), run through a small shared agentic loop (`lib/ai/tool-loop.ts`) used by all 4 routes so Claude and DeepSeek share one code path. See AGENTS.md → "Multi-Provider AI Settings" for the full pattern and the two production bugs (tool-call leak, silent-empty-response) it took to get here.
 
 ---
 
@@ -18,7 +18,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 - **yahoo-finance2** `3.13.2` + **Zod** `3.24.1`
 - **Prisma** `7.4.2` + **Turso** (libSQL) via `@prisma/adapter-libsql`
 - **Auth.js** `next-auth@5.0.0-beta.30` + **bcryptjs**
-- **Anthropic SDK** + **Claude Opus 4.8** (Deep Value + Analyst Review, `effort: "xhigh"`) / **Claude Sonnet 5** (Advisor `effort: "high"`; next-earnings lookup `effort: "medium"`) — adaptive thinking, web search enabled
+- **Anthropic SDK** + **Claude Opus 4.8** (Deep Value + Analyst Review, `effort: "xhigh"`) / **Claude Sonnet 5** (Advisor `effort: "high"`; next-earnings lookup `effort: "medium"`) / **DeepSeek V4 Pro** (alternative provider, same SDK via its Anthropic-compat endpoint, user-selectable) — adaptive thinking, web search enabled (native for Claude, client-executed via Tavily for DeepSeek)
 - **Tailwind** `3.4.17` + typography + **Framer Motion** `11.18.2` + **Recharts** `2.15.1` + react-markdown + remark-gfm + node-html-parser
 - **Vitest** `3.2.4` + Testing Library `16.2.0`
 
@@ -97,6 +97,12 @@ Slim, single path: ticker search → `GET /api/quote` (price header + reference 
 - **Email** via Resend (`lib/email.ts`, lazily init): ledger-themed card per ticker — price, Δ% vs buy target, Bear/Base/Bull split into Analysis / one row per analyst lens that ran (`Scettico`/`Rialzista`/`Qualità`) / Consensus, buy target, analysis date, native currency. `DigestItem.analysts: {angle,bear,base,bull}[]` carries the per-lens intrinsic values.
 - **Portfolio-aware digest copy**: `runWatchlistAnalysisForUserInternal` batches one `Position` query per user (`closedAt: null`) and aggregates open lots per ticker via `aggregateOpenLots()` (`lib/portfolio-math.ts`, pure — total shares + weighted-avg cost). Each `DigestItem` carries `holdingShares`/`holdingWeightedAvgCost` (both `null` when no open position). The email shows an "In portafoglio: N az. · PMC · P&L%" line whenever a holding exists — regardless of buy/watch status — and the under-target note reads "valuta se incrementare la posizione" instead of "potenziale opportunità di acquisto" when the ticker is already held, so the copy never frames topping up an existing position as a fresh buy.
 
+### AI Model Selection (multi-provider)
+- Every AI call site resolves `{model, effort, thinking}` via `resolveAiSettings()` (`lib/ai/ai-preferences.ts`): request-body override > the user's stored `User.ai{Model,Effort,ThinkingEnabled}` default > the route's own historical hardcoded fallback, then clamped to the chosen model's supported effort levels.
+- **Models**: `claude-opus-4-8`, `claude-sonnet-5`, `deepseek-v4-pro` (catalog in `types/ai-settings.ts`). DeepSeek only exposes `high`/`max` effort (it maps low/medium to high internally).
+- **Global default**: gear icon in `NavBar` → `<AiPreferencesModal>` → `GET/PATCH /api/settings/ai`. **Per-run override**: `<AiSettingsControl>` inline on Deep Value, Advisor, and the Analyst panel (one shared selector for all 3 lenses). Earnings lookup has no inline control — always the stored default.
+- **DeepSeek web search is client-executed**, not the provider's server-side tool — its Anthropic-compat translation of server-side tool calls proved unreliable in production (raw internal syntax leaked into the Advisor's visible stream). `lib/ai/web-search-tool.ts` (Tavily-backed) + `lib/ai/tool-loop.ts` (shared agentic loop, all 4 routes) replace it with standard function-calling. Deep Value's loop needs a higher iteration cap (25 vs. the default 10) — its research prompt needs far more one-query-at-a-time rounds than the Advisor's.
+
 ### Next-Earnings Calendar (AI-sourced)
 - **Purpose**: know when a stock next reports results, so you know when to re-run its analysis. Sourced **on demand** from **Claude Sonnet 5 + web search** (not Yahoo — `quote.earningsTimestamp` is stale for many MTAA tickers, returning the last reported quarter). Manual (per-stock button), **persisted** so the calendar survives reloads without re-running the model.
 - **Data**: `EarningsEstimate` model — `@@unique([userId, ticker])`, `nextEarningsDate?`, `confidence` (`confirmed|estimated|unknown`), `sourceUrl?`, `fetchedAt`. `POST /api/earnings` runs the model **non-streaming** (`messages.create`, `effort: "medium"`, `max_tokens: 6000`), parses the JSON by concatenating **all** text blocks (web-search reasoning splits them — gotcha #13), validates with Zod, upserts. `GET /api/earnings` returns the user's store. Prompt in `lib/ai/earnings-prompt.ts` — grounded (web-verify, future-only, never fabricate) and **cadence-neutral** (quarterly/half-year/annual, so EU/IT semi-annual reporters aren't skipped).
@@ -133,6 +139,11 @@ lib/
   earnings.ts                # pure: isFutureEarnings, isAnalysisStalePreEarnings, formatEarningsDate
   earnings-client.ts         # client helpers: fetchEarnings / refreshEarnings
   yahoo-client.ts            # getQuote + extractRawNumber + mapFundamentalsFromTimeSeries
+  ai/client.ts               # server-only: getAiClient/buildThinkingParam/buildEffortConfig/buildWebSearchTools
+  ai/ai-preferences.ts       # server-only: resolveAiSettings() — override > stored > fallback, effort-clamped
+  ai/tool-loop.ts            # server-only: runStreamWithToolLoop/runCreateWithToolLoop — shared client-side tool loop (DeepSeek web search)
+  ai/web-search-tool.ts      # server-only: CUSTOM_WEB_SEARCH_TOOL + executeWebSearch() (Tavily)
+  ai-settings-client.ts      # client helpers: fetchAiSettings/saveAiSettings
   auth.ts  db.ts  format.ts  analyses.ts  portfolio.ts
   portfolio-snapshots.ts     # server-only: snapshot creation
   dividends.ts               # server-only: Borsa Italiana dividend fetcher
@@ -152,8 +163,10 @@ app/
       earnings (GET/POST — AI next-earnings)  portfolio/snapshots
       cron/{portfolio-snapshot,watchlist-analysis}  watchlist(+/[id],/settings,/run)
       ai/deep-value(+/verify)  ai/advisor  advisor/sessions(+/[id](+/messages))
+      settings/ai (GET/PATCH — global AI model/effort/thinking default)
 components/                  # hub-client, analyze-client, deep-value-panel, analyses-list,
-                             #   earnings-badge, analyst-panel (3-lens panel on saved detail), …
+                             #   earnings-badge, analyst-panel (3-lens panel on saved detail),
+                             #   ai-settings-control (per-run selector), ai-preferences-modal (global default), …
   report/                    #   portfolio-list, portfolio-history-chart, watchlist-client,
                              #   advisor-client, nav-bar, download-pdf-button, …
                              # report/: report-shell, recap-table, fair-value-cards, report-body,
@@ -189,6 +202,8 @@ TURSO_AUTH_TOKEN="..."                 # not needed for local file:
 NEXTAUTH_SECRET="..."                  # openssl rand -hex 32
 NEXTAUTH_URL="http://localhost:3000"   # prod: https://your-domain.vercel.app
 ANTHROPIC_API_KEY="sk-ant-..."
+DEEPSEEK_API_KEY="sk-..."          # optional — DeepSeek V4 Pro provider
+TAVILY_API_KEY="tvly-..."          # web search for DeepSeek (client-executed tool)
 DISABLE_REGISTRATION="false"
 CRON_SECRET="..."                      # also set in Vercel project settings
 RESEND_API_KEY="re_..."                # watchlist email digest

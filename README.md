@@ -38,6 +38,7 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **Decision Panel** — after every Deep Value Analysis completes, an **Add to Watchlist** button appears (pre-fills ticker + MoS). Every analysis ends with a deliberate next step, not a dead end.
 - **Exit signal ("At Fair Value")** — when a position's current price reaches the **intrinsic base fair value** from your most recent saved analysis (i.e. the margin of safety is fully consumed), an amber ⚠ badge appears in the portfolio row (always visible). Its "Re-analyze →" button runs a fresh, **position-blind** Deep Value analysis (no cost basis is ever fed to the AI, so the valuation stays independent); use the Advisor afterwards to decide hold / add / exit
 - **Estimate-evolution diff** — when a ticker has two or more saved analyses, its saved-analyses card shows how the estimate moved vs. the previous save (Δ Analysis / Consensus base fair value). Pure arithmetic on your saved numbers — never sent to the AI
+- **Choose your AI model** — pick which model powers each analysis (Claude Opus 4.8, Claude Sonnet 5, or **DeepSeek V4 Pro**), plus a reasoning-effort level and thinking on/off, as a global default (gear icon in the nav bar) with a per-run override on Deep Value, the Advisor, and the Analyst Panel
 
 ### What Problem Does It Solve?
 

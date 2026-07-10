@@ -177,6 +177,7 @@ export type Translations = {
   signInToAnalyze: string;
   deepValueTitle: string;
   deepValueDesc: string;
+  deepValueEmptyResponse: string;
   deepAnalysisBtn: string;
 
   // ─── Scenario panels ────────────────────────────────────────────────────────
@@ -615,6 +616,7 @@ const en: Translations = {
   signInToAnalyze: "to generate AI analyses and save your reports.",
   deepValueTitle: "Deep Value Analysis",
   deepValueDesc: "Claude picks the valuation method and sources all data via web search",
+  deepValueEmptyResponse: "The AI didn't return a result — it may have run out of research rounds. Try again, possibly with a different model.",
   deepAnalysisBtn: "Deep Analysis (AI)",
 
   // Scenario panels
@@ -1052,6 +1054,7 @@ const it: Translations = {
   signInToAnalyze: "per generare analisi AI e salvare i report.",
   deepValueTitle: "Analisi Deep Value",
   deepValueDesc: "Claude sceglie il metodo di valutazione e raccoglie i dati via web search",
+  deepValueEmptyResponse: "L'AI non ha restituito un risultato — potrebbe aver esaurito i cicli di ricerca. Riprova, magari con un modello diverso.",
   deepAnalysisBtn: "Analisi Profonda (AI)",
 
   // Scenario panels

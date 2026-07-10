@@ -10,6 +10,9 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useLanguage } from "@/context/language-context";
 import { APP_TO_AI_LANGUAGE } from "@/lib/i18n/translations";
+import { AiSettingsControl } from "@/components/ai-settings-control";
+import { fetchAiSettings } from "@/lib/ai-settings-client";
+import { DEFAULT_AI_SETTINGS, type AiSettings } from "@/types/ai-settings";
 
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string };
 type AdvisorSession = { id: string; title: string; createdAt: string; updatedAt: string };
@@ -253,6 +256,7 @@ export default function AdvisorClient() {
   const [error, setError] = useState<string | null>(null);
   const [contextCounts, setContextCounts] = useState<{ positions: number; analyses: number } | null>(null);
   const [mode, setMode] = useState<"portfolio" | "discovery">("portfolio");
+  const [aiSettings, setAiSettings] = useState<AiSettings>(DEFAULT_AI_SETTINGS);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -266,6 +270,16 @@ export default function AdvisorClient() {
   useEffect(() => {
     localStorage.setItem("sfa:advisor-mode", mode);
   }, [mode]);
+
+  // Load the user's global AI default once on mount; the header selector then
+  // overrides it per-run without persisting (persisting happens via the NavBar modal).
+  useEffect(() => {
+    fetchAiSettings()
+      .then(setAiSettings)
+      .catch(() => {
+        // Keep DEFAULT_AI_SETTINGS — non-fatal, chat still works.
+      });
+  }, []);
 
   // Load session list + context counts on mount.
   useEffect(() => {
@@ -385,6 +399,9 @@ export default function AdvisorClient() {
             messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
             language: APP_TO_AI_LANGUAGE[language],
             mode,
+            model: aiSettings.model,
+            effort: aiSettings.effort,
+            thinking: aiSettings.thinking,
           }),
           signal: abortRef.current.signal,
         });
@@ -418,7 +435,7 @@ export default function AdvisorClient() {
         abortRef.current = null;
       }
     },
-    [messages, isStreaming, language, t, activeSessionId, mode]
+    [messages, isStreaming, language, t, activeSessionId, mode, aiSettings]
   );
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -528,6 +545,7 @@ export default function AdvisorClient() {
               {t("advisorModeDiscovery")}
             </button>
           </div>
+          <AiSettingsControl value={aiSettings} onChange={setAiSettings} className="ml-auto" />
         </div>
 
         <div className="flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

@@ -30,6 +30,13 @@ model User {
   watchlistEnabled        Boolean             @default(true)
   // Rate-limit manual trigger to once per 24h
   lastManualWatchlistRun  DateTime?
+  // Global AI preferences — per-model/effort/thinking default used by every AI call
+  // site (deep-value, verify, advisor, earnings) unless overridden per-request.
+  // "claude-opus-4-8" | "claude-sonnet-5" | "deepseek-v4-pro"
+  aiModel                 String              @default("claude-opus-4-8")
+  // "low" | "medium" | "high" | "xhigh" | "max"
+  aiEffort                String              @default("high")
+  aiThinkingEnabled        Boolean             @default(true)
 }
 
 model Analysis {
