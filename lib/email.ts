@@ -137,7 +137,7 @@ function priceVsTargetCell(item: DigestItem): string {
   const below = dist <= 0;
   const color = below ? C.emerald : C.amber;
   const word = below ? "sotto" : "sopra";
-  return `<span style="color:${color};font-weight:600;">${Math.abs(dist).toFixed(1)}% ${word} il buy target</span>`;
+  return `<span style="color:${color};font-weight:600;">${Math.abs(dist).toFixed(1)}% ${word} il buy target (analisi)</span>`;
 }
 
 // One row of the per-ticker valuation table (Bear / Base / Bull), used for the analysis,
