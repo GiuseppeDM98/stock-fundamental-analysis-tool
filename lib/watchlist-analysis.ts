@@ -105,7 +105,10 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
         : null;
 
     const { price: currentPrice, currency } = await fetchQuote(item.ticker);
-    const adjustedBase = intrinsicBase * (1 - item.mosPercent);
+    // Buy target/status prefer the consensus (analysis + every analyst that ran) over the
+    // base analysis alone — more independent opinions is a more robust signal than one.
+    const verdictBase = consensus?.base ?? intrinsicBase;
+    const adjustedBase = verdictBase * (1 - item.mosPercent);
     const upside =
       currentPrice !== null ? (adjustedBase - currentPrice) / currentPrice : null;
     const status: DigestItem["status"] =

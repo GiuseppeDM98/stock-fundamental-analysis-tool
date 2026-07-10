@@ -17,8 +17,9 @@ const ANALYST_LABEL_IT: Record<AnalystAngle, string> = {
 };
 
 // One watched ticker, priced against the user's latest saved Deep Value analysis. All
-// fair-value fields are on the intrinsic scale; `adjustedBase` is the base buy target
-// (intrinsic base discounted by the watchlist item's own MoS). The analyst opinions +
+// fair-value fields are on the intrinsic scale; `adjustedBase` is the buy target (intrinsic
+// base discounted by the watchlist item's own MoS) — sourced from the consensus (analysis +
+// every analyst that ran) when available, else the analysis alone. The analyst opinions +
 // consensus are empty/null when no analyst-panel pass has run on the analysis.
 export interface DigestItem {
   ticker: string;
@@ -129,15 +130,19 @@ function statusBadge(status: DigestItem["status"]): string {
   return `<span style="color:${C.muted};">—</span>`;
 }
 
-// The price's distance from the base buy target — the actionable number. Negative = below
-// target (an opportunity), positive = still above target.
+// The price's distance from the buy target — the actionable number. Negative = below target
+// (an opportunity), positive = still above target. `adjustedBase` (and so this distance) is
+// sourced from the consensus when the analyst panel ran, else the analysis alone — the
+// "(analisi)"/"(consenso)" suffix says which, so it never reads as ambiguous next to the
+// Analisi/Consenso rows in the valuation table below.
 function priceVsTargetCell(item: DigestItem): string {
   if (item.currentPrice === null) return `<span style="color:${C.muted};">—</span>`;
   const dist = ((item.currentPrice - item.adjustedBase) / item.adjustedBase) * 100;
   const below = dist <= 0;
   const color = below ? C.emerald : C.amber;
   const word = below ? "sotto" : "sopra";
-  return `<span style="color:${color};font-weight:600;">${Math.abs(dist).toFixed(1)}% ${word} il buy target (analisi)</span>`;
+  const source = item.consensusBase !== null ? "consenso" : "analisi";
+  return `<span style="color:${color};font-weight:600;">${Math.abs(dist).toFixed(1)}% ${word} il buy target (${source})</span>`;
 }
 
 // One row of the per-ticker valuation table (Bear / Base / Bull), used for the analysis,
@@ -183,7 +188,7 @@ function buildCard(item: DigestItem): string {
   const underNote =
     item.status === "under"
       ? `<p style="margin:10px 0 0;padding:8px 10px;background:rgba(16,185,129,0.12);border-radius:8px;color:${C.emerald};font-size:12px;">
-           ⚠ Il prezzo è sotto il buy target base — ${hasPosition ? "valuta se incrementare la posizione." : "potenziale opportunità di acquisto."}
+           ⚠ Il prezzo è sotto il buy target (${hasConsensus ? "consenso" : "analisi"}) — ${hasPosition ? "valuta se incrementare la posizione." : "potenziale opportunità di acquisto."}
          </p>`
       : "";
 
@@ -238,7 +243,7 @@ function buildCard(item: DigestItem): string {
       <table role="presentation" width="100%" style="border-collapse:collapse;margin-top:12px;border-top:1px solid ${C.border};">
         <tr>
           <td style="text-align:left;vertical-align:middle;padding-top:10px;font-size:11px;color:${C.muted};">
-            Buy target (base −${(item.mosPercent * 100).toFixed(0)}%):
+            Buy target (${hasConsensus ? "consenso" : "analisi"} base −${(item.mosPercent * 100).toFixed(0)}%):
             <span style="color:${C.accent};font-weight:700;">${formatPrice(item.adjustedBase, item.currency)}</span>
           </td>
           <td style="text-align:right;vertical-align:middle;padding-top:10px;font-size:11px;color:${C.faint};white-space:nowrap;">${item.method} · ${formatDate(item.analysisDate)}</td>
@@ -274,7 +279,7 @@ export async function sendWatchlistDigest(params: {
 
       <p style="color:${C.muted};font-size:11px;margin-top:24px;line-height:1.6;">
         Valori dalla tua ultima analisi Deep Value salvata per ciascun titolo, riprezzati sul prezzo attuale.<br>
-        Il buy target è il fair value base scontato del tuo margine di sicurezza.<br>
+        Il buy target è il fair value base (del consenso quando disponibile, altrimenti dell'analisi) scontato del tuo margine di sicurezza.<br>
         Non costituisce consulenza finanziaria.
       </p>
     </div>`;

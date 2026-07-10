@@ -122,6 +122,8 @@
 
 - **Watchlist digest emails no longer arrive on weekends** — since markets are closed Saturday and Sunday, the daily digest now runs Monday through Friday only, so you won't get an email repeating Friday's numbers.
 
+- **Buy/Watch/Over verdict now factors in every analyst opinion** — on Saved Analyses, the Watchlist, and the email digest, the verdict badge, the ruler's buy/watch zones, and the buy-target percentage now use the **consensus** (the base analysis plus every analyst lens that ran) once you've run at least one, instead of only the base analysis — a more robust signal when you've gathered a second opinion. The percentage now also states its source, "... (analysis)" or "... (consensus)", so it's never ambiguous which buy target it's measured against.
+
 ## 🔒 Security
 
 - Registration can be disabled via the `DISABLE_REGISTRATION=true` environment variable — useful to lock down the app after initial setup.
