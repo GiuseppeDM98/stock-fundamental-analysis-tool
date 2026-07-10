@@ -1,3 +1,18 @@
+/**
+ * The lenses of the analyst panel. After a Deep Value analysis is saved the user can
+ * run up to three independent second-opinion passes, each reading the report through a
+ * distinct angle and committing to its own valuation. The base analysis + every analyst
+ * run are averaged into a consensus. Canonical definition — imported by the prompts,
+ * the consensus math and the API routes so the set stays in one place.
+ *
+ * "skeptic" keeps the legacy `review*` column prefix (it shipped as the sole reviewer);
+ * "optimist"/"quality" use their own prefixes. See ANALYST_COLUMNS in lib/report/consensus.ts.
+ */
+export type AnalystAngle = "skeptic" | "optimist" | "quality";
+
+/** The three analyst lenses, in display order. */
+export const ANALYST_ANGLES: AnalystAngle[] = ["skeptic", "optimist", "quality"];
+
 /** A saved AI-generated analysis stored in the database. */
 export type SavedAnalysis = {
   id: string;
@@ -12,23 +27,42 @@ export type SavedAnalysis = {
   fairValueBase?: number | null;
   fairValueBear?: number | null;
   valuationMethod?: string | null;
-  // Independent "Analyst Review" critique — null until the user runs it.
+  // Skeptic analyst (red-team) — kept under the legacy `review*` names. Null until run.
+  // The critique Markdown, plus its own independent valuation (same MoS-adjusted unit as
+  // fairValue*), used to compute the consensus.
   reviewMd?: string | null;
-  // The reviewer's own independent valuation (same MoS-adjusted unit as fairValue*),
-  // used to compute a base/reviewer consensus. Null until a review with valid JSON runs.
   reviewFairValueBull?: number | null;
   reviewFairValueBase?: number | null;
   reviewFairValueBear?: number | null;
   reviewValuationMethod?: string | null;
+  // Optimist analyst (constructive bull case). Same shape/unit as the skeptic. Null until run.
+  optimistCritiqueMd?: string | null;
+  optimistFairValueBull?: number | null;
+  optimistFairValueBase?: number | null;
+  optimistFairValueBear?: number | null;
+  optimistValuationMethod?: string | null;
+  // Quality analyst (long-term durability). Same shape/unit as above. Null until run.
+  qualityCritiqueMd?: string | null;
+  qualityFairValueBull?: number | null;
+  qualityFairValueBase?: number | null;
+  qualityFairValueBear?: number | null;
+  qualityValuationMethod?: string | null;
   createdAt: string; // ISO 8601 string (JSON serialized from Date)
 };
 
-/** The reviewer's own fair values, attached when the Analyst Review emits a JSON block. */
-export type ReviewFairValues = {
-  reviewFairValueBull?: number;
-  reviewFairValueBase?: number;
-  reviewFairValueBear?: number;
-  reviewValuationMethod?: string;
+/**
+ * Payload to attach (or replace) one analyst's opinion on a saved analysis via
+ * PATCH /api/analyses/:id. The route maps `angle` to that analyst's columns.
+ */
+export type AnalystOpinionUpdate = {
+  angle: AnalystAngle;
+  // The critique Markdown (JSON block already stripped).
+  critiqueMd: string;
+  // The analyst's own valuation (MoS-adjusted buy targets), when it emitted a JSON block.
+  fairValueBull?: number;
+  fairValueBase?: number;
+  fairValueBear?: number;
+  valuationMethod?: string;
 };
 
 /** Payload required to save a new analysis. */
@@ -42,10 +76,4 @@ export type SaveAnalysisRequest = {
   fairValueBase?: number;
   fairValueBear?: number;
   valuationMethod?: string;
-  // Attached only when the Analyst Review was run before saving.
-  reviewMd?: string;
-  reviewFairValueBull?: number;
-  reviewFairValueBase?: number;
-  reviewFairValueBear?: number;
-  reviewValuationMethod?: string;
 };

@@ -2,7 +2,9 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { sendWatchlistDigest, type DigestItem } from "@/lib/email";
-import { grossUpToIntrinsic } from "@/lib/report/valuation";
+import { grossUpToIntrinsic, type Triple } from "@/lib/report/valuation";
+import { presentAnalysts, meanTriple } from "@/lib/report/consensus";
+import type { SavedAnalysis } from "@/types/analysis";
 import { aggregateOpenLots } from "@/lib/portfolio-math";
 
 // ─── Current price helper ─────────────────────────────────────────────────────
@@ -62,7 +64,7 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
     });
     if (!analysis) continue;
 
-    // Stored fair values (analysis + reviewer) are MoS-adjusted buy targets discounted by the
+    // Stored fair values (analysis + analysts) are MoS-adjusted buy targets discounted by the
     // analysis's own MoS — gross them back up to the intrinsic fair value. The digest then
     // re-applies the *watchlist item's* own MoS to the base to get the buy target.
     const aMos = (analysis.mosPercent ?? 0) / 100;
@@ -72,16 +74,24 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
     const intrinsicBull = gross(analysis.fairValueBull);
     // The digest needs a complete bear/base/bull set; skip incomplete analyses.
     if (intrinsicBear == null || intrinsicBase == null || intrinsicBull == null) continue;
+    const intrinsic: Triple = { bear: intrinsicBear, base: intrinsicBase, bull: intrinsicBull };
 
-    // Reviewer's own independent valuation (from a red-team Analyst Review), if present.
-    const reviewBear = gross(analysis.reviewFairValueBear);
-    const reviewBase = gross(analysis.reviewFairValueBase);
-    const reviewBull = gross(analysis.reviewFairValueBull);
-    const hasReviewer = reviewBear != null && reviewBase != null && reviewBull != null;
-    // Consensus = per-scenario mean of analysis and reviewer intrinsic values.
-    const consensusBear = hasReviewer ? (intrinsicBear + reviewBear!) / 2 : null;
-    const consensusBase = hasReviewer ? (intrinsicBase + reviewBase!) / 2 : null;
-    const consensusBull = hasReviewer ? (intrinsicBull + reviewBull!) / 2 : null;
+    // Independent analyst-panel opinions on the intrinsic scale (the Prisma row is
+    // structurally a SavedAnalysis for the purposes of the pure consensus helpers).
+    const grossTriple = (t: Triple): Triple => ({
+      bear: grossUpToIntrinsic(t.bear, aMos),
+      base: grossUpToIntrinsic(t.base, aMos),
+      bull: grossUpToIntrinsic(t.bull, aMos),
+    });
+    const analysts = presentAnalysts(analysis as unknown as SavedAnalysis).map(({ angle, triple }) => ({
+      angle,
+      ...grossTriple(triple),
+    }));
+    // Consensus = per-scenario mean of the analysis + every analyst — null when none ran.
+    const consensus =
+      analysts.length > 0
+        ? meanTriple([intrinsic, ...analysts.map((a) => ({ bear: a.bear, base: a.base, bull: a.bull }))])
+        : null;
 
     const { price: currentPrice, currency } = await fetchQuote(item.ticker);
     const adjustedBase = intrinsicBase * (1 - item.mosPercent);
@@ -104,12 +114,10 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
       fairValueBear: intrinsicBear,
       fairValueBase: intrinsicBase,
       fairValueBull: intrinsicBull,
-      reviewFairValueBear: reviewBear,
-      reviewFairValueBase: reviewBase,
-      reviewFairValueBull: reviewBull,
-      consensusBear,
-      consensusBase,
-      consensusBull,
+      analysts,
+      consensusBear: consensus?.bear ?? null,
+      consensusBase: consensus?.base ?? null,
+      consensusBull: consensus?.bull ?? null,
       currentPrice,
       mosPercent: item.mosPercent,
       adjustedBase,

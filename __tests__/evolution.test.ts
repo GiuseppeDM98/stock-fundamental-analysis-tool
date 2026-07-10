@@ -21,6 +21,16 @@ function makeAnalysis(overrides: Partial<SavedAnalysis>): SavedAnalysis {
     reviewFairValueBase: null,
     reviewFairValueBear: null,
     reviewValuationMethod: null,
+    optimistCritiqueMd: null,
+    optimistFairValueBull: null,
+    optimistFairValueBase: null,
+    optimistFairValueBear: null,
+    optimistValuationMethod: null,
+    qualityCritiqueMd: null,
+    qualityFairValueBull: null,
+    qualityFairValueBase: null,
+    qualityFairValueBear: null,
+    qualityValuationMethod: null,
     createdAt: "2026-01-01T00:00:00.000Z",
     ...overrides,
   };
@@ -48,28 +58,47 @@ describe("computeEvolution", () => {
     expect(evo!.prevDate).toBe(prev.createdAt);
   });
 
-  it("includes reviewer and consensus only when both analyses carry reviewer values", () => {
-    const prev = makeAnalysis({ fairValueBase: 100, reviewFairValueBase: 90 });
-    const curr = makeAnalysis({ fairValueBase: 120, reviewFairValueBase: 110 });
+  it("includes consensus when both analyses have a full base triple and an analyst", () => {
+    // Consensus = mean of the base analysis + every analyst that has run (here one: skeptic).
+    const prev = makeAnalysis({
+      fairValueBear: 80,
+      fairValueBase: 100,
+      fairValueBull: 120,
+      reviewFairValueBear: 70,
+      reviewFairValueBase: 90,
+      reviewFairValueBull: 110,
+    });
+    const curr = makeAnalysis({
+      fairValueBear: 96,
+      fairValueBase: 120,
+      fairValueBull: 144,
+      reviewFairValueBear: 88,
+      reviewFairValueBase: 110,
+      reviewFairValueBull: 132,
+    });
 
     const evo = computeEvolution(prev, curr);
 
-    expect(evo!.reviewer).toBeDefined();
-    expect(evo!.reviewer!.prev).toBeCloseTo(90);
-    expect(evo!.reviewer!.curr).toBeCloseTo(110);
-    // Consensus = mean of analysis + reviewer per side: prev 95 → curr 115.
+    // Consensus base: prev mean(100, 90) = 95 → curr mean(120, 110) = 115.
+    expect(evo!.consensus).toBeDefined();
     expect(evo!.consensus!.prev).toBeCloseTo(95);
     expect(evo!.consensus!.curr).toBeCloseTo(115);
   });
 
-  it("omits reviewer and consensus when one side lacks reviewer values", () => {
-    const prev = makeAnalysis({ fairValueBase: 100, reviewFairValueBase: null });
-    const curr = makeAnalysis({ fairValueBase: 120, reviewFairValueBase: 110 });
+  it("omits consensus when one side has no analyst run", () => {
+    const prev = makeAnalysis({ fairValueBear: 80, fairValueBase: 100, fairValueBull: 120 });
+    const curr = makeAnalysis({
+      fairValueBear: 96,
+      fairValueBase: 120,
+      fairValueBull: 144,
+      reviewFairValueBear: 88,
+      reviewFairValueBase: 110,
+      reviewFairValueBull: 132,
+    });
 
     const evo = computeEvolution(prev, curr);
 
     expect(evo!.base).toBeDefined();
-    expect(evo!.reviewer).toBeUndefined();
     expect(evo!.consensus).toBeUndefined();
   });
 });

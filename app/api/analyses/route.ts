@@ -5,6 +5,9 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 
+// A new analysis is saved with only its own (base) valuation. Analyst-panel opinions
+// (skeptic/optimist/quality) are run afterward on the saved-analysis detail page and
+// attached via PATCH /api/analyses/:id — never at save time.
 const saveSchema = z.object({
   ticker: z.string().min(1).max(10),
   companyName: z.string().min(1),
@@ -16,13 +19,6 @@ const saveSchema = z.object({
   fairValueBase: z.number().positive().optional(),
   fairValueBear: z.number().positive().optional(),
   valuationMethod: z.string().optional(),
-  // Optional Analyst Review critique, attached when run before saving.
-  reviewMd: z.string().max(60000).optional(),
-  // The reviewer's own valuation (MoS-adjusted buy targets), when it emitted JSON.
-  reviewFairValueBull: z.number().positive().optional(),
-  reviewFairValueBase: z.number().positive().optional(),
-  reviewFairValueBear: z.number().positive().optional(),
-  reviewValuationMethod: z.string().optional(),
 });
 
 export async function GET() {
@@ -44,11 +40,24 @@ export async function GET() {
       fairValueBase: true,
       fairValueBear: true,
       valuationMethod: true,
+      // Skeptic analyst (legacy review* columns).
       reviewMd: true,
       reviewFairValueBull: true,
       reviewFairValueBase: true,
       reviewFairValueBear: true,
       reviewValuationMethod: true,
+      // Optimist analyst.
+      optimistCritiqueMd: true,
+      optimistFairValueBull: true,
+      optimistFairValueBase: true,
+      optimistFairValueBear: true,
+      optimistValuationMethod: true,
+      // Quality analyst.
+      qualityCritiqueMd: true,
+      qualityFairValueBull: true,
+      qualityFairValueBase: true,
+      qualityFairValueBear: true,
+      qualityValuationMethod: true,
     },
   });
 
@@ -81,11 +90,6 @@ export async function POST(request: Request) {
       fairValueBase: body.fairValueBase,
       fairValueBear: body.fairValueBear,
       valuationMethod: body.valuationMethod,
-      reviewMd: body.reviewMd,
-      reviewFairValueBull: body.reviewFairValueBull,
-      reviewFairValueBase: body.reviewFairValueBase,
-      reviewFairValueBear: body.reviewFairValueBear,
-      reviewValuationMethod: body.reviewValuationMethod,
     },
   });
 

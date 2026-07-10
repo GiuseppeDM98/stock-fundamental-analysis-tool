@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import type { AnalystAngle } from "@/types/analysis";
 
 // Lazily initialized — avoids throwing during build when the env var is absent.
 let _resend: Resend | null = null;
@@ -7,10 +8,17 @@ function getResend(): Resend {
   return _resend;
 }
 
+// Italian display names for the analyst lenses (the digest is Italian-only).
+const ANALYST_LABEL_IT: Record<AnalystAngle, string> = {
+  skeptic: "Scettico",
+  optimist: "Rialzista",
+  quality: "Qualità",
+};
+
 // One watched ticker, priced against the user's latest saved Deep Value analysis. All
 // fair-value fields are on the intrinsic scale; `adjustedBase` is the base buy target
-// (intrinsic base discounted by the watchlist item's own MoS). Reviewer + consensus fields
-// are null when the analysis has no red-team Analyst Review.
+// (intrinsic base discounted by the watchlist item's own MoS). The analyst opinions +
+// consensus are empty/null when no analyst-panel pass has run on the analysis.
 export interface DigestItem {
   ticker: string;
   companyName: string;
@@ -20,11 +28,10 @@ export interface DigestItem {
   fairValueBear: number;
   fairValueBase: number;
   fairValueBull: number;
-  // Reviewer (red-team) intrinsic fair values — null when no review
-  reviewFairValueBear: number | null;
-  reviewFairValueBase: number | null;
-  reviewFairValueBull: number | null;
-  // Consensus = per-scenario mean of analysis + reviewer — null when no review
+  // Independent analyst-panel opinions on the intrinsic scale — one entry per lens that
+  // has run (empty when none).
+  analysts: { angle: AnalystAngle; bear: number; base: number; bull: number }[];
+  // Consensus = per-scenario mean of the analysis + every analyst — null when none ran
   consensusBear: number | null;
   consensusBase: number | null;
   consensusBull: number | null;
@@ -93,7 +100,7 @@ function priceVsTargetCell(item: DigestItem): string {
 }
 
 // One row of the per-ticker valuation table (Bear / Base / Bull), used for the analysis,
-// reviewer and consensus lines. `emphasize` styles the consensus row.
+// each analyst and the consensus line. `emphasize` styles the consensus row.
 function fvRow(label: string, bear: number, base: number, bull: number, currency: string, emphasize = false): string {
   const labelColor = emphasize ? C.accent : C.muted;
   const valColor = emphasize ? C.text : "#94a3b8";
@@ -110,10 +117,6 @@ function fvRow(label: string, bear: number, base: number, bull: number, currency
 // A single ticker card: header + price/target line + optional under-target note + a
 // valuation table (analysis, reviewer, consensus when present) + the buy target + footer.
 function buildCard(item: DigestItem): string {
-  const hasReviewer =
-    item.reviewFairValueBear !== null &&
-    item.reviewFairValueBase !== null &&
-    item.reviewFairValueBull !== null;
   const hasConsensus =
     item.consensusBear !== null && item.consensusBase !== null && item.consensusBull !== null;
 
@@ -143,9 +146,9 @@ function buildCard(item: DigestItem): string {
          </p>`
       : "";
 
-  const reviewerRow = hasReviewer
-    ? fvRow("Revisore", item.reviewFairValueBear!, item.reviewFairValueBase!, item.reviewFairValueBull!, item.currency)
-    : "";
+  const analystRows = item.analysts
+    .map((a) => fvRow(ANALYST_LABEL_IT[a.angle], a.bear, a.base, a.bull, item.currency))
+    .join("");
   const consensusRow = hasConsensus
     ? fvRow("Consenso", item.consensusBear!, item.consensusBase!, item.consensusBull!, item.currency, true)
     : "";
@@ -184,7 +187,7 @@ function buildCard(item: DigestItem): string {
         </thead>
         <tbody>
           ${fvRow("Analisi", item.fairValueBear, item.fairValueBase, item.fairValueBull, item.currency)}
-          ${reviewerRow}
+          ${analystRows}
           ${consensusRow}
         </tbody>
       </table>

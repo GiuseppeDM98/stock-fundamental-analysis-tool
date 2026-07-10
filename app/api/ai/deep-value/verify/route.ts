@@ -1,25 +1,31 @@
-// POST /api/ai/deep-value/verify — independent "Analyst Review" of a completed report.
-// A fresh-context Opus pass that red-teams the Deep Value report the client just
-// generated: it stress-tests numbers/assumptions and spot-checks figures via web
-// search. It streams a leading JSON block with the reviewer's OWN bull/base/bear
-// valuation (same MoS-adjusted unit as the base analysis, so the two can be averaged
-// into a consensus) followed by the plain-Markdown critique.
+// POST /api/ai/deep-value/verify — one independent analyst-panel pass over a completed
+// report. A fresh-context Opus pass that reviews the saved Deep Value report through one
+// LENS (skeptic / optimist / quality — see `angle`): it stress-tests numbers/assumptions
+// and spot-checks figures via web search. It streams a leading JSON block with the
+// analyst's OWN bull/base/bear valuation (same MoS-adjusted unit as the base analysis, so
+// the base + every analyst can be averaged into a consensus) followed by the plain-Markdown
+// critique. The lens only swaps persona/focus in the prompt — path and streaming machinery
+// are identical, so all three analysts reuse this one route.
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { auth } from "@/lib/auth";
 import { getQuote } from "@/lib/yahoo-client";
+import { ANALYST_ANGLES } from "@/types/analysis";
 import {
-  buildVerificationSystemPrompt,
-  buildVerificationUserPrompt,
+  buildAnalystSystemPrompt,
+  buildAnalystUserPrompt,
 } from "@/lib/ai/deep-value-prompts";
 
 const requestSchema = z.object({
   ticker: z.string().min(1).max(20),
   reportMd: z.string().min(1).max(60000),
   language: z.string().min(1).max(30).default("English"),
-  // Applied to the reviewer's own fair values so its JSON buy targets match the unit
-  // of the base analysis (MoS-adjusted) and the two can be averaged into a consensus.
+  // Which analyst lens is reviewing. Defaults to "skeptic" — the original red-team pass —
+  // so older clients that omit it keep their existing behavior.
+  angle: z.enum(ANALYST_ANGLES as [string, ...string[]]).default("skeptic"),
+  // Applied to the analyst's own fair values so its JSON buy targets match the unit
+  // of the base analysis (MoS-adjusted) and they can be averaged into a consensus.
   mosPercent: z.number().min(0).max(80).default(0),
 });
 
@@ -61,8 +67,9 @@ export async function POST(request: Request) {
       // Non-fatal — omit the authoritative-price clause and let the review run.
     }
 
-    const systemPrompt = buildVerificationSystemPrompt(body.language, currentDate, body.mosPercent);
-    const userPrompt = buildVerificationUserPrompt(body.ticker, body.reportMd, body.language, currentDate, currentPrice, currency, body.mosPercent);
+    const angle = body.angle as (typeof ANALYST_ANGLES)[number];
+    const systemPrompt = buildAnalystSystemPrompt(angle, body.language, currentDate, body.mosPercent);
+    const userPrompt = buildAnalystUserPrompt(angle, body.ticker, body.reportMd, body.language, currentDate, currentPrice, currency, body.mosPercent);
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 

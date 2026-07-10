@@ -3,6 +3,8 @@
 // and autonomously picks the valuation method — no Yahoo Finance dependency.
 // Business logic lives here (not in the API route) per project conventions.
 
+import type { AnalystAngle } from "@/types/analysis";
+
 // "Analytical rigor" checklist injected into the Deep Value system prompt
 // (between the scenario step and the output step). Each item hardens against a
 // concrete failure mode surfaced by the Analyst Review red-team pass (e.g. a stale
@@ -177,44 +179,108 @@ export function buildDeepValueUserPrompt(
 Use web search to find the financial data, choose the appropriate valuation method, compute the fair values for bull/base/bear scenarios, and produce the report in ${language} following the required format.`;
 }
 
-// ─── Analyst Review prompts (red-team / fresh-context verifier) ──────────────
-// A second, independent Opus pass that critiques a completed Deep Value report.
-// It does NOT rewrite the report — it stress-tests the numbers and assumptions,
-// so the user gets a "second opinion" before acting on a money decision.
-// As part of the red-team it now ALSO commits to its OWN independent bull/base/bear
-// valuation, emitted as a leading JSON block (same schema/unit as Deep Value —
-// MoS-adjusted buy targets), so the app can average the two into a "consensus" and
-// surface the disagreement. The JSON is stripped before the critique is rendered
-// via <ReportBody>.
+// ─── Analyst panel prompts (independent second opinions) ─────────────────────
+// After a Deep Value report is SAVED, the user can run a panel of up to three
+// independent Opus passes, each reading the same finished report through a distinct
+// LENS and committing to its OWN bull/base/bear valuation (leading JSON block, same
+// MoS-adjusted unit as the report). The app averages the base analysis with every
+// analyst run into a "consensus" and surfaces the disagreement spatially. None of
+// these passes rewrites the report — they stress-test it and give a second opinion
+// before the user acts on a money decision. The JSON is stripped before the critique
+// is rendered via <ReportBody>.
+//
+// The three angles share ALL machinery — the mandatory JSON block, the authoritative-
+// price guard, the MoS convention, the output rules — and differ ONLY in persona and
+// focus areas. Rule of Three: one parameterized builder + an angle registry, rather
+// than three near-duplicate prompts to keep in sync.
+//   - skeptic: the original red-team pass — stress-tests the numbers for downside.
+//   - optimist: a constructive bull-case analyst — surfaces upside the base case
+//     under-weights, still grounded and web-verified (not a pump).
+//   - quality: a long-term owner — judges moat, returns on capital and durability.
+
+type AngleConfig = {
+  // One-line persona that opens the system prompt (follows "You are ").
+  persona: string;
+  // Numbered focus areas that steer the critique for this lens.
+  focus: string[];
+  // How the "your own valuation" section is framed for this lens.
+  valuationFraming: string;
+};
+
+const ANGLE_CONFIG: Record<AnalystAngle, AngleConfig> = {
+  skeptic: {
+    persona:
+      "a skeptical senior investment analyst performing an independent second review of a colleague's valuation report. Your job is to **red-team** it, not to rewrite it.",
+    focus: [
+      "**Internal consistency** — do the numbers add up? Does the fair value follow from the stated assumptions and method?",
+      "**Assumption defensibility** — are growth, margin, discount-rate and terminal assumptions realistic vs. history and peers, or optimistic/pessimistic? Flag anything that materially swings the fair value.",
+      "**Data accuracy** — do any figures conflict with what web search returns? Call out stale, wrong, or unverifiable numbers.",
+      "**The single biggest risk to the thesis** — what would most likely make this valuation wrong?",
+      "**Verdict** — does the base-case fair value hold up, or should it be revised up/down? State it plainly.",
+    ],
+    valuationFraming:
+      "Beyond critiquing, commit to your OWN independent bull/base/bear fair value for the stock, based on the figures you consider defensible after your review. This is your second opinion in numbers — do NOT simply copy the report's values; where you disagree, your numbers should reflect that disagreement.",
+  },
+  optimist: {
+    persona:
+      "a constructive bull-case investment analyst delivering an independent second opinion on a colleague's valuation report. Your job is to find the upside the base case under-weights — while staying rigorously grounded in verifiable facts, never inflating a thesis you cannot support.",
+    focus: [
+      "**Underappreciated upside** — what growth, operating leverage, optionality or catalyst does the report under-weight or omit? Quantify its impact on fair value.",
+      "**Conservatism check** — are the report's growth, margin or terminal assumptions too cautious vs. history, current guidance and peers? Flag where a defensible less-conservative input materially lifts value.",
+      "**Re-rating potential** — is there a credible path for the multiple to expand (a catalyst, de-risking, index inclusion, improving returns)? Name the specific trigger; if none is visible, say so honestly.",
+      "**Data accuracy** — web-verify the load-bearing figures; never build upside on stale or wrong numbers.",
+      "**Verdict** — is the base-case fair value too low? By how much, and driven by which lever? State it plainly.",
+    ],
+    valuationFraming:
+      "Commit to your OWN independent bull/base/bear fair value reflecting the upside you consider defensible after your review. Ground every optimistic input in a verifiable fact or a clearly-labeled assumption — an upside case is still a disciplined case, not a pitch. Where you disagree with the report, your numbers should reflect it.",
+  },
+  quality: {
+    persona:
+      "a long-term, quality-focused investor delivering an independent second opinion on a colleague's valuation report. You judge the business as an owner would: the durability of returns over a decade, not the next quarter.",
+    focus: [
+      "**Moat & durability** — how wide and durable is the competitive advantage? Does the report's terminal/long-run assumption match the actual defensibility of returns?",
+      "**Returns on capital** — is ROIC above the cost of capital, and is there reinvestment runway to compound it? Flag if the valuation credits growth that dilutes or destroys returns.",
+      "**Balance-sheet resilience** — can the business fund itself and survive a downturn (net debt, interest coverage, cash conversion)? Does the discount rate reflect the real financial risk?",
+      "**Management & capital allocation** — is capital deployed into value-accretive uses (reinvestment, buybacks below value, disciplined M&A) rather than value-destructive ones?",
+      "**Verdict** — for a long-term owner, is the base-case fair value defensible on quality grounds? Revise it up or down and say why.",
+    ],
+    valuationFraming:
+      "Commit to your OWN independent bull/base/bear fair value that a long-term owner would underwrite — anchored to durable, normalized returns rather than peak-cycle figures. Where the report credits fragile or non-recurring earnings, your numbers should be more conservative.",
+  },
+};
 
 /**
- * System prompt for the Analyst Review pass.
+ * System prompt for one analyst-panel pass, parameterized by lens.
  *
- * @param language - Report language (e.g. "English", "Italiano")
+ * @param angle - Which lens (skeptic/optimist/quality) — selects persona + focus.
+ * @param language - Critique language (e.g. "English", "Italiano")
  * @param currentDate - Today's date string injected from the server
- * @param mosPercent - Margin of safety to apply to the reviewer's own fair values,
+ * @param mosPercent - Margin of safety to apply to the analyst's own fair values,
  *   so its JSON buy targets are directly comparable to the base analysis's.
  */
-export function buildVerificationSystemPrompt(language = "English", currentDate = "", mosPercent = 0): string {
+export function buildAnalystSystemPrompt(
+  angle: AnalystAngle = "skeptic",
+  language = "English",
+  currentDate = "",
+  mosPercent = 0,
+): string {
+  const cfg = ANGLE_CONFIG[angle];
   const dateClause = currentDate
     ? `\n**Today's date: ${currentDate}.** Do NOT assume the current year is 2025; verify recency via web search.\n`
     : "";
+  const focusList = cfg.focus.map((f, i) => `${i + 1}. ${f}`).join("\n");
 
-  return `You are a skeptical senior investment analyst performing an independent second review of a colleague's valuation report. Your job is to **red-team** it, not to rewrite it.
+  return `You are ${cfg.persona}
 ${dateClause}
 Read the report provided in the user message and critically stress-test it. Use web search to spot-check the most load-bearing figures (revenue, margins, FCF/EBITDA, net debt, shares, growth rate, discount rate, terminal assumptions) against primary sources.
 
 **Authoritative current price.** When the user message provides a current price, it comes from a live market-data feed and is authoritative. Do NOT flag it as wrong, "overstated", or "overvalued" on the basis of web-searched quotes — those are frequently delayed, stale, or from an intraday session and often disagree with the live price. Treat the provided price as ground truth for all "is it above/below fair value" reasoning; if a web quote differs, defer to the provided price.
 
 Focus your review on:
-1. **Internal consistency** — do the numbers add up? Does the fair value follow from the stated assumptions and method?
-2. **Assumption defensibility** — are growth, margin, discount-rate and terminal assumptions realistic vs. history and peers, or optimistic/pessimistic? Flag anything that materially swings the fair value.
-3. **Data accuracy** — do any figures conflict with what web search returns? Call out stale, wrong, or unverifiable numbers.
-4. **The single biggest risk to the thesis** — what would most likely make this valuation wrong?
-5. **Verdict** — does the base-case fair value hold up, or should it be revised up/down? State it plainly.
+${focusList}
 
 ## Your own independent valuation (MANDATORY)
-Beyond critiquing, commit to your OWN independent bull/base/bear fair value for the stock, based on the figures you consider defensible after your review. This is your second opinion in numbers — do NOT simply copy the report's values; where you disagree, your numbers should reflect that disagreement.
+${cfg.valuationFraming}
 
 Emit it as a JSON block that MUST be the very FIRST thing you output, before any critique text:
 
@@ -242,13 +308,16 @@ Rules:
 }
 
 /**
- * User message for the Analyst Review pass — carries the completed report to critique.
+ * User message for one analyst-panel pass — carries the completed report to critique.
  *
+ * @param angle - Which lens is reviewing (kept for symmetry; the lens itself is set
+ *   by the system prompt).
  * @param currentPrice - Authoritative live price from the app's market-data feed.
- *   When provided, it is stated as ground truth so the reviewer doesn't "correct" it
- *   with stale web-searched quotes (see buildVerificationSystemPrompt).
+ *   When provided, it is stated as ground truth so the analyst doesn't "correct" it
+ *   with stale web-searched quotes (see buildAnalystSystemPrompt).
  */
-export function buildVerificationUserPrompt(
+export function buildAnalystUserPrompt(
+  angle: AnalystAngle,
   ticker: string,
   reportMd: string,
   language: string,
@@ -257,6 +326,7 @@ export function buildVerificationUserPrompt(
   currency = "",
   mosPercent = 0,
 ): string {
+  void angle; // lens is applied in the system prompt; kept in the signature for symmetry.
   const dateClause = currentDate ? ` Today's date: ${currentDate}.` : "";
   const priceClause =
     currentPrice != null
@@ -265,7 +335,7 @@ export function buildVerificationUserPrompt(
   const mosClause = mosPercent > 0
     ? ` Apply a margin of safety of ${mosPercent}% to your own fair values in the JSON block (buy target = intrinsic value × ${(1 - mosPercent / 100).toFixed(2)}).`
     : "";
-  return `Independently review the following Deep Value report on ${ticker}.${dateClause}${priceClause}${mosClause} Red-team its numbers and assumptions, spot-check key figures via web search, commit to your own bull/base/bear valuation in the JSON block, and give your verdict in ${language} following the required format.
+  return `Independently review the following Deep Value report on ${ticker}.${dateClause}${priceClause}${mosClause} Scrutinize its numbers and assumptions through your lens, spot-check key figures via web search, commit to your own bull/base/bear valuation in the JSON block, and give your verdict in ${language} following the required format.
 
 --- REPORT UNDER REVIEW ---
 ${reportMd}

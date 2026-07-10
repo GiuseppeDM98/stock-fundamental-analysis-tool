@@ -1,6 +1,6 @@
 // Client-side fetch helpers for saved analyses.
 // Thin wrappers over the /api/analyses routes — keeps components clean.
-import type { SavedAnalysis, SaveAnalysisRequest, ReviewFairValues } from "@/types/analysis";
+import type { SavedAnalysis, SaveAnalysisRequest, AnalystOpinionUpdate } from "@/types/analysis";
 
 export async function fetchAnalyses(): Promise<SavedAnalysis[]> {
   const res = await fetch("/api/analyses");
@@ -22,22 +22,22 @@ export async function saveAnalysis(data: SaveAnalysisRequest): Promise<SavedAnal
 }
 
 /**
- * Attaches (or replaces) the Analyst Review on an existing saved analysis: its Markdown
- * critique and, when the review emitted a JSON block, the reviewer's own fair values.
+ * Attaches (or replaces) one analyst-panel opinion on an existing saved analysis: its
+ * Markdown critique and, when the pass emitted a JSON block, that analyst's own fair
+ * values. The `angle` in the payload selects which analyst's columns the route writes.
  */
-export async function updateAnalysisReview(
+export async function updateAnalystOpinion(
   id: string,
-  reviewMd: string,
-  reviewFvs?: ReviewFairValues,
+  opinion: AnalystOpinionUpdate,
 ): Promise<SavedAnalysis> {
   const res = await fetch(`/api/analyses/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ reviewMd, ...reviewFvs }),
+    body: JSON.stringify(opinion),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? "Failed to save review");
+    throw new Error(body.error ?? "Failed to save analyst opinion");
   }
   return res.json();
 }

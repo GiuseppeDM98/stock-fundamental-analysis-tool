@@ -7,8 +7,20 @@
 // up / projected to the selected level) — this module is presentation only.
 
 import { Fragment, type ReactNode } from "react";
+import type { Triple } from "@/lib/report/valuation";
 
-export type Triple = { bear: number; base: number; bull: number };
+// Re-exported for existing consumers that import Triple from this module.
+export type { Triple };
+
+// Tick color per analyst lens, keyed by angle. Static strings (not `bg-${key}`) so Tailwind's
+// purge step keeps them in the production bundle. Skeptic keeps the original slate tick; the
+// two newer lenses get distinct hues that don't collide with the emerald/amber zones, the
+// white price dot, or the sky consensus diamond.
+const ANALYST_TICK_BG: Record<string, string> = {
+  skeptic: "bg-slate-400",
+  optimist: "bg-fuchsia-400",
+  quality: "bg-indigo-300",
+};
 
 // Returns a value in [0, 1] representing where `value` falls in [min, max], clamped.
 export function axisFraction(value: number, min: number, max: number): number {
@@ -38,10 +50,10 @@ function formatPrice(price: number, currency?: string): string {
 /**
  * The card's hero: one bear→bull axis (intrinsic scale). Three zones encode the decision —
  * emerald = buy (≤ buy target), amber = watch (buy target→FV), neutral = rich (≥ FV) — so the
- * price dot's zone matches the verdict badge. When a review exists a slate tick marks the
- * reviewer's FV and an accent diamond marks the consensus (midpoint of the two), making the
- * red-team disagreement legible spatially. `compact` renders the thin collapsed variant
- * (zones + price only, no ticks/labels).
+ * price dot's zone matches the verdict badge. When analysts have run, one colored tick per
+ * lens marks its FV and a sky diamond marks the consensus (mean of the base + every analyst),
+ * making the panel's disagreement legible spatially. `compact` renders the thin collapsed
+ * variant (zones + price only, no ticks/labels).
  */
 export function ValuationRuler({
   min,
@@ -66,8 +78,8 @@ export function ValuationRuler({
   markers?: {
     analysisLabel: string;
     analysis: number;
-    reviewerLabel: string;
-    reviewer?: number;
+    // One entry per analyst lens that has a value, keyed by angle (drives the tick color).
+    analysts?: { key: string; label: string; value: number }[];
     consensusLabel: string;
     consensus?: number;
   };
@@ -113,15 +125,17 @@ export function ValuationRuler({
   // and the whole set updates when the level toggle flips FV ↔ buy target.
   const priceGlyph = <span className="inline-block h-2 w-2 rounded-full border border-slate-900 bg-white" />;
   const analysisGlyph = <span className="inline-block h-3 w-0.5 bg-slate-100" />;
-  const reviewerGlyph = <span className="inline-block h-3 w-0.5 bg-slate-400" />;
   const consensusGlyph = <span className="inline-block h-2 w-2 rotate-45 bg-sky-400" />;
+  const analystGlyph = (key: string) => (
+    <span className={`inline-block h-3 w-0.5 ${ANALYST_TICK_BG[key] ?? "bg-slate-400"}`} />
+  );
 
   const legend: { key: string; glyph: ReactNode; label: string; value: number }[] = [];
   if (price != null) legend.push({ key: "p", glyph: priceGlyph, label: priceLabel, value: price });
   if (markers) {
     legend.push({ key: "a", glyph: analysisGlyph, label: markers.analysisLabel, value: markers.analysis });
-    if (markers.reviewer != null)
-      legend.push({ key: "r", glyph: reviewerGlyph, label: markers.reviewerLabel, value: markers.reviewer });
+    for (const an of markers.analysts ?? [])
+      legend.push({ key: `an-${an.key}`, glyph: analystGlyph(an.key), label: an.label, value: an.value });
     if (markers.consensus != null)
       legend.push({ key: "c", glyph: consensusGlyph, label: markers.consensusLabel, value: markers.consensus });
   }
@@ -140,12 +154,13 @@ export function ValuationRuler({
               className="absolute top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 bg-slate-100"
               style={{ left: `${pct(markers.analysis)}%` }}
             />
-            {markers.reviewer != null && (
+            {(markers.analysts ?? []).map((an) => (
               <div
-                className="absolute top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 bg-slate-400"
-                style={{ left: `${pct(markers.reviewer)}%` }}
+                key={an.key}
+                className={`absolute top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 ${ANALYST_TICK_BG[an.key] ?? "bg-slate-400"}`}
+                style={{ left: `${pct(an.value)}%` }}
               />
-            )}
+            ))}
             {markers.consensus != null && (
               <div
                 className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-slate-900 bg-sky-400"
@@ -187,15 +202,15 @@ export function ValuationRuler({
 // ─── Comparison table ────────────────────────────────────────────────────────
 
 /**
- * Compact figures behind the ruler: rows Bull/Base/Bear, columns Analysis / Reviewer /
- * Consensus. Reviewer + Consensus appear only when a review exists. The `level` (intrinsic
- * value vs MoS-adjusted buy target) is controlled by the parent so the ruler and the table
- * stay in sync. Inputs are the buy-target triples; intrinsic is reconstructed as
+ * Compact figures behind the ruler: rows Bull/Base/Bear, columns Analysis / <each analyst> /
+ * Consensus. Analyst + Consensus columns appear only when those opinions exist. The `level`
+ * (intrinsic value vs MoS-adjusted buy target) is controlled by the parent so the ruler and
+ * the table stay in sync. Inputs are the buy-target triples; intrinsic is reconstructed as
  * target / (1 - mos).
  */
 export function ComparisonTable({
   analysis,
-  reviewer,
+  analysts,
   consensus,
   mos,
   level,
@@ -203,13 +218,13 @@ export function ComparisonTable({
   currency,
 }: {
   analysis: Triple;
-  reviewer?: Triple;
+  // One column per analyst lens that has run, keyed by angle.
+  analysts?: { key: string; label: string; triple: Triple }[];
   consensus?: Triple;
   mos: number;
   level: "intrinsic" | "buyTarget";
   labels: {
     analysis: string;
-    reviewer: string;
     consensus: string;
     bear: string;
     base: string;
@@ -224,7 +239,7 @@ export function ComparisonTable({
 
   const cols: { key: string; label: string; triple: Triple; emphasize?: boolean }[] = [
     { key: "a", label: labels.analysis, triple: project(analysis) },
-    ...(reviewer ? [{ key: "r", label: labels.reviewer, triple: project(reviewer) }] : []),
+    ...(analysts ?? []).map((an) => ({ key: `an-${an.key}`, label: an.label, triple: project(an.triple) })),
     ...(consensus ? [{ key: "c", label: labels.consensus, triple: project(consensus), emphasize: true }] : []),
   ];
 

@@ -7,12 +7,15 @@
 // Advisor; the valuation stays blind.
 //
 // All figures are compared on the INTRINSIC scale (grossed up from the stored
-// MoS-adjusted buy targets via grossUpToIntrinsic), on the BASE scenario, across the
-// three sources the app already tracks: the analysis, the red-team reviewer, and
-// their per-scenario consensus (mean).
+// MoS-adjusted buy targets via grossUpToIntrinsic), on the BASE scenario, across two
+// sources: the analysis's own value and the panel consensus (mean of the base analysis
+// + every analyst that has run). A per-analyst breakdown is intentionally omitted — with
+// three lenses a single "reviewer" row is ambiguous, and the consensus already captures
+// how the aggregate thesis moved.
 
 import type { SavedAnalysis } from "@/types/analysis";
 import { grossUpToIntrinsic } from "@/lib/report/valuation";
+import { consensusIntrinsicBase } from "@/lib/report/consensus";
 
 /** One source's base-scenario intrinsic value at two points in time. */
 export type SourceDelta = { prev: number; curr: number; pctDelta: number };
@@ -21,28 +24,13 @@ export type SourceDelta = { prev: number; curr: number; pctDelta: number };
 export type Evolution = {
   prevDate: string; // ISO createdAt of the previous analysis
   base: SourceDelta; // the analysis's own base fair value — always present
-  reviewer?: SourceDelta; // only when BOTH analyses carry a reviewer base fair value
-  consensus?: SourceDelta; // only when BOTH analyses have analysis + reviewer base
+  consensus?: SourceDelta; // only when BOTH analyses have a base + ≥1 analyst run
 };
 
 /** Intrinsic base fair value of an analysis, or null when not stored. */
 function intrinsicBase(a: SavedAnalysis): number | null {
   if (a.fairValueBase == null) return null;
   return grossUpToIntrinsic(a.fairValueBase, (a.mosPercent ?? 0) / 100);
-}
-
-/** Intrinsic reviewer base fair value of an analysis, or null when no review. */
-function intrinsicReviewerBase(a: SavedAnalysis): number | null {
-  if (a.reviewFairValueBase == null) return null;
-  return grossUpToIntrinsic(a.reviewFairValueBase, (a.mosPercent ?? 0) / 100);
-}
-
-/** Consensus (analysis+reviewer mean) base intrinsic value, or null when incomplete. */
-function intrinsicConsensusBase(a: SavedAnalysis): number | null {
-  const analysis = intrinsicBase(a);
-  const reviewer = intrinsicReviewerBase(a);
-  if (analysis == null || reviewer == null) return null;
-  return (analysis + reviewer) / 2;
 }
 
 /** Builds a SourceDelta, or null if either endpoint is missing or prev is zero. */
@@ -66,7 +54,6 @@ export function computeEvolution(prev: SavedAnalysis, curr: SavedAnalysis): Evol
   return {
     prevDate: prev.createdAt,
     base,
-    reviewer: delta(intrinsicReviewerBase(prev), intrinsicReviewerBase(curr)) ?? undefined,
-    consensus: delta(intrinsicConsensusBase(prev), intrinsicConsensusBase(curr)) ?? undefined,
+    consensus: delta(consensusIntrinsicBase(prev), consensusIntrinsicBase(curr)) ?? undefined,
   };
 }

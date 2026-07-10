@@ -10,12 +10,13 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { fetchAnalyses, deleteAnalysis } from "@/lib/analyses";
 import { fetchPositions } from "@/lib/portfolio";
-import type { SavedAnalysis } from "@/types/analysis";
+import type { SavedAnalysis, AnalystAngle } from "@/types/analysis";
 import type { Position } from "@/types/portfolio";
 import { useLanguage } from "@/context/language-context";
 import { ValuationRuler, ComparisonTable } from "@/components/report/valuation-ruler";
 import { getVerdict, VERDICT_BADGE, VERDICT_TEXT, type Verdict } from "@/lib/report/verdict";
 import { grossUpToIntrinsic } from "@/lib/report/valuation";
+import { presentAnalysts, consensusTriple } from "@/lib/report/consensus";
 import { computeEvolution, type Evolution, type SourceDelta } from "@/lib/report/evolution";
 import { EarningsBadge } from "@/components/earnings-badge";
 import { isAnalysisStalePreEarnings, isFutureEarnings, formatEarningsDate } from "@/lib/earnings";
@@ -208,11 +209,10 @@ function EvolutionDiff({
 }: {
   evolution: Evolution;
   title: string;
-  labels: { analysis: string; reviewer: string; consensus: string };
+  labels: { analysis: string; consensus: string };
 }) {
   const rows: { label: string; delta: SourceDelta }[] = [
     { label: labels.analysis, delta: evolution.base },
-    ...(evolution.reviewer ? [{ label: labels.reviewer, delta: evolution.reviewer }] : []),
     ...(evolution.consensus ? [{ label: labels.consensus, delta: evolution.consensus }] : []),
   ];
 
@@ -264,6 +264,9 @@ function TickerGroup({
 }) {
   const router = useRouter();
   const { t } = useLanguage();
+  // Display name for each analyst lens (closes over t, so defined in the component body).
+  const analystLabel = (angle: AnalystAngle) =>
+    angle === "skeptic" ? t("analystSkeptic") : angle === "optimist" ? t("analystOptimist") : t("analystQuality");
   const [expanded, setExpanded] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   // Shared level for the ruler + table: fair value (intrinsic) vs MoS-adjusted buy target.
@@ -288,11 +291,9 @@ function TickerGroup({
 
   const hasFV =
     latest.fairValueBear != null && latest.fairValueBase != null && latest.fairValueBull != null;
-  const hasReviewerFv =
-    hasFV &&
-    latest.reviewFairValueBear != null &&
-    latest.reviewFairValueBase != null &&
-    latest.reviewFairValueBull != null;
+  // Analyst-panel opinions present on the latest save, and their consensus with the base.
+  const presentAn = presentAnalysts(latest);
+  const consensusT = consensusTriple(latest);
   const hasSnapshot = latest.priceAtAnalysis != null && currentPrice != null;
 
   // Stored fairValues are MoS-adjusted buy targets; intrinsic = target / (1 - mos).
@@ -328,12 +329,13 @@ function TickerGroup({
     ? {
         analysisLabel: level === "intrinsic" ? t("fvShort") : t("buyTargetBarLabel"),
         analysis: project(latest.fairValueBase!),
-        reviewerLabel: t("reviewerLabel"),
-        reviewer: hasReviewerFv ? project(latest.reviewFairValueBase!) : undefined,
+        analysts: presentAn.map(({ angle, triple }) => ({
+          key: angle,
+          label: analystLabel(angle),
+          value: project(triple.base),
+        })),
         consensusLabel: t("consensusLabel"),
-        consensus: hasReviewerFv
-          ? (project(latest.fairValueBase!) + project(latest.reviewFairValueBase!)) / 2
-          : undefined,
+        consensus: consensusT ? project(consensusT.base) : undefined,
       }
     : null;
 
@@ -354,7 +356,7 @@ function TickerGroup({
                 {latest.valuationMethod}
               </span>
             )}
-            {latest.reviewMd && (
+            {(latest.reviewMd || latest.optimistCritiqueMd || latest.qualityCritiqueMd) && (
               <span className="shrink-0 rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-300">
                 ✓ {t("analystReviewBadge")}
               </span>
@@ -472,25 +474,16 @@ function TickerGroup({
 
               <ComparisonTable
                 analysis={{ bear: latest.fairValueBear!, base: latest.fairValueBase!, bull: latest.fairValueBull! }}
-                reviewer={
-                  hasReviewerFv
-                    ? { bear: latest.reviewFairValueBear!, base: latest.reviewFairValueBase!, bull: latest.reviewFairValueBull! }
-                    : undefined
-                }
-                consensus={
-                  hasReviewerFv
-                    ? {
-                        bear: (latest.fairValueBear! + latest.reviewFairValueBear!) / 2,
-                        base: (latest.fairValueBase! + latest.reviewFairValueBase!) / 2,
-                        bull: (latest.fairValueBull! + latest.reviewFairValueBull!) / 2,
-                      }
-                    : undefined
-                }
+                analysts={presentAn.map(({ angle, triple }) => ({
+                  key: angle,
+                  label: analystLabel(angle),
+                  triple,
+                }))}
+                consensus={consensusT ?? undefined}
                 mos={mos}
                 level={level}
                 labels={{
                   analysis: t("analysisLabel"),
-                  reviewer: t("reviewerLabel"),
                   consensus: t("consensusLabel"),
                   bear: t("bearLabel"),
                   base: t("baseLabel"),
@@ -509,7 +502,6 @@ function TickerGroup({
               title={t("evolutionTitle")}
               labels={{
                 analysis: t("analysisLabel"),
-                reviewer: t("reviewerLabel"),
                 consensus: t("consensusLabel"),
               }}
             />
