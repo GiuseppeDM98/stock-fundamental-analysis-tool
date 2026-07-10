@@ -4,18 +4,26 @@
 // No Yahoo Finance fundamentals call — only a quote for the current price.
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import Anthropic from "@anthropic-ai/sdk";
 import { auth } from "@/lib/auth";
 import { getQuote } from "@/lib/yahoo-client";
 import {
   buildDeepValueSystemPrompt,
   buildDeepValueUserPrompt,
 } from "@/lib/ai/deep-value-prompts";
+import { getAiClient, buildThinkingParam, buildEffortConfig, buildWebSearchTools } from "@/lib/ai/client";
+import { resolveAiSettings } from "@/lib/ai/ai-preferences";
+import { runStreamWithToolLoop } from "@/lib/ai/tool-loop";
+import { AI_MODEL_IDS, AI_EFFORT_LEVELS, type AiSettings } from "@/types/ai-settings";
+
+const DEFAULT_SETTINGS: AiSettings = { model: "claude-opus-4-8", effort: "xhigh", thinking: true };
 
 const requestSchema = z.object({
   ticker: z.string().min(1).max(20),
   language: z.string().min(1).max(30).default("English"),
   mosPercent: z.number().min(0).max(80).default(0),
+  model: z.enum(AI_MODEL_IDS).optional(),
+  effort: z.enum(AI_EFFORT_LEVELS).optional(),
+  thinking: z.boolean().optional(),
 });
 
 export async function POST(request: Request) {
@@ -54,42 +62,37 @@ export async function POST(request: Request) {
     const systemPrompt = buildDeepValueSystemPrompt(body.language, currentDate, body.mosPercent);
     const userPrompt = buildDeepValueUserPrompt(body.ticker, currentPrice, currency, body.language, currentDate, body.mosPercent);
 
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const aiSettings = await resolveAiSettings(
+      session.user.id,
+      body.model ? { model: body.model, effort: body.effort ?? DEFAULT_SETTINGS.effort, thinking: body.thinking ?? DEFAULT_SETTINGS.thinking } : undefined,
+      DEFAULT_SETTINGS
+    );
+    const client = getAiClient(aiSettings.model);
 
     const readable = new ReadableStream({
       async start(controller) {
         try {
-          const stream = client.messages.stream({
-            model: "claude-opus-4-8",
-            // Streaming, so a large ceiling can't hit HTTP timeouts (Opus 4.8 allows up to
-            // 128k). 64k gives ample room for xhigh adaptive thinking + JSON block + the
-            // full 10-section report without truncation. max_tokens is a cap, not a target —
-            // the model generates only what it needs, so this doesn't raise cost.
-            max_tokens: 64000,
-            thinking: { type: "adaptive" },
-            // xhigh (Opus 4.8) is the recommended effort for agentic, multi-step work —
-            // Deep Value is exactly that (iterative web search + valuation reasoning).
-            // The pinned SDK (^0.78) types the effort union as low|medium|high|max and
-            // doesn't yet list "xhigh"; it's valid at the API level and serializes through
-            // unchanged, so we cast to satisfy the compiler only.
-            output_config: { effort: "xhigh" as unknown as "high" },
-            system: systemPrompt,
-            tools: [{ type: "web_search_20260209" as const, name: "web_search" }],
-            messages: [{ role: "user", content: userPrompt }],
-          });
-
           // Buffer text before the JSON block to suppress reasoning text that Claude
           // emits between web search tool calls. Only forward once ```json is seen.
           let jsonBlockStarted = false;
           let preJsonBuffer = "";
 
-          for await (const event of stream) {
-            if (
-              event.type === "content_block_delta" &&
-              event.delta.type === "text_delta"
-            ) {
-              const text = event.delta.text;
-
+          const { hitIterationCap } = await runStreamWithToolLoop(
+            client,
+            {
+              model: aiSettings.model,
+              // Streaming, so a large ceiling can't hit HTTP timeouts (Opus 4.8 allows up
+              // to 128k). 64k gives ample room for xhigh adaptive thinking + JSON block +
+              // the full 10-section report without truncation. max_tokens is a cap, not a
+              // target — the model generates only what it needs, so this doesn't raise cost.
+              max_tokens: 64000,
+              thinking: buildThinkingParam(aiSettings.thinking),
+              output_config: buildEffortConfig(aiSettings.effort),
+              system: systemPrompt,
+              tools: buildWebSearchTools(aiSettings.model),
+              messages: [{ role: "user", content: userPrompt }],
+            },
+            (text) => {
               if (!jsonBlockStarted) {
                 preJsonBuffer += text;
                 const jsonIdx = preJsonBuffer.indexOf("```json");
@@ -102,7 +105,29 @@ export async function POST(request: Request) {
               } else {
                 controller.enqueue(new TextEncoder().encode(text));
               }
-            }
+            },
+            // Deep Value's prompt (ANALYTICAL_RIGOR_BLOCK: ~5y financials, quality
+            // metrics, historical multiples, comparables) needs far more research rounds
+            // than Advisor/verify's default cap — reproduced in production (2026-07-10)
+            // with DeepSeek: the default 10 was hit mid-research, discarding everything
+            // silently (nothing had reached the ```json fence yet) and returning an empty
+            // report with no error.
+            25
+          );
+
+          // Failsafe: if the model never reached the JSON fence (e.g. still researching
+          // when the iteration cap hit, or it opened straight into prose), flush the
+          // buffered text so the run isn't silently swallowed.
+          if (!jsonBlockStarted && preJsonBuffer) {
+            controller.enqueue(new TextEncoder().encode(preJsonBuffer));
+          }
+
+          if (hitIterationCap) {
+            const isItalian = body.language === "Italiano" || body.language === "Italian";
+            const note = isItalian
+              ? "\n\n_[Analisi interrotta: troppi cicli di ricerca web. Riprova, magari con un margine di sicurezza diverso.]_"
+              : "\n\n_[Analysis stopped: too many web search rounds. Try again, maybe with a different margin of safety.]_";
+            controller.enqueue(new TextEncoder().encode(note));
           }
         } catch (streamErr) {
           const msg = streamErr instanceof Error ? streamErr.message : "AI error";

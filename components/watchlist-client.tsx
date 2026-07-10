@@ -14,11 +14,12 @@ import { useState, useEffect, useRef } from "react";
 import { useLanguage } from "@/context/language-context";
 import { fetchAnalyses } from "@/lib/analyses";
 import type { WatchlistItem, WatchlistSettings } from "@/types/watchlist";
-import type { SavedAnalysis } from "@/types/analysis";
+import type { SavedAnalysis, AnalystAngle } from "@/types/analysis";
 import type { Translations } from "@/lib/i18n/translations";
 import { ValuationRuler, ComparisonTable, type Triple } from "@/components/report/valuation-ruler";
 import { getVerdict, VERDICT_BADGE, VERDICT_TEXT, type Verdict } from "@/lib/report/verdict";
 import { grossUpToIntrinsic } from "@/lib/report/valuation";
+import { presentAnalysts, meanTriple } from "@/lib/report/consensus";
 import { EarningsBadge } from "@/components/earnings-badge";
 import { isAnalysisStalePreEarnings, isFutureEarnings } from "@/lib/earnings";
 import { fetchEarnings, refreshEarnings } from "@/lib/earnings-client";
@@ -183,6 +184,9 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
 
   const currency = priceCurrency ?? "EUR";
   const itemMos = item.mosPercent; // fraction 0–0.8, the user's per-ticker knob
+  // Display name for each analyst lens (closes over the passed-in t).
+  const analystLabel = (angle: AnalystAngle) =>
+    angle === "skeptic" ? t("analystSkeptic") : angle === "optimist" ? t("analystOptimist") : t("analystQuality");
 
   // ── Valuation, derived from the latest saved analysis ──
   const aMos = (analysis?.mosPercent ?? 0) / 100; // the analysis's own MoS
@@ -190,16 +194,16 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
     analysis?.fairValueBear != null &&
     analysis?.fairValueBase != null &&
     analysis?.fairValueBull != null;
-  const hasReviewerFv =
-    hasFV &&
-    analysis?.reviewFairValueBear != null &&
-    analysis?.reviewFairValueBase != null &&
-    analysis?.reviewFairValueBull != null;
 
   // Intrinsic scale: stored fair values are buy targets discounted by the analysis MoS —
   // gross them back up. Buy-target scale: discount the intrinsic by the *item's* MoS.
   const toIntrinsic = (v: number) => grossUpToIntrinsic(v, aMos);
   const toBuyTarget = (v: number) => v * (1 - itemMos);
+  const toIntrinsicTriple = (t3: Triple): Triple => ({
+    bear: toIntrinsic(t3.bear),
+    base: toIntrinsic(t3.base),
+    bull: toIntrinsic(t3.bull),
+  });
 
   const intrinsic: Triple | null = hasFV
     ? {
@@ -208,13 +212,15 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
         bull: toIntrinsic(analysis!.fairValueBull!),
       }
     : null;
-  const reviewerIntrinsic: Triple | null = hasReviewerFv
-    ? {
-        bear: toIntrinsic(analysis!.reviewFairValueBear!),
-        base: toIntrinsic(analysis!.reviewFairValueBase!),
-        bull: toIntrinsic(analysis!.reviewFairValueBull!),
-      }
-    : null;
+  // Analyst-panel opinions on the latest analysis, grossed up to the intrinsic scale.
+  const analystsIntrinsic = analysis
+    ? presentAnalysts(analysis).map(({ angle, triple }) => ({ angle, triple: toIntrinsicTriple(triple) }))
+    : [];
+  // Consensus (mean of base + every analyst) on the intrinsic scale — null until an analyst runs.
+  const consensusIntrinsic: Triple | null =
+    intrinsic && analystsIntrinsic.length > 0
+      ? meanTriple([intrinsic, ...analystsIntrinsic.map((a) => a.triple)])
+      : null;
 
   const buyTargetBase = intrinsic ? toBuyTarget(intrinsic.base) : null;
   const verdict: Verdict | null =
@@ -236,12 +242,13 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
     ? {
         analysisLabel: level === "intrinsic" ? t("fvShort") : t("buyTargetBarLabel"),
         analysis: projectMark(intrinsic.base),
-        reviewerLabel: t("reviewerLabel"),
-        reviewer: reviewerIntrinsic ? projectMark(reviewerIntrinsic.base) : undefined,
+        analysts: analystsIntrinsic.map(({ angle, triple }) => ({
+          key: angle,
+          label: analystLabel(angle),
+          value: projectMark(triple.base),
+        })),
         consensusLabel: t("consensusLabel"),
-        consensus: reviewerIntrinsic
-          ? (projectMark(intrinsic.base) + projectMark(reviewerIntrinsic.base)) / 2
-          : undefined,
+        consensus: consensusIntrinsic ? projectMark(consensusIntrinsic.base) : undefined,
       }
     : null;
 
@@ -252,15 +259,12 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
     bull: toBuyTarget(t3.bull),
   });
   const analysisBT = intrinsic ? toBuyTargetTriple(intrinsic) : null;
-  const reviewerBT = reviewerIntrinsic ? toBuyTargetTriple(reviewerIntrinsic) : undefined;
-  const consensusBT =
-    analysisBT && reviewerBT
-      ? {
-          bear: (analysisBT.bear + reviewerBT.bear) / 2,
-          base: (analysisBT.base + reviewerBT.base) / 2,
-          bull: (analysisBT.bull + reviewerBT.bull) / 2,
-        }
-      : undefined;
+  const analystsBT = analystsIntrinsic.map(({ angle, triple }) => ({
+    key: angle,
+    label: analystLabel(angle),
+    triple: toBuyTargetTriple(triple),
+  }));
+  const consensusBT = consensusIntrinsic ? toBuyTargetTriple(consensusIntrinsic) : undefined;
 
   async function handleSaveEdit() {
     setSaving(true);
@@ -289,7 +293,7 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
                 {analysis.valuationMethod}
               </span>
             )}
-            {analysis?.reviewMd && (
+            {(analysis?.reviewMd || analysis?.optimistCritiqueMd || analysis?.qualityCritiqueMd) && (
               <span className="shrink-0 rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-300">
                 ✓ {t("analystReviewBadge")}
               </span>
@@ -414,14 +418,13 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
 
               <ComparisonTable
                 analysis={analysisBT!}
-                reviewer={reviewerBT}
+                analysts={analystsBT}
                 consensus={consensusBT}
                 mos={itemMos}
                 level={level}
                 currency={currency}
                 labels={{
                   analysis: t("analysisLabel"),
-                  reviewer: t("reviewerLabel"),
                   consensus: t("consensusLabel"),
                   bear: t("bearLabel"),
                   base: t("baseLabel"),

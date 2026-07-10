@@ -6,11 +6,11 @@
     },
     {
       "path": "/api/cron/watchlist-analysis",
-      "schedule": "0 6 * * *"
+      "schedule": "0 6 * * 1-5"
     },
     {
       "path": "/api/cron/watchlist-analysis",
-      "schedule": "0 7 * * *"
+      "schedule": "0 7 * * 1-5"
     }
   ]
 }

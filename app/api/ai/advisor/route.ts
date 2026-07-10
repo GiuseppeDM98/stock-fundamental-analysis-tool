@@ -3,11 +3,16 @@
 // into the system prompt, then streams a Claude response.
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import Anthropic from "@anthropic-ai/sdk";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getQuote } from "@/lib/yahoo-client";
 import { buildAdvisorSystemPrompt, buildAdvisorUserPrompt, buildDiscoverySystemPrompt } from "@/lib/ai/advisor-prompts";
+import { getAiClient, buildThinkingParam, buildEffortConfig, buildWebSearchTools } from "@/lib/ai/client";
+import { resolveAiSettings } from "@/lib/ai/ai-preferences";
+import { runStreamWithToolLoop } from "@/lib/ai/tool-loop";
+import { AI_MODEL_IDS, AI_EFFORT_LEVELS, type AiSettings } from "@/types/ai-settings";
+
+const DEFAULT_SETTINGS: AiSettings = { model: "claude-sonnet-5", effort: "high", thinking: true };
 
 const messageSchema = z.object({
   role: z.enum(["user", "assistant"]),
@@ -18,6 +23,9 @@ const requestSchema = z.object({
   messages: z.array(messageSchema).min(1).max(20),
   language: z.string().min(1).max(30).default("English"),
   mode: z.enum(["portfolio", "discovery"]).default("portfolio"),
+  model: z.enum(AI_MODEL_IDS).optional(),
+  effort: z.enum(AI_EFFORT_LEVELS).optional(),
+  thinking: z.boolean().optional(),
 });
 
 export async function POST(request: Request) {
@@ -122,38 +130,35 @@ export async function POST(request: Request) {
       content: buildAdvisorUserPrompt(m.content),
     }));
 
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const aiSettings = await resolveAiSettings(
+      session.user.id,
+      body.model ? { model: body.model, effort: body.effort ?? DEFAULT_SETTINGS.effort, thinking: body.thinking ?? DEFAULT_SETTINGS.thinking } : undefined,
+      DEFAULT_SETTINGS
+    );
+    const client = getAiClient(aiSettings.model);
 
     const readable = new ReadableStream({
       async start(controller) {
         try {
-          const stream = client.messages.stream({
-            model: "claude-sonnet-5",
-            // Headroom for adaptive thinking + web-search reasoning, which count
-            // toward max_tokens alongside the visible answer. At 4096 a long
-            // multi-candidate Discovery reply (thinking + several web searches +
-            // prose) exhausted the budget and got cut off mid-word with
-            // stop_reason "max_tokens". This is a ceiling, not a target — the model
-            // still stops at end_turn, so normal replies cost the same.
-            max_tokens: 16000,
-            thinking: { type: "adaptive" },
-            output_config: { effort: "high" },
-            system: systemPrompt,
-            tools: [{ type: "web_search_20260209" as const, name: "web_search" }],
-            messages: anthropicMessages,
-          });
-
-          let stopReason: string | null = null;
-          for await (const event of stream) {
-            if (
-              event.type === "content_block_delta" &&
-              event.delta.type === "text_delta"
-            ) {
-              controller.enqueue(new TextEncoder().encode(event.delta.text));
-            } else if (event.type === "message_delta" && event.delta.stop_reason) {
-              stopReason = event.delta.stop_reason;
-            }
-          }
+          const { stopReason, hitIterationCap } = await runStreamWithToolLoop(
+            client,
+            {
+              model: aiSettings.model,
+              // Headroom for adaptive thinking + web-search reasoning, which count
+              // toward max_tokens alongside the visible answer. At 4096 a long
+              // multi-candidate Discovery reply (thinking + several web searches +
+              // prose) exhausted the budget and got cut off mid-word with
+              // stop_reason "max_tokens". This is a ceiling, not a target — the model
+              // still stops at end_turn, so normal replies cost the same.
+              max_tokens: 16000,
+              thinking: buildThinkingParam(aiSettings.thinking),
+              output_config: buildEffortConfig(aiSettings.effort),
+              system: systemPrompt,
+              tools: buildWebSearchTools(aiSettings.model),
+              messages: anthropicMessages,
+            },
+            (text) => controller.enqueue(new TextEncoder().encode(text))
+          );
 
           // Surface a hard token-cap cutoff instead of truncating silently — a
           // clean mid-word cut with no marker is indistinguishable from a normal
@@ -162,6 +167,13 @@ export async function POST(request: Request) {
             const note = body.language === "Italian"
               ? "_[Risposta troncata: raggiunto il limite di lunghezza.]_"
               : "_[Response truncated: length limit reached.]_";
+            controller.enqueue(new TextEncoder().encode(`\n\n${note}`));
+          } else if (hitIterationCap) {
+            // The DeepSeek custom web_search tool loop (lib/ai/tool-loop.ts) ran out of
+            // rounds while still researching — surface it instead of returning silence.
+            const note = body.language === "Italian"
+              ? "_[Ricerca interrotta: troppi cicli di ricerca web. Riprova con una domanda più mirata.]_"
+              : "_[Research stopped: too many web search rounds. Try a more specific question.]_";
             controller.enqueue(new TextEncoder().encode(`\n\n${note}`));
           }
         } catch (streamErr) {

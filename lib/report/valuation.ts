@@ -16,3 +16,10 @@
 export function grossUpToIntrinsic(buyTarget: number, mosFraction: number): number {
   return mosFraction > 0 ? buyTarget / (1 - mosFraction) : buyTarget;
 }
+
+/**
+ * A bear/base/bull valuation triple (buy-target scale unless stated otherwise). Lives here
+ * — the pure valuation module — so both server code (watchlist digest) and the client ruler
+ * can share it without importing types from a "use client" component.
+ */
+export type Triple = { bear: number; base: number; bull: number };

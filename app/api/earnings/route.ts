@@ -11,7 +11,13 @@ import Anthropic from "@anthropic-ai/sdk";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { buildEarningsSystemPrompt, buildEarningsUserPrompt } from "@/lib/ai/earnings-prompt";
+import { getAiClient, buildThinkingParam, buildEffortConfig, buildWebSearchTools } from "@/lib/ai/client";
+import { resolveAiSettings } from "@/lib/ai/ai-preferences";
+import { runCreateWithToolLoop } from "@/lib/ai/tool-loop";
+import type { AiSettings } from "@/types/ai-settings";
 import type { EarningsConfidence, EarningsEstimate } from "@/types/earnings";
+
+const DEFAULT_SETTINGS: AiSettings = { model: "claude-sonnet-5", effort: "medium", thinking: true };
 
 const requestSchema = z.object({
   ticker: z.string().min(1).max(20),
@@ -84,17 +90,18 @@ export async function POST(request: Request) {
       day: "numeric",
     });
 
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const aiSettings = await resolveAiSettings(session.user.id, undefined, DEFAULT_SETTINGS);
+    const client = getAiClient(aiSettings.model);
 
     // Non-streaming: a single small fact. Sonnet 5 rejects temperature and has adaptive
     // thinking on by default; web-search + thinking tokens count toward max_tokens.
-    const response = await client.messages.create({
-      model: "claude-sonnet-5",
+    const response = await runCreateWithToolLoop(client, {
+      model: aiSettings.model,
       max_tokens: 6000,
-      thinking: { type: "adaptive" },
-      output_config: { effort: "medium" },
+      thinking: buildThinkingParam(aiSettings.thinking),
+      output_config: buildEffortConfig(aiSettings.effort),
       system: buildEarningsSystemPrompt({ currentDate }),
-      tools: [{ type: "web_search_20260209" as const, name: "web_search" }],
+      tools: buildWebSearchTools(aiSettings.model),
       messages: [{ role: "user", content: buildEarningsUserPrompt({ ticker, companyName: body.companyName }) }],
     });
 

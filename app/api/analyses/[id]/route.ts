@@ -1,5 +1,5 @@
 // GET    /api/analyses/:id — fetch one saved analysis
-// PATCH  /api/analyses/:id — attach an Analyst Review to an existing analysis
+// PATCH  /api/analyses/:id — attach one analyst-panel opinion to an existing analysis
 // DELETE /api/analyses/:id — delete one saved analysis
 //
 // Returns 404 for both "not found" and "wrong user" cases to avoid
@@ -8,18 +8,22 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { ANALYST_ANGLES } from "@/types/analysis";
+import { ANALYST_COLUMNS } from "@/lib/report/consensus";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-// Only the Analyst Review can be patched onto a saved analysis; the report
-// itself is immutable once generated. The review carries its critique Markdown and,
-// when it emitted a JSON block, the reviewer's own fair values (MoS-adjusted).
+// Only analyst-panel opinions can be patched onto a saved analysis; the report itself is
+// immutable once generated. Each opinion carries its critique Markdown and, when it emitted
+// a JSON block, that analyst's own fair values (MoS-adjusted). `angle` selects which
+// analyst's columns to write (mapped via ANALYST_COLUMNS — single source shared with reads).
 const patchSchema = z.object({
-  reviewMd: z.string().min(1).max(60000),
-  reviewFairValueBull: z.number().positive().optional(),
-  reviewFairValueBase: z.number().positive().optional(),
-  reviewFairValueBear: z.number().positive().optional(),
-  reviewValuationMethod: z.string().optional(),
+  angle: z.enum(ANALYST_ANGLES as [string, ...string[]]).default("skeptic"),
+  critiqueMd: z.string().min(1).max(60000),
+  fairValueBull: z.number().positive().optional(),
+  fairValueBase: z.number().positive().optional(),
+  fairValueBear: z.number().positive().optional(),
+  valuationMethod: z.string().optional(),
 });
 
 export async function GET(_request: Request, context: RouteContext) {
@@ -59,16 +63,19 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const updated = await db.analysis.update({
-    where: { id },
-    data: {
-      reviewMd: body.reviewMd,
-      reviewFairValueBull: body.reviewFairValueBull,
-      reviewFairValueBase: body.reviewFairValueBase,
-      reviewFairValueBear: body.reviewFairValueBear,
-      reviewValuationMethod: body.reviewValuationMethod,
-    },
-  });
+  // Map the angle to its columns and write only that analyst's fields. Undefined fair
+  // values are left untouched by Prisma (e.g. a re-run that emitted no valid JSON keeps
+  // the critique but leaves any prior numbers in place).
+  const cols = ANALYST_COLUMNS[body.angle as (typeof ANALYST_ANGLES)[number]];
+  const data: Record<string, unknown> = {
+    [cols.critique]: body.critiqueMd,
+    [cols.bull]: body.fairValueBull,
+    [cols.base]: body.fairValueBase,
+    [cols.bear]: body.fairValueBear,
+    [cols.method]: body.valuationMethod,
+  };
+
+  const updated = await db.analysis.update({ where: { id }, data });
 
   return NextResponse.json(updated);
 }

@@ -13,6 +13,9 @@ import ReportBody from "@/components/report/report-body";
 import ReportShell from "@/components/report/report-shell";
 import type { DeepValueResult } from "@/components/report/types";
 import { parseDeepValueJson, stripJsonBlock } from "@/lib/report/parse-deep-value-json";
+import { AiSettingsControl } from "@/components/ai-settings-control";
+import { fetchAiSettings } from "@/lib/ai-settings-client";
+import { DEFAULT_AI_SETTINGS, type AiSettings } from "@/types/ai-settings";
 
 type Props = {
   ticker: string | null;
@@ -61,13 +64,21 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [result, setResult] = useState<DeepValueResult | null>(null);
   const [watchlistStatus, setWatchlistStatus] = useState<WatchlistStatus>("idle");
+  const [aiSettings, setAiSettings] = useState<AiSettings>(DEFAULT_AI_SETTINGS);
 
-  // Analyst Review — an independent fresh-context Opus pass that red-teams the report.
-  const [reviewText, setReviewText] = useState<string>("");
-  const [reviewStatus, setReviewStatus] = useState<Status>("idle");
-  // The reviewer's own bull/base/bear valuation, parsed from the review's JSON block.
-  const [reviewResult, setReviewResult] = useState<DeepValueResult | null>(null);
-  const reviewAbortRef = useRef<AbortController | null>(null);
+  // Load the user's global AI default once on mount; the panel's own selector then
+  // overrides it per-run without persisting (persisting happens via the NavBar modal).
+  useEffect(() => {
+    if (!session) return;
+    fetchAiSettings()
+      .then(setAiSettings)
+      .catch(() => {
+        // Keep DEFAULT_AI_SETTINGS — non-fatal, generation still works.
+      });
+  }, [session]);
+
+  // The analyst panel (skeptic/optimist/quality reviews) runs on the SAVED-analysis detail
+  // page, not here — the live panel only produces and saves the base analysis.
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -89,11 +100,6 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
     setErrorMsg(null);
     setSaveStatus("idle");
     setWatchlistStatus("idle");
-    // A new analysis invalidates any prior review.
-    reviewAbortRef.current?.abort();
-    setReviewText("");
-    setReviewStatus("idle");
-    setReviewResult(null);
 
     try {
       const res = await fetch("/api/ai/deep-value", {
@@ -103,6 +109,9 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           ticker,
           language,
           mosPercent,
+          model: aiSettings.model,
+          effort: aiSettings.effort,
+          thinking: aiSettings.thinking,
         }),
         signal: controller.signal,
       });
@@ -136,6 +145,16 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
         }
       }
 
+      // Defends against a silent empty stream (e.g. the AI provider's tool-use loop
+      // hit its iteration cap before producing any output) — without this, status still
+      // flipped to "done" with an empty report and nothing rendered, so the button just
+      // went back to idle with no explanation.
+      if (!accumulated.trim()) {
+        setErrorMsg(t("deepValueEmptyResponse"));
+        setStatus("error");
+        return;
+      }
+
       // Parse the JSON block once streaming is complete.
       const parsed = parseDeepValueJson(accumulated);
       setResult(parsed);
@@ -148,59 +167,6 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
       }
       setErrorMsg(err instanceof Error ? err.message : "Something went wrong");
       setStatus("error");
-    }
-  }
-
-  async function handleRunReview() {
-    if (!ticker || !report) return;
-
-    reviewAbortRef.current?.abort();
-    const controller = new AbortController();
-    reviewAbortRef.current = controller;
-
-    setReviewText("");
-    setReviewResult(null);
-    setReviewStatus("loading");
-
-    try {
-      const res = await fetch("/api/ai/deep-value/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // Send the report without the machine-readable JSON block — the reviewer
-        // only needs the human-readable analysis to critique. mosPercent lets the
-        // reviewer emit its own fair values in the same (MoS-adjusted) unit as the base.
-        body: JSON.stringify({ ticker, reportMd: stripJsonBlock(report), language, mosPercent }),
-        signal: controller.signal,
-      });
-
-      if (!res.ok || !res.body) throw new Error(`Request failed (${res.status})`);
-
-      setReviewStatus("streaming");
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let done = false;
-      let accumulated = "";
-
-      while (!done) {
-        const { value, done: streamDone } = await reader.read();
-        done = streamDone;
-        if (value) {
-          accumulated += decoder.decode(value, { stream: !streamDone });
-          setReviewText(accumulated);
-        }
-      }
-
-      // Parse the reviewer's own valuation once streaming completes (null if it
-      // emitted no valid JSON — the critique still stands on its own).
-      setReviewResult(parseDeepValueJson(accumulated));
-      setReviewStatus("done");
-    } catch (err) {
-      if ((err as Error).name === "AbortError") {
-        setReviewStatus("idle");
-        return;
-      }
-      setReviewStatus("error");
     }
   }
 
@@ -219,14 +185,6 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
         fairValueBase: result?.base.fairValue,
         fairValueBear: result?.bear.fairValue,
         valuationMethod: result?.method,
-        // Attach the Analyst Review only if it has already completed for this report.
-        // Store the critique without its JSON block (the numbers live in the columns
-        // below); the reviewer's own fair values feed the consensus on the list page.
-        reviewMd: reviewStatus === "done" && reviewText ? stripJsonBlock(reviewText) : undefined,
-        reviewFairValueBull: reviewResult?.bull.fairValue,
-        reviewFairValueBase: reviewResult?.base.fairValue,
-        reviewFairValueBear: reviewResult?.bear.fairValue,
-        reviewValuationMethod: reviewResult?.method,
       });
       setSaveStatus("saved");
     } catch (err) {
@@ -291,6 +249,8 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
               </option>
             ))}
           </select>
+
+          <AiSettingsControl value={aiSettings} onChange={setAiSettings} />
 
           <button
             onClick={() => handleGenerate()}
@@ -392,60 +352,8 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
         </div>
       )}
 
-      {/* Analyst Review — independent red-team pass over the completed report.
-          Included in the PDF export only when a review actually exists; the
-          interactive controls (button/spinner/error) stay screen-only. */}
-      {status === "done" && report && (
-        <div className={`rounded-xl border border-violet-500/20 bg-violet-500/5 p-5 ${reviewText ? "break-inside-avoid" : "print:hidden"}`}>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold text-violet-300 print:text-violet-700">{t("analystReviewTitle")}</h3>
-            {reviewStatus === "idle" && (
-              <button
-                onClick={handleRunReview}
-                className="tap rounded-lg border border-violet-500/40 px-3 py-1.5 text-xs font-medium text-violet-300 transition hover:border-violet-400 hover:bg-violet-500/10 print:hidden"
-              >
-                {t("analystReviewButton")}
-              </button>
-            )}
-            {(reviewStatus === "loading" || reviewStatus === "streaming") && (
-              <span className="flex items-center gap-2 text-xs text-violet-300 print:hidden">
-                <span className="h-3 w-3 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />
-                {t("analystReviewRunning")}
-              </span>
-            )}
-            {/* Regenerate — e.g. after a truncated run, or to refresh the critique. */}
-            {reviewStatus === "done" && reviewText && (
-              <button
-                onClick={handleRunReview}
-                className="tap rounded-lg border border-violet-500/40 px-2.5 py-1 text-xs font-medium text-violet-300 transition hover:border-violet-400 hover:bg-violet-500/10 print:hidden"
-              >
-                {t("analystReviewRerun")}
-              </button>
-            )}
-          </div>
-
-          {reviewStatus === "error" && (
-            <div className="mt-3 flex items-center gap-3 print:hidden">
-              <p className="text-sm text-red-400">{t("analystReviewError")}</p>
-              <button
-                onClick={handleRunReview}
-                className="tap rounded-lg border border-violet-500/40 px-3 py-1 text-xs font-medium text-violet-300 transition hover:border-violet-400 hover:bg-violet-500/10"
-              >
-                {t("analystReviewButton")}
-              </button>
-            </div>
-          )}
-
-          {reviewText && (
-            <div className="mt-3">
-              {reviewStatus === "streaming" && (
-                <span className="mb-2 inline-block h-3 w-1.5 animate-pulse bg-violet-400 print:hidden" />
-              )}
-              <ReportBody markdown={stripJsonBlock(reviewText)} />
-            </div>
-          )}
-        </div>
-      )}
+      {/* The analyst panel (skeptic/optimist/quality) lives on the saved-analysis detail
+          page — after saving, the "View saved analyses" link routes there to run it. */}
 
       {/* Decision Panel — pipeline routing after analysis completes */}
       {status === "done" && result && ticker && (

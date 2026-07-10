@@ -177,6 +177,7 @@ export type Translations = {
   signInToAnalyze: string;
   deepValueTitle: string;
   deepValueDesc: string;
+  deepValueEmptyResponse: string;
   deepAnalysisBtn: string;
 
   // ─── Scenario panels ────────────────────────────────────────────────────────
@@ -398,6 +399,16 @@ export type Translations = {
   analystReviewSavedNote: string;
   analystReviewBadge: string;
   analystReviewRerun: string;
+  // ─── Analyst panel (skeptic / optimist / quality lenses) ──────────────────
+  analystSkeptic: string;
+  analystOptimist: string;
+  analystQuality: string;
+  analystPanelTitle: string;
+  analystPanelDesc: string;
+  analystSkepticDesc: string;
+  analystOptimistDesc: string;
+  analystQualityDesc: string;
+  analystRunButton: string;
 
   // ─── Pipeline actions ─────────────────────────────────────────────────────
   addToWatchlist: string;
@@ -605,6 +616,7 @@ const en: Translations = {
   signInToAnalyze: "to generate AI analyses and save your reports.",
   deepValueTitle: "Deep Value Analysis",
   deepValueDesc: "Claude picks the valuation method and sources all data via web search",
+  deepValueEmptyResponse: "The AI didn't return a result — it may have run out of research rounds. Try again, possibly with a different model.",
   deepAnalysisBtn: "Deep Analysis (AI)",
 
   // Scenario panels
@@ -825,6 +837,16 @@ const en: Translations = {
   analystReviewSavedNote: "Saved with this analysis",
   analystReviewBadge: "Reviewed",
   analystReviewRerun: "Re-run",
+  analystSkeptic: "Skeptic",
+  analystOptimist: "Bull",
+  analystQuality: "Quality",
+  analystPanelTitle: "Analyst Panel",
+  analystPanelDesc:
+    "Run up to three independent second opinions on this analysis. Each reads the report through a different lens and commits to its own valuation; the consensus is the average of the base analysis and every analyst you run.",
+  analystSkepticDesc: "A red-team skeptic — stress-tests the numbers and downside risk.",
+  analystOptimistDesc: "A constructive bull case — surfaces upside the base case under-weights.",
+  analystQualityDesc: "A long-term owner — judges moat, returns on capital and durability.",
+  analystRunButton: "Run",
 
   // Pipeline actions
   addToWatchlist: "Add to Watchlist",
@@ -1032,6 +1054,7 @@ const it: Translations = {
   signInToAnalyze: "per generare analisi AI e salvare i report.",
   deepValueTitle: "Analisi Deep Value",
   deepValueDesc: "Claude sceglie il metodo di valutazione e raccoglie i dati via web search",
+  deepValueEmptyResponse: "L'AI non ha restituito un risultato — potrebbe aver esaurito i cicli di ricerca. Riprova, magari con un modello diverso.",
   deepAnalysisBtn: "Analisi Profonda (AI)",
 
   // Scenario panels
@@ -1252,6 +1275,16 @@ const it: Translations = {
   analystReviewSavedNote: "Salvata con questa analisi",
   analystReviewBadge: "Revisionata",
   analystReviewRerun: "Rigenera",
+  analystSkeptic: "Scettico",
+  analystOptimist: "Rialzista",
+  analystQuality: "Qualità",
+  analystPanelTitle: "Panel di Analisti",
+  analystPanelDesc:
+    "Lancia fino a tre pareri indipendenti su questa analisi. Ciascuno legge il report con una lente diversa e propone la propria valutazione; il consenso è la media dell'analisi base e di ogni analista che esegui.",
+  analystSkepticDesc: "Uno scettico red-team — stressa i numeri e il rischio ribassista.",
+  analystOptimistDesc: "Un caso rialzista costruttivo — evidenzia l'upside che la base sottopesa.",
+  analystQualityDesc: "Un proprietario di lungo periodo — valuta moat, ritorni sul capitale e durabilità.",
+  analystRunButton: "Avvia",
 
   // Pipeline actions
   addToWatchlist: "Aggiungi alla Watchlist",

@@ -30,6 +30,13 @@ model User {
   watchlistEnabled        Boolean             @default(true)
   // Rate-limit manual trigger to once per 24h
   lastManualWatchlistRun  DateTime?
+  // Global AI preferences — per-model/effort/thinking default used by every AI call
+  // site (deep-value, verify, advisor, earnings) unless overridden per-request.
+  // "claude-opus-4-8" | "claude-sonnet-5" | "deepseek-v4-pro"
+  aiModel                 String              @default("claude-opus-4-8")
+  // "low" | "medium" | "high" | "xhigh" | "max"
+  aiEffort                String              @default("high")
+  aiThinkingEnabled        Boolean             @default(true)
 }
 
 model Analysis {
@@ -52,10 +59,27 @@ model Analysis {
   // The reviewer's own independent valuation, parsed from the review's leading JSON
   // block. Same unit as fairValue* above (MoS-adjusted buy targets), so the two can be
   // averaged into a consensus. Null when no review was run or it emitted no valid JSON.
+  // NOTE: review* is the "skeptic" analyst of the analyst panel (kept under the legacy
+  // name to avoid renaming a shipped column). The optimist/quality analysts below mirror
+  // this exact shape; the consensus is the mean of the base analysis + every analyst run.
   reviewFairValueBull   Float?
   reviewFairValueBase   Float?
   reviewFairValueBear   Float?
   reviewValuationMethod String?
+  // Optimist ("Rialzista") analyst — constructive bull-case second opinion. Same
+  // MoS-adjusted buy-target unit as fairValue*/reviewFairValue*. Null until run.
+  optimistFairValueBull   Float?
+  optimistFairValueBase   Float?
+  optimistFairValueBear   Float?
+  optimistValuationMethod String?
+  optimistCritiqueMd      String?
+  // Quality/durability ("Qualità") analyst — long-term owner's view (moat, ROIC, balance
+  // sheet resilience). Same unit as above. Null until run.
+  qualityFairValueBull   Float?
+  qualityFairValueBase   Float?
+  qualityFairValueBear   Float?
+  qualityValuationMethod String?
+  qualityCritiqueMd      String?
   createdAt        DateTime @default(now())
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 

@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import OpenPositionBanner from "@/components/open-position-banner";
 import SavedValuationSummary, { type SavedValuationMeta } from "@/components/saved-valuation-summary";
-import SavedAnalystReview from "@/components/saved-analyst-review";
+import AnalystPanel from "@/components/analyst-panel";
 import DownloadPdfButton from "@/components/download-pdf-button";
 
 type PageProps = { params: Promise<{ id: string }> };
@@ -122,15 +122,20 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
         </div>
       )}
 
-      {/* Analyst Review — render existing critique or let the user generate + persist one.
-          Only meaningful for reports with a parseable Deep Value JSON block. */}
+      {/* Analyst panel — render existing critiques or let the user generate + persist each
+          lens (skeptic/optimist/quality). Only meaningful for reports with a parseable
+          Deep Value JSON block. */}
       {valuationMeta && (
-        <SavedAnalystReview
+        <AnalystPanel
           analysisId={analysis.id}
           ticker={analysis.ticker}
           reportMd={markdown}
           mosPercent={analysis.mosPercent}
-          initialReviewMd={analysis.reviewMd}
+          initialCritiques={{
+            skeptic: analysis.reviewMd,
+            optimist: analysis.optimistCritiqueMd,
+            quality: analysis.qualityCritiqueMd,
+          }}
         />
       )}
 

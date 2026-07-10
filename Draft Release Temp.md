@@ -4,11 +4,7 @@
 
 - **AI Deep Value analysis** — the core of the app. A single AI panel on `/analyze` produces a full equity-research report for any stock worldwide, including tickers where market data is incomplete. The AI autonomously picks the valuation method (DCF, DDM, EV/EBITDA, or P/B) based on the sector, sources all financial data via web search, and outputs Bull / Base / Bear fair values plus a structured report (Company Overview, Competitive Moat, Valuation Method, Key Financial Data & Quality Metrics, Bull/Base/Bear cases, Key Risks, Near-term Catalysts, Investment Summary). Available in 8 languages (EN, IT, ES, FR, DE, PT, ZH, JA).
 
-- **Analyst Review (second opinion)** — after a Deep Value report finishes, a **Run Analyst Review** button starts an independent red-team pass: a fresh AI analyst stress-tests the numbers and assumptions, spot-checks key figures via web search, and gives a verdict on whether the base fair value holds up. It reads as a concise critique below your report — a second set of eyes before you act.
-
-- **Save the Analyst Review with your analysis** — the second opinion is now kept alongside a saved analysis. Run it before or after saving; open any saved analysis later and the review is right there in a distinct violet panel, with a **✓ Reviewed** badge on the list card. You can regenerate it anytime with a **Re-run** button, and it's included in the PDF export.
-
-- **A second opinion with its own numbers** — the Analyst Review now commits to its own Bull / Base / Bear fair values, not just a written critique. On the saved-analyses card you see the reviewer's valuation next to the base analysis and a **consensus** (the average of the two) for each scenario, with the percentage gap between them — so you can gauge at a glance how much the red-team disagrees, and where.
+- **Analyst Panel — three independent second opinions** — on any saved analysis, run up to three independent AI passes, each through a distinct lens: **Skeptic** (red-teams the numbers and assumptions), **Optimist** (builds the constructive bull case), and **Quality** (stress-tests the moat and long-term durability). Each lens commits to its own Bull/Base/Bear valuation and a written critique, run on demand from the saved-analysis page. Every lens that has run is shown next to the base analysis on the valuation ruler and comparison table, along with a **consensus** — the average across the base analysis and every lens that ran — so you can see at a glance how much (and in which direction) independent reviewers disagree. Results are saved with the analysis, shown in a distinct panel with a **✓ Reviewed** badge on the list card, regenerable anytime, and included in the PDF export. (Replaces the earlier single "Analyst Review" red-team pass — the Skeptic lens is that same review, now joined by two more perspectives.)
 
 - **Margin of Safety & dual fair value** — set a Margin of Safety (0–80%) and the report shows both the intrinsic fair value (what the stock is worth) and the MoS-discounted buy target, for each Bear/Base/Bull scenario. A valuation recap table at the end of every report lists current price vs. fair values with upside/downside.
 
@@ -16,7 +12,7 @@
 
 - **AI Portfolio Advisor** — a conversational `/advisor` page with two modes. **Portfolio mode** knows your holdings, weighted average costs, and saved fair values, so you can ask "which of my positions has the most upside left?" **Discovery mode** starts clean and is purpose-built for finding new ideas — ask for quality compounders, undervalued dividend growers, or sector opportunities and get 3–5 concrete tickers with a thesis, ROIC, valuation setup, and key risk each. When the AI names a stock, it appears as a clickable chip that launches a Deep Value analysis. Conversations are saved and listed in a sidebar. Your selected mode is remembered.
 
-- **See how your estimate evolved** — when you have more than one saved analysis for a ticker, the saved-analyses card shows an evolution panel comparing your latest fair values to the previous save: Analysis, Reviewer, and Consensus base values side by side with the % change. It's a plain, exact calculation from your saved numbers — so you can watch the thesis strengthen or weaken over time at a glance.
+- **See how your estimate evolved** — when you have more than one saved analysis for a ticker, the saved-analyses card shows an evolution panel comparing your latest fair values to the previous save: Analysis and Consensus base values side by side with the % change. It's a plain, exact calculation from your saved numbers — so you can watch the thesis strengthen or weaken over time at a glance.
 
 - **Adaptive Hub home** — the home page frames the full pipeline (Discover → Decide → Monitor) with a card per stage, a "Start with the Advisor" call-to-action, and a quick ticker box that jumps straight into an analysis. When logged in it surfaces a recent-activity strip: latest analyses, portfolio P&L, and watchlist count.
 
@@ -40,15 +36,19 @@
 
 - **Portfolio ↔ analyses cross-linking** — each position shows how many saved analyses exist for its ticker, expandable inline with date, MoS%, buy target and intrinsic value, and a link to the full report. Each saved analysis conversely shows an open-position badge with shares, WAC, and live P&L.
 
-- **Watchlist, redesigned with a daily digest** — the watchlist is now a compact card per ticker, matching the saved-analyses page: expand a card for the same **valuation ruler** (buy/watch/rich zones, your fair value, the reviewer's fair value, and the consensus) and a Fair value ↔ Buy target toggle, plus a BUY/WATCH/OVER verdict at a glance. The email digest now arrives **daily**, with a richer per-ticker layout: price, gap vs. your buy target, a Bear/Base/Bull breakdown split into Analysis / Reviewer / Consensus, your buy target, and the date of the underlying analysis. Each entry still has its own MoS% slider, a per-row **Analyze** button, and a price-proximity badge. Pause the digest without deleting the list, or trigger an update on demand (rate-limited to once per 24h).
+- **Watchlist, redesigned with a daily digest** — the watchlist is now a compact card per ticker, matching the saved-analyses page: expand a card for the same **valuation ruler** (buy/watch/rich zones, your fair value, one tick per analyst lens that ran, and the consensus) and a Fair value ↔ Buy target toggle, plus a BUY/WATCH/OVER verdict at a glance. The email digest now arrives **daily**, with a richer per-ticker layout: price, gap vs. your buy target, a Bear/Base/Bull breakdown split into Analysis / each analyst lens that ran / Consensus, your buy target, and the date of the underlying analysis. Each entry still has its own MoS% slider, a per-row **Analyze** button, and a price-proximity badge. Pause the digest without deleting the list, or trigger an update on demand (rate-limited to once per 24h).
 
-- **Saved analyses, redesigned** — reports are grouped by ticker as compact cards showing the live price and a **Buy / Watch / Over-FV verdict** at a glance. Expand a card for a single **valuation ruler** that places the current price on the Bear→Bull range with clear buy / watch zones, your fair value, the reviewer's fair value, and the consensus all marked on one axis (with their values), plus a compact **Analysis / Reviewer / Consensus** table you can flip between fair value and buy target. Metadata (performance, open-position P&L) and actions live in the expanded view; older analyses stay in a collapsible history. Search by ticker/name, filter to "Under FV", or sort by recent / ticker / performance. A performance badge shows `$priceAtSave → $priceNow ±X%`.
+- **Saved analyses, redesigned** — reports are grouped by ticker as compact cards showing the live price and a **Buy / Watch / Over-FV verdict** at a glance. Expand a card for a single **valuation ruler** that places the current price on the Bear→Bull range with clear buy / watch zones, your fair value, one tick per analyst lens that ran, and the consensus all marked on one axis (with their values), plus a compact comparison table you can flip between fair value and buy target. Metadata (performance, open-position P&L) and actions live in the expanded view; older analyses stay in a collapsible history. Search by ticker/name, filter to "Under FV", or sort by recent / ticker / performance. A performance badge shows `$priceAtSave → $priceNow ±X%`.
 
 - **User accounts** — register with email and password to save reports, revisit them at `/analyses`, and re-run any analysis with one click (ticker pre-filled).
 
 - **Language toggle (EN / IT)** — switch the entire interface, including number formatting, with one click. Your preference is remembered. AI report language defaults to your selection but can be overridden per report.
 
 - **Installable app (PWA)** — install the app on your device. On Android, Chrome shows an "Install" banner; on iOS, use Share → Add to Home Screen. Once installed it opens in standalone mode with its own icon.
+
+- **Choose your AI model** — a new settings menu (gear icon in the nav bar) lets you pick which AI model powers every analysis: Claude Opus 4.8, Claude Sonnet 5, or the new **DeepSeek V4 Pro** — plus a reasoning-effort level and thinking on/off, as your default across the app. Deep Value, the Advisor, and the Analyst Panel each also show an inline selector so you can override the default for a single run. DeepSeek is a lower-cost alternative; note it's noticeably slower than Claude on a full Deep Value analysis, since it takes many more research steps to gather the same data.
+
+- **Earnings countdown in the watchlist digest** — if you've looked up a stock's next-earnings date (via the "Find next earnings (AI)" button on Saved Analyses, Watchlist, or Portfolio), the daily email now shows a countdown for it right on the ticker card: "results today," "N days until the next report," or, if you haven't refreshed it in a while, "N days since the expected date" — a nudge to update it.
 
 ## 🐛 Bug Fixes
 
@@ -100,13 +100,13 @@
 
 - **Deep Value analyses are more rigorous** — reports now incorporate the latest quarterly results (not just annual figures), verify that any cited guidance or business plan is the current version, separate official guidance from estimates, use normalized (recurring) earnings for valuation multiples, differentiate the Bull/Base/Bear scenarios on real fundamentals, and benchmark against the closest comparable companies rather than only large global peers. These directly address blind spots a second opinion used to catch.
 
-- **The Analyst Review trusts the app's live price** — it no longer second-guesses a correct current price using stale quotes from the web, so its "above or below fair value" verdict is reliable.
+- **Every analyst lens trusts the app's live price** — none of them second-guess a correct current price using stale quotes from the web, so each "above or below fair value" verdict is reliable.
 
 - **Deep Value reports read like professional research** — clearer section dividers, consistent spacing and colors, and the exact same layout whether streaming live or opened from your saved history. The recap table collapses to stacked cards on narrow screens.
 
 - **Deep Value analyses dig deeper** — they run at a higher reasoning effort with far more room to work, sourcing up to 5 years of financial data, so reports are more thorough and less likely to be cut short on complex companies.
 
-- **Every analysis is independent of your position** — a Deep Value analysis (and its Analyst Review) is never told what you paid or what a previous run estimated, so its fair values can't be unconsciously anchored to your cost basis or nudged to justify holding. Reaching fair value is a checkpoint, not an automatic sell — take the fresh, unbiased numbers to the Advisor, which knows your holdings and can weigh hold / add / exit (including dividend considerations) for you.
+- **Every analysis is independent of your position** — a Deep Value analysis (and every analyst-panel lens) is never told what you paid or what a previous run estimated, so its fair values can't be unconsciously anchored to your cost basis or nudged to justify holding. Reaching fair value is a checkpoint, not an automatic sell — take the fresh, unbiased numbers to the Advisor, which knows your holdings and can weigh hold / add / exit (including dividend considerations) for you.
 
 - **Cleaner P&L presentation** — performance and P&L deltas appear as colored pill badges with a tinted background, and positions display as `shares × buy price → current price` with an inline P&L badge.
 
@@ -119,6 +119,8 @@
 - **Watchlist digest now arrives at a consistent local time** — the daily email used to run on a fixed UTC schedule, so it landed an hour later (or earlier) in Italy depending on daylight saving time. It's now pinned to 8am Italian time year-round, ahead of market open, automatically adjusting across the seasonal clock change.
 
 - **Watchlist digest now knows what you already own** — if a watched ticker's price drops below your buy target and you already hold a position in it, the email no longer suggests it as a fresh "buying opportunity." Instead it shows your existing holding (shares, average cost, current P&L%) and nudges you to consider adding to the position rather than treating it as a new buy.
+
+- **Watchlist digest emails no longer arrive on weekends** — since markets are closed Saturday and Sunday, the daily digest now runs Monday through Friday only, so you won't get an email repeating Friday's numbers.
 
 ## 🔒 Security
 

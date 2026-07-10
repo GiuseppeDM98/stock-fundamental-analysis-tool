@@ -8,6 +8,7 @@ import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useLanguage } from "@/context/language-context";
 import type { Language } from "@/lib/i18n/translations";
+import { AiPreferencesModal } from "@/components/ai-preferences-modal";
 
 /**
  * Top navigation bar shown on all pages.
@@ -40,6 +41,7 @@ export default function NavBar() {
   const { language, setLanguage, t } = useLanguage();
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [aiModalOpen, setAiModalOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const reduceMotion = useReducedMotion();
   const openButtonRef = useRef<HTMLButtonElement>(null);
@@ -124,6 +126,29 @@ export default function NavBar() {
           >
             {LANGUAGE_FLAGS[language]} {LANGUAGE_LABELS[language]}
           </button>
+
+          {/* AI preferences — global model/effort/thinking default */}
+          {session && (
+            <button
+              onClick={() => setAiModalOpen(true)}
+              aria-label="AI preferences"
+              title="AI preferences"
+              className="tap flex items-center justify-center rounded-md border border-slate-700 px-2 py-1 text-muted transition hover:border-slate-500 hover:text-slate-100"
+            >
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path
+                  d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                />
+                <path
+                  d="M16.2 12.6l1.1.6-.9 1.6-1.2-.4a4.6 4.6 0 01-1.4.8l-.2 1.3H11.4l-.2-1.3a4.6 4.6 0 01-1.4-.8l-1.2.4-.9-1.6 1.1-.6a4.7 4.7 0 010-1.6l-1.1-.6.9-1.6 1.2.4a4.6 4.6 0 011.4-.8L11.4 7h2.2l.2 1.3a4.6 4.6 0 011.4.8l1.2-.4.9 1.6-1.1.6a4.7 4.7 0 010 1.6z"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                />
+              </svg>
+            </button>
+          )}
 
           {status === "loading" ? null : session ? (
             <>
@@ -247,6 +272,8 @@ export default function NavBar() {
           </AnimatePresence>,
           document.body,
         )}
+
+      {aiModalOpen && <AiPreferencesModal onClose={() => setAiModalOpen(false)} />}
     </header>
   );
 }
