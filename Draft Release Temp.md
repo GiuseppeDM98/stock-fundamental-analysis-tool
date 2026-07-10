@@ -46,6 +46,8 @@
 
 - **Installable app (PWA)** — install the app on your device. On Android, Chrome shows an "Install" banner; on iOS, use Share → Add to Home Screen. Once installed it opens in standalone mode with its own icon.
 
+- **Earnings countdown in the watchlist digest** — if you've looked up a stock's next-earnings date (via the "Find next earnings (AI)" button on Saved Analyses, Watchlist, or Portfolio), the daily email now shows a countdown for it right on the ticker card: "results today," "N days until the next report," or, if you haven't refreshed it in a while, "N days since the expected date" — a nudge to update it.
+
 ## 🐛 Bug Fixes
 
 - Fixed the **PDF export from the analysis page including an app "screenshot"** as the first page (the search box, disclaimer, market-data header, and Margin of Safety slider). The PDF now starts cleanly at the report, matching the saved-analysis export.
@@ -115,6 +117,8 @@
 - **Watchlist digest now arrives at a consistent local time** — the daily email used to run on a fixed UTC schedule, so it landed an hour later (or earlier) in Italy depending on daylight saving time. It's now pinned to 8am Italian time year-round, ahead of market open, automatically adjusting across the seasonal clock change.
 
 - **Watchlist digest now knows what you already own** — if a watched ticker's price drops below your buy target and you already hold a position in it, the email no longer suggests it as a fresh "buying opportunity." Instead it shows your existing holding (shares, average cost, current P&L%) and nudges you to consider adding to the position rather than treating it as a new buy.
+
+- **Watchlist digest emails no longer arrive on weekends** — since markets are closed Saturday and Sunday, the daily digest now runs Monday through Friday only, so you won't get an email repeating Friday's numbers.
 
 ## 🔒 Security
 

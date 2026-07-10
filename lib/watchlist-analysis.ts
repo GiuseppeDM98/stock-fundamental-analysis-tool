@@ -5,6 +5,7 @@ import { sendWatchlistDigest, type DigestItem } from "@/lib/email";
 import { grossUpToIntrinsic, type Triple } from "@/lib/report/valuation";
 import { presentAnalysts, meanTriple } from "@/lib/report/consensus";
 import type { SavedAnalysis } from "@/types/analysis";
+import type { EarningsConfidence } from "@/types/earnings";
 import { aggregateOpenLots } from "@/lib/portfolio-math";
 
 // ─── Current price helper ─────────────────────────────────────────────────────
@@ -52,6 +53,16 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
   for (const p of openPositions) {
     lotsByTicker.set(p.ticker, [...(lotsByTicker.get(p.ticker) ?? []), { shares: p.shares, purchasePrice: p.purchasePrice }]);
   }
+
+  // Next-earnings dates, batched once per user (same N+1-avoidance shape as positions above).
+  // This is read-only — the cron NEVER calls the AI lookup itself, it only surfaces whatever
+  // the user already fetched on-demand from /analyses, the watchlist or the portfolio.
+  // Missing entries (user never ran the lookup for that ticker) are left null in the digest.
+  const earningsEstimates = await db.earningsEstimate.findMany({
+    where: { userId: user.id },
+    select: { ticker: true, nextEarningsDate: true, confidence: true },
+  });
+  const earningsByTicker = new Map(earningsEstimates.map((e) => [e.ticker, e]));
 
   const digestItems: DigestItem[] = [];
 
@@ -105,6 +116,7 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
         : "over";
 
     const holding = aggregateOpenLots(lotsByTicker.get(item.ticker) ?? []);
+    const earnings = earningsByTicker.get(item.ticker);
 
     digestItems.push({
       ticker: item.ticker,
@@ -126,6 +138,8 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
       analysisDate: analysis.createdAt.toISOString(),
       holdingShares: holding?.totalShares ?? null,
       holdingWeightedAvgCost: holding?.weightedAvgCost ?? null,
+      nextEarningsDate: earnings?.nextEarningsDate ? earnings.nextEarningsDate.toISOString() : null,
+      earningsConfidence: (earnings?.confidence as EarningsConfidence | undefined) ?? null,
     });
 
     // Small delay between quote fetches to respect Yahoo rate limits (no AI calls now)
@@ -162,7 +176,8 @@ export async function runWatchlistAnalysisForUser(userId: string): Promise<void>
 
 /**
  * Iterates all users with at least one watchlist item and watchlistEnabled=true.
- * The digest is sent daily to every enabled user (no per-user frequency).
+ * The digest is sent weekdays (Mon-Fri) to every enabled user (no per-user frequency;
+ * markets are closed on weekends, see vercel.json's cron schedule).
  * Sequential processing with 3s delay between users to respect rate limits.
  */
 export async function runWatchlistAnalysisForAllUsers(): Promise<void> {

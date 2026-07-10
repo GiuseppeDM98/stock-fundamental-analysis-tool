@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import type { AnalystAngle } from "@/types/analysis";
+import type { EarningsConfidence } from "@/types/earnings";
 
 // Lazily initialized — avoids throwing during build when the env var is absent.
 let _resend: Resend | null = null;
@@ -49,6 +50,13 @@ export interface DigestItem {
   // (same ticker, same instrument).
   holdingShares: number | null;
   holdingWeightedAvgCost: number | null;
+  // Next-earnings date from the user's stored EarningsEstimate (AI-sourced, on-demand —
+  // the cron never runs the lookup itself). Null when the user never fetched it for this
+  // ticker. The AI only ever persists a *future* date or null, so a stored date that has
+  // since passed means the user hasn't refreshed it since the report — that's what lets
+  // the digest show "days ago" without a separate "last earnings" field.
+  nextEarningsDate: string | null;
+  earningsConfidence: EarningsConfidence | null;
 }
 
 // ─── Ledger palette (inline for email clients) ────────────────────────────────
@@ -76,6 +84,39 @@ function formatPrice(value: number, currency: string): string {
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("it-IT", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+// Whole calendar days between today and `dateIso` — positive = future, negative = past.
+// Compares at day granularity (both sides zeroed to midnight) so "today" reads as 0
+// regardless of the time-of-day the cron happens to run at.
+function daysUntil(dateIso: string): number {
+  const target = new Date(dateIso);
+  target.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((target.getTime() - today.getTime()) / MS_PER_DAY);
+}
+
+// Next/last-earnings line, shown only when the user has fetched an estimate for this
+// ticker. Three cases: today, N days from now (future, still the "next" report), or N
+// days ago (the stored date has already passed — a nudge to refresh, since the AI never
+// persists a past date, only a future one that later became stale).
+function earningsNote(item: DigestItem): string {
+  if (!item.nextEarningsDate) return "";
+  const days = daysUntil(item.nextEarningsDate);
+  const approx = item.earningsConfidence !== "confirmed" ? "~" : "";
+  let text: string;
+  if (days === 0) {
+    text = "📅 Risultati finanziari oggi";
+  } else if (days > 0) {
+    text = `📅 Mancano ${approx}${days} ${days === 1 ? "giorno" : "giorni"} ai prossimi risultati`;
+  } else {
+    const ago = Math.abs(days);
+    text = `📅 Sono passati ${ago} ${ago === 1 ? "giorno" : "giorni"} dai risultati attesi — aggiorna la data`;
+  }
+  return `<div style="margin-top:6px;font-size:12px;color:${C.muted};">${text}</div>`;
 }
 
 function statusBadge(status: DigestItem["status"]): string {
@@ -174,6 +215,8 @@ function buildCard(item: DigestItem): string {
 
       ${positionLine}
 
+      ${earningsNote(item)}
+
       ${underNote}
 
       <table style="width:100%;border-collapse:collapse;margin-top:14px;">
@@ -205,11 +248,13 @@ function buildCard(item: DigestItem): string {
 }
 
 /**
- * Sends the daily watchlist digest email for one user via Resend.
+ * Sends the watchlist digest email for one user via Resend (weekdays only, see
+ * app/api/cron/watchlist-analysis).
  * Each ticker is a card: live price + distance to the base buy target (with an under-target
- * note when applicable), a bear/base/bull table for the analysis, the red-team reviewer and
- * their consensus (when a review exists), the MoS-adjusted buy target, and the source
- * analysis date. Native currency is used per ticker — no forced EUR conversion.
+ * note when applicable), an open-position line when held, a next/last-earnings note when the
+ * user has fetched one, a bear/base/bull table for the analysis, each analyst-panel lens and
+ * their consensus (when present), the MoS-adjusted buy target, and the source analysis date.
+ * Native currency is used per ticker — no forced EUR conversion.
  */
 export async function sendWatchlistDigest(params: {
   to: string;
