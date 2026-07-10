@@ -185,6 +185,23 @@ A `PortfolioSnapshot` row is written for each user who has at least one position
 
 > **Note:** Do not reuse secrets between local and production environments.
 
+### ⚠️ Vercel Hobby plan: AI routes will 504
+
+The three AI routes (`/api/ai/deep-value`, `/api/ai/deep-value/verify`, `/api/ai/advisor`) call Claude with a high reasoning effort plus web search — generation regularly takes **1–2 minutes**. On Vercel, every API route is a serverless function with a `maxDuration` capped by the plan:
+
+| Plan | Max `maxDuration` |
+|---|---|
+| Hobby | 60s |
+| Pro | 300s (up to 800s with Fluid Compute) |
+| Enterprise | 900s |
+
+**On Hobby, these routes will hit the 60s ceiling and return a 504** before the report finishes — streaming doesn't help, since Vercel counts total execution time, not whether the response is still being written. If you deploy on Hobby, either:
+
+- **Run AI analyses from `npm run dev` on localhost** (no function-duration limit) and use the deployed instance for everything else, or
+- **Upgrade to Pro** and add `export const maxDuration = 300;` to each of the three route files.
+
+A queue+polling architecture (job persisted immediately, generation run by a worker outside Vercel's function limit) would remove this ceiling on Hobby entirely, at the cost of losing live streaming — explored but not implemented, see [`docs/async-ai-analysis-architecture.md`](docs/async-ai-analysis-architecture.md).
+
 ---
 
 ## Troubleshooting

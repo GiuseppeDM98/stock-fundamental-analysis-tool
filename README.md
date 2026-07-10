@@ -480,6 +480,14 @@ turso db shell <your-db-name> < prisma/migrations/<latest>/migration.sql
 
 **Future**: Add UI field for manual shares input
 
+### Vercel Hobby Plan — 60s Function Timeout on AI Routes
+
+**Issue**: `/api/ai/deep-value`, `/api/ai/deep-value/verify` and `/api/ai/advisor` call Claude with `effort: "xhigh"`/`"high"` plus web search, which regularly takes **1–2 minutes** to finish. Every Vercel API route is a serverless function with a `maxDuration` capped by the plan — **60s on Hobby**, 300s on Pro (800s with Fluid Compute), 900s on Enterprise. Streaming does not help: Vercel counts total function execution time, not whether bytes are still being sent, so the function is killed and the browser gets a **504 Gateway Timeout** well before the report finishes. A Vercel Cron job doesn't bypass this either — it only triggers the route on a schedule, the invoked function is still subject to the same `maxDuration`.
+
+**Workaround**: run these three AI routes against `npm run dev` (localhost) instead of a Hobby deployment, or set `export const maxDuration = 300` on the three routes after upgrading to Vercel Pro.
+
+**Future**: an async queue+polling architecture (job written to the DB immediately, generation done by a worker outside Vercel's function limit, client polls for the result) would remove the ceiling entirely on Hobby, at the cost of losing live token-by-token streaming. Explored but not implemented — see [`docs/async-ai-analysis-architecture.md`](docs/async-ai-analysis-architecture.md) for the trade-off analysis against just upgrading to Pro.
+
 ---
 
 ## 🗺️ Roadmap
