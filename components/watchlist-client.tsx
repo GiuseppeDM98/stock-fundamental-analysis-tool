@@ -222,10 +222,14 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
       ? meanTriple([intrinsic, ...analystsIntrinsic.map((a) => a.triple)])
       : null;
 
-  const buyTargetBase = intrinsic ? toBuyTarget(intrinsic.base) : null;
+  // Verdict/zones prefer the consensus (base analysis + every analyst lens that ran) over
+  // the base analysis alone — more independent opinions is a more robust signal than one.
+  // Falls back to the base analysis's own fair value when no analyst has run yet.
+  const verdictBaseIntrinsic = consensusIntrinsic ? consensusIntrinsic.base : intrinsic?.base ?? null;
+  const buyTargetBase = verdictBaseIntrinsic != null ? toBuyTarget(verdictBaseIntrinsic) : null;
   const verdict: Verdict | null =
-    intrinsic && buyTargetBase != null && currentPrice != null
-      ? getVerdict(currentPrice, buyTargetBase, intrinsic.base)
+    verdictBaseIntrinsic != null && buyTargetBase != null && currentPrice != null
+      ? getVerdict(currentPrice, buyTargetBase, verdictBaseIntrinsic)
       : null;
   // Distance of the price from the buy target (the actionable reference).
   const buyTargetPct =
@@ -363,7 +367,7 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
             max={intrinsic.bull}
             price={currentPrice ?? undefined}
             buyTargetEdge={buyTargetBase}
-            fvEdge={intrinsic.base}
+            fvEdge={verdictBaseIntrinsic ?? intrinsic.base}
             priceLabel={t("priceShort")}
           />
         </div>
@@ -381,7 +385,13 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
                   <span className="text-slate-400">
                     {" · "}
                     {Math.abs(buyTargetPct).toFixed(0)}%{" "}
-                    {buyTargetPct <= 0 ? t("belowBuyTargetPhrase") : t("aboveBuyTargetPhrase")}
+                    {consensusIntrinsic
+                      ? buyTargetPct <= 0
+                        ? t("belowBuyTargetConsensusPhrase")
+                        : t("aboveBuyTargetConsensusPhrase")
+                      : buyTargetPct <= 0
+                        ? t("belowBuyTargetPhrase")
+                        : t("aboveBuyTargetPhrase")}
                   </span>
                 </p>
               )}
@@ -391,7 +401,7 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
                 max={intrinsic.bull}
                 price={currentPrice ?? undefined}
                 buyTargetEdge={buyTargetBase}
-                fvEdge={intrinsic.base}
+                fvEdge={verdictBaseIntrinsic ?? intrinsic.base}
                 markers={markers ?? undefined}
                 priceLabel={t("priceShort")}
                 currency={currency}

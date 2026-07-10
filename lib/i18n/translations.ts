@@ -140,6 +140,8 @@ export type Translations = {
   verdictOver: string;
   belowBuyTargetPhrase: string;
   aboveBuyTargetPhrase: string;
+  belowBuyTargetConsensusPhrase: string;
+  aboveBuyTargetConsensusPhrase: string;
   priceShort: string;
   priceNa: string;
   fvShort: string;
@@ -578,8 +580,10 @@ const en: Translations = {
   verdictBuy: "BUY",
   verdictWatch: "WATCH",
   verdictOver: "OVER FV",
-  belowBuyTargetPhrase: "below buy target",
-  aboveBuyTargetPhrase: "above buy target",
+  belowBuyTargetPhrase: "below buy target (analysis)",
+  aboveBuyTargetPhrase: "above buy target (analysis)",
+  belowBuyTargetConsensusPhrase: "below buy target (consensus)",
+  aboveBuyTargetConsensusPhrase: "above buy target (consensus)",
   priceShort: "Price",
   priceNa: "Price n/a",
   fvShort: "FV",
@@ -1016,8 +1020,10 @@ const it: Translations = {
   verdictBuy: "BUY",
   verdictWatch: "WATCH",
   verdictOver: "SOPRA FV",
-  belowBuyTargetPhrase: "sotto il buy target",
-  aboveBuyTargetPhrase: "sopra il buy target",
+  belowBuyTargetPhrase: "sotto il buy target (analisi)",
+  aboveBuyTargetPhrase: "sopra il buy target (analisi)",
+  belowBuyTargetConsensusPhrase: "sotto il buy target (consenso)",
+  aboveBuyTargetConsensusPhrase: "sopra il buy target (consenso)",
   priceShort: "Prezzo",
   priceNa: "Prezzo n/d",
   fvShort: "FV",

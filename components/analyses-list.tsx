@@ -299,11 +299,16 @@ function TickerGroup({
   // Stored fairValues are MoS-adjusted buy targets; intrinsic = target / (1 - mos).
   const grossUp = (v: number) => grossUpToIntrinsic(v, mos);
 
+  // Verdict/zones prefer the consensus (base analysis + every analyst lens that ran) over
+  // the base analysis alone — more independent opinions is a more robust signal than one.
+  // Falls back to the base analysis's own buy target when no analyst has run yet.
+  const verdictBase = consensusT ? consensusT.base : latest.fairValueBase;
+
   // Everything below is only meaningful when the latest analysis carries fair values.
   const ruler = hasFV
     ? {
-        buyTargetBase: latest.fairValueBase!,
-        intrinsicBase: grossUp(latest.fairValueBase!),
+        buyTargetBase: verdictBase!,
+        intrinsicBase: grossUp(verdictBase!),
         min: grossUp(latest.fairValueBear!),
         max: grossUp(latest.fairValueBull!),
       }
@@ -438,7 +443,13 @@ function TickerGroup({
                   <span className="text-slate-400">
                     {" · "}
                     {Math.abs(buyTargetPct).toFixed(0)}%{" "}
-                    {buyTargetPct <= 0 ? t("belowBuyTargetPhrase") : t("aboveBuyTargetPhrase")}
+                    {consensusT
+                      ? buyTargetPct <= 0
+                        ? t("belowBuyTargetConsensusPhrase")
+                        : t("aboveBuyTargetConsensusPhrase")
+                      : buyTargetPct <= 0
+                        ? t("belowBuyTargetPhrase")
+                        : t("aboveBuyTargetPhrase")}
                   </span>
                 </p>
               )}
