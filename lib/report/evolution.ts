@@ -20,9 +20,10 @@ import { consensusIntrinsicBase } from "@/lib/report/consensus";
 /** One source's base-scenario intrinsic value at two points in time. */
 export type SourceDelta = { prev: number; curr: number; pctDelta: number };
 
-/** Base-scenario evolution of an analysis vs. the previous saved analysis. */
+/** Base-scenario evolution between one saved analysis and the next (older → newer). */
 export type Evolution = {
-  prevDate: string; // ISO createdAt of the previous analysis
+  prevDate: string; // ISO createdAt of the older (prev) analysis
+  currDate: string; // ISO createdAt of the newer (curr) analysis
   base: SourceDelta; // the analysis's own base fair value — always present
   consensus?: SourceDelta; // only when BOTH analyses have a base + ≥1 analyst run
 };
@@ -53,7 +54,28 @@ export function computeEvolution(prev: SavedAnalysis, curr: SavedAnalysis): Evol
 
   return {
     prevDate: prev.createdAt,
+    currDate: curr.createdAt,
     base,
     consensus: delta(consensusIntrinsicBase(prev), consensusIntrinsicBase(curr)) ?? undefined,
   };
+}
+
+/**
+ * Builds the full evolution history for a ticker: one {@link Evolution} per adjacent
+ * pair of saves, so the UI can show how the estimate moved at EVERY step, not just the
+ * latest vs. the immediately previous one.
+ *
+ * @param analysesNewestFirst - A ticker's saved analyses in newest-first order (as
+ *   grouped for display). Fewer than 2 comparable saves yields an empty array.
+ * @returns One step per adjacent pair, newest step first; pairs whose base value is
+ *   missing on either side are skipped (a gap collapses rather than breaking the chain).
+ */
+export function computeEvolutionChain(analysesNewestFirst: SavedAnalysis[]): Evolution[] {
+  const steps: Evolution[] = [];
+  for (let i = 0; i < analysesNewestFirst.length - 1; i++) {
+    // prev = older (i+1), curr = newer (i) — computeEvolution expects (prev, curr).
+    const step = computeEvolution(analysesNewestFirst[i + 1], analysesNewestFirst[i]);
+    if (step) steps.push(step);
+  }
+  return steps;
 }

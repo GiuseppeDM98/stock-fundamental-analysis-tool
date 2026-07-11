@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeEvolution } from "@/lib/report/evolution";
+import { computeEvolution, computeEvolutionChain } from "@/lib/report/evolution";
 import type { SavedAnalysis } from "@/types/analysis";
 
 // Minimal SavedAnalysis fixture — only the fields computeEvolution reads matter;
@@ -100,5 +100,50 @@ describe("computeEvolution", () => {
 
     expect(evo!.base).toBeDefined();
     expect(evo!.consensus).toBeUndefined();
+  });
+});
+
+describe("computeEvolutionChain", () => {
+  it("returns no steps for a single saved analysis", () => {
+    const only = makeAnalysis({ fairValueBase: 100 });
+
+    expect(computeEvolutionChain([only])).toEqual([]);
+  });
+
+  it("emits one step per adjacent pair across the whole history, newest step first", () => {
+    // Newest-first, as grouped for display: c (newest) → b → a (oldest).
+    const a = makeAnalysis({ createdAt: "2026-01-01T00:00:00.000Z", fairValueBase: 100 });
+    const b = makeAnalysis({ createdAt: "2026-02-01T00:00:00.000Z", fairValueBase: 110 });
+    const c = makeAnalysis({ createdAt: "2026-03-01T00:00:00.000Z", fairValueBase: 121 });
+
+    const chain = computeEvolutionChain([c, b, a]);
+
+    expect(chain).toHaveLength(2);
+    // Step 0: b → c (the most recent move).
+    expect(chain[0].prevDate).toBe(b.createdAt);
+    expect(chain[0].currDate).toBe(c.createdAt);
+    expect(chain[0].base.prev).toBeCloseTo(110);
+    expect(chain[0].base.curr).toBeCloseTo(121);
+    expect(chain[0].base.pctDelta).toBeCloseTo(0.1);
+    // Step 1: a → b (the earlier move).
+    expect(chain[1].prevDate).toBe(a.createdAt);
+    expect(chain[1].currDate).toBe(b.createdAt);
+    expect(chain[1].base.prev).toBeCloseTo(100);
+    expect(chain[1].base.curr).toBeCloseTo(110);
+  });
+
+  it("skips steps whose base value is missing on either side, keeping the valid ones", () => {
+    // b has no base value → both pairs touching it (b↔c and a↔b) drop, leaving only c↔d.
+    const a = makeAnalysis({ createdAt: "2026-01-01T00:00:00.000Z", fairValueBase: 100 });
+    const b = makeAnalysis({ createdAt: "2026-02-01T00:00:00.000Z", fairValueBase: null });
+    const c = makeAnalysis({ createdAt: "2026-03-01T00:00:00.000Z", fairValueBase: 120 });
+    const d = makeAnalysis({ createdAt: "2026-04-01T00:00:00.000Z", fairValueBase: 132 });
+
+    const chain = computeEvolutionChain([d, c, b, a]);
+
+    expect(chain).toHaveLength(1);
+    expect(chain[0].prevDate).toBe(c.createdAt);
+    expect(chain[0].currDate).toBe(d.createdAt);
+    expect(chain[0].base.pctDelta).toBeCloseTo(0.1);
   });
 });

@@ -133,8 +133,11 @@ export type Translations = {
   consensusLabel: string;
   reviewerLabel: string;
   analysisLabel: string;
-  // Deterministic estimate-evolution diff on the analyses card.
+  // Static header for the deterministic estimate-evolution history on the analyses card
+  // (each row carries its own date range, so the title no longer trails a single date).
   evolutionTitle: string;
+  // Caption under that header naming the metric shown (base intrinsic fair value).
+  evolutionSubtitle: string;
   verdictBuy: string;
   verdictWatch: string;
   verdictOver: string;
@@ -142,6 +145,9 @@ export type Translations = {
   aboveBuyTargetPhrase: string;
   belowBuyTargetConsensusPhrase: string;
   aboveBuyTargetConsensusPhrase: string;
+  // Signal-reliability flag: shown when the bull↔bear cone dwarfs the price-vs-FV edge.
+  weakSignalLabel: string;
+  weakSignalHint: string;
   priceShort: string;
   priceNa: string;
   fvShort: string;
@@ -576,7 +582,8 @@ const en: Translations = {
   consensusLabel: "Consensus",
   reviewerLabel: "Reviewer",
   analysisLabel: "Analysis",
-  evolutionTitle: "Evolution vs analysis of",
+  evolutionTitle: "Estimate evolution (history)",
+  evolutionSubtitle: "Fair value (base intrinsic value)",
   verdictBuy: "BUY",
   verdictWatch: "WATCH",
   verdictOver: "OVER FV",
@@ -584,6 +591,8 @@ const en: Translations = {
   aboveBuyTargetPhrase: "above buy target (analysis)",
   belowBuyTargetConsensusPhrase: "below buy target (consensus)",
   aboveBuyTargetConsensusPhrase: "above buy target (consensus)",
+  weakSignalLabel: "weak signal",
+  weakSignalHint: "The bull–bear range dwarfs the gap between price and fair value: the verdict is inside the model's own uncertainty. Treat it as low-confidence.",
   priceShort: "Price",
   priceNa: "Price n/a",
   fvShort: "FV",
@@ -1016,7 +1025,8 @@ const it: Translations = {
   consensusLabel: "Consenso",
   reviewerLabel: "Revisore",
   analysisLabel: "Analisi",
-  evolutionTitle: "Evoluzione vs analisi del",
+  evolutionTitle: "Evoluzione stima (storico)",
+  evolutionSubtitle: "Fair value (valore intrinseco, scenario base)",
   verdictBuy: "BUY",
   verdictWatch: "WATCH",
   verdictOver: "SOPRA FV",
@@ -1024,6 +1034,8 @@ const it: Translations = {
   aboveBuyTargetPhrase: "sopra il buy target (analisi)",
   belowBuyTargetConsensusPhrase: "sotto il buy target (consenso)",
   aboveBuyTargetConsensusPhrase: "sopra il buy target (consenso)",
+  weakSignalLabel: "segnale debole",
+  weakSignalHint: "La forbice bull–bear è molto più ampia del divario tra prezzo e fair value: il verdetto è dentro l'incertezza stessa del modello. Consideralo a bassa affidabilità.",
   priceShort: "Prezzo",
   priceNa: "Prezzo n/d",
   fvShort: "FV",

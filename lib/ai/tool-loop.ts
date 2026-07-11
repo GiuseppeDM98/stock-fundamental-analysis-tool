@@ -15,6 +15,16 @@ import { executeWebSearch } from "@/lib/ai/web-search-tool";
 // for Deep Value and silently returned an empty report with no error.
 const DEFAULT_MAX_TOOL_ITERATIONS = 10;
 
+// Cap for the heavy-research routes (Deep Value + its analyst-panel review). Their
+// prompts demand far more one-query-at-a-time rounds than the Advisor's single-answer
+// prompt — and the ANALYTICAL_RIGOR_BLOCK / analyst structural checks (EV→equity bridge,
+// same-basis comparables, scenario-vs-sensitivity, anchoring, reverse) each add figures
+// to web-verify. Shared by both routes so the knob lives in one place. Raised 25→35 after
+// the added checks pushed real DeepSeek runs into the "too many search rounds" cutoff.
+// DeepSeek-only in effect: Claude's server-side web_search never surfaces a client
+// tool_use, so its loop exits after one iteration regardless of this value.
+export const DEEP_RESEARCH_MAX_TOOL_ITERATIONS = 35;
+
 type StreamParams = Omit<Anthropic.MessageStreamParams, "messages"> & {
   messages: Anthropic.MessageParam[];
 };
