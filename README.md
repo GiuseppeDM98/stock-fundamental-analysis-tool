@@ -37,7 +37,8 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **AI Portfolio Advisor** — conversational AI at `/advisor` in two modes: **Portfolio** (knows your holdings and saved analyses) and **Discovery** (idea generation — finds quality compounders, undervalued stocks, or sector opportunities with no portfolio context). In Portfolio mode it grounds on the **real current price** of each of your holdings, and it verifies any cited news or reason for a price move via web search (flagging it as unconfirmed when it can't) rather than guessing. Recommended tickers appear as one-click chips that launch a Deep Value analysis. Conversations saved to your account.
 - **Decision Panel** — after every Deep Value Analysis completes, an **Add to Watchlist** button appears (pre-fills ticker + MoS). Every analysis ends with a deliberate next step, not a dead end.
 - **Exit signal ("At Fair Value")** — when a position's current price reaches the **intrinsic base fair value** from your most recent saved analysis (i.e. the margin of safety is fully consumed), an amber ⚠ badge appears in the portfolio row (always visible). Its "Re-analyze →" button runs a fresh, **position-blind** Deep Value analysis (no cost basis is ever fed to the AI, so the valuation stays independent); use the Advisor afterwards to decide hold / add / exit
-- **Estimate-evolution diff** — when a ticker has two or more saved analyses, its saved-analyses card shows how the estimate moved vs. the previous save (Δ Analysis / Consensus base fair value). Pure arithmetic on your saved numbers — never sent to the AI
+- **Estimate-evolution history** — when a ticker has two or more saved analyses, its saved-analyses card traces the estimate's move at **every step across your full save history** (Δ Analysis / Consensus base fair value per dated step). Pure arithmetic on your saved numbers — never sent to the AI
+- **Weak-signal indicator** — a muted "weak signal" tag next to the Buy/Watch/Over verdict (Saved Analyses + Watchlist) when the Bull–Bear range is so wide that the price-vs-fair-value gap sits inside the model's own uncertainty. Deterministic, self-calibrating (silent on high-conviction, tight-range names)
 - **Choose your AI model** — pick which model powers each analysis (Claude Opus 4.8, Claude Sonnet 5, or **DeepSeek V4 Pro**), plus a reasoning-effort level and thinking on/off, as a global default (gear icon in the nav bar) with a per-run override on Deep Value, the Advisor, and the Analyst Panel
 
 ### What Problem Does It Solve?
@@ -85,7 +86,8 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - 📱 **Installable PWA**: Install the app on Android or iOS for a native-like experience — standalone mode, home screen icon, no browser chrome
 - 💬 **AI Portfolio Advisor**: Conversational AI at `/advisor` that knows your portfolio and saved analyses — ask free-form questions, receive stock recommendations as one-click Deep Value chips, with full conversation history saved to your account
 - ⚠️ **Exit Signal**: Amber "At Fair Value" badge appears in the portfolio row when price ≥ base fair value from the most recent saved analysis — signals when the margin of safety is consumed; one click runs a fresh, position-blind re-analysis
-- 📈 **Estimate-Evolution Diff**: When a ticker has ≥2 saved analyses, its card shows Δ Analysis / Consensus base fair value vs. the previous save — deterministic, never sent to the AI
+- 📈 **Estimate-Evolution History**: When a ticker has ≥2 saved analyses, its card shows Δ Analysis / Consensus base fair value at every step across your full save history — deterministic, never sent to the AI
+- 🚦 **Weak-Signal Flag**: A "weak signal" tag warns when a Bull–Bear range is so wide the Buy/Watch/Over verdict is inside the model's own uncertainty — deterministic, and quiet on tight-range, high-conviction stocks
 - 🧪 **Fully Tested**: Vitest + Testing Library coverage for calculations and UI
 
 ---
@@ -498,8 +500,8 @@ turso db shell <your-db-name> < prisma/migrations/<latest>/migration.sql
 - [ ] Enhanced error messages with "Try Again" button
 
 ### Phase 2: Data & Calculations
-- [ ] 2-stage DCF model option
-- [ ] P/E-based valuation comparison
+- [ ] **TIKR grounding + deterministic multiple anchor** — optional "Grounded" mode: paste TIKR statements/valuation/peers, plus a historical-multiple anchor computed in code (the structural cure for price-anchoring; spec in `docs/deep-value-tikr-grounding.md`)
+- [ ] Deterministic quant cards (Piotroski / Altman Z / multiples percentile)
 - [ ] Sensitivity analysis matrix (WACC vs growth)
 
 ### Phase 3: Features

@@ -12,7 +12,7 @@ import {
 } from "@/lib/ai/deep-value-prompts";
 import { getAiClient, buildThinkingParam, buildEffortConfig, buildWebSearchTools } from "@/lib/ai/client";
 import { resolveAiSettings } from "@/lib/ai/ai-preferences";
-import { runStreamWithToolLoop } from "@/lib/ai/tool-loop";
+import { runStreamWithToolLoop, DEEP_RESEARCH_MAX_TOOL_ITERATIONS } from "@/lib/ai/tool-loop";
 import { AI_MODEL_IDS, AI_EFFORT_LEVELS, type AiSettings } from "@/types/ai-settings";
 
 const DEFAULT_SETTINGS: AiSettings = { model: "claude-opus-4-8", effort: "xhigh", thinking: true };
@@ -107,12 +107,13 @@ export async function POST(request: Request) {
               }
             },
             // Deep Value's prompt (ANALYTICAL_RIGOR_BLOCK: ~5y financials, quality
-            // metrics, historical multiples, comparables) needs far more research rounds
-            // than Advisor/verify's default cap — reproduced in production (2026-07-10)
-            // with DeepSeek: the default 10 was hit mid-research, discarding everything
-            // silently (nothing had reached the ```json fence yet) and returning an empty
-            // report with no error.
-            25
+            // metrics, historical multiples, comparables, EV→equity bridge, reverse
+            // check) needs far more research rounds than Advisor's default cap —
+            // reproduced in production (2026-07-10) with DeepSeek: the default 10 was hit
+            // mid-research, discarding everything silently (nothing had reached the
+            // ```json fence yet) and returning an empty report with no error. See the
+            // shared constant for why it's 35.
+            DEEP_RESEARCH_MAX_TOOL_ITERATIONS
           );
 
           // Failsafe: if the model never reached the JSON fence (e.g. still researching

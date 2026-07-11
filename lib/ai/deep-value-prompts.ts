@@ -7,10 +7,15 @@ import type { AnalystAngle } from "@/types/analysis";
 
 // "Analytical rigor" checklist injected into the Deep Value system prompt
 // (between the scenario step and the output step). Each item hardens against a
-// concrete failure mode surfaced by the Analyst Review red-team pass (e.g. a stale
+// concrete failure mode surfaced by real second-opinion reviews (e.g. a stale
 // quarter ignored, a superseded industrial plan cited, an author estimate passed
-// off as company guidance, reported EBITDA inflated by one-offs, or scenarios that
-// differ only by the exit multiple).
+// off as company guidance, reported EBITDA inflated by one-offs, scenarios that
+// differ only by the exit multiple, an equity value that forgets to deduct
+// minority interests, a bull case that double-counts a demerger as both SOTP
+// narrative and consolidated multiple, a multiple reverse-engineered from the current
+// price so fair value ≈ price by construction, a net-debt/minorities bridge left
+// constant across scenarios, or profitability ratios that don't reconcile with the
+// income statement/balance sheet shown alongside them).
 const ANALYTICAL_RIGOR_BLOCK = `## Analytical rigor — MANDATORY checks
 These are non-negotiable. A valuation that fails them is not defensible.
 
@@ -22,13 +27,30 @@ These are non-negotiable. A valuation that fails them is not defensible.
 
 4. **Normalized earnings for multiples.** For EV/EBITDA, margin, and multiple analysis use RECURRING/normalized figures: strip out one-off items (asset disposals, insurance indemnities, impairments, litigation) and disclose them. Any headline multiple you quote must be computed on the normalized figure, not one flattered by non-recurring gains.
 
-5. **Differentiate scenarios on fundamentals.** The three scenarios must differ primarily through operating fundamentals (revenue growth, margins, EBITDA/FCF), not merely through the exit multiple or discount rate. Identify the single assumption that drives most of the value range and disclose its sensitivity (e.g. "each +1.0x on the exit multiple = +X per share"). If the whole upside rests on one lever, say so plainly.
+5. **Differentiate scenarios on fundamentals — and reconcile them to your own sensitivity.** The three scenarios must differ primarily through operating fundamentals (revenue growth, margins, EBITDA/FCF), not merely through the exit multiple or discount rate. Identify the single assumption that drives most of the value range and disclose its sensitivity (e.g. "each +1.0x on the exit multiple = +X per share"). If the whole upside rests on one lever, say so plainly. Then reconcile each scenario's operating figure to the driver assumption of THAT scenario using the sensitivity you just stated: e.g. if you claim "$10/bbl of Brent ≈ €2–3bn of EBITDA" and the bear assumes Brent far below the base, the bear EBITDA must fall by the implied amount — a bear EBITDA that contradicts your own stated sensitivity is an internal error. Avoid stretching the multiple in the SAME direction as the operating figure across scenarios unless you justify it: co-moving both levers inflates the tails and compounds error.
 
-6. **Base case uses the central point.** For the base case use the central/most-likely point of any guidance or estimate range — not the optimistic end — especially when recent results trend below it. Reserve the top of the range for the bull case and the bottom for the bear case.
+6. **Base case uses the central point — and normalize to the base driver, not a stale trailing figure.** For the base case use the central/most-likely point of any guidance or estimate range — not the optimistic end — especially when recent results trend below it. Reserve the top of the range for the bull case and the bottom for the bear case. For a commodity/cyclical business, the base operating figure (EBITDA/FCF) must be RE-DERIVED at the base-case commodity/price assumption using your stated sensitivity: do NOT reuse a trailing-twelve-month figure that embeds a different point in the cycle (e.g. a TTM that includes a quarter at much higher prices) and label it "normalized" — if the base assumes $75 but TTM earned an average $90, the base figure must be marked down to the $75 level.
 
-7. **Closest comparables and structural discounts.** When valuing on a multiple, benchmark against the CLOSEST comparables (similar size, geography, ownership structure, free float, liquidity, index membership) — not just large global leaders that trade at a premium. Justify the target multiple against them. Assess whether any valuation discount is STRUCTURAL (controlling shareholder, thin free float, low liquidity, limited analyst coverage) — which tends to persist — versus a temporary anomaly likely to close. If your thesis depends on multiple re-rating, name the specific catalyst that would trigger it; if none is visible, temper the conclusion accordingly.
+7. **Closest comparables, same basis, and structural discounts.** When valuing on a multiple, benchmark against the CLOSEST comparables (similar size, geography, ownership structure, free float, liquidity, index membership) — not just large global leaders that trade at a premium. Compare on the SAME basis: net debt and EBITDA for both the subject and the peers must use the same lease-accounting treatment (pre- vs post-IFRS 16) and the same EBITDA definition (reported vs adjusted/normalized). A headline "discount vs peers" computed on mismatched bases is a perimeter artifact, not a real discount — verify the basis before quoting it. Justify the target multiple against them. Assess whether any valuation discount is STRUCTURAL (controlling shareholder, thin free float, low liquidity, limited analyst coverage) — which tends to persist — versus a temporary anomaly likely to close. If your thesis depends on multiple re-rating, name the specific catalyst that would trigger it; if none is visible, temper the conclusion accordingly. **No selection bias:** do not drop the closest structural comparable merely because it lowers (or raises) the peer average — if a peer shares the very traits you cite as the cause of the subject's discount (e.g. state control, high commodity/E&P weight), it is the MOST relevant comp, not the least; include it, or justify its exclusion on grounds independent of its effect on the average.
 
-8. **Internal consistency (final check).** Before emitting the JSON, verify that every number used in your scenario calculations matches the figure cited in the corresponding narrative. The inputs in the math must equal the inputs described in prose — no bull case that narrates one target but computes with another.
+8. **Complete the EV→equity bridge.** When converting enterprise value to equity, do NOT stop at EV − net debt. Subtract minority (non-controlling) interests, preferred equity and unfunded pension/decommissioning liabilities, and add associates/JVs carried at equity. This matters most when consolidated EBITDA already includes subsidiaries the company does not wholly own (third-party or private-equity stakes, JVs): that minority share of value is not shareholders', so treating EV − net debt as equity overstates fair value per share. State each bridge item you deduct, or note "not material" explicitly. **The bridge is scenario-dependent, not a constant:** net debt moves with each scenario's cash generation (a bear with low prices, a suspended buyback and maintained capex de-levers slower or re-levers — net debt RISES; a bull generates more cash — net debt falls); and minority interests move with the value of the partially-owned subsidiaries (a bull that marks the satellites to higher valuations must deduct a correspondingly HIGHER minority share — you cannot claim higher segment value AND deduct constant minorities). Never carry the same net-debt and minority figures unchanged across bull, base and bear.
+
+9. **Method ↔ narrative coherence (no disguised sum-of-the-parts).** If your thesis leans on segment-specific value — a demerger, stake sales at segment multiples, "crystallizing" or "unlocking" the value of a division — then value the company as a genuine SUM-OF-THE-PARTS (each segment at its own appropriate multiple/method, then minus net debt and minorities), not as a single blended multiple on consolidated EBITDA. You may not narrate SOTP upside AND add it on top of a consolidated multiple that already captures the whole group: that double-counts. Pick one framework and apply it consistently.
+
+10. **Anchor the valuation lever to something INDEPENDENT of today's price — the market-implied read is a control, never the input.** The fair value of a multiple method is dominated by one number (the multiple); of a DCF/DDM, by the key lever (WACC, terminal growth, cost of equity). That lever must be anchored to evidence that does NOT depend on the current price:
+   - FIRST commit to the base-case lever justified ONLY from (a) the company's OWN historical distribution (median/percentile over 3–5y, gathered in Step 2) and (b) the closest peers with an explicit, reasoned discount/premium. Do this BEFORE, and WITHOUT reference to, the current price or the multiple the price implies.
+   - It is FORBIDDEN to set the base multiple equal to — or reverse-engineer it (or the WACC/terminal growth) from — the multiple/inputs implied by the current price. That produces a fair value ≈ price by construction: a null result dressed as analysis, not a signal.
+   - THEN compute the market-implied read as a separate CONTROL: back out what the price already prices in (the implied multiple on your normalized EBITDA/earnings; and for a commodity/cyclical name, the commodity price implied — which requires FIXING the multiple and holding it constant, since you cannot derive an implied commodity price from a multiple alone). Report the GAP between your independently-anchored lever and the market-implied one in the "Market-Implied Expectations" subsection (§4): that gap — not their coincidence — is the signal. If they coincide, state it as a finding ("the market already prices my anchored multiple"), not as your method.
+   - Never normalize on a trailing figure that spans a different point in the cycle than the scenario you are pricing (see check 6).
+
+11. **Margin-of-safety adequacy.** Judge whether the applied margin of safety is adequate for the RANGE and cyclicality of the business, rather than applying it mechanically. A small MoS against a wide bull↔bear dispersion (several turns of the multiple, a commodity-driven earnings swing) offers little real protection and is cosmetic — say so plainly. Do NOT change the user's chosen MoS; only judge, in the summary, whether it is sufficient given the dispersion you computed.
+
+12. **Internal consistency & reconciliation (final check — treat as a linter).** Before emitting the JSON, run these checks and FIX any failure rather than shipping it:
+   - Every number used in your scenario calculations matches the figure cited in the corresponding narrative — no bull case that narrates one target but computes with another.
+   - The profitability/quality metrics tie to the income statement and balance sheet you present: ROE ≈ net income / equity, net margin × revenue ≈ net income, ROA ≈ net income / assets. If a ratio pulled from a third-party source (e.g. a Yahoo ROE) contradicts your own tables, reconcile it or drop it — never show both a ~17% ROE and figures that imply ~6%.
+   - Explain any large year-on-year balance-sheet move you show (e.g. a double-digit-% change in equity), or flag it as unverified — do not present an unexplained ~€13bn equity drop.
+   - Resolve the share count to a SINGLE figure: reconcile shares issued vs. outstanding-net-of-treasury vs. ADR-equivalent, state which you use and why. An unresolved 5%+ discrepancy directly mis-scales every per-share value.
+   - Use terminology precisely: a shareholding (e.g. a government's ~33% stake held via a sovereign fund) is NOT a "golden share" (a distinct legal instrument granting special veto/approval powers). Do not conflate a stake with a control mechanism.
 `;
 
 /**
@@ -86,7 +108,7 @@ Apply the chosen method with three scenario sets. For each scenario compute:
 
 **DCF**: Project 10 years of FCF, apply WACC discount, add Gordon Growth terminal value.
 **DDM**: 2-stage — 10 explicit dividend years + Gordon Growth terminal. Cost of equity via CAPM.
-**EV/EBITDA**: EV = EBITDA × multiple → subtract net debt → divide by shares.
+**EV/EBITDA**: EV = EBITDA × multiple → subtract net debt → subtract minority interests, preferred equity and unfunded pension/decommissioning liabilities → add associates/JVs carried at equity → divide by shares. When consolidated EBITDA includes subsidiaries that are not wholly owned (third-party or JV stakes), the minority share of that value is not shareholders' — never treat EV − net debt as equity.
 **P/B**: Fair value = Book Value per Share × target P/B multiple.
 
 ${ANALYTICAL_RIGOR_BLOCK}
@@ -132,6 +154,8 @@ Present the key data gathered in Step 2 in a structured way:
 - Balance sheet health (net debt, debt/equity, current ratio)
 - Historical valuation context (how current multiples compare to the 3–5 year average)
 
+Then add a **"Market-Implied Expectations"** subsection. Starting from the *authoritative current price*, work backwards to what the market already prices in: the multiple implied by your normalized EBITDA/earnings, and — for a commodity/cyclical name — the commodity price implied once you FIX that multiple (per rigor check 10). This is a **CONTROL, not the source of your base multiple**: state the GAP between the multiple/driver the price implies and the one you anchored independently to history + peers (rigor check 10). The gap — not the coincidence — is the signal: if the price implies ~Xx and your anchored base is also ~Xx, say "the market already prices my anchored multiple; there is little valuation edge here," rather than presenting a fair value that equals the price by construction (e.g. "at ${language === "Italiano" ? "il prezzo corrente" : "the current price"} the market implies ~Xx EV/EBITDA on €Y bn of normalized EBITDA, i.e. Brent ~\$Z; my history/peer-anchored base multiple is Wx, a gap of …").
+
 ## 5. Bull Case — Intrinsic Value: [intrinsic_value] | Buy Target (−${mosPercent}% MoS): [buy_target]
 What would need to go right? Key assumptions and catalysts.
 
@@ -144,14 +168,15 @@ What could go wrong? Key downside risks and their probability.
 ## 8. Key Risks
 Top 3–5 risks that could derail the investment thesis.
 
-## 9. Near-term Catalysts
-Upcoming events or triggers (earnings releases, regulatory decisions, product launches, macro shifts) that could move the stock price materially in the next 6–12 months.
+## 9. Near-term Catalysts & Falsification Conditions
+First, upcoming events or triggers (earnings releases, regulatory decisions, product launches, macro shifts) that could move the stock price materially in the next 6–12 months.
+Then a distinct **"Falsification conditions"** paragraph: the specific, observable, near-term evidence that would prove THIS base-case thesis WRONG (e.g. "if the next quarter shows CFFO below €X, or the commodity settles under \$Y, or the segment margin does not recover, the base case is broken"). A catalyst is what makes you right; a falsification condition is what would make you admit you are wrong — state the latter as concrete thresholds against the next reported period, not vague risks.
 
 ## 10. Investment Summary
-A concise synthesis: is this stock attractively valued at the current price? Summarize the moat rating, the base case intrinsic value, and the buy target after applying the ${mosPercent}% margin of safety. State clearly whether the current price is above or below the buy target.
+A concise synthesis: is this stock attractively valued at the current price? Summarize the moat rating, the base case intrinsic value, and the buy target after applying the ${mosPercent}% margin of safety. State clearly whether the current price is above or below the buy target. Then judge whether the ${mosPercent}% margin of safety is *adequate* given (a) the bull↔bear dispersion you computed and (b) the cyclicality/volatility of the business: explicitly flag when a small MoS is cosmetic relative to a wide valuation range (e.g. a 10% MoS against a bull/bear spread of several turns of the multiple offers little real protection). Do NOT change the ${mosPercent}% figure — it is the user's chosen input — only judge its adequacy.
 
 Rules:
-- Write the entire report in ${language} — every word, header, and disclaimer
+- Write the entire report in ${language} — every word, header, and disclaimer. Use ONLY the writing system of ${language}: never emit stray characters from another script (e.g. no CJK/Chinese/Japanese/Korean characters when the language is not one of those). If a foreign-script word slips in, replace it with its ${language} equivalent.
 - Cite your sources (e.g. "According to [source]...")
 - End with: "⚠️ This report is for informational purposes only and does not constitute financial advice."
 - Do not write any preamble before the JSON block (no "Let me search...", "I'll start by...")`;
@@ -249,6 +274,23 @@ const ANGLE_CONFIG: Record<AnalystAngle, AngleConfig> = {
   },
 };
 
+// Structural checks shared by ALL analyst lenses, independent of persona.
+// Distilled from a real external review that found the tool's three lenses each
+// missed the SAME structural defects (an equity value that never deducted minority
+// interests; a bull case that narrated a demerger as sum-of-the-parts while the math
+// was a single consolidated multiple; a "discount vs peers" computed on mismatched
+// IFRS-16 bases; a bear EBITDA inconsistent with the report's own stated sensitivity).
+// Persona-specific focus areas alone did not surface these, so every lens now runs the
+// same explicit structural pass. One shared block (Rule of Three), not per-lens copies.
+const ANALYST_STRUCTURAL_CHECKS = `## Structural checks — always verify (regardless of your lens)
+These are the defects prior reviews have repeatedly missed. Check each explicitly, even if it falls outside your persona's usual focus:
+1. **EV→equity bridge is complete.** For multiple-based valuations, confirm equity = EV − net debt − minority (non-controlling) interests − preferred − unfunded pension/decommissioning + associates/JVs at equity. If the consolidated EBITDA includes subsidiaries that are NOT wholly owned (third-party or private-equity stakes, JVs), that minority share of value is not shareholders' — flag any report that treats EV − net debt as equity, and quantify the per-share overstatement.
+2. **Method ↔ narrative coherence.** If the thesis leans on segment-specific value (a demerger, stake sales at segment multiples, "unlocking" a division), the math must be a genuine sum-of-the-parts with per-segment multiples — not a single blended multiple on consolidated EBITDA with the SOTP value narrated on top. Flag double-counting.
+3. **Same-basis comparables.** Any peer-multiple discount/premium must compare net debt and EBITDA on the SAME basis (pre- vs post-IFRS 16, same reported/adjusted EBITDA definition) for both the subject and the peers. Flag a "discount vs peers" that may be a perimeter/definition artifact.
+4. **Scenario figures vs the report's own sensitivity.** Check each scenario's operating figure against the sensitivity the report itself states (e.g. "$10/bbl of Brent ≈ €2–3bn of EBITDA"): a bear EBITDA that contradicts the bear's own commodity assumption is an internal contradiction — call it out.
+5. **Anchoring & margin of safety.** Is the target multiple anchored (the company's own 3–5y distribution + closest peers with a justified discount) or hand-picked? Is the applied margin of safety adequate for the dispersion and cyclicality, or cosmetic given a wide bull↔bear range?
+`;
+
 /**
  * System prompt for one analyst-panel pass, parameterized by lens.
  *
@@ -279,6 +321,7 @@ Read the report provided in the user message and critically stress-test it. Use 
 Focus your review on:
 ${focusList}
 
+${ANALYST_STRUCTURAL_CHECKS}
 ## Your own independent valuation (MANDATORY)
 ${cfg.valuationFraming}
 
@@ -298,10 +341,11 @@ Emit it as a JSON block that MUST be the very FIRST thing you output, before any
 Each \`fairValue\` is your intrinsic estimate AFTER applying a margin of safety of ${mosPercent}% (buy target = intrinsic × (1 − ${mosPercent}/100)) — same convention as the report under review, so the two are directly comparable. After the JSON block, write the critique.
 
 Rules:
-- Write the critique entirely in ${language}.
+- Write the critique entirely in ${language}, using ONLY that language's writing system — never emit stray characters from another script (e.g. no CJK character dropped into a Western-language sentence). If a foreign-script word slips in, replace it with its ${language} equivalent.
 - Be specific and cite sources for any figure you challenge (e.g. "According to [source]...").
 - Be concise: this is a review, not a second full report. Use short sections and bullet points.
 - The ONLY JSON you emit is the single valuation block above; do NOT restate the whole report.
+- **Do not escalate prescriptiveness beyond the report you review.** Your output is a second opinion on the VALUATION: commit to your own bull/base/bear and say whether the report's fair value should be revised up or down. Do NOT issue an operational trade instruction more prescriptive than the base report — no "buy at €X", "accumulate below €Y", "sell now" when the report itself only concludes "hold". Judge the number; do not originate a trade call the report did not make.
 - If the report is sound, say so clearly and briefly rather than inventing problems (your JSON may then closely match the report's).
 - End with: "⚠️ This review is for informational purposes only and does not constitute financial advice."
 - Do not write any preamble before the JSON block (no "Let me review...", "I'll start by...").`;
