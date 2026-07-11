@@ -42,8 +42,12 @@ export async function executeWebSearch(query: string): Promise<string> {
       },
       body: JSON.stringify({
         query,
-        search_depth: "basic",
-        max_results: 5,
+        // "advanced" depth + 8 results (vs the old "basic"/5) makes each round more
+        // productive, so the DeepSeek research loop converges in fewer rounds and hits
+        // the iteration cap less often. Trade-off: advanced costs ~2 Tavily credits per
+        // search vs 1. Only DeepSeek uses this tool — Claude searches server-side.
+        search_depth: "advanced",
+        max_results: 8,
         topic: "finance",
       }),
     });

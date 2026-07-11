@@ -15,9 +15,10 @@ import type { Position } from "@/types/portfolio";
 import { useLanguage } from "@/context/language-context";
 import { ValuationRuler, ComparisonTable } from "@/components/report/valuation-ruler";
 import { getVerdict, VERDICT_BADGE, VERDICT_TEXT, type Verdict } from "@/lib/report/verdict";
+import { getSignalStrength } from "@/lib/report/signal";
 import { grossUpToIntrinsic } from "@/lib/report/valuation";
 import { presentAnalysts, consensusTriple } from "@/lib/report/consensus";
-import { computeEvolution, type Evolution, type SourceDelta } from "@/lib/report/evolution";
+import { computeEvolutionChain, type Evolution, type SourceDelta } from "@/lib/report/evolution";
 import { EarningsBadge } from "@/components/earnings-badge";
 import { isAnalysisStalePreEarnings, isFutureEarnings, formatEarningsDate } from "@/lib/earnings";
 import { fetchEarnings, refreshEarnings } from "@/lib/earnings-client";
@@ -197,41 +198,61 @@ function deltaBadgeClass(pctDelta: number): string {
   return "text-slate-400";
 }
 
+/** One "prev → curr  Δ%" figure, shared by the base and consensus lines of a step. */
+function DeltaFigure({ delta }: { delta: SourceDelta }) {
+  return (
+    <span className="flex items-center gap-1.5 font-mono text-slate-300">
+      {delta.prev.toFixed(2)} → {delta.curr.toFixed(2)}
+      <span className={`rounded px-1.5 py-0.5 font-sans font-semibold ${deltaBadgeClass(delta.pctDelta)}`}>
+        {delta.pctDelta >= 0 ? "+" : ""}
+        {(delta.pctDelta * 100).toFixed(1)}%
+      </span>
+    </span>
+  );
+}
+
 /**
- * Deterministic estimate-evolution diff for a ticker (base scenario, intrinsic scale).
- * Purely presentational — the numbers come from computeEvolution and never touch an
- * AI prompt; this only lets the user see how the thesis moved vs. the previous save.
+ * Deterministic estimate-evolution history for a ticker (base scenario, intrinsic scale).
+ * Shows one Δ per adjacent pair of saves — the whole trajectory, not just the latest move.
+ * Purely presentational — the numbers come from computeEvolutionChain and never touch an
+ * AI prompt; this only lets the user see how the thesis moved over every save.
+ * The subtitle names the metric (base intrinsic fair value) so the bare numbers aren't
+ * ambiguous; each step is a dated block whose rows are labeled by source (Analysis, and —
+ * when both endpoints had an analyst run — the panel Consensus).
  */
 function EvolutionDiff({
-  evolution,
+  steps,
   title,
-  labels,
+  subtitle,
+  analysisLabel,
+  consensusLabel,
 }: {
-  evolution: Evolution;
+  steps: Evolution[];
   title: string;
-  labels: { analysis: string; consensus: string };
+  subtitle: string;
+  analysisLabel: string;
+  consensusLabel: string;
 }) {
-  const rows: { label: string; delta: SourceDelta }[] = [
-    { label: labels.analysis, delta: evolution.base },
-    ...(evolution.consensus ? [{ label: labels.consensus, delta: evolution.consensus }] : []),
-  ];
-
   return (
     <div className="mt-3 rounded-lg border border-slate-700/50 bg-slate-800/30 p-3">
-      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-        {title} {formatDate(evolution.prevDate)}
-      </p>
-      <div className="space-y-1">
-        {rows.map((row) => (
-          <div key={row.label} className="flex items-center justify-between gap-2 text-xs">
-            <span className="text-slate-400">{row.label}</span>
-            <span className="flex items-center gap-1.5 font-mono text-slate-300">
-              {row.delta.prev.toFixed(2)} → {row.delta.curr.toFixed(2)}
-              <span className={`rounded px-1.5 py-0.5 font-sans font-semibold ${deltaBadgeClass(row.delta.pctDelta)}`}>
-                {row.delta.pctDelta >= 0 ? "+" : ""}
-                {(row.delta.pctDelta * 100).toFixed(1)}%
-              </span>
-            </span>
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">{title}</p>
+      <p className="mb-2.5 text-[10px] text-slate-500">{subtitle}</p>
+      <div className="space-y-2.5">
+        {steps.map((step) => (
+          <div key={step.prevDate} className="space-y-1">
+            <p className="text-[11px] text-slate-500">
+              {formatDate(step.prevDate)} → {formatDate(step.currDate)}
+            </p>
+            <div className="flex items-center justify-between gap-2 pl-2 text-xs">
+              <span className="text-slate-400">{analysisLabel}</span>
+              <DeltaFigure delta={step.base} />
+            </div>
+            {step.consensus && (
+              <div className="flex items-center justify-between gap-2 pl-2 text-[11px] text-slate-500">
+                <span>{consensusLabel}</span>
+                <DeltaFigure delta={step.consensus} />
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -284,10 +305,11 @@ function TickerGroup({
     ? earnings!.nextEarningsDate
     : null;
 
-  // Deterministic evolution of the estimate vs. the previous saved analysis (base
-  // scenario). Null when there's no prior save or no comparable base value — never
-  // fed to an AI prompt, purely a display of how the thesis moved over time.
-  const evolution = older.length > 0 ? computeEvolution(older[0], latest) : null;
+  // Deterministic evolution of the estimate across the WHOLE save history (base
+  // scenario), one Δ per adjacent pair — not just latest vs. the immediately previous
+  // save. Empty when there's a single save or no comparable base value; never fed to an
+  // AI prompt, purely a display of how the thesis moved over time.
+  const evolutionSteps = computeEvolutionChain(analyses);
 
   const hasFV =
     latest.fairValueBear != null && latest.fairValueBase != null && latest.fairValueBull != null;
@@ -323,6 +345,18 @@ function TickerGroup({
     ruler && currentPrice != null
       ? ((currentPrice - ruler.buyTargetBase) / ruler.buyTargetBase) * 100
       : null;
+
+  // Is the verdict actually meaningful, or is the base fair value ~on the price inside a
+  // huge bull↔bear cone (assumption variance > signal)? When "low", we say so instead of
+  // dressing a null result as a confident buy/watch/over. Deterministic, no AI.
+  const weakSignal =
+    ruler && currentPrice != null
+      ? getSignalStrength(currentPrice, {
+          bear: ruler.min,
+          base: ruler.intrinsicBase,
+          bull: ruler.max,
+        }) === "low"
+      : false;
 
   const verdictLabel = (v: Verdict) =>
     v === "buy" ? t("verdictBuy") : v === "watch" ? t("verdictWatch") : t("verdictOver");
@@ -380,6 +414,14 @@ function TickerGroup({
                 <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${VERDICT_BADGE[verdict]}`}>
                   {verdictLabel(verdict)} {buyTargetPct > 0 ? "+" : ""}
                   {buyTargetPct.toFixed(0)}%
+                </span>
+              )}
+              {weakSignal && (
+                <span
+                  className="rounded bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-medium text-slate-300"
+                  title={t("weakSignalHint")}
+                >
+                  {t("weakSignalLabel")}
                 </span>
               )}
             </div>
@@ -454,6 +496,12 @@ function TickerGroup({
                 </p>
               )}
 
+              {/* When the scenario cone dwarfs the price-vs-fair-value edge, the verdict is
+                  noise — say so instead of implying a confident call. */}
+              {weakSignal && (
+                <p className="mb-3 -mt-2 text-[11px] text-slate-500">{t("weakSignalHint")}</p>
+              )}
+
               <ValuationRuler
                 min={ruler.min}
                 max={ruler.max}
@@ -506,15 +554,14 @@ function TickerGroup({
             <p className="text-xs text-slate-500">{t("noValuationData")}</p>
           )}
 
-          {/* Estimate evolution vs the previous saved analysis — deterministic, no AI */}
-          {evolution && (
+          {/* Estimate evolution across the whole save history — deterministic, no AI */}
+          {evolutionSteps.length > 0 && (
             <EvolutionDiff
-              evolution={evolution}
+              steps={evolutionSteps}
               title={t("evolutionTitle")}
-              labels={{
-                analysis: t("analysisLabel"),
-                consensus: t("consensusLabel"),
-              }}
+              subtitle={t("evolutionSubtitle")}
+              analysisLabel={t("analysisLabel")}
+              consensusLabel={t("consensusLabel")}
             />
           )}
 

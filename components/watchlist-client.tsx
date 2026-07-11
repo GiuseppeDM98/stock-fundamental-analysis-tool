@@ -18,6 +18,7 @@ import type { SavedAnalysis, AnalystAngle } from "@/types/analysis";
 import type { Translations } from "@/lib/i18n/translations";
 import { ValuationRuler, ComparisonTable, type Triple } from "@/components/report/valuation-ruler";
 import { getVerdict, VERDICT_BADGE, VERDICT_TEXT, type Verdict } from "@/lib/report/verdict";
+import { getSignalStrength } from "@/lib/report/signal";
 import { grossUpToIntrinsic } from "@/lib/report/valuation";
 import { presentAnalysts, meanTriple } from "@/lib/report/consensus";
 import { EarningsBadge } from "@/components/earnings-badge";
@@ -237,6 +238,17 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
       ? ((currentPrice - buyTargetBase) / buyTargetBase) * 100
       : null;
 
+  // "low" when the bull↔bear cone dwarfs the price-vs-fair-value edge: the verdict is
+  // inside the model's own uncertainty. Deterministic, no AI. Same flag as /analyses.
+  const weakSignal =
+    intrinsic && verdictBaseIntrinsic != null && currentPrice != null
+      ? getSignalStrength(currentPrice, {
+          bear: intrinsic.bear,
+          base: verdictBaseIntrinsic,
+          bull: intrinsic.bull,
+        }) === "low"
+      : false;
+
   const verdictLabel = (v: Verdict) =>
     v === "buy" ? t("verdictBuy") : v === "watch" ? t("verdictWatch") : t("verdictOver");
 
@@ -323,6 +335,14 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
               ) : !hasFV ? (
                 <span className="text-[10px] text-slate-600">{t("watchlistNoLastRun")}</span>
               ) : null}
+              {weakSignal && (
+                <span
+                  className="rounded bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-medium text-slate-300"
+                  title={t("weakSignalHint")}
+                >
+                  {t("weakSignalLabel")}
+                </span>
+              )}
             </div>
           )}
 

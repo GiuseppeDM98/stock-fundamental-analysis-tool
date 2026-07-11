@@ -12,7 +12,9 @@
 
 - **AI Portfolio Advisor** — a conversational `/advisor` page with two modes. **Portfolio mode** knows your holdings, weighted average costs, and saved fair values, so you can ask "which of my positions has the most upside left?" **Discovery mode** starts clean and is purpose-built for finding new ideas — ask for quality compounders, undervalued dividend growers, or sector opportunities and get 3–5 concrete tickers with a thesis, ROIC, valuation setup, and key risk each. When the AI names a stock, it appears as a clickable chip that launches a Deep Value analysis. Conversations are saved and listed in a sidebar. Your selected mode is remembered.
 
-- **See how your estimate evolved** — when you have more than one saved analysis for a ticker, the saved-analyses card shows an evolution panel comparing your latest fair values to the previous save: Analysis and Consensus base values side by side with the % change. It's a plain, exact calculation from your saved numbers — so you can watch the thesis strengthen or weaken over time at a glance.
+- **See how your estimate evolved** — when you have more than one saved analysis for a ticker, the saved-analyses card shows an evolution panel tracing the % change at **every step across your full save history** (not just the latest vs. the previous one). Each step is a dated block with rows clearly labeled **Analysis** and **Consensus**, under a caption naming the metric (base fair value). It's a plain, exact calculation from your saved numbers — so you can watch the thesis strengthen or weaken over time at a glance.
+
+- **Weak-signal indicator on valuations** — when a stock's Bull–Bear range is so wide that the gap between price and fair value falls inside the model's own uncertainty, a muted **"weak signal"** tag appears next to the Buy/Watch/Over verdict on Saved Analyses and the Watchlist. It's an honest heads-up that the verdict is low-confidence (common for volatile, commodity-driven names), computed purely from your saved Bull/Base/Bear values — and it stays quiet on high-conviction, tight-range stocks.
 
 - **Adaptive Hub home** — the home page frames the full pipeline (Discover → Decide → Monitor) with a card per stage, a "Start with the Advisor" call-to-action, and a quick ticker box that jumps straight into an analysis. When logged in it surfaces a recent-activity strip: latest analyses, portfolio P&L, and watchlist count.
 
@@ -96,9 +98,17 @@
 
 - Fixed the **estimated tax figure showing even when your overall unrealized P&L was a net loss** — a single profitable position no longer triggers a tax estimate that made no sense against a portfolio down overall.
 
+- Fixed **AI reviews and analyses being cut off with a "too many search rounds" notice** when using the DeepSeek model — the research budget was raised and each web search now returns more, so DeepSeek runs complete far more often. (Analyses using Claude were never affected.)
+
+- Fixed **an occasional stray non-Latin character** (e.g. a Chinese character) slipping into a report or review written in another language.
+
 ## 🔧 Improvements
 
 - **Deep Value analyses are more rigorous** — reports now incorporate the latest quarterly results (not just annual figures), verify that any cited guidance or business plan is the current version, separate official guidance from estimates, use normalized (recurring) earnings for valuation multiples, differentiate the Bull/Base/Bear scenarios on real fundamentals, and benchmark against the closest comparable companies rather than only large global peers. These directly address blind spots a second opinion used to catch.
+
+- **Valuations resist anchoring to the current share price** — the analysis now derives its valuation multiple from the company's own history and closest peers *independently of the price*, and treats "what the market is already pricing in" as a cross-check that reports the gap, rather than the answer. Reports also deduct minority stakes correctly and vary them across each Bull/Base/Bear scenario, keep the scenario numbers internally consistent (net debt, ROE, share count), compare peers on the same accounting basis, and now end with explicit **"what would prove this thesis wrong"** conditions to watch at the next results.
+
+- **Analyst reviewers are sharper and stay in their lane** — every lens now runs the same structural checks (the valuation bridge, sum-of-the-parts double-counting, peer comparability) that independent reviewers used to catch, and no longer issues a trade instruction more aggressive than the report it's reviewing (e.g. "buy at €X" when the report says hold).
 
 - **Every analyst lens trusts the app's live price** — none of them second-guess a correct current price using stale quotes from the web, so each "above or below fair value" verdict is reliable.
 

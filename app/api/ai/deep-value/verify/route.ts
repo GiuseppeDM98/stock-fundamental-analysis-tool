@@ -17,7 +17,7 @@ import {
 } from "@/lib/ai/deep-value-prompts";
 import { getAiClient, buildThinkingParam, buildEffortConfig, buildWebSearchTools } from "@/lib/ai/client";
 import { resolveAiSettings } from "@/lib/ai/ai-preferences";
-import { runStreamWithToolLoop } from "@/lib/ai/tool-loop";
+import { runStreamWithToolLoop, DEEP_RESEARCH_MAX_TOOL_ITERATIONS } from "@/lib/ai/tool-loop";
 import { AI_MODEL_IDS, AI_EFFORT_LEVELS, type AiSettings } from "@/types/ai-settings";
 
 const DEFAULT_SETTINGS: AiSettings = { model: "claude-opus-4-8", effort: "xhigh", thinking: true };
@@ -126,12 +126,13 @@ export async function POST(request: Request) {
                 controller.enqueue(new TextEncoder().encode(text));
               }
             },
-            // Matches the Deep Value route's cap: this review does comparably
-            // web-search-heavy work (spot-checking figures/assumptions), so the
-            // shared default of 10 (lib/ai/tool-loop.ts) was too tight and tripped
-            // the "too many search rounds" cutoff under the client-executed DeepSeek
-            // search loop before the review finished.
-            25
+            // Matches the Deep Value route's cap (shared constant): this review does
+            // comparably web-search-heavy work — spot-checking figures/assumptions plus
+            // the structural checks (bridge/minorities, same-basis comparables, scenario
+            // vs. sensitivity, anchoring) — so the shared default of 10 was far too tight
+            // and tripped the "too many search rounds" cutoff under the client-executed
+            // DeepSeek search loop before the review finished.
+            DEEP_RESEARCH_MAX_TOOL_ITERATIONS
           );
 
           // Failsafe: if the model never emitted a JSON fence (e.g. it opened straight
