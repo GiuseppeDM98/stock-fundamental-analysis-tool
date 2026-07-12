@@ -448,6 +448,63 @@ export type Translations = {
   hubViewAll: string;
   hubRecentEmpty: string;
   hubWatchlistTracked: string;
+
+  // ─── Grounded Deep Value — pasted-data blocks + extract preview ───────────────
+  groundingSectionTitle: string;
+  groundingSectionDesc: string;
+  groundingAddBlockBtn: string;
+  groundingKindIncomeStatement: string;
+  groundingKindBalanceSheet: string;
+  groundingKindCashFlow: string;
+  groundingKindValuationMultiples: string;
+  groundingKindEstimates: string;
+  groundingKindPeerValuation: string;
+  groundingKindOther: string;
+  groundingPeerTickerPlaceholder: string;
+  groundingPeerTickerRequired: string;
+  groundingTextareaPlaceholder: string;
+  groundingRemoveBlock: string;
+  groundingCharsSuffix: string;
+  groundingLargeWarning: string;
+  groundingCapExceeded: string;
+  groundingPrepareBtn: string;
+  groundingPreparingState: string;
+  groundingExtractErrorPrefix: string;
+  groundingEditBtn: string;
+  groundingAnalyzeWithDataBtn: string;
+  groundingReadyBadge: string;
+  groundingNoBlocksYet: string;
+  groundingPreviewTitle: string;
+  groundingFiscalYearsSuffix: string;
+  groundingCoverageLabel: string;
+  groundingEvEbitdaHistoryTitle: string;
+  groundingMedianLabel: string;
+  groundingPeersCurrentLabel: string;
+  groundingPriceImpliesLabel: string;
+  groundingPercentileLabel: string;
+  groundingNoMarketImplied: string;
+  groundingWarningsTitle: string;
+  groundingUnitBillions: string;
+  groundingUnitMillions: string;
+  groundingUnitThousands: string;
+  groundingUnitUnits: string;
+  groundingWarnEpsMismatch: string;
+  groundingWarnNetdebtMismatch: string;
+  groundingWarnShareCountJump: string;
+  groundingWarnEbitGtEbitda: string;
+  groundingWarnValueConflict: string;
+  groundingWarnCurrencyMismatch: string;
+  groundingWarnNoMultiples: string;
+  groundingWarnMissingBridgeInputs: string;
+  groundingWarnBlockExtractFailed: string;
+  groundingWarnGeneric: string;
+  groundingCardTitle: string;
+  groundingCardArithmeticLabel: string;
+  groundingCardMosLabel: string;
+  groundingCardNoBridge: string;
+  groundingCardBaseMultipleLabel: string;
+  groundingCardGapLabel: string;
+  groundingCardAnchoringFlag: string;
 };
 
 const en: Translations = {
@@ -891,6 +948,64 @@ const en: Translations = {
   hubViewAll: "View all →",
   hubRecentEmpty: "Nothing yet",
   hubWatchlistTracked: "tracked",
+
+  // Grounded Deep Value
+  groundingSectionTitle: "Pasted data (optional)",
+  groundingSectionDesc:
+    "Paste authoritative financial statements, historical multiples, estimates and peer data to ground the valuation in numbers you provide, instead of what the model finds via web search.",
+  groundingAddBlockBtn: "+ Add table",
+  groundingKindIncomeStatement: "Income statement",
+  groundingKindBalanceSheet: "Balance sheet",
+  groundingKindCashFlow: "Cash flow",
+  groundingKindValuationMultiples: "Historical multiples",
+  groundingKindEstimates: "Estimates",
+  groundingKindPeerValuation: "Peer",
+  groundingKindOther: "Other",
+  groundingPeerTickerPlaceholder: "Peer ticker (e.g. SHEL)",
+  groundingPeerTickerRequired: "Every peer block needs a ticker before you can prepare the data.",
+  groundingTextareaPlaceholder: "Paste the table here…",
+  groundingRemoveBlock: "Remove",
+  groundingCharsSuffix: "chars",
+  groundingLargeWarning: "large paste — extraction may take longer",
+  groundingCapExceeded: "exceeds the 200,000 character limit — remove or shorten a block",
+  groundingPrepareBtn: "Prepare data",
+  groundingPreparingState: "Preparing…",
+  groundingExtractErrorPrefix: "Extraction failed:",
+  groundingEditBtn: "Edit",
+  groundingAnalyzeWithDataBtn: "Analyze with this data →",
+  groundingReadyBadge: "Ready",
+  groundingNoBlocksYet: "No tables added yet — use \"+ Add table\" to paste your first one.",
+  groundingPreviewTitle: "Extract",
+  groundingFiscalYearsSuffix: "fiscal years",
+  groundingCoverageLabel: "coverage",
+  groundingEvEbitdaHistoryTitle: "Historical EV/EBITDA",
+  groundingMedianLabel: "median",
+  groundingPeersCurrentLabel: "Peers (current)",
+  groundingPriceImpliesLabel: "Price implies",
+  groundingPercentileLabel: "percentile",
+  groundingNoMarketImplied: "Price-implied read unavailable — see warnings below.",
+  groundingWarningsTitle: "Warnings",
+  groundingUnitBillions: "billions",
+  groundingUnitMillions: "millions",
+  groundingUnitThousands: "thousands",
+  groundingUnitUnits: "units",
+  groundingWarnEpsMismatch: "EPS doesn't reconcile with net income / shares",
+  groundingWarnNetdebtMismatch: "Net debt doesn't reconcile with total debt − cash",
+  groundingWarnShareCountJump: "Share count moved more than 10% year over year",
+  groundingWarnEbitGtEbitda: "EBIT is greater than EBITDA",
+  groundingWarnValueConflict: "Two pasted blocks disagree on a value",
+  groundingWarnCurrencyMismatch: "Reporting currency differs from the quote currency — price-implied check skipped",
+  groundingWarnNoMultiples: "No historical EV/EBITDA multiples found — price-implied check skipped",
+  groundingWarnMissingBridgeInputs: "Latest fiscal year is missing net debt, minorities or share count — price-implied check skipped",
+  groundingWarnBlockExtractFailed: "A pasted block could not be extracted",
+  groundingWarnGeneric: "Data quality warning",
+  groundingCardTitle: "Deterministic post-check",
+  groundingCardArithmeticLabel: "Bridge arithmetic",
+  groundingCardMosLabel: "MoS applied",
+  groundingCardNoBridge: "The model did not declare a valuation bridge for this scenario.",
+  groundingCardBaseMultipleLabel: "Your base multiple",
+  groundingCardGapLabel: "gap",
+  groundingCardAnchoringFlag: "Multiple anchored to price — this fair value may equal the price by construction",
 };
 
 const it: Translations = {
@@ -1334,6 +1449,65 @@ const it: Translations = {
   hubViewAll: "Vedi tutte →",
   hubRecentEmpty: "Ancora niente",
   hubWatchlistTracked: "monitorati",
+
+  // Grounded Deep Value
+  groundingSectionTitle: "Dati incollati (opzionale)",
+  groundingSectionDesc:
+    "Incolla bilanci, multipli storici, stime e dati dei peer per ancorare la valutazione a numeri forniti da te, invece di quelli trovati dal modello via web search.",
+  groundingAddBlockBtn: "+ Aggiungi tabella",
+  groundingKindIncomeStatement: "Conto economico",
+  groundingKindBalanceSheet: "Stato patrimoniale",
+  groundingKindCashFlow: "Cash flow",
+  groundingKindValuationMultiples: "Multipli storici",
+  groundingKindEstimates: "Stime",
+  groundingKindPeerValuation: "Peer",
+  groundingKindOther: "Altro",
+  groundingPeerTickerPlaceholder: "Ticker del peer (es. SHEL)",
+  groundingPeerTickerRequired: "Ogni blocco Peer richiede un ticker prima di poter preparare i dati.",
+  groundingTextareaPlaceholder: "Incolla qui la tabella…",
+  groundingRemoveBlock: "Rimuovi",
+  groundingCharsSuffix: "caratteri",
+  groundingLargeWarning: "incolla ampio — l'estrazione potrebbe richiedere più tempo",
+  groundingCapExceeded: "supera il limite di 200.000 caratteri — rimuovi o accorcia un blocco",
+  groundingPrepareBtn: "Prepara dati",
+  groundingPreparingState: "Preparazione…",
+  groundingExtractErrorPrefix: "Estrazione fallita:",
+  groundingEditBtn: "Modifica",
+  groundingAnalyzeWithDataBtn: "Analizza con questi dati →",
+  groundingReadyBadge: "Pronto",
+  groundingNoBlocksYet: "Nessuna tabella ancora — usa \"+ Aggiungi tabella\" per incollare la prima.",
+  groundingPreviewTitle: "Estratto",
+  groundingFiscalYearsSuffix: "esercizi",
+  groundingCoverageLabel: "copertura",
+  groundingEvEbitdaHistoryTitle: "EV/EBITDA storico",
+  groundingMedianLabel: "mediana",
+  groundingPeersCurrentLabel: "Peer (correnti)",
+  groundingPriceImpliesLabel: "Il prezzo implica",
+  groundingPercentileLabel: "percentile",
+  groundingNoMarketImplied: "Lettura implicita nel prezzo non disponibile — vedi gli avvisi sotto.",
+  groundingWarningsTitle: "Avvisi",
+  groundingUnitBillions: "miliardi",
+  groundingUnitMillions: "milioni",
+  groundingUnitThousands: "migliaia",
+  groundingUnitUnits: "unità",
+  groundingWarnEpsMismatch: "L'EPS non torna con utile netto / azioni",
+  groundingWarnNetdebtMismatch: "Il net debt non torna con debito totale − cassa",
+  groundingWarnShareCountJump: "Il numero di azioni è variato di oltre il 10% da un anno all'altro",
+  groundingWarnEbitGtEbitda: "L'EBIT è superiore all'EBITDA",
+  groundingWarnValueConflict: "Due blocchi incollati non sono coerenti su un valore",
+  groundingWarnCurrencyMismatch: "La valuta di reporting è diversa da quella di quotazione — controllo del multiplo implicito saltato",
+  groundingWarnNoMultiples: "Nessun multiplo EV/EBITDA storico trovato — controllo del multiplo implicito saltato",
+  groundingWarnMissingBridgeInputs:
+    "All'ultimo esercizio mancano net debt, minorities o numero di azioni — controllo del multiplo implicito saltato",
+  groundingWarnBlockExtractFailed: "Non è stato possibile estrarre un blocco incollato",
+  groundingWarnGeneric: "Avviso sulla qualità dei dati",
+  groundingCardTitle: "Post-check deterministico",
+  groundingCardArithmeticLabel: "Aritmetica del ponte",
+  groundingCardMosLabel: "MoS applicata",
+  groundingCardNoBridge: "Il modello non ha dichiarato un ponte di valutazione per questo scenario.",
+  groundingCardBaseMultipleLabel: "Il tuo multiplo base",
+  groundingCardGapLabel: "gap",
+  groundingCardAnchoringFlag: "Multiplo ancorato al prezzo — questo fair value potrebbe coincidere col prezzo per costruzione",
 };
 
 export const translations: Record<Language, Translations> = { en, it };

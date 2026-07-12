@@ -19,6 +19,9 @@ const saveSchema = z.object({
   fairValueBase: z.number().positive().optional(),
   fairValueBear: z.number().positive().optional(),
   valuationMethod: z.string().optional(),
+  // Grounded Deep Value mode — the confirmed GroundingPayload (blocks + extract), as
+  // JSON. Present only when the analysis was generated with pasted financial data.
+  groundingJson: z.string().max(400000).optional(),
 });
 
 export async function GET() {
@@ -58,6 +61,13 @@ export async function GET() {
       qualityFairValueBase: true,
       qualityFairValueBear: true,
       qualityValuationMethod: true,
+      // groundingJson is DELIBERATELY OMITTED here — it's a JSON blob (raw paste blocks
+      // + extract, up to 400KB) and this list view never renders it (no ruler/table/card
+      // on /analyses needs it). Selecting it would bloat every list load for a value
+      // nobody reads on this screen. If a future feature on THIS list needs grounding
+      // data, add it back deliberately — don't "restore" it reflexively because it looks
+      // missing next to the other columns. types/analysis.ts's SavedAnalysis mirrors this
+      // same exclusion; keep the two in sync.
     },
   });
 
@@ -90,6 +100,7 @@ export async function POST(request: Request) {
       fairValueBase: body.fairValueBase,
       fairValueBear: body.fairValueBear,
       valuationMethod: body.valuationMethod,
+      groundingJson: body.groundingJson,
     },
   });
 

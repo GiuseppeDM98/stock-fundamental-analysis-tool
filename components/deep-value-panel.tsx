@@ -16,12 +16,21 @@ import { parseDeepValueJson, stripJsonBlock } from "@/lib/report/parse-deep-valu
 import { AiSettingsControl } from "@/components/ai-settings-control";
 import { fetchAiSettings } from "@/lib/ai-settings-client";
 import { DEFAULT_AI_SETTINGS, type AiSettings } from "@/types/ai-settings";
+import type { GroundingPayload } from "@/types/grounding";
+import { GroundingCard } from "@/components/report/grounding-card";
 
 type Props = {
   ticker: string | null;
   companyName?: string;
   mosPercent?: number;
   currentPrice?: number;
+  // Quote currency — needed by <GroundingCard>'s currency-mismatch guard (the market-
+  // implied read must never divide a price in one currency by an EBITDA in another).
+  currency?: string;
+  // Confirmed Grounded-mode payload from <GroundingInput>, lifted in analyze-client.tsx.
+  // Null (the default) is Quick mode — sent as-is in the POST body, so its absence keeps
+  // the request (and thus the prompt) unchanged from before this feature existed.
+  grounding?: GroundingPayload | null;
 };
 
 type Status = "idle" | "loading" | "streaming" | "done" | "error";
@@ -38,7 +47,7 @@ const LANGUAGES = [
   { value: "日本語", label: "🇯🇵 日本語" },
 ];
 
-export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, currentPrice }: Props) {
+export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, currentPrice, currency, grounding = null }: Props) {
   const { data: session } = useSession();
   const router = useRouter();
   const { language: globalLanguage, t } = useLanguage();
@@ -112,6 +121,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           model: aiSettings.model,
           effort: aiSettings.effort,
           thinking: aiSettings.thinking,
+          ...(grounding ? { grounding } : {}),
         }),
         signal: controller.signal,
       });
@@ -185,6 +195,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
         fairValueBase: result?.base.fairValue,
         fairValueBear: result?.bear.fairValue,
         valuationMethod: result?.method,
+        groundingJson: grounding ? JSON.stringify(grounding) : undefined,
       });
       setSaveStatus("saved");
     } catch (err) {
@@ -304,6 +315,13 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
             bullLabel: t("bullLabel"),
           }}
         />
+      )}
+
+      {/* Deterministic post-check card — Grounded runs only. Recomputes the model's own
+          declared bridge from `grounding.extract`, independent of whether the save/DB
+          persistence (commit 7) has happened yet. */}
+      {status === "done" && result && grounding && currentPrice != null && currency && (
+        <GroundingCard result={result} extract={grounding.extract} mosPercent={mosPercent} currentPrice={currentPrice} currency={currency} />
       )}
 
       {/* Raw streaming report — shown while generating, before the shell above takes over. */}
