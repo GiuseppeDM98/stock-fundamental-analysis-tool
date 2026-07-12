@@ -70,3 +70,47 @@ scrivere il codice):
 implicito nel prezzo 4,18x a €14,18 → Δ≈0,46% → `priceAnchoringFlag: true`). `npm run build`
 verde dopo un fix di tipo in `merge.ts` (assegnazione generica su `GroundingMeta[keyof]`,
 serviva un cast esplicito).
+
+---
+
+## Sessione B (commit 3-4)
+
+### Step 3 — feat: grounding extraction endpoint (Sonnet 5, no web search)
+
+**Cosa**: `lib/ai/grounding-extract-prompt.ts` (`buildGroundingExtractSystemPrompt` /
+`buildGroundingExtractUserPrompt`, un `KIND_CONFIG` per i 7 `GroundingBlockKind` — istruzioni
++ esempio JSON per kind) e `app/api/ai/grounding/extract/route.ts`: `auth()` → 401; Zod valida
+`{ticker, blocks}` (40k/blocco via `.max`, 200k totali via `.refine`, `peerTicker` obbligatorio
+se `kind === "peer_valuation"` via `.refine`); una chiamata `runCreateWithToolLoop` **per
+blocco, in parallelo** (`Promise.allSettled`), `tools: []`, `claude-sonnet-5`/`medium`/thinking
+via `resolveAiSettings(userId, undefined, fallback)` (stesso pattern di `/api/earnings`);
+schema Zod **stretto e specifico per kind** (es. lo schema di `income_statement` non ha
+nemmeno la chiave `totalDebt` — il modello non può restituirla); la route poi **pada** la riga
+parsata alla forma piena `FiscalYearFinancials` (null sui campi che quel kind non copre) prima
+di passarla a `mergeExtractedBlocks` (già costruito in sessione A, che richiede righe sempre a
+forma piena). Blocco fallito (niente fence, JSON non valido, schema non valido) → non affonda
+gli altri, diventa un warning `block_extract_failed` (`detail: "#N"`, posizione 1-based).
+Wipeout totale (zero blocchi estratti) → 502. Poi `mergeExtractedBlocks` → `checkReconciliation`
+→ `computeMultipleStats` → `computeValuationGrid` → `getQuote` best-effort → `computeMarketImplied`.
+Risposta: `{extract, stats, grid, marketImplied, warnings}`.
+
+**Perché**: è l'endpoint che trasforma il paste grezzo nei dati strutturati che l'anteprima
+(step 4) rende verificabili prima di spendere una run Deep Value da 30-60s — spec §6.2.
+
+**Nota — le tre scelte validate con l'utente prima di scrivere il codice** (nessuna era
+letterale nella spec):
+1. **Schema Zod per kind**: sottoinsieme stretto per kind (non lo shape pieno riusato ovunque)
+   — la route poi pada a forma piena. Scelto per aderire a "meno gradi di libertà" alla lettera.
+2. **Chi emette `currency_mismatch`/`no_multiples`/`missing_bridge_inputs`**: nessuno dei moduli
+   `lib/grounding/*` (sessione A) li emette — `computeMarketImplied` ritorna `null` in silenzio
+   su tre condizioni distinte. La route ora replica **esattamente lo stesso ordine di branching**
+   di `computeMarketImplied` (valuta → input del ponte → serie multipli) per garantire che il
+   warning emesso corrisponda sempre alla vera causa del `null`, mai indovinato.
+3. **`detail` per i 4 codici senza un numero naturale**: token language-invariant (`"EUR vs USD"`,
+   `"#2"`), non stringa vuota — stesso spirito dei numeri già usati altrove in `detail`.
+
+`npm run test`: 114/114 verdi (nessun test nuovo — la route chiama un LLM vero, stesso motivo
+per cui `/api/earnings` non ha un test diretto; solo `lib/grounding/*` puro è testato).
+`npm run build` verde dopo aver sostituito un tipo condizionale scomodo
+(`BlockExtractResult["financials"] extends (infer R)[] ...`) con l'import diretto dei tipi
+(`FiscalYearFinancials`/`FiscalYearMultiples`/`ForwardEstimate`) da `types/grounding.ts`.
