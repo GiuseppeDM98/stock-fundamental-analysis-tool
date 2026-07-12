@@ -64,7 +64,15 @@ These are non-negotiable. A valuation that fails them is not defensible.
  * @param language - Report language (e.g. "English", "Italiano")
  * @param currentDate - Today's date string injected from the server (e.g. "May 7, 2026")
  */
-export function buildDeepValueSystemPrompt(language = "English", currentDate = "", mosPercent = 0): string {
+export function buildDeepValueSystemPrompt({
+  language = "English",
+  currentDate = "",
+  mosPercent = 0,
+}: {
+  language?: string;
+  currentDate?: string;
+  mosPercent?: number;
+} = {}): string {
   const dateClause = currentDate
     ? `\n**Today's date: ${currentDate}.** Use this to determine what counts as "most recent" data. Financial data from 2025 is historical — fiscal year 2025 results may or may not have been published yet; verify via web search. Do NOT assume the current year is 2025.\n`
     : "";
@@ -187,14 +195,21 @@ Rules:
  *
  * @param currentDate - Today's date string injected from the server (e.g. "May 7, 2026")
  */
-export function buildDeepValueUserPrompt(
-  ticker: string,
-  currentPrice: number,
-  currency: string,
-  language: string,
+export function buildDeepValueUserPrompt({
+  ticker,
+  currentPrice,
+  currency,
+  language,
   currentDate = "",
   mosPercent = 0,
-): string {
+}: {
+  ticker: string;
+  currentPrice: number;
+  currency: string;
+  language: string;
+  currentDate?: string;
+  mosPercent?: number;
+}): string {
   const dateClause = currentDate ? ` Today's date: ${currentDate}.` : "";
   const mosClause = mosPercent > 0
     ? ` Apply a margin of safety of ${mosPercent}% to all fair values (buy target = intrinsic value × ${(1 - mosPercent / 100).toFixed(2)}).`
@@ -300,12 +315,17 @@ These are the defects prior reviews have repeatedly missed. Check each explicitl
  * @param mosPercent - Margin of safety to apply to the analyst's own fair values,
  *   so its JSON buy targets are directly comparable to the base analysis's.
  */
-export function buildAnalystSystemPrompt(
-  angle: AnalystAngle = "skeptic",
+export function buildAnalystSystemPrompt({
+  angle = "skeptic",
   language = "English",
   currentDate = "",
   mosPercent = 0,
-): string {
+}: {
+  angle?: AnalystAngle;
+  language?: string;
+  currentDate?: string;
+  mosPercent?: number;
+} = {}): string {
   const cfg = ANGLE_CONFIG[angle];
   const dateClause = currentDate
     ? `\n**Today's date: ${currentDate}.** Do NOT assume the current year is 2025; verify recency via web search.\n`
@@ -360,16 +380,25 @@ Rules:
  *   When provided, it is stated as ground truth so the analyst doesn't "correct" it
  *   with stale web-searched quotes (see buildAnalystSystemPrompt).
  */
-export function buildAnalystUserPrompt(
-  angle: AnalystAngle,
-  ticker: string,
-  reportMd: string,
-  language: string,
+export function buildAnalystUserPrompt({
+  angle,
+  ticker,
+  reportMd,
+  language,
   currentDate = "",
-  currentPrice?: number,
+  currentPrice,
   currency = "",
   mosPercent = 0,
-): string {
+}: {
+  angle: AnalystAngle;
+  ticker: string;
+  reportMd: string;
+  language: string;
+  currentDate?: string;
+  currentPrice?: number;
+  currency?: string;
+  mosPercent?: number;
+}): string {
   void angle; // lens is applied in the system prompt; kept in the signature for symmetry.
   const dateClause = currentDate ? ` Today's date: ${currentDate}.` : "";
   const priceClause =

@@ -76,8 +76,8 @@ export async function POST(request: Request) {
     }
 
     const angle = body.angle as (typeof ANALYST_ANGLES)[number];
-    const systemPrompt = buildAnalystSystemPrompt(angle, body.language, currentDate, body.mosPercent);
-    const userPrompt = buildAnalystUserPrompt(angle, body.ticker, body.reportMd, body.language, currentDate, currentPrice, currency, body.mosPercent);
+    const systemPrompt = buildAnalystSystemPrompt({ angle, language: body.language, currentDate, mosPercent: body.mosPercent });
+    const userPrompt = buildAnalystUserPrompt({ angle, ticker: body.ticker, reportMd: body.reportMd, language: body.language, currentDate, currentPrice, currency, mosPercent: body.mosPercent });
 
     const aiSettings = await resolveAiSettings(
       session.user.id,

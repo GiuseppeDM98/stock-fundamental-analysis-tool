@@ -59,8 +59,8 @@ export async function POST(request: Request) {
     // anchored to what the user paid or to a previous run. Position-aware hold/exit
     // reasoning happens separately in the Advisor; estimate evolution is shown as a
     // deterministic diff on /analyses (never fed back into a prompt).
-    const systemPrompt = buildDeepValueSystemPrompt(body.language, currentDate, body.mosPercent);
-    const userPrompt = buildDeepValueUserPrompt(body.ticker, currentPrice, currency, body.language, currentDate, body.mosPercent);
+    const systemPrompt = buildDeepValueSystemPrompt({ language: body.language, currentDate, mosPercent: body.mosPercent });
+    const userPrompt = buildDeepValueUserPrompt({ ticker: body.ticker, currentPrice, currency, language: body.language, currentDate, mosPercent: body.mosPercent });
 
     const aiSettings = await resolveAiSettings(
       session.user.id,
