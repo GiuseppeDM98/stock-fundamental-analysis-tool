@@ -114,3 +114,58 @@ per cui `/api/earnings` non ha un test diretto; solo `lib/grounding/*` puro è t
 `npm run build` verde dopo aver sostituito un tipo condizionale scomodo
 (`BlockExtractResult["financials"] extends (infer R)[] ...`) con l'import diretto dei tipi
 (`FiscalYearFinancials`/`FiscalYearMultiples`/`ForwardEstimate`) da `types/grounding.ts`.
+
+### Step 4 — feat: typed paste blocks + extract preview on /analyze
+
+**Cosa**: `lib/grounding-client.ts` (client fetch helper, pattern `lib/earnings-client.ts` —
+`extractGrounding(ticker, blocks)` + il tipo `GroundingExtractResponse`);
+`components/grounding-input.tsx` (editor a blocchi tipizzati: sezione collassabile
+"Dati incollati (opzionale)", `[+ Aggiungi tabella ▾]` con i 7 kind, ogni blocco è una riga
+collassata — due `<button>` fratelli, mai annidati (gotcha #24) — che si espande su una
+`<textarea>` + input `peerTicker` per i blocchi Peer; bozza persistita in `localStorage` per
+ticker (`sfa:grounding:<TICKER>`, JSON.parse/stringify espliciti, gotcha #21); cap 40k/blocco
+(`maxLength`), 200k totali (blocca "Prepara dati"), avviso non bloccante oltre 120k; "Prepara
+dati" chiama `extractGrounding` e passa alla vista anteprima);
+`components/report/grounding-preview.tsx` (rende `GroundingExtractResponse`: header
+valuta/unità/N esercizi/copertura, stats EV/EBITDA con trend early→late mean, multipli
+secondari compatti, peer correnti, multiplo implicito nel prezzo + percentile o motivo
+dell'assenza, lista `ReconciliationWarning` tradotta, bottoni Modifica/Analizza); montato in
+`analyze-client.tsx` sopra `<DeepValuePanel>` con stato `grounding: GroundingPayload | null`
+sollevato via pattern controllato `value`/`onChange` (stesso di `AiSettingsControl`) — non
+ancora usato nel body della POST (quello è il commit 5). +47 chiavi i18n (type + en + it) in
+`lib/i18n/translations.ts`.
+
+**Perché**: è l'anteprima verificabile che la spec richiede PRIMA di spendere una run Deep
+Value da 30-60s su dati potenzialmente mal trascritti — spec §5.2/§5.3.
+
+**Nota — la quarta scelta validata con l'utente prima di scrivere il codice**: dove va lo
+stato prodotto dal bottone "Analizza con questi dati →", dato che `/api/ai/deep-value` non lo
+consuma ancora (commit 5). Sollevato subito in `analyze-client.tsx` (pattern controllato
+`value`/`onChange`, non un semplice callback one-shot) così il commit 5 legge solo quello
+stato, senza restructuring. Qualunque modifica ai blocchi dopo una conferma invalida il
+payload sollevato (`onChange(null)`), e cambiare ticker resetta tutto (bozza, vista, risultato
+estratto, conferma) — un payload confermato non deve mai sopravvivere a un ticker diverso da
+quello per cui è stato calcolato.
+
+**Nota — dettagli minori non nella spec, decisi senza chiedere (bassa posta, reversibili)**:
+- Notazione finanziaria standard (EV/EBITDA, P/E, P/B, EV/Sales, "de-rating"/"re-rating") NON
+  passa da `t()` — stesso trattamento dei method badge già esistenti (es. "DCF"), è notazione
+  invariante per lingua, non prosa.
+- `groundingWarnRoeMismatch` non esiste come chiave: `roe_mismatch` resta dormiente (mai
+  emesso da `checkReconciliation`, sessione A); la mappa codice→chiave in
+  `grounding-preview.tsx` ha un fallback (`groundingWarnGeneric`) invece di una entry per
+  ogni membro della union, quindi non serve preparare una traduzione per un codice morto.
+
+`npm run test`: 114/114 verdi (nessun test nuovo — componenti React d'interazione, nessuna
+nuova funzione pura). `npm run build` verde; `/analyze` passa da 4.4 kB a 7.3 kB.
+
+**Fix post-review (stesso commit)**: il menu `[+ Aggiungi tabella ▾]` (assoluto, dentro la
+card "Dati incollati") appariva dietro la card successiva ("Analisi Deep Value") — non un bug
+di `overflow`, ma di stacking context: `.card` usa `backdrop-blur-sm`, che crea il proprio
+stacking context, quindi lo `z-10` del menu non riesce a superare una card successiva nel DOM
+qualunque sia il suo z-index locale (stesso principio già documentato in AGENTS.md per i
+modali). Portato il menu su `document.body` via `ReactDOM.createPortal` (pattern già usato da
+`ai-preferences-modal.tsx`), posizionato `fixed` sulle coordinate del bottone
+(`getBoundingClientRect()`), chiusura su click esterno (ora verificato contro due ref, bottone
++ menu, dato che non sono più annidati nel DOM) e su scroll (il menu è calcolato una sola volta
+all'apertura, non ri-tracciato in continuo). `npm run build`/`npm run test` verdi dopo il fix.
