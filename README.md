@@ -500,7 +500,7 @@ turso db shell <your-db-name> < prisma/migrations/<latest>/migration.sql
 - [ ] Enhanced error messages with "Try Again" button
 
 ### Phase 2: Data & Calculations
-- [ ] **TIKR grounding + deterministic multiple anchor** — optional "Grounded" mode: paste TIKR statements/valuation/peers, plus a historical-multiple anchor computed in code (the structural cure for price-anchoring; spec in `docs/deep-value-tikr-grounding.md`)
+- [ ] **Grounded mode + deterministic multiple anchor** — optional "Grounded" mode: paste the statements/valuation/peers from any source, plus a historical-multiple anchor computed in code and a post-check that verifies the model's own valuation bridge (the structural cure for price-anchoring; spec in `docs/deep-value-grounding-spec.md`)
 - [ ] Deterministic quant cards (Piotroski / Altman Z / multiples percentile)
 - [ ] Sensitivity analysis matrix (WACC vs growth)
 
