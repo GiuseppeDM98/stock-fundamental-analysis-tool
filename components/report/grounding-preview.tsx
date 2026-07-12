@@ -39,7 +39,10 @@ const WARNING_KEY: Partial<Record<ReconciliationWarning["code"], keyof Translati
   block_extract_failed: "groundingWarnBlockExtractFailed",
 };
 
-function warningLabelKey(code: ReconciliationWarning["code"]): keyof Translations {
+// Exported — reused by grounding-card.tsx so the two surfaces that render
+// ReconciliationWarning[] (this pre-generation preview and the post-generation
+// deterministic card) never drift onto two different code→translation-key mappings.
+export function warningLabelKey(code: ReconciliationWarning["code"]): keyof Translations {
   // roe_mismatch is dormant (lib/grounding/reconcile.ts never emits it) but stays in the
   // union for forward compatibility — the fallback below covers it if that ever changes.
   return WARNING_KEY[code] ?? "groundingWarnGeneric";

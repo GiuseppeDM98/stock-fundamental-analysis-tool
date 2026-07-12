@@ -80,6 +80,13 @@ model Analysis {
   qualityFairValueBear   Float?
   qualityValuationMethod String?
   qualityCritiqueMd      String?
+  // Grounded Deep Value mode (docs/deep-value-grounding-spec.md): the confirmed
+  // GroundingPayload (raw paste blocks + the structured extract) as JSON, when the
+  // analysis was generated with pasted financial data. Null for Quick-mode analyses.
+  // NOT selected by the GET /api/analyses list (it's a blob the list never uses — see
+  // the select in app/api/analyses/route.ts) and NOT part of SavedAnalysis (see
+  // types/analysis.ts) — both exclusions are deliberate, not oversights.
+  groundingJson    String?
   createdAt        DateTime @default(now())
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 

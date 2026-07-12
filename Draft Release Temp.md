@@ -52,6 +52,10 @@
 
 - **Earnings countdown in the watchlist digest** — if you've looked up a stock's next-earnings date (via the "Find next earnings (AI)" button on Saved Analyses, Watchlist, or Portfolio), the daily email now shows a countdown for it right on the ticker card: "results today," "N days until the next report," or, if you haven't refreshed it in a while, "N days since the expected date" — a nudge to update it.
 
+- Added **Grounded Deep Value — paste your own financial data**. On `/analyze`, an optional "Pasted data" section lets you paste financial statements, historical valuation multiples, forward estimates, and peer comparables (from any source you like) instead of relying solely on the AI's own web search. Add each paste as a typed block — income statement, balance sheet, cash flow, multiples, estimates, or a peer — and hit **"Prepare data"** for a verifiable preview: currency and units, years covered, the historical multiple distribution (with a de-rating/re-rating trend), current peer multiples, and any data-quality warnings (a share count that jumped implausibly, a net-debt mismatch) — all before spending a full analysis run on it. Confirm to run the analysis grounded in your own numbers; web search is then reserved for anything more recent than your paste plus qualitative context (moat, risks, catalysts), never used to re-fetch what you already provided.
+
+- Added a **deterministic "reality check" on every Grounded report**. After a Grounded analysis completes, a new **"Deterministic post-check"** card verifies the AI's own math: whether its bull/base/bear valuation bridge reconciles with the fair value it reported, whether your margin of safety was applied correctly, and — the key signal — whether its base-case valuation multiple happens to land suspiciously close to what the current price already implies, a sign the "fair value" might just be reverse-engineered from the price rather than independently derived.
+
 ## 🐛 Bug Fixes
 
 - Fixed the **PDF export from the analysis page including an app "screenshot"** as the first page (the search box, disclaimer, market-data header, and Margin of Safety slider). The PDF now starts cleanly at the report, matching the saved-analysis export.
@@ -133,6 +137,8 @@
 - **Watchlist digest emails no longer arrive on weekends** — since markets are closed Saturday and Sunday, the daily digest now runs Monday through Friday only, so you won't get an email repeating Friday's numbers.
 
 - **Buy/Watch/Over verdict now factors in every analyst opinion** — on Saved Analyses, the Watchlist, and the email digest, the verdict badge, the ruler's buy/watch zones, and the buy-target percentage now use the **consensus** (the base analysis plus every analyst lens that ran) once you've run at least one, instead of only the base analysis — a more robust signal when you've gathered a second opinion. The percentage now also states its source, "... (analysis)" or "... (consensus)", so it's never ambiguous which buy target it's measured against.
+
+- **The Analyst Panel now sees your pasted data too** — when you run the Skeptic, Optimist, or Quality lens on a Grounded analysis, each one reasons over the same historical data and anchors you provided instead of re-deriving everything from the finished report — so a lens's critique is checked against the same numbers you supplied, not guessed at from scratch.
 
 ## 🔒 Security
 

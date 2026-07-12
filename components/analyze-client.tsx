@@ -61,8 +61,8 @@ export function AnalyzeClient() {
   const [errorMessage, setErrorMessage] = useState("");
   const [quote, setQuote] = useState<QuoteResponse | null>(null);
   const [mosPercent, setMosPercent] = useState(25);
-  // Lifted from GroundingInput so a later session can thread it into the Deep Value
-  // POST body — not consumed yet (still Quick-only), see docs/deep-value-grounding-spec.md.
+  // Lifted from GroundingInput and threaded into the Deep Value POST body below — a
+  // confirmed payload switches that run into Grounded mode; null/unconfirmed stays Quick.
   const [grounding, setGrounding] = useState<GroundingPayload | null>(null);
   // Tracks whether client-side hydration has completed to prevent localStorage reads during SSR
   const [isHydrated, setIsHydrated] = useState(false);
@@ -216,6 +216,8 @@ export function AnalyzeClient() {
               companyName={quote.shortName}
               mosPercent={mosPercent}
               currentPrice={quote.regularMarketPrice}
+              currency={quote.currency}
+              grounding={grounding}
             />
           </motion.div>
         )}

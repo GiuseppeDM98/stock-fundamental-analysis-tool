@@ -6,35 +6,23 @@
 // asks the model not to fall into). Pure, no server-only. See
 // docs/deep-value-grounding-spec.md §5.4.
 import type { GroundedFinancials } from "@/types/grounding";
+import type { Scenario, ValuationBridge } from "@/components/report/types";
 import { grossUpToIntrinsic } from "@/lib/report/valuation";
 import { computeMarketImplied, percentileOf, type MarketImplied } from "@/lib/grounding/anchors";
 
-export type ValuationBridge = {
-  driver: string; // e.g. "Normalized EBITDA 2026e" — display label, not used in arithmetic
-  driverValue: number;
-  multiple?: number; // absent for DCF/DDM (spec §5.5) — Check A degrades gracefully, see below
-  netDebt: number;
-  minorities: number;
-  shares: number;
-  intrinsicPerShare: number; // the model's OWN declared intrinsic value for this scenario
-};
+// Re-exported for backward compatibility with this module's own tests/callers, which
+// import these names from here — the canonical definitions now live on the real,
+// extended Deep Value JSON contract (components/report/types.ts), wired in this session
+// (spec §5.5/§9 commit 6) rather than the local mirror an earlier session used as a
+// placeholder.
+export type { ValuationBridge };
+export type BridgeScenario = Scenario;
 
-export type BridgeScenario = {
-  fairValue: number; // MoS-adjusted buy target — same convention as the stored/JSON field
-  bridge: ValuationBridge;
-};
-
-/**
- * The subset of the (future) extended Deep Value JSON contract this postcheck needs.
- * Deliberately NOT importing `DeepValueResult` from `components/report/types.ts`: that type
- * only grows its `bridge` field in a later session (spec §5.5/§9 commit 6) that hasn't
- * landed yet. This local shape is exactly what that extended type's bull/base/bear will
- * look like — wiring the real type in is that session's job, not this one's.
- */
+/** The subset of the extended Deep Value JSON contract this postcheck needs. */
 export type BridgeCheckInput = {
-  bull: BridgeScenario;
-  base: BridgeScenario;
-  bear: BridgeScenario;
+  bull: Scenario;
+  base: Scenario;
+  bear: Scenario;
 };
 
 export type BridgeCheck = {
@@ -76,6 +64,14 @@ function checkOneScenario(
   // Trap (spec §5.4): fairValue is a MoS-adjusted buy target, never compare it directly
   // against intrinsicPerShare. Gross it up first via the SHARED helper (not reimplemented).
   const statedIntrinsic = grossUpToIntrinsic(fairValue, mosPercent / 100);
+
+  // `bridge` is optional on Scenario (Quick reports, and older saved reports, never had
+  // it) — the Grounded prompt instructs the model to always include it, but this is
+  // untrusted LLM output, not a validated schema. Degrade every downstream check to null
+  // rather than throw when the model didn't declare one for this scenario.
+  if (!bridge) {
+    return { scenario, statedIntrinsic, recomputedIntrinsic: null, arithmeticOk: null, mosOk: null, impliedMultiple: null, impliedPercentile: null };
+  }
 
   // Check A — the model's own bridge arithmetic. Only computable when it declared a
   // `multiple` (absent for DCF/DDM, per spec §5.5) and shares is non-zero.

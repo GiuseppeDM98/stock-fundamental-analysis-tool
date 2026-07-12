@@ -9,16 +9,19 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
 import { getQuote } from "@/lib/yahoo-client";
 import { ANALYST_ANGLES } from "@/types/analysis";
+import type { GroundingPayload } from "@/types/grounding";
 import {
   buildAnalystSystemPrompt,
   buildAnalystUserPrompt,
 } from "@/lib/ai/deep-value-prompts";
 import { getAiClient, buildThinkingParam, buildEffortConfig, buildWebSearchTools } from "@/lib/ai/client";
 import { resolveAiSettings } from "@/lib/ai/ai-preferences";
-import { runStreamWithToolLoop, DEEP_RESEARCH_MAX_TOOL_ITERATIONS } from "@/lib/ai/tool-loop";
+import { runStreamWithToolLoop, DEEP_RESEARCH_MAX_TOOL_ITERATIONS, GROUNDED_MAX_TOOL_ITERATIONS } from "@/lib/ai/tool-loop";
 import { AI_MODEL_IDS, AI_EFFORT_LEVELS, type AiSettings } from "@/types/ai-settings";
+import { buildGroundingPromptContext, type GroundingPromptContext } from "@/lib/grounding/prompt-format";
 
 const DEFAULT_SETTINGS: AiSettings = { model: "claude-opus-4-8", effort: "xhigh", thinking: true };
 
@@ -31,10 +34,15 @@ const requestSchema = z.object({
   angle: z.enum(ANALYST_ANGLES as [string, ...string[]]).default("skeptic"),
   // Applied to the analyst's own fair values so its JSON buy targets match the unit
   // of the base analysis (MoS-adjusted) and they can be averaged into a consensus.
+  // Overridden by the saved analysis's own mosPercent when analysisId resolves (below).
   mosPercent: z.number().min(0).max(80).default(0),
   model: z.enum(AI_MODEL_IDS).optional(),
   effort: z.enum(AI_EFFORT_LEVELS).optional(),
   thinking: z.boolean().optional(),
+  // When present, grounds this lens the same way as the base analysis: the route
+  // re-reads Analysis.groundingJson (never trusts a client-sent copy — spec §6.4) rather
+  // than accepting the payload in the body, which would be 100-200KB per lens.
+  analysisId: z.string().min(1).optional(),
 });
 
 export async function POST(request: Request) {
@@ -75,9 +83,35 @@ export async function POST(request: Request) {
       // Non-fatal — omit the authoritative-price clause and let the review run.
     }
 
+    // Ground this lens the same way as the base analysis, re-read from the DB (never
+    // the request body — spec §6.4). The saved analysis's own mosPercent is authoritative
+    // once we're reading the row anyway, so it overrides whatever the client sent —
+    // avoids the lens computing its fair values at a stale client-side MoS.
+    let groundingContext: GroundingPromptContext | undefined;
+    let effectiveMosPercent = body.mosPercent;
+    if (body.analysisId) {
+      const analysis = await db.analysis.findFirst({
+        where: { id: body.analysisId, userId: session.user.id },
+        select: { groundingJson: true, mosPercent: true },
+      });
+      if (analysis) {
+        effectiveMosPercent = analysis.mosPercent;
+        if (analysis.groundingJson) {
+          try {
+            const payload = JSON.parse(analysis.groundingJson) as GroundingPayload;
+            // Lenses get extract + anchors + warnings, never the raw paste — see the
+            // doc comment on buildAnalystUserPrompt's `grounding` param for why.
+            groundingContext = buildGroundingPromptContext([], payload.extract, currentPrice ?? null, currency);
+          } catch {
+            // Malformed/legacy groundingJson — proceed ungrounded rather than fail the review.
+          }
+        }
+      }
+    }
+
     const angle = body.angle as (typeof ANALYST_ANGLES)[number];
-    const systemPrompt = buildAnalystSystemPrompt({ angle, language: body.language, currentDate, mosPercent: body.mosPercent });
-    const userPrompt = buildAnalystUserPrompt({ angle, ticker: body.ticker, reportMd: body.reportMd, language: body.language, currentDate, currentPrice, currency, mosPercent: body.mosPercent });
+    const systemPrompt = buildAnalystSystemPrompt({ angle, language: body.language, currentDate, mosPercent: effectiveMosPercent, grounding: groundingContext });
+    const userPrompt = buildAnalystUserPrompt({ angle, ticker: body.ticker, reportMd: body.reportMd, language: body.language, currentDate, currentPrice, currency, mosPercent: effectiveMosPercent, grounding: groundingContext });
 
     const aiSettings = await resolveAiSettings(
       session.user.id,
@@ -131,8 +165,10 @@ export async function POST(request: Request) {
             // the structural checks (bridge/minorities, same-basis comparables, scenario
             // vs. sensitivity, anchoring) — so the shared default of 10 was far too tight
             // and tripped the "too many search rounds" cutoff under the client-executed
-            // DeepSeek search loop before the review finished.
-            DEEP_RESEARCH_MAX_TOOL_ITERATIONS
+            // DeepSeek search loop before the review finished. Grounded lenses get the
+            // same rescoped (lower) cap as the base Deep Value run — same reasoning
+            // (spec §5.6): historical data is provided, not researched.
+            groundingContext ? GROUNDED_MAX_TOOL_ITERATIONS : DEEP_RESEARCH_MAX_TOOL_ITERATIONS
           );
 
           // Failsafe: if the model never emitted a JSON fence (e.g. it opened straight

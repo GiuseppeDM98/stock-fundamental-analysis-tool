@@ -159,4 +159,24 @@ describe("checkValuationBridges", () => {
     const result: BridgeCheckInput = { bear: scenarioAt(3.0), base: scenarioAt(4.2), bull: scenarioAt(5.5) };
     expect(checkValuationBridges(result, 0, 14.18, "EUR", makeExtract())).toBeNull();
   });
+
+  it("degrades a scenario with NO bridge at all to all-null checks, never throws (Scenario.bridge is optional)", () => {
+    // A Quick-mode scenario (or a Grounded run where the model simply omitted the
+    // bridge for one scenario despite the instruction) has no `bridge` key whatsoever —
+    // distinct from the DCF/DDM case above, which still has a bridge minus `multiple`.
+    const base = scenarioAt(4.2);
+    delete (base as { bridge?: unknown }).bridge;
+    const result: BridgeCheckInput = { bear: scenarioAt(3.0), base, bull: scenarioAt(5.5) };
+    const postCheck = checkValuationBridges(result, 0, 14.18, "EUR", EXTRACT);
+
+    const baseCheck = postCheck!.scenarios.find((s) => s.scenario === "base")!;
+    expect(baseCheck.recomputedIntrinsic).toBeNull();
+    expect(baseCheck.arithmeticOk).toBeNull();
+    expect(baseCheck.mosOk).toBeNull();
+    expect(baseCheck.impliedMultiple).toBeNull();
+    expect(baseCheck.impliedPercentile).toBeNull();
+    // statedIntrinsic is still computable — it only needs fairValue + mosPercent, not the
+    // bridge. scenarioAt(4.2) at mos=0: intrinsicPerShare = (4.2×14200−11500−3200)/3150 ≈ 14.2667.
+    expect(baseCheck.statedIntrinsic).toBeCloseTo(14.266666667, 6);
+  });
 });

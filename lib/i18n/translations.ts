@@ -498,6 +498,13 @@ export type Translations = {
   groundingWarnMissingBridgeInputs: string;
   groundingWarnBlockExtractFailed: string;
   groundingWarnGeneric: string;
+  groundingCardTitle: string;
+  groundingCardArithmeticLabel: string;
+  groundingCardMosLabel: string;
+  groundingCardNoBridge: string;
+  groundingCardBaseMultipleLabel: string;
+  groundingCardGapLabel: string;
+  groundingCardAnchoringFlag: string;
 };
 
 const en: Translations = {
@@ -992,6 +999,13 @@ const en: Translations = {
   groundingWarnMissingBridgeInputs: "Latest fiscal year is missing net debt, minorities or share count — price-implied check skipped",
   groundingWarnBlockExtractFailed: "A pasted block could not be extracted",
   groundingWarnGeneric: "Data quality warning",
+  groundingCardTitle: "Deterministic post-check",
+  groundingCardArithmeticLabel: "Bridge arithmetic",
+  groundingCardMosLabel: "MoS applied",
+  groundingCardNoBridge: "The model did not declare a valuation bridge for this scenario.",
+  groundingCardBaseMultipleLabel: "Your base multiple",
+  groundingCardGapLabel: "gap",
+  groundingCardAnchoringFlag: "Multiple anchored to price — this fair value may equal the price by construction",
 };
 
 const it: Translations = {
@@ -1487,6 +1501,13 @@ const it: Translations = {
     "All'ultimo esercizio mancano net debt, minorities o numero di azioni — controllo del multiplo implicito saltato",
   groundingWarnBlockExtractFailed: "Non è stato possibile estrarre un blocco incollato",
   groundingWarnGeneric: "Avviso sulla qualità dei dati",
+  groundingCardTitle: "Post-check deterministico",
+  groundingCardArithmeticLabel: "Aritmetica del ponte",
+  groundingCardMosLabel: "MoS applicata",
+  groundingCardNoBridge: "Il modello non ha dichiarato un ponte di valutazione per questo scenario.",
+  groundingCardBaseMultipleLabel: "Il tuo multiplo base",
+  groundingCardGapLabel: "gap",
+  groundingCardAnchoringFlag: "Multiplo ancorato al prezzo — questo fair value potrebbe coincidere col prezzo per costruzione",
 };
 
 export const translations: Record<Language, Translations> = { en, it };

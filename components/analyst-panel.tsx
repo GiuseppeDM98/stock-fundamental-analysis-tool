@@ -137,6 +137,9 @@ function AnalystSlot({
           model: aiSettings.model,
           effort: aiSettings.effort,
           thinking: aiSettings.thinking,
+          // The route re-reads Analysis.groundingJson server-side from this id — never
+          // sent as a payload here (spec §6.4: would be 100-200KB per lens).
+          analysisId,
         }),
         signal: controller.signal,
       });

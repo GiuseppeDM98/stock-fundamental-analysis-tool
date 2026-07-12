@@ -8,7 +8,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: July 11, 2026 — **Deep Value rigor hardening + a deterministic "signal reliability" flag.** Distilled from real reviewer feedback on live Eni reports across three rounds: `ANALYTICAL_RIGOR_BLOCK` grew to **12 conditional checks** (complete EV→equity bridge with minorities *varied per scenario*, no disguised SOTP, same-basis comparables + anti-selection-bias, base normalized to the driver not a stale TTM, a reconciliation "linter", and crucially **anchor the multiple to something independent of the price — the market-implied read is a control that reports the GAP, never the input**). The analyst lenses gained shared structural checks + a non-prescriptive rule. Because a prompt can only *reduce* the "fair-value ≈ price by construction" pathology, a new pure `lib/report/signal.ts` (`getSignalStrength`) makes it **visible**: a muted "weak signal" pill on `/analyses` and `/watchlist` when the bull↔bear cone dwarfs the price-vs-FV edge. Also: the estimate-evolution diff now shows the **whole save history** (a Δ per step, metric-labeled), and the DeepSeek research cap moved to a shared `DEEP_RESEARCH_MAX_TOOL_ITERATIONS = 35` + richer Tavily. The structural cure (a deterministic multiple anchor from historical data, plus a code-side post-check of the model's own valuation bridge) is specced but not yet built — see `docs/deep-value-grounding-spec.md`.
+**Last Updated**: July 12, 2026 — **Grounded Deep Value mode, built and validated end-to-end.** An optional "paste your own data" mode on `/analyze` (spec `docs/deep-value-grounding-spec.md`, now implemented): typed blocks (income statement, balance sheet, cash flow, historical multiples, forward estimates, peer comps) → a Sonnet 5 extraction pass with web search off → a human-verifiable preview (currency/units, the historical multiple distribution with an early→late trend, current peer multiples, reconciliation warnings) → confirmed data flows into the Deep Value prompt alongside deterministic anchors (`lib/grounding/*`: percentile stats, a 3×3 valuation grid, the market-implied multiple as a control, never an input). The JSON contract grows a per-scenario `bridge` (driver/multiple/net debt/minorities/shares/`intrinsicPerShare`); a new `<GroundingCard>` recomputes it in code and shows ✓/✗ per scenario, the model's own implied multiple vs. the market-implied one, and — the structural cure the spec set out to build — a deterministic **"multiple anchored to price"** flag. Grounding persists with the analysis (`Analysis.groundingJson`) and reaches the Analyst Panel lenses too (re-read server-side via `analysisId`, extract + anchors only, never the raw paste). Validated on a live end-to-end run (Iren S.p.A.): the Skeptic lens independently caught a real 2% bridge deviation using the same deterministic grid the base report saw — direct proof the grounding reaches the lenses, not just the base report.
 
 ---
 
@@ -59,6 +59,14 @@ Slim, single path: ticker search → `GET /api/quote` (price header + reference 
 - **Report UI + PDF**: live panel (`status==="done"`) and detail page both render `<ReportShell>` (`components/report/*`) — masthead, badges, fair-value cards, Markdown body, recap table, disclaimer, `prose-report` typography. Recap table (`recap-table.tsx`) shows reference/current price + Bear/Base/Bull FV/buy-target with upside/downside computed client-side as `(value−price)/price`; header is `Buy Target (-X%)` when MoS>0 else `Fair Value`. "Download PDF" → `window.print()`; `app/print.css` hides chrome, inverts to print-safe light; `/analyze` chrome is `print:hidden`.
 - **Decision Panel** (after done): "Add to Watchlist" → POST `/api/watchlist` (409 → "In Watchlist"); resets each generate.
 - **Position-blind (hard invariant)**: never inject portfolio position or a prior estimate into the Deep Value or analyst-panel prompts. Hold/add/exit reasoning → the Advisor; estimate evolution → deterministic diff on `/analyses`. Never re-add a position/prevFv field to `/api/ai/deep-value`.
+
+### Grounded Deep Value (paste-your-own-data mode)
+- Optional, above the Deep Value panel on `/analyze`: a collapsible "Pasted data" section (`components/grounding-input.tsx`) where the user adds typed blocks — income statement, balance sheet, cash flow, historical multiples, forward estimates, peer comps (with a ticker) — each a labeled textarea (cap 40k chars/block, 200k total, draft persisted per-ticker in `localStorage`). Source-agnostic by design (no format-specific parser); TIKR is the suggested source in the UI copy only.
+- **Prepare data** → `POST /api/ai/grounding/extract` (Sonnet 5, `tools: []` — pure transcription, no web search, no arithmetic) transcribes each block in parallel into a per-kind-scoped Zod schema, merges by fiscal year (`lib/grounding/merge.ts`), and returns a **verifiable preview** (`components/report/grounding-preview.tsx`): currency/units/years covered, the historical multiple distribution (min/p25/median/p75/max + an early→late trend), current peer multiples, the market-implied multiple + percentile (or why it's unavailable), and any `ReconciliationWarning`s (EPS/net-debt mismatches, share-count jumps) — never blocking, just shown.
+- **Analyze with this data →** confirms the payload (`GroundingPayload = { blocks, extract }`) and threads it into `/api/ai/deep-value`'s POST body. The route recomputes the deterministic anchors server-side (never trusts client-sent stats) and injects both the raw paste and the anchors into the prompt via `formatGroundingForPrompt()` (`lib/grounding/prompt-format.ts`) — web search is **rescoped, not disabled**: forbidden on historical data already provided, required for anything published after the paste's coverage date plus qualitative context (moat/risks/catalysts).
+- **Deterministic post-check** (`<GroundingCard>`, `lib/grounding/postcheck.ts`): after generation, recomputes each scenario's bridge (multiple × driver − net debt − minorities, ÷ shares) from the model's own declared numbers and shows ✓/✗ vs. what it reported, plus the model's implied multiple vs. the market-implied one and a **"multiple anchored to price"** flag when they coincide (< 3% apart) — the structural, code-side proof that the model didn't just reverse-engineer the price.
+- **Persists with the analysis** (`Analysis.groundingJson`, nullable) and **reaches the Analyst Panel lenses** on a saved analysis — the verify route re-reads it server-side via `analysisId` and injects the extract + anchors (never the raw paste, to keep 3 Opus xhigh passes affordable).
+- Quick mode (no paste) is unaffected — byte-identical prompts, verified by a capture-and-diff test at every step of the build.
 
 ### User Accounts & Saved Analyses
 - Email+password (Auth.js v5, bcrypt); `DISABLE_REGISTRATION=true` blocks signups. Save/view/delete at `/analyses`.
@@ -156,6 +164,9 @@ lib/
   report/valuation.ts        # grossUpToIntrinsic() + Triple type (shared)
   report/consensus.ts        # pure: N-way consensus (consensusTriple/meanTriple/presentAnalysts) + ANALYST_COLUMNS
   report/evolution.ts        # computeEvolution()/computeEvolutionChain() — deterministic history (no AI)
+  grounding/                 # pure: merge/anchors/reconcile/postcheck/prompt-format/schema — Grounded mode
+  ai/grounding-extract-prompt.ts  # per-kind extraction prompt builders (Sonnet 5, no web search)
+  grounding-client.ts        # client helper: extractGrounding()
   i18n/translations.ts       # EN/IT dictionary
 app/
   page.tsx (Hub)  analyze/  login/  register/  analyses/(+[id])  portfolio/  watchlist/  advisor/
@@ -163,19 +174,20 @@ app/
   api/ quote/[ticker]  auth/*  analyses(+/[id])  positions(+/[id], PATCH closes/sells)
       earnings (GET/POST — AI next-earnings)  portfolio/snapshots
       cron/{portfolio-snapshot,watchlist-analysis}  watchlist(+/[id],/settings,/run)
-      ai/deep-value(+/verify)  ai/advisor  advisor/sessions(+/[id](+/messages))
+      ai/deep-value(+/verify)  ai/advisor  ai/grounding/extract  advisor/sessions(+/[id](+/messages))
       settings/ai (GET/PATCH — global AI model/effort/thinking default)
-components/                  # hub-client, analyze-client, deep-value-panel, analyses-list,
+components/                  # hub-client, analyze-client, deep-value-panel, analyses-list, grounding-input,
                              #   earnings-badge, analyst-panel (3-lens panel on saved detail),
                              #   ai-settings-control (per-run selector), ai-preferences-modal (global default), …
   report/                    #   portfolio-list, portfolio-history-chart, watchlist-client,
                              #   advisor-client, nav-bar, download-pdf-button, …
                              # report/: report-shell, recap-table, fair-value-cards, report-body,
-                             #   method-badges, valuation-ruler (ValuationRuler + ComparisonTable)
+                             #   method-badges, valuation-ruler (ValuationRuler + ComparisonTable),
+                             #   grounding-card, grounding-preview
 context/language-context.tsx
 public/sw.js  public/icons/
 prisma/  generated/prisma/ (gitignored)  vercel.json  docs/
-__tests__/                   # yahoo-client + evolution + consensus + portfolio-math + earnings .test.ts
+__tests__/                   # yahoo-client + evolution + consensus + portfolio-math + earnings + grounding-* .test.ts
 ```
 
 ---
@@ -216,8 +228,7 @@ See `.env.example` for the full template.
 
 ## Next Priorities
 1. Caching layer for `/api/quote`.
-2. **Grounded mode + deterministic multiple anchor** (full spec in `docs/deep-value-grounding-spec.md`; session-by-session prompts in `docs/deep-value-grounding-sessions.md`): optional "Grounded" mode where the user pastes statements/valuation/peers (source-agnostic; TIKR is the suggested source), a historical-multiple anchor computed in code, and a deterministic post-check that recomputes the model's own valuation bridge and flags a base multiple anchored to the price — the structural cure for the price-anchoring pathology.
-3. Per-ticker yield-on-cost in the exit signal (needs per-position dividend exposure via snapshots).
+2. Per-ticker yield-on-cost in the exit signal (needs per-position dividend exposure via snapshots).
 
 ---
 
