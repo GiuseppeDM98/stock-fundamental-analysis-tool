@@ -48,6 +48,14 @@ export type SavedAnalysis = {
   qualityFairValueBear?: number | null;
   qualityValuationMethod?: string | null;
   createdAt: string; // ISO 8601 string (JSON serialized from Date)
+  // groundingJson is DELIBERATELY NOT a field here. This type mirrors the GET
+  // /api/analyses list's `select` (app/api/analyses/route.ts), which omits
+  // groundingJson on purpose — it's a JSON blob the list never renders, and adding it
+  // to this type without adding it to that select would silently promise a value that's
+  // always undefined at runtime (AGENTS.md gotcha #20). The detail page reads it via a
+  // separate `findUnique` with no `select` (Prisma returns every column, already typed).
+  // If a future /analyses list feature needs it, add BOTH the select field and this one
+  // together — never one without the other.
 };
 
 /**
@@ -76,4 +84,7 @@ export type SaveAnalysisRequest = {
   fairValueBase?: number;
   fairValueBear?: number;
   valuationMethod?: string;
+  // Grounded Deep Value mode — the confirmed GroundingPayload (blocks + extract),
+  // JSON.stringify'd. Present only when the analysis was generated with pasted data.
+  groundingJson?: string;
 };

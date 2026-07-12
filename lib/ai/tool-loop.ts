@@ -25,6 +25,14 @@ const DEFAULT_MAX_TOOL_ITERATIONS = 10;
 // tool_use, so its loop exits after one iteration regardless of this value.
 export const DEEP_RESEARCH_MAX_TOOL_ITERATIONS = 35;
 
+// Cap for Grounded-mode Deep Value runs (and its analyst lenses) — lower than the Quick
+// cap above because the web search is RESCOPED, not eliminated (spec §5.6): the model no
+// longer needs to research 5y of financials/multiples/comparables (they're provided), it
+// only needs the post-coverage-date update + qualitative material. DeepSeek-only in
+// effect, same as DEEP_RESEARCH_MAX_TOOL_ITERATIONS — Claude's server-side web_search
+// never surfaces a client tool_use, so its loop exits after one iteration regardless.
+export const GROUNDED_MAX_TOOL_ITERATIONS = 12;
+
 type StreamParams = Omit<Anthropic.MessageStreamParams, "messages"> & {
   messages: Anthropic.MessageParam[];
 };

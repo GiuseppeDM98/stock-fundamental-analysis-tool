@@ -1,11 +1,10 @@
 # Deep Value — Modalità Grounded (dati incollati + ancore deterministiche)
 
-> **Specifica di implementazione.** I prompt operativi per condurre le sessioni sono in
-> `docs/deep-value-grounding-sessions.md`.
-> Scritta per una sessione di implementazione che parte **a freddo**: la §3 contiene la mappa dei
-> punti d'innesto con riferimenti `file:riga`, così non vanno riscoperti.
-> **Leggere tutto prima di scrivere codice.** Le trappole di §2 e §5.4 sono quelle che, se ignorate,
-> fanno fallire l'intera feature in modo silenzioso.
+> **Stato: implementata** (luglio 2026). Tutti i punti della §9 sono stati completati e
+> validati con un run reale punta a punta (Iren S.p.A., incluse le 3 lenti analista) — vedi
+> la cronologia dei commit `feat:`/`refactor:` di questa feature per il dettaglio.
+> Questo documento resta come riferimento di design; i prompt operativi delle sessioni sono
+> in `docs/deep-value-grounding-sessions.md`.
 
 ---
 

@@ -88,6 +88,7 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - ⚠️ **Exit Signal**: Amber "At Fair Value" badge appears in the portfolio row when price ≥ base fair value from the most recent saved analysis — signals when the margin of safety is consumed; one click runs a fresh, position-blind re-analysis
 - 📈 **Estimate-Evolution History**: When a ticker has ≥2 saved analyses, its card shows Δ Analysis / Consensus base fair value at every step across your full save history — deterministic, never sent to the AI
 - 🚦 **Weak-Signal Flag**: A "weak signal" tag warns when a Bull–Bear range is so wide the Buy/Watch/Over verdict is inside the model's own uncertainty — deterministic, and quiet on tight-range, high-conviction stocks
+- 📎 **Grounded Deep Value**: Optionally paste your own financial statements, historical multiples, forward estimates, and peer comps on `/analyze` instead of relying solely on AI web search — a verifiable preview shows the transcribed data and historical multiple distribution before you run the analysis, and a deterministic **post-check** card recomputes the model's own valuation bridge afterward, flagging when its multiple suspiciously coincides with what the current price already implies
 - 🧪 **Fully Tested**: Vitest + Testing Library coverage for calculations and UI
 
 ---
@@ -500,7 +501,7 @@ turso db shell <your-db-name> < prisma/migrations/<latest>/migration.sql
 - [ ] Enhanced error messages with "Try Again" button
 
 ### Phase 2: Data & Calculations
-- [ ] **Grounded mode + deterministic multiple anchor** — optional "Grounded" mode: paste the statements/valuation/peers from any source, plus a historical-multiple anchor computed in code and a post-check that verifies the model's own valuation bridge (the structural cure for price-anchoring; spec in `docs/deep-value-grounding-spec.md`)
+- [x] **Grounded mode + deterministic multiple anchor** — optional "Grounded" mode: paste the statements/valuation/peers from any source, a historical-multiple anchor computed in code, and a post-check that verifies the model's own valuation bridge and flags price-anchoring (spec in `docs/deep-value-grounding-spec.md`)
 - [ ] Deterministic quant cards (Piotroski / Altman Z / multiples percentile)
 - [ ] Sensitivity analysis matrix (WACC vs growth)
 

@@ -7,8 +7,10 @@ import { DisclaimerBanner } from "@/components/disclaimer-banner";
 import { PriceSummary } from "@/components/price-summary";
 import { TickerSearch } from "@/components/ticker-search";
 import DeepValuePanel from "@/components/deep-value-panel";
+import { GroundingInput } from "@/components/grounding-input";
 import { useLanguage } from "@/context/language-context";
 import { QuoteResponse } from "@/types/market";
+import type { GroundingPayload } from "@/types/grounding";
 
 type LoadState = "idle" | "loading" | "success" | "error";
 
@@ -59,6 +61,9 @@ export function AnalyzeClient() {
   const [errorMessage, setErrorMessage] = useState("");
   const [quote, setQuote] = useState<QuoteResponse | null>(null);
   const [mosPercent, setMosPercent] = useState(25);
+  // Lifted from GroundingInput and threaded into the Deep Value POST body below — a
+  // confirmed payload switches that run into Grounded mode; null/unconfirmed stays Quick.
+  const [grounding, setGrounding] = useState<GroundingPayload | null>(null);
   // Tracks whether client-side hydration has completed to prevent localStorage reads during SSR
   const [isHydrated, setIsHydrated] = useState(false);
 
@@ -204,11 +209,15 @@ export function AnalyzeClient() {
               </label>
             </div>
 
+            <GroundingInput ticker={ticker} value={grounding} onChange={setGrounding} />
+
             <DeepValuePanel
               ticker={ticker}
               companyName={quote.shortName}
               mosPercent={mosPercent}
               currentPrice={quote.regularMarketPrice}
+              currency={quote.currency}
+              grounding={grounding}
             />
           </motion.div>
         )}

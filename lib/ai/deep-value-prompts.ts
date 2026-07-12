@@ -4,6 +4,8 @@
 // Business logic lives here (not in the API route) per project conventions.
 
 import type { AnalystAngle } from "@/types/analysis";
+import type { GroundingPromptContext } from "@/lib/grounding/prompt-format";
+import { formatGroundingForPrompt } from "@/lib/grounding/prompt-format";
 
 // "Analytical rigor" checklist injected into the Deep Value system prompt
 // (between the scenario step and the output step). Each item hardens against a
@@ -53,6 +55,25 @@ These are non-negotiable. A valuation that fails them is not defensible.
    - Use terminology precisely: a shareholding (e.g. a government's ~33% stake held via a sovereign fund) is NOT a "golden share" (a distinct legal instrument granting special veto/approval powers). Do not conflate a stake with a control mechanism.
 `;
 
+// Injected only in Grounded mode (when the caller passes `grounding`) — the user has
+// pasted authoritative financial data (transcribed + anchored in code, see
+// lib/grounding/*) that is appended to the USER prompt via formatGroundingForPrompt.
+// This block carries the RULES for using it; it is deliberately static (no
+// interpolation) so it can't accidentally break Quick's byte-identical output — the
+// concrete numbers (the actual market-implied multiple/percentile) live in the anchors
+// section itself, formatted per-request. See docs/deep-value-grounding-spec.md §5.6/§6.1.
+const GROUNDED_RULES_BLOCK = `## Grounded mode — using the user-provided data (MANDATORY)
+The user has pasted authoritative financial data for this company. It has been transcribed into a structured extract and turned into deterministic anchors, both injected below in the user message. This does NOT turn off web search — it RESCOPES it:
+
+1. **Do not search the web for historical data already provided** — financial statements, historical valuation multiples, peer multiples. Searching for them re-contaminates authoritative, human-confirmed data with the same low-quality web data this mode exists to remove.
+2. **You MUST still search the web for**: (a) any results, guidance, trading update, buyback or M&A published AFTER the extract's stated coverage period — these can move net debt and share count, which the anchors below assume are current as of that period; (b) the qualitative material for the Moat, Risks and Catalysts sections, which cannot come from a balance sheet; (c) whatever the analytical-rigor checks above require (latest quarter, current guidance/plans).
+3. **On conflict between web data and the pasted data on a HISTORICAL figure, the pasted data wins.** State the conflict explicitly in a short "Data conflicts" note in the report — never resolve it silently by quietly picking one number.
+4. **Forward estimates are a legitimate input; analyst targets are not.** The provided forward revenue/EBITDA/EPS estimates are legitimate inputs for a fundamentals-based base case. Analyst TARGET PRICE, TARGET MULTIPLE, and RATING are NEVER a legitimate valuation anchor — even if web search surfaces them — because they are already anchored to the price/consensus; do not use them to justify your multiple or discount rate.
+5. **Units.** Every monetary figure in the structured extract and the anchors below is expressed in the SAME unit (stated in the extract's \`meta.units\`) — do not apply any unit conversion, and do not assume a different scale.
+6. **The deterministic anchors are FACTS, not suggestions.** Your base case's multiple (or key DCF/DDM lever) must be one of the anchor statistics below, or an explicit deviation you justify with a stated number and reason. The market-implied read is a CONTROL that reports the GAP versus your independently-anchored lever — never the source of it (rigor item 10 above).
+7. **No selection bias on the provided peers.** Every peer supplied below must appear in your comparables table — you may not drop one because it is unfavorable to your thesis (rigor item 7 above).
+`;
+
 /**
  * System prompt instructing Claude to:
  * 1. Identify sector via web search
@@ -64,10 +85,43 @@ These are non-negotiable. A valuation that fails them is not defensible.
  * @param language - Report language (e.g. "English", "Italiano")
  * @param currentDate - Today's date string injected from the server (e.g. "May 7, 2026")
  */
-export function buildDeepValueSystemPrompt(language = "English", currentDate = "", mosPercent = 0): string {
+export function buildDeepValueSystemPrompt({
+  language = "English",
+  currentDate = "",
+  mosPercent = 0,
+  grounding,
+}: {
+  language?: string;
+  currentDate?: string;
+  mosPercent?: number;
+  // Presence alone gates GROUNDED_RULES_BLOCK — the system prompt only needs to know
+  // Grounded mode is active, not the actual figures (those go in the user prompt via
+  // formatGroundingForPrompt). Undefined (Quick) leaves the prompt byte-identical.
+  grounding?: GroundingPromptContext;
+} = {}): string {
   const dateClause = currentDate
     ? `\n**Today's date: ${currentDate}.** Use this to determine what counts as "most recent" data. Financial data from 2025 is historical — fiscal year 2025 results may or may not have been published yet; verify via web search. Do NOT assume the current year is 2025.\n`
     : "";
+  const groundedRulesClause = grounding ? `\n${GROUNDED_RULES_BLOCK}\n` : "";
+  // Each scenario's JSON object. Grounded mode additionally requires a "bridge" — the
+  // per-scenario EV→equity bridge inputs plus intrinsicPerShare (the PRE-MoS value) — so
+  // lib/grounding/postcheck.ts can recompute the model's own arithmetic in code (spec
+  // §5.4/§5.5). Quick mode's line is untouched: identical to the pre-grounding template.
+  const scenarioJsonLine = (name: "bull" | "base" | "bear"): string =>
+    grounding
+      ? `  "${name}": {
+    "fairValue": <buy target after ${mosPercent}% MoS>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, SAME unit as the extract's meta.units>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM>,
+      "netDebt": <THIS scenario's net debt, SAME unit as meta.units>,
+      "minorities": <THIS scenario's minority interests, SAME unit as meta.units>,
+      "shares": <SAME unit as sharesDiluted>,
+      "intrinsicPerShare": <the fair value BEFORE the ${mosPercent}% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  }`
+      : `  "${name}": { "fairValue": <buy target after ${mosPercent}% MoS> }`;
 
   return `You are a professional financial analyst. Your task is to perform a fully autonomous investment valuation of a stock.
 ${dateClause}
@@ -99,7 +153,7 @@ Search for the most recent annual financial data (last 5 years where available, 
 - Beta (or estimate from sector peers if not available)
 
 Do not fabricate numbers. If a data point is unavailable after searching, state it explicitly and use a conservative estimate with clear disclosure.
-
+${groundedRulesClause}
 ## Step 3 — Compute 3 scenarios (Bull / Base / Bear)
 Apply the chosen method with three scenario sets. For each scenario compute:
 - Intrinsic fair value per share
@@ -122,9 +176,9 @@ The JSON block MUST be the very first thing you output, before any other text:
   "method": "<DCF|DDM|EV/EBITDA|P/B>",
   "sector": "<sector name>",
   "currency": "<ISO currency code, e.g. USD, EUR>",
-  "bull": { "fairValue": <buy target after ${mosPercent}% MoS> },
-  "base": { "fairValue": <buy target after ${mosPercent}% MoS> },
-  "bear": { "fairValue": <buy target after ${mosPercent}% MoS> }
+${scenarioJsonLine("bull")},
+${scenarioJsonLine("base")},
+${scenarioJsonLine("bear")}
 }
 \`\`\`
 
@@ -187,21 +241,33 @@ Rules:
  *
  * @param currentDate - Today's date string injected from the server (e.g. "May 7, 2026")
  */
-export function buildDeepValueUserPrompt(
-  ticker: string,
-  currentPrice: number,
-  currency: string,
-  language: string,
+export function buildDeepValueUserPrompt({
+  ticker,
+  currentPrice,
+  currency,
+  language,
   currentDate = "",
   mosPercent = 0,
-): string {
+  grounding,
+}: {
+  ticker: string;
+  currentPrice: number;
+  currency: string;
+  language: string;
+  currentDate?: string;
+  mosPercent?: number;
+  // The Grounded data section (raw paste + extract + anchors + warnings), appended
+  // after the base prompt. Undefined (Quick) appends nothing — byte-identical output.
+  grounding?: GroundingPromptContext;
+}): string {
   const dateClause = currentDate ? ` Today's date: ${currentDate}.` : "";
   const mosClause = mosPercent > 0
     ? ` Apply a margin of safety of ${mosPercent}% to all fair values (buy target = intrinsic value × ${(1 - mosPercent / 100).toFixed(2)}).`
     : "";
+  const groundingSection = grounding ? `\n\n${formatGroundingForPrompt(grounding)}` : "";
   return `Analyze ${ticker}. Current price: ${currentPrice.toFixed(2)} ${currency} — this is the authoritative live market price. Use it as the current price for all upside/downside math; do NOT replace it with web-searched quotes, which are frequently delayed or stale.${dateClause}${mosClause}
 
-Use web search to find the financial data, choose the appropriate valuation method, compute the fair values for bull/base/bear scenarios, and produce the report in ${language} following the required format.`;
+Use web search to find the financial data, choose the appropriate valuation method, compute the fair values for bull/base/bear scenarios, and produce the report in ${language} following the required format.${groundingSection}`;
 }
 
 // ─── Analyst panel prompts (independent second opinions) ─────────────────────
@@ -300,17 +366,28 @@ These are the defects prior reviews have repeatedly missed. Check each explicitl
  * @param mosPercent - Margin of safety to apply to the analyst's own fair values,
  *   so its JSON buy targets are directly comparable to the base analysis's.
  */
-export function buildAnalystSystemPrompt(
-  angle: AnalystAngle = "skeptic",
+export function buildAnalystSystemPrompt({
+  angle = "skeptic",
   language = "English",
   currentDate = "",
   mosPercent = 0,
-): string {
+  grounding,
+}: {
+  angle?: AnalystAngle;
+  language?: string;
+  currentDate?: string;
+  mosPercent?: number;
+  // Presence gates GROUNDED_RULES_BLOCK, same as buildDeepValueSystemPrompt — the lens
+  // reads the actual data (extract + anchors + warnings) from the user prompt via
+  // formatGroundingForPrompt, re-read from Analysis.groundingJson (spec §6.4).
+  grounding?: GroundingPromptContext;
+} = {}): string {
   const cfg = ANGLE_CONFIG[angle];
   const dateClause = currentDate
     ? `\n**Today's date: ${currentDate}.** Do NOT assume the current year is 2025; verify recency via web search.\n`
     : "";
   const focusList = cfg.focus.map((f, i) => `${i + 1}. ${f}`).join("\n");
+  const groundedRulesClause = grounding ? `\n${GROUNDED_RULES_BLOCK}\n` : "";
 
   return `You are ${cfg.persona}
 ${dateClause}
@@ -321,7 +398,7 @@ Read the report provided in the user message and critically stress-test it. Use 
 Focus your review on:
 ${focusList}
 
-${ANALYST_STRUCTURAL_CHECKS}
+${ANALYST_STRUCTURAL_CHECKS}${groundedRulesClause}
 ## Your own independent valuation (MANDATORY)
 ${cfg.valuationFraming}
 
@@ -360,16 +437,33 @@ Rules:
  *   When provided, it is stated as ground truth so the analyst doesn't "correct" it
  *   with stale web-searched quotes (see buildAnalystSystemPrompt).
  */
-export function buildAnalystUserPrompt(
-  angle: AnalystAngle,
-  ticker: string,
-  reportMd: string,
-  language: string,
+export function buildAnalystUserPrompt({
+  angle,
+  ticker,
+  reportMd,
+  language,
   currentDate = "",
-  currentPrice?: number,
+  currentPrice,
   currency = "",
   mosPercent = 0,
-): string {
+  grounding,
+}: {
+  angle: AnalystAngle;
+  ticker: string;
+  reportMd: string;
+  language: string;
+  currentDate?: string;
+  currentPrice?: number;
+  currency?: string;
+  mosPercent?: number;
+  // Re-read from Analysis.groundingJson by the caller (verify/route.ts), never passed in
+  // the request body — see spec §6.4. `blocks` is deliberately empty here even when the
+  // saved analysis has raw paste blocks: the lens's job is to judge the JUDGMENT, and the
+  // anchors/extract already give it that; the extra line-item detail would triple the
+  // input cost across 3 Opus xhigh passes for no proportional benefit (deliberate,
+  // reversible choice — see AGENTS.md).
+  grounding?: GroundingPromptContext;
+}): string {
   void angle; // lens is applied in the system prompt; kept in the signature for symmetry.
   const dateClause = currentDate ? ` Today's date: ${currentDate}.` : "";
   const priceClause =
@@ -379,9 +473,10 @@ export function buildAnalystUserPrompt(
   const mosClause = mosPercent > 0
     ? ` Apply a margin of safety of ${mosPercent}% to your own fair values in the JSON block (buy target = intrinsic value × ${(1 - mosPercent / 100).toFixed(2)}).`
     : "";
+  const groundingSection = grounding ? `\n\n${formatGroundingForPrompt(grounding)}` : "";
   return `Independently review the following Deep Value report on ${ticker}.${dateClause}${priceClause}${mosClause} Scrutinize its numbers and assumptions through your lens, spot-check key figures via web search, commit to your own bull/base/bear valuation in the JSON block, and give your verdict in ${language} following the required format.
 
 --- REPORT UNDER REVIEW ---
 ${reportMd}
---- END REPORT ---`;
+--- END REPORT ---${groundingSection}`;
 }

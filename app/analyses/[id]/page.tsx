@@ -6,6 +6,21 @@ import OpenPositionBanner from "@/components/open-position-banner";
 import SavedValuationSummary, { type SavedValuationMeta } from "@/components/saved-valuation-summary";
 import AnalystPanel from "@/components/analyst-panel";
 import DownloadPdfButton from "@/components/download-pdf-button";
+import type { GroundingPayload } from "@/types/grounding";
+
+/**
+ * Parses the persisted GroundingPayload (spec §6.5) — malformed/legacy rows (or Quick-
+ * mode analyses, where the column is simply null) degrade to null rather than crash the
+ * page render.
+ */
+function parseGroundingPayload(raw: string | null): GroundingPayload | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as GroundingPayload;
+  } catch {
+    return null;
+  }
+}
 
 type PageProps = { params: Promise<{ id: string }> };
 
@@ -72,6 +87,8 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
 
   // Reconstruct the valuation summary (badges + cards + recap) from the saved JSON block.
   const valuationMeta = parseValuationMeta(analysis.reportMd);
+  // Grounded Deep Value mode — null for Quick-mode analyses (column never set).
+  const groundingPayload = parseGroundingPayload(analysis.groundingJson);
 
   // Strip any leading JSON block (from Deep Value analyses) before rendering.
   const markdown = analysis.reportMd.replace(/^```json\n[\s\S]*?\n```\n?/, "");
@@ -108,6 +125,7 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
           companyName={analysis.companyName}
           reportDate={formattedDate}
           markdown={markdown}
+          groundingExtract={groundingPayload?.extract ?? null}
         />
       ) : (
         // Fallback for older/non-Deep-Value analyses without a parseable JSON block.
