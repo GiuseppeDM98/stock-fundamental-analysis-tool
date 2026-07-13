@@ -36,9 +36,12 @@ const DEFAULT_SETTINGS: AiSettings = { model: "claude-opus-4-8", effort: "xhigh"
 
 // Doubles the wall clock of the app's longest route (docs/deep-value-rigor-v2-spec.md
 // §6.2.6): the blind-first flow (grounding present) pays for two full turns, the second of
-// which replays the first turn's thinking as input. Requires Vercel Pro + Fluid Compute
-// (see SETUP.md's maxDuration table — Hobby caps at 60s regardless of this value).
-export const maxDuration = 800;
+// which replays the first turn's thinking as input. Vercel's builder rejects any
+// maxDuration above what the *currently deployed* plan allows — Hobby caps the build at
+// 300 even though the plan's actual runtime ceiling is 60s (see SETUP.md's maxDuration
+// table), so 800 (the Pro + Fluid Compute ceiling) fails to build on Hobby. Bump this back
+// to 800 only after upgrading to Pro with Fluid Compute enabled.
+export const maxDuration = 300;
 
 const requestSchema = z.object({
   ticker: z.string().min(1).max(20),
