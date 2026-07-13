@@ -534,6 +534,7 @@ export type Translations = {
   groundingImpliedOnProviderLabel: string;
   groundingLtmEquivLabel: string;
   groundingWedgeLabel: string;
+  groundingWedgeCaveat: string;
 };
 
 const en: Translations = {
@@ -1065,6 +1066,7 @@ const en: Translations = {
   groundingImpliedOnProviderLabel: "Provider basis",
   groundingLtmEquivLabel: "LTM-equivalent",
   groundingWedgeLabel: "wedge",
+  groundingWedgeCaveat: "real growth or a basis mismatch in the pasted EBITDA — check for data conflicts",
 };
 
 const it: Translations = {
@@ -1597,6 +1599,7 @@ const it: Translations = {
   groundingImpliedOnProviderLabel: "Base fornitore",
   groundingLtmEquivLabel: "Equivalente LTM",
   groundingWedgeLabel: "scarto",
+  groundingWedgeCaveat: "crescita reale o base diversa nell'EBITDA incollato — controlla i conflitti di dato",
 };
 
 export const translations: Record<Language, Translations> = { en, it };

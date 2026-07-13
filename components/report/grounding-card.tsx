@@ -136,7 +136,14 @@ export function GroundingCard({ result, extract, mosPercent, currentPrice, curre
               {" · "}
               {t("groundingLtmEquivLabel")} {base.impliedMultipleLtm.toFixed(2)}x
               {base.impliedPercentileLtm != null && ` (${t("groundingPercentileLabel")} ${base.impliedPercentileLtm.toFixed(0)})`}
-              {base.growthWedgePct != null && ` · ${t("groundingWedgeLabel")} ${base.growthWedgePct >= 0 ? "+" : ""}${(base.growthWedgePct * 100).toFixed(0)}%`}
+              {base.growthWedgePct != null && (
+                <>
+                  {" · "}
+                  {t("groundingWedgeLabel")} {base.growthWedgePct >= 0 ? "+" : ""}
+                  {(base.growthWedgePct * 100).toFixed(0)}%{" "}
+                  <span className="text-muted">({t("groundingWedgeCaveat")})</span>
+                </>
+              )}
             </>
           )}
         </p>

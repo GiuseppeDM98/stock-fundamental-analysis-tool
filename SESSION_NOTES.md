@@ -47,10 +47,26 @@ emersi testando dal vivo con dati reali (Webuild), non dalla lettura della spec.
   forward/trailing su una base sbagliata (su base rettificata coerente sarebbe stato
   ~6%, non 489%). **Questo è un mismatch di base DIVERSO da kE/kB** (che riguardano
   tabella-multipli-vs-conto-economico) — è conto-economico-grezzo-vs-rettificato-
-  ufficiale, un problema che la spec attuale non copre. Non toccato in questa sessione;
-  segnalato come possibile lavoro futuro (es. un check di plausibilità simile a
-  `ebit_gt_ebitda` in `reconcile.ts`, o un warning quando l'EBITDA del paste diverge
-  drasticamente da quanto il modello trova via web search).
+  ufficiale, un problema che la spec attuale non copre.
+
+**Mitigazione applicata (stesso giorno, su richiesta esplicita)**: non è possibile una
+detection puramente deterministica dal solo paste (nessun modo di sapere, senza dati
+esterni, che 209,80 differisce dalla cifra ufficiale) — quindi due fix a basso rischio,
+stesso spirito del fix EPS/netIncome:
+1. `lib/ai/grounding-extract-prompt.ts` (`income_statement`) — nuova istruzione "EBITDA
+   BASIS": se la fonte mostra più di un EBITDA per lo stesso anno (es. "as reported"
+   accanto a un "Adjusted/Normalized EBITDA" etichettato dall'azienda), estrarre quello
+   rettificato. Non risolve il caso Webuild specifico se la fonte (qui TIKR tab Income
+   Statement) non espone affatto quella riga — è un KPI tipicamente da comunicato
+   stampa, non da aggregatore — ma aiuta quando la fonte la contiene.
+2. `components/report/grounding-card.tsx` + 3 chiavi i18n nuove
+   (`groundingWedgeCaveat`) — il "wedge" nel cruscotto gate ora porta sempre un
+   caveat testuale ("crescita reale o base diversa nell'EBITDA incollato — controlla i
+   conflitti di dato"), non condizionato a una soglia (nessuna nuova costante magica
+   da giustificare) — onesto in ogni caso, non solo sui wedge estremi.
+
+**Nota**: nessun test automatico copre il punto 1 (comportamento del modello). Non
+ancora ri-testato su un paste reale dopo questo fix.
 
 ---
 
