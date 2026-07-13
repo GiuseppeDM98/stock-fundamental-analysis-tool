@@ -462,6 +462,7 @@ export type Translations = {
   groundingKindOther: string;
   groundingPeerTickerPlaceholder: string;
   groundingPeerTickerRequired: string;
+  groundingValuationMultiplesHint: string;
   groundingTextareaPlaceholder: string;
   groundingRemoveBlock: string;
   groundingCharsSuffix: string;
@@ -497,6 +498,10 @@ export type Translations = {
   groundingWarnNoMultiples: string;
   groundingWarnMissingBridgeInputs: string;
   groundingWarnBlockExtractFailed: string;
+  groundingWarnBasisMismatch: string;
+  groundingWarnBasisUnverifiable: string;
+  groundingWarnEvBridgeMismatch: string;
+  groundingWarnDividendNotCovered: string;
   groundingWarnGeneric: string;
   groundingCardTitle: string;
   groundingCardArithmeticLabel: string;
@@ -505,6 +510,30 @@ export type Translations = {
   groundingCardBaseMultipleLabel: string;
   groundingCardGapLabel: string;
   groundingCardAnchoringFlag: string;
+  groundingMeanLabel: string;
+  groundingGridTitle: string;
+  groundingGridUnverifiedNote: string;
+  groundingBasisSameLabel: string;
+  groundingBasisMismatchLabel: string;
+  groundingBasisUnverifiableLabel: string;
+  groundingGateDashboardTitle: string;
+  groundingGateBasisSame: string;
+  groundingGateHorizonConsistent: string;
+  groundingGateBearBreaksPrice: string;
+  groundingGateMultipleVsMarket: string;
+  groundingGateTrailingForward: string;
+  groundingGateNetdebtTrajectory: string;
+  groundingGateRoicVsWacc: string;
+  groundingGateProbabilities: string;
+  groundingGateCrossCheck: string;
+  groundingGateKillPrice: string;
+  groundingExpectedValueTitle: string;
+  groundingExpectedValueIntrinsicLabel: string;
+  groundingExpectedValueBuyTargetLabel: string;
+  groundingExpectedValueUpsideLabel: string;
+  groundingImpliedOnProviderLabel: string;
+  groundingLtmEquivLabel: string;
+  groundingWedgeLabel: string;
 };
 
 const en: Translations = {
@@ -963,6 +992,8 @@ const en: Translations = {
   groundingKindOther: "Other",
   groundingPeerTickerPlaceholder: "Peer ticker (e.g. SHEL)",
   groundingPeerTickerRequired: "Every peer block needs a ticker before you can prepare the data.",
+  groundingValuationMultiplesHint:
+    "Include the EV/Revenue, Market Cap and Enterprise Value columns if your source has them — they let the app verify your multiples table uses the same EBITDA basis as your income statement.",
   groundingTextareaPlaceholder: "Paste the table here…",
   groundingRemoveBlock: "Remove",
   groundingCharsSuffix: "chars",
@@ -998,6 +1029,10 @@ const en: Translations = {
   groundingWarnNoMultiples: "No historical EV/EBITDA multiples found — price-implied check skipped",
   groundingWarnMissingBridgeInputs: "Latest fiscal year is missing net debt, minorities or share count — price-implied check skipped",
   groundingWarnBlockExtractFailed: "A pasted block could not be extracted",
+  groundingWarnBasisMismatch: "Historical multiples and income statement use different EBITDA definitions",
+  groundingWarnBasisUnverifiable: "Cannot verify whether the historical multiples use the same EBITDA basis as the income statement",
+  groundingWarnEvBridgeMismatch: "The provider's EV bridge includes items ours doesn't (leases, pensions, associates)",
+  groundingWarnDividendNotCovered: "Dividend not covered by average free cash flow — may be financed by debt",
   groundingWarnGeneric: "Data quality warning",
   groundingCardTitle: "Deterministic post-check",
   groundingCardArithmeticLabel: "Bridge arithmetic",
@@ -1006,6 +1041,30 @@ const en: Translations = {
   groundingCardBaseMultipleLabel: "Your base multiple",
   groundingCardGapLabel: "gap",
   groundingCardAnchoringFlag: "Multiple anchored to price — this fair value may equal the price by construction",
+  groundingMeanLabel: "mean",
+  groundingGridTitle: "Valuation grid",
+  groundingGridUnverifiedNote: "Basis unverified — columns use the raw table multiples as-is",
+  groundingBasisSameLabel: "Same EBITDA basis as the income statement",
+  groundingBasisMismatchLabel: "Historical multiples are on a different EBITDA basis",
+  groundingBasisUnverifiableLabel: "EBITDA basis unverifiable",
+  groundingGateDashboardTitle: "Deterministic checks",
+  groundingGateBasisSame: "Same EBITDA basis",
+  groundingGateHorizonConsistent: "Consistent scenario horizon",
+  groundingGateBearBreaksPrice: "Bear breaks current price",
+  groundingGateMultipleVsMarket: "Multiple vs. market-implied",
+  groundingGateTrailingForward: "Trailing/forward horizon",
+  groundingGateNetdebtTrajectory: "Net-debt trajectory",
+  groundingGateRoicVsWacc: "Returns vs. cost of capital",
+  groundingGateProbabilities: "Scenario probabilities",
+  groundingGateCrossCheck: "Second-method cross-check",
+  groundingGateKillPrice: "Kill price declared",
+  groundingExpectedValueTitle: "Expected value (probability-weighted)",
+  groundingExpectedValueIntrinsicLabel: "Intrinsic",
+  groundingExpectedValueBuyTargetLabel: "Buy target",
+  groundingExpectedValueUpsideLabel: "Upside",
+  groundingImpliedOnProviderLabel: "Provider basis",
+  groundingLtmEquivLabel: "LTM-equivalent",
+  groundingWedgeLabel: "wedge",
 };
 
 const it: Translations = {
@@ -1464,6 +1523,8 @@ const it: Translations = {
   groundingKindOther: "Altro",
   groundingPeerTickerPlaceholder: "Ticker del peer (es. SHEL)",
   groundingPeerTickerRequired: "Ogni blocco Peer richiede un ticker prima di poter preparare i dati.",
+  groundingValuationMultiplesHint:
+    "Includi le colonne EV/Revenue, Market Cap ed Enterprise Value se la tua fonte le riporta — permettono all'app di verificare che la tabella dei multipli usi la stessa base EBITDA del conto economico.",
   groundingTextareaPlaceholder: "Incolla qui la tabella…",
   groundingRemoveBlock: "Rimuovi",
   groundingCharsSuffix: "caratteri",
@@ -1500,6 +1561,10 @@ const it: Translations = {
   groundingWarnMissingBridgeInputs:
     "All'ultimo esercizio mancano net debt, minorities o numero di azioni — controllo del multiplo implicito saltato",
   groundingWarnBlockExtractFailed: "Non è stato possibile estrarre un blocco incollato",
+  groundingWarnBasisMismatch: "I multipli storici e il conto economico usano definizioni di EBITDA diverse",
+  groundingWarnBasisUnverifiable: "Non è possibile verificare se i multipli storici usano la stessa base EBITDA del conto economico",
+  groundingWarnEvBridgeMismatch: "Il ponte EV del fornitore include voci che il nostro non ha (leasing, pensioni, collegate)",
+  groundingWarnDividendNotCovered: "Il dividendo non è coperto dal free cash flow medio — potrebbe essere finanziato a debito",
   groundingWarnGeneric: "Avviso sulla qualità dei dati",
   groundingCardTitle: "Post-check deterministico",
   groundingCardArithmeticLabel: "Aritmetica del ponte",
@@ -1508,6 +1573,30 @@ const it: Translations = {
   groundingCardBaseMultipleLabel: "Il tuo multiplo base",
   groundingCardGapLabel: "gap",
   groundingCardAnchoringFlag: "Multiplo ancorato al prezzo — questo fair value potrebbe coincidere col prezzo per costruzione",
+  groundingMeanLabel: "media",
+  groundingGridTitle: "Griglia di valutazione",
+  groundingGridUnverifiedNote: "Base non verificata — le colonne usano i multipli grezzi della tabella così come sono",
+  groundingBasisSameLabel: "Stessa base EBITDA del conto economico",
+  groundingBasisMismatchLabel: "I multipli storici sono su una base EBITDA diversa",
+  groundingBasisUnverifiableLabel: "Base EBITDA non verificabile",
+  groundingGateDashboardTitle: "Controlli deterministici",
+  groundingGateBasisSame: "Stessa base EBITDA",
+  groundingGateHorizonConsistent: "Orizzonte scenari coerente",
+  groundingGateBearBreaksPrice: "Il bear rompe il prezzo corrente",
+  groundingGateMultipleVsMarket: "Multiplo vs. implicito di mercato",
+  groundingGateTrailingForward: "Orizzonte trailing/forward",
+  groundingGateNetdebtTrajectory: "Traiettoria del debito netto",
+  groundingGateRoicVsWacc: "Rendimenti vs. costo del capitale",
+  groundingGateProbabilities: "Probabilità degli scenari",
+  groundingGateCrossCheck: "Cross-check con secondo metodo",
+  groundingGateKillPrice: "Kill price dichiarato",
+  groundingExpectedValueTitle: "Valore atteso (ponderato per probabilità)",
+  groundingExpectedValueIntrinsicLabel: "Intrinseco",
+  groundingExpectedValueBuyTargetLabel: "Target d'acquisto",
+  groundingExpectedValueUpsideLabel: "Upside",
+  groundingImpliedOnProviderLabel: "Base fornitore",
+  groundingLtmEquivLabel: "Equivalente LTM",
+  groundingWedgeLabel: "scarto",
 };
 
 export const translations: Record<Language, Translations> = { en, it };

@@ -41,6 +41,10 @@ const multiplesRowSchema = z.object({
   pb: nullableNumber,
   fcfYield: nullableNumber,
   dividendYield: nullableNumber,
+  // Basis-reconciliation inputs — nullable + defaulted so extracts persisted before this
+  // field existed (Analysis.groundingJson) still parse (spec §2.1: "nessuna migrazione dati").
+  marketCap: nullableNumber.default(null),
+  enterpriseValue: nullableNumber.default(null),
 });
 
 const estimateRowSchema = z.object({

@@ -26,11 +26,12 @@ import {
 import { buildGroundingExtractSystemPrompt, buildGroundingExtractUserPrompt } from "@/lib/ai/grounding-extract-prompt";
 import { getAiClient, buildThinkingParam, buildEffortConfig } from "@/lib/ai/client";
 import { resolveAiSettings } from "@/lib/ai/ai-preferences";
-import { runCreateWithToolLoop } from "@/lib/ai/tool-loop";
+import { runStreamWithToolLoop } from "@/lib/ai/tool-loop";
 import type { AiSettings } from "@/types/ai-settings";
 import { mergeExtractedBlocks, type BlockExtractResult } from "@/lib/grounding/merge";
 import { checkReconciliation, type ReconciliationWarning } from "@/lib/grounding/reconcile";
-import { computeMultipleStats, computeValuationGrid, computeMarketImplied } from "@/lib/grounding/anchors";
+import { computeMultipleStats, computeValuationGrid, computeMarketImplied, computeImpliedExpectations } from "@/lib/grounding/anchors";
+import { computeBasisReconciliation } from "@/lib/grounding/basis";
 
 const DEFAULT_SETTINGS: AiSettings = { model: "claude-sonnet-5", effort: "medium", thinking: true };
 
@@ -107,6 +108,12 @@ const multiplesRowSchema = z.object({
   pb: nullableNumber,
   fcfYield: nullableNumber,
   dividendYield: nullableNumber,
+  // Basis-reconciliation inputs (spec §2.1) — transcribed only when the paste has its
+  // own Market Cap / Enterprise Value column; never computed from other columns (see
+  // buildGroundingExtractSystemPrompt's added instruction). Defaulted so older-shaped
+  // model output missing the key still parses.
+  marketCap: nullableNumber.default(null),
+  enterpriseValue: nullableNumber.default(null),
 });
 
 const estimateRowSchema = z.object({
@@ -220,27 +227,40 @@ async function extractBlock(
   aiSettings: AiSettings,
   block: { id: string; kind: GroundingBlockKind; peerTicker?: string; text: string }
 ): Promise<BlockExtractResult> {
-  const response = await runCreateWithToolLoop(client, {
-    model: aiSettings.model,
-    max_tokens: 16000,
-    thinking: buildThinkingParam(aiSettings.thinking),
-    output_config: buildEffortConfig(aiSettings.effort),
-    system: buildGroundingExtractSystemPrompt({ kind: block.kind }),
-    tools: [], // pure transcription — see the module doc comment above
-    messages: [
-      {
-        role: "user",
-        content: buildGroundingExtractUserPrompt({ kind: block.kind, text: block.text, peerTicker: block.peerTicker }),
-      },
-    ],
-  });
-
-  // Concatenate ALL text blocks before matching — adaptive thinking can still split the
-  // response even with web search off (AGENTS.md gotcha #13).
-  const allText = response.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("\n");
+  // STREAMING, not client.messages.create() — the Anthropic API requires streaming above
+  // a max_tokens threshold on non-streaming calls (to avoid very long synchronous HTTP
+  // connections) and rejects the request outright otherwise. Discovered live: raising
+  // max_tokens to 64000 here (to fix an intermittent truncation — see below) on the
+  // previous non-streaming call made EVERY block fail at once, uniformly, since the
+  // rejection happens before any generation starts. Nothing is forwarded to the client —
+  // `onTextDelta` just accumulates locally, same shape as the non-streaming `response`
+  // used to have, so the parsing logic below is unchanged.
+  let allText = "";
+  await runStreamWithToolLoop(
+    client,
+    {
+      model: aiSettings.model,
+      // Adaptive thinking counts toward this budget even for a "pure transcription" call
+      // (AGENTS.md gotcha) — 16k occasionally let the model's reasoning eat enough of the
+      // budget to truncate the closing ```json fence mid-object, causing an intermittent
+      // (non-deterministic, retry-doesn't-fix-it) JSON.parse failure on an otherwise valid
+      // paste. Matched to the Deep Value routes' ceiling — a cap, not a target.
+      max_tokens: 64000,
+      thinking: buildThinkingParam(aiSettings.thinking),
+      output_config: buildEffortConfig(aiSettings.effort),
+      system: buildGroundingExtractSystemPrompt({ kind: block.kind }),
+      tools: [], // pure transcription — see the module doc comment above
+      messages: [
+        {
+          role: "user",
+          content: buildGroundingExtractUserPrompt({ kind: block.kind, text: block.text, peerTicker: block.peerTicker }),
+        },
+      ],
+    },
+    (text) => {
+      allText += text;
+    }
+  );
 
   const match = allText.match(/```json\s*([\s\S]*?)\s*```/);
   if (!match) throw new Error(`Block ${block.id}: no JSON block in the AI response.`);
@@ -292,19 +312,25 @@ export async function POST(request: Request) {
     }
 
     const { extract, warnings: mergeWarnings } = mergeExtractedBlocks(results);
-    const reconciliationWarnings = checkReconciliation(extract);
+    // The basis reconciliation is a property of the PASTE alone (extract.financials +
+    // extract.multiples) — computable before any price is known, and needed by every
+    // anchor below (spec §1/§2). Compute it once, thread it everywhere.
+    const basis = computeBasisReconciliation(extract);
+    const reconciliationWarnings = checkReconciliation(extract, basis);
 
     const stats = computeMultipleStats(extract.multiples);
-    const grid = computeValuationGrid(extract);
+    const grid = computeValuationGrid(extract, basis);
 
     // Best-effort live price for the market-implied control — a quote failure (rate
     // limit, delisted) must not fail the whole extraction; it just leaves the
     // price-implied read absent, same as a currency mismatch would.
     let marketImplied = null as ReturnType<typeof computeMarketImplied>;
+    let impliedExpectations = null as ReturnType<typeof computeImpliedExpectations>;
     const anchorWarnings: ReconciliationWarning[] = [];
     try {
       const quote = await getQuote(body.ticker);
-      marketImplied = computeMarketImplied(quote.regularMarketPrice, quote.currency, extract);
+      marketImplied = computeMarketImplied(quote.regularMarketPrice, quote.currency, extract, basis);
+      impliedExpectations = computeImpliedExpectations(quote.regularMarketPrice, quote.currency, extract, basis);
 
       // computeMarketImplied returns null silently on three distinct conditions (see
       // lib/grounding/anchors.ts) — replicate its own branching order here so the
@@ -340,9 +366,11 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       extract,
+      basis,
       stats,
       grid,
       marketImplied,
+      impliedExpectations,
       warnings: [...failureWarnings, ...mergeWarnings, ...reconciliationWarnings, ...anchorWarnings],
     });
   } catch (error) {

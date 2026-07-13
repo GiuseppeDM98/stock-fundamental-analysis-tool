@@ -7,6 +7,7 @@
 // on a suspected transcription error is bad UX, and the human reviewing the preview is
 // better placed to judge than a hard gate.
 import type { GroundedFinancials } from "@/types/grounding";
+import { SAME_BASIS_TOLERANCE, EV_BRIDGE_TOLERANCE, type BasisReconciliation } from "@/lib/grounding/basis";
 
 export type ReconciliationWarning = {
   code:
@@ -19,7 +20,12 @@ export type ReconciliationWarning = {
     | "currency_mismatch"
     | "no_multiples"
     | "missing_bridge_inputs"
-    | "block_extract_failed";
+    | "block_extract_failed"
+    // NEW (docs/deep-value-rigor-v2-spec.md §2.5) — the basis-reconciliation warnings.
+    | "basis_mismatch"
+    | "basis_unverifiable"
+    | "ev_bridge_mismatch"
+    | "dividend_not_covered";
   severity: "warn" | "info";
   fiscalYear: number | null;
   // Numbers/years ONLY — t() has no interpolation, so the component composes
@@ -33,6 +39,9 @@ const RATIO_TOLERANCE = 0.1; // 10%
 // netDebt ≈ totalDebt − cash is a straight arithmetic identity — tighter tolerance.
 const IDENTITY_TOLERANCE = 0.02; // 2%
 const SHARE_COUNT_JUMP_THRESHOLD = 0.1; // 10% YoY
+// dividend_not_covered looks back this many non-null FCF years for its average — enough to
+// smooth a single weak year without diluting a genuine multi-year coverage shortfall.
+const PAYOUT_LOOKBACK_YEARS = 3;
 
 function relDiff(stated: number, derived: number): number {
   return Math.abs(stated - derived) / (Math.abs(stated) || 1);
@@ -49,8 +58,13 @@ function relDiff(stated: number, derived: number): number {
  * very same two fields IS the definition of ROE, not an independent cross-check, so
  * comparing it to itself can never fail. Revisit only if a future block type ever supplies
  * an independently-stated ROE (e.g. a "quality metrics" paste).
+ *
+ * @param basis The basis reconciliation computed from this SAME extract
+ *   (`computeBasisReconciliation`) — the caller passes it rather than this function
+ *   recomputing it, since callers that already have `basis` for other reasons (anchors,
+ *   the prompt) would otherwise redo the same year-by-year pass.
  */
-export function checkReconciliation(extract: GroundedFinancials): ReconciliationWarning[] {
+export function checkReconciliation(extract: GroundedFinancials, basis: BasisReconciliation): ReconciliationWarning[] {
   const warnings: ReconciliationWarning[] = [];
   const rows = extract.financials;
 
@@ -105,6 +119,46 @@ export function checkReconciliation(extract: GroundedFinancials): Reconciliation
           severity: "warn",
           fiscalYear: rows[i].fiscalYear,
           detail: `${prev} → ${curr} (${(change * 100).toFixed(1)}%)`,
+        });
+      }
+    }
+  }
+
+  // Basis-reconciliation warnings (spec §2.5) — these depend on `basis`, not just `extract`,
+  // so they can't be folded into the per-row loop above.
+  if (basis.kE == null) {
+    warnings.push({ code: "basis_unverifiable", severity: "warn", fiscalYear: null, detail: "evSales/enterpriseValue absent" });
+  } else if (Math.abs(basis.kE - 1) > SAME_BASIS_TOLERANCE) {
+    warnings.push({
+      code: "basis_mismatch",
+      severity: "warn",
+      fiscalYear: null,
+      detail: `${basis.kE.toFixed(2)} (n=${basis.kEn}, spread ${(basis.kESpread ?? 0).toFixed(2)})`,
+    });
+  }
+
+  if (basis.kB != null && Math.abs(basis.kB - 1) > EV_BRIDGE_TOLERANCE) {
+    const kBn = basis.years.filter((y) => y.kB != null).length;
+    warnings.push({ code: "ev_bridge_mismatch", severity: "warn", fiscalYear: null, detail: `${basis.kB.toFixed(2)} (n=${kBn})` });
+  }
+
+  // dividend_not_covered — a high payout funded by debt rather than cash generation is a
+  // RISK, never support for the thesis (spec §2.5 — the one check no reviewer ran on Iren).
+  const latestFy = rows[rows.length - 1];
+  if (latestFy?.dividendsPerShare != null && latestFy.sharesDiluted != null) {
+    const dividendTotal = latestFy.dividendsPerShare * latestFy.sharesDiluted;
+    const recentFcf = rows
+      .slice(-PAYOUT_LOOKBACK_YEARS)
+      .map((r) => r.freeCashFlow)
+      .filter((v): v is number => v != null);
+    if (recentFcf.length > 0) {
+      const fcfMean = recentFcf.reduce((s, v) => s + v, 0) / recentFcf.length;
+      if (dividendTotal > fcfMean) {
+        warnings.push({
+          code: "dividend_not_covered",
+          severity: "warn",
+          fiscalYear: latestFy.fiscalYear,
+          detail: `${dividendTotal.toFixed(1)} vs ${fcfMean.toFixed(1)} (${recentFcf.length}y mean)`,
         });
       }
     }

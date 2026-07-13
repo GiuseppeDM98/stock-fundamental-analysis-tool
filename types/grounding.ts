@@ -66,6 +66,14 @@ export type FiscalYearMultiples = {
   pb: number | null;
   fcfYield: number | null; // percentage
   dividendYield: number | null; // percentage
+  // Basis-reconciliation inputs (docs/deep-value-rigor-v2-spec.md §1/§2.1) — when the
+  // paste has explicit Market Cap / Enterprise Value columns, these make kE/kB OBSERVED
+  // instead of inferred from evSales/pe/pb. Same unit as meta.units, like every other
+  // monetary value in this type. Nullable + defaulted for backward compatibility with
+  // extracts saved before this field existed — lib/grounding/basis.ts degrades to the
+  // inferred path (or "unavailable") when both are absent.
+  marketCap: number | null;
+  enterpriseValue: number | null;
 };
 
 export type ForwardEstimate = {

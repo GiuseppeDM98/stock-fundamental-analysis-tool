@@ -1,9 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { buildDeepValueSystemPrompt, buildDeepValueUserPrompt, buildAnalystSystemPrompt, buildAnalystUserPrompt } from "@/lib/ai/deep-value-prompts";
-import { computeMultipleStats, computeValuationGrid, computeMarketImplied } from "@/lib/grounding/anchors";
-import { checkReconciliation } from "@/lib/grounding/reconcile";
+import { buildGroundingPromptContext } from "@/lib/grounding/prompt-format";
 import { makeFinancialsRow, makeMultiplesRow, makeExtract, makeMeta } from "./grounding-test-helpers";
-import type { GroundingPromptContext } from "@/lib/grounding/prompt-format";
 import type { GroundingBlock } from "@/types/grounding";
 
 const EXTRACT = makeExtract({
@@ -12,14 +10,7 @@ const EXTRACT = makeExtract({
   multiples: [3.0, 3.8, 4.6].map((evEbitda, i) => makeMultiplesRow({ fiscalYear: 2023 + i, evEbitda })),
 });
 const BLOCKS: GroundingBlock[] = [{ id: "1", kind: "balance_sheet", text: "some pasted table" }];
-const GROUNDING: GroundingPromptContext = {
-  blocks: BLOCKS,
-  extract: EXTRACT,
-  stats: computeMultipleStats(EXTRACT.multiples),
-  grid: computeValuationGrid(EXTRACT),
-  marketImplied: computeMarketImplied(14.18, "EUR", EXTRACT),
-  warnings: checkReconciliation(EXTRACT),
-};
+const GROUNDING = buildGroundingPromptContext(BLOCKS, EXTRACT, 14.18, "EUR");
 
 describe("Quick mode stays untouched by the grounding param", () => {
   it("buildDeepValueSystemPrompt omits GROUNDED_RULES_BLOCK when grounding is not passed", () => {

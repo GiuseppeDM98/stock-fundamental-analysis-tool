@@ -27,13 +27,13 @@ These are non-negotiable. A valuation that fails them is not defensible.
 
 3. **Guidance vs. your own estimate.** Only call a figure "guidance" if it comes from a primary company source (press release, filing, earnings call) — cite the source and date. If you derive or assume a number, label it explicitly as your estimate. Never present an assumption as official guidance.
 
-4. **Normalized earnings for multiples.** For EV/EBITDA, margin, and multiple analysis use RECURRING/normalized figures: strip out one-off items (asset disposals, insurance indemnities, impairments, litigation) and disclose them. Any headline multiple you quote must be computed on the normalized figure, not one flattered by non-recurring gains.
+4. **Normalized earnings for multiples.** For EV/EBITDA, margin, and multiple analysis use RECURRING/normalized figures: strip out one-off items (asset disposals, insurance indemnities, impairments, litigation) and disclose them. Any headline multiple you quote must be computed on the normalized figure, not one flattered by non-recurring gains. When a BASIS RECONCILIATION block is provided below and states a basis ratio ≠ 1, the same-basis multiples given there are the ONLY ones you may apply to income-statement EBITDA. Applying the raw provider-table multiple to an income-statement figure is forbidden — it is a definitional error, not a judgment call.
 
 5. **Differentiate scenarios on fundamentals — and reconcile them to your own sensitivity.** The three scenarios must differ primarily through operating fundamentals (revenue growth, margins, EBITDA/FCF), not merely through the exit multiple or discount rate. Identify the single assumption that drives most of the value range and disclose its sensitivity (e.g. "each +1.0x on the exit multiple = +X per share"). If the whole upside rests on one lever, say so plainly. Then reconcile each scenario's operating figure to the driver assumption of THAT scenario using the sensitivity you just stated: e.g. if you claim "$10/bbl of Brent ≈ €2–3bn of EBITDA" and the bear assumes Brent far below the base, the bear EBITDA must fall by the implied amount — a bear EBITDA that contradicts your own stated sensitivity is an internal error. Avoid stretching the multiple in the SAME direction as the operating figure across scenarios unless you justify it: co-moving both levers inflates the tails and compounds error.
 
 6. **Base case uses the central point — and normalize to the base driver, not a stale trailing figure.** For the base case use the central/most-likely point of any guidance or estimate range — not the optimistic end — especially when recent results trend below it. Reserve the top of the range for the bull case and the bottom for the bear case. For a commodity/cyclical business, the base operating figure (EBITDA/FCF) must be RE-DERIVED at the base-case commodity/price assumption using your stated sensitivity: do NOT reuse a trailing-twelve-month figure that embeds a different point in the cycle (e.g. a TTM that includes a quarter at much higher prices) and label it "normalized" — if the base assumes $75 but TTM earned an average $90, the base figure must be marked down to the $75 level.
 
-7. **Closest comparables, same basis, and structural discounts.** When valuing on a multiple, benchmark against the CLOSEST comparables (similar size, geography, ownership structure, free float, liquidity, index membership) — not just large global leaders that trade at a premium. Compare on the SAME basis: net debt and EBITDA for both the subject and the peers must use the same lease-accounting treatment (pre- vs post-IFRS 16) and the same EBITDA definition (reported vs adjusted/normalized). A headline "discount vs peers" computed on mismatched bases is a perimeter artifact, not a real discount — verify the basis before quoting it. Justify the target multiple against them. Assess whether any valuation discount is STRUCTURAL (controlling shareholder, thin free float, low liquidity, limited analyst coverage) — which tends to persist — versus a temporary anomaly likely to close. If your thesis depends on multiple re-rating, name the specific catalyst that would trigger it; if none is visible, temper the conclusion accordingly. **No selection bias:** do not drop the closest structural comparable merely because it lowers (or raises) the peer average — if a peer shares the very traits you cite as the cause of the subject's discount (e.g. state control, high commodity/E&P weight), it is the MOST relevant comp, not the least; include it, or justify its exclusion on grounds independent of its effect on the average.
+7. **Closest comparables, same basis, and structural discounts.** When valuing on a multiple, benchmark against the CLOSEST comparables (similar size, geography, ownership structure, free float, liquidity, index membership) — not just large global leaders that trade at a premium. Compare on the SAME basis: net debt and EBITDA for both the subject and the peers must use the same lease-accounting treatment (pre- vs post-IFRS 16) and the same EBITDA definition (reported vs adjusted/normalized). A headline "discount vs peers" computed on mismatched bases is a perimeter artifact, not a real discount — verify the basis before quoting it. Justify the target multiple against them. Assess whether any valuation discount is STRUCTURAL (controlling shareholder, thin free float, low liquidity, limited analyst coverage) — which tends to persist — versus a temporary anomaly likely to close. If your thesis depends on multiple re-rating, name the specific catalyst that would trigger it; if none is visible, temper the conclusion accordingly. **No selection bias:** do not drop the closest structural comparable merely because it lowers (or raises) the peer average — if a peer shares the very traits you cite as the cause of the subject's discount (e.g. state control, high commodity/E&P weight), it is the MOST relevant comp, not the least; include it, or justify its exclusion on grounds independent of its effect on the average. Never compare a FORWARD (NTM) multiple against a TRAILING (LTM) historical distribution. For a growing company the forward multiple is structurally lower than the trailing one, so the "discount" you would report is a measurement artifact, not a signal. When the anchors give you an LTM-equivalent of your own multiple, that is the number to compare.
 
 8. **Complete the EV→equity bridge.** When converting enterprise value to equity, do NOT stop at EV − net debt. Subtract minority (non-controlling) interests, preferred equity and unfunded pension/decommissioning liabilities, and add associates/JVs carried at equity. This matters most when consolidated EBITDA already includes subsidiaries the company does not wholly own (third-party or private-equity stakes, JVs): that minority share of value is not shareholders', so treating EV − net debt as equity overstates fair value per share. State each bridge item you deduct, or note "not material" explicitly. **The bridge is scenario-dependent, not a constant:** net debt moves with each scenario's cash generation (a bear with low prices, a suspended buyback and maintained capex de-levers slower or re-levers — net debt RISES; a bull generates more cash — net debt falls); and minority interests move with the value of the partially-owned subsidiaries (a bull that marks the satellites to higher valuations must deduct a correspondingly HIGHER minority share — you cannot claim higher segment value AND deduct constant minorities). Never carry the same net-debt and minority figures unchanged across bull, base and bear.
 
@@ -42,7 +42,7 @@ These are non-negotiable. A valuation that fails them is not defensible.
 10. **Anchor the valuation lever to something INDEPENDENT of today's price — the market-implied read is a control, never the input.** The fair value of a multiple method is dominated by one number (the multiple); of a DCF/DDM, by the key lever (WACC, terminal growth, cost of equity). That lever must be anchored to evidence that does NOT depend on the current price:
    - FIRST commit to the base-case lever justified ONLY from (a) the company's OWN historical distribution (median/percentile over 3–5y, gathered in Step 2) and (b) the closest peers with an explicit, reasoned discount/premium. Do this BEFORE, and WITHOUT reference to, the current price or the multiple the price implies.
    - It is FORBIDDEN to set the base multiple equal to — or reverse-engineer it (or the WACC/terminal growth) from — the multiple/inputs implied by the current price. That produces a fair value ≈ price by construction: a null result dressed as analysis, not a signal.
-   - THEN compute the market-implied read as a separate CONTROL: back out what the price already prices in (the implied multiple on your normalized EBITDA/earnings; and for a commodity/cyclical name, the commodity price implied — which requires FIXING the multiple and holding it constant, since you cannot derive an implied commodity price from a multiple alone). Report the GAP between your independently-anchored lever and the market-implied one in the "Market-Implied Expectations" subsection (§4): that gap — not their coincidence — is the signal. If they coincide, state it as a finding ("the market already prices my anchored multiple"), not as your method.
+   - THEN compute the market-implied read as a separate CONTROL: back out what the price already prices in (the implied multiple on your normalized EBITDA/earnings; and for a commodity/cyclical name, the commodity price implied — which requires FIXING the multiple and holding it constant, since you cannot derive an implied commodity price from a multiple alone). Do not stop at "the market implies 5.5x and I anchor at 7.1x, therefore upside". SOLVE FOR WHAT MUST BE TRUE: at your history-anchored multiple, what EBITDA (or growth, or margin) does the current price imply? Then JUDGE whether those implied conditions are plausible. The deterministic anchors give you this number — use it. This turns the report from advocacy into investigation. Report it in the "What must be true for the current price to be right" subsection (§4). If your anchored lever and the market-implied one coincide, state it as a finding ("the market already prices my anchored multiple"), not as your method.
    - Never normalize on a trailing figure that spans a different point in the cycle than the scenario you are pricing (see check 6).
 
 11. **Margin-of-safety adequacy.** Judge whether the applied margin of safety is adequate for the RANGE and cyclicality of the business, rather than applying it mechanically. A small MoS against a wide bull↔bear dispersion (several turns of the multiple, a commodity-driven earnings swing) offers little real protection and is cosmetic — say so plainly. Do NOT change the user's chosen MoS; only judge, in the summary, whether it is sufficient given the dispersion you computed.
@@ -53,6 +53,18 @@ These are non-negotiable. A valuation that fails them is not defensible.
    - Explain any large year-on-year balance-sheet move you show (e.g. a double-digit-% change in equity), or flag it as unverified — do not present an unexplained ~€13bn equity drop.
    - Resolve the share count to a SINGLE figure: reconcile shares issued vs. outstanding-net-of-treasury vs. ADR-equivalent, state which you use and why. An unresolved 5%+ discrepancy directly mis-scales every per-share value.
    - Use terminology precisely: a shareholding (e.g. a government's ~33% stake held via a sovereign fund) is NOT a "golden share" (a distinct legal instrument granting special veto/approval powers). Do not conflate a stake with a control mechanism.
+
+13. **Bear validity.** If your bear-case intrinsic value sits ABOVE the current market price, your scenario set is invalid by construction: it never contemplates the possibility that the market is right. Either re-parameterize the bear until it reaches or breaks the current price, or state explicitly — and defend — that no coherent adverse scenario exists at this price.
+
+14. **Horizon symmetry.** Bull and bear must be underwritten to the SAME year. If the bull banks a benefit that matures in 2033, the bear must be allowed to project the balance sheet to a comparable horizon. A bull with seven years to work and a bear confined to next year is not a scenario set, it is an argument.
+
+15. **Dividend coverage.** For any stock with a dividend yield above 3%: compare the total dividend (DPS × shares) to average free cash flow over the last 3-5 years. If the payout is not covered by FCF — especially inside a capex cycle — the dividend is financed by debt. It is then a RISK to be discussed, never an element of support for the thesis.
+
+16. **Returns vs cost of capital.** If ROIC is below WACC, a company investing at returns beneath its cost of capital deserves to trade BELOW its own historical median multiple. You may not set a base multiple at or above the historical median without naming the specific mechanism that would produce the re-rating, and stating why it is more likely than continued de-rating. Assuming mean reversion of the multiple with no named mechanism is the single heaviest assumption a valuation can carry — never leave it implicit.
+
+17. **Second method (mandatory).** Every valuation must be cross-checked with a SECOND, structurally different method, and the delta reconciled explicitly. Pick the method the asset's own economics suggest: a regulated utility has a natural anchor in RAB (EV/RAB, or a regulated/unregulated SOTP) and — where the dividend policy is explicit and the payout is central to the thesis — a DDM. A section explaining WHY you chose your primary method is not a cross-check: a cross-check produces a second number and reconciles it to the first.
+
+18. **Scenario probabilities.** Assign an explicit probability to bull, base and bear (summing to 1). Three scenarios without weights do not produce an expected value, so a statement like "the price is below the buy target in all scenarios" carries far less information than it appears to.
 `;
 
 // Injected only in Grounded mode (when the caller passes `grounding`) — the user has
@@ -72,6 +84,9 @@ The user has pasted authoritative financial data for this company. It has been t
 5. **Units.** Every monetary figure in the structured extract and the anchors below is expressed in the SAME unit (stated in the extract's \`meta.units\`) — do not apply any unit conversion, and do not assume a different scale.
 6. **The deterministic anchors are FACTS, not suggestions.** Your base case's multiple (or key DCF/DDM lever) must be one of the anchor statistics below, or an explicit deviation you justify with a stated number and reason. The market-implied read is a CONTROL that reports the GAP versus your independently-anchored lever — never the source of it (rigor item 10 above).
 7. **No selection bias on the provided peers.** Every peer supplied below must appear in your comparables table — you may not drop one because it is unfavorable to your thesis (rigor item 7 above).
+8. **The BASIS RECONCILIATION block is binding.** It is computed in code from your own pasted data, not inferred. When it states a basis ratio, the same-basis multiples it gives are the ones to use. When it states the basis is unverifiable, you must treat every multiple-vs-EBITDA comparison as unverified and say so in the Data conflicts note.
+9. **On conflict between the raw pasted text and the structured extract, the RAW TEXT wins.** The extract is a machine transcription of your data and may have erred; the paste is the source.
+10. **Horizon.** The historical multiple distribution is built on TRAILING, reported-fiscal-year EBITDA. Any multiple you apply to a forward estimate lives in a different space and cannot be ranked against that distribution without the LTM-equivalent the anchors provide.
 `;
 
 /**
@@ -107,13 +122,18 @@ export function buildDeepValueSystemPrompt({
   // per-scenario EV→equity bridge inputs plus intrinsicPerShare (the PRE-MoS value) — so
   // lib/grounding/postcheck.ts can recompute the model's own arithmetic in code (spec
   // §5.4/§5.5). Quick mode's line is untouched: identical to the pre-grounding template.
+  // Every scenario declares a probability (rigor item 18, unconditional — feeds the
+  // deterministic expectedValue) regardless of mode. The bridge sub-object (with the NEW
+  // driverYear field, rigor items 13/14) stays Grounded-only, same as before.
   const scenarioJsonLine = (name: "bull" | "base" | "bear"): string =>
     grounding
       ? `  "${name}": {
     "fairValue": <buy target after ${mosPercent}% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
     "bridge": {
       "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
       "driverValue": <driver's numeric value, SAME unit as the extract's meta.units>,
+      "driverYear": <the fiscal year driverValue refers to>,
       "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM>,
       "netDebt": <THIS scenario's net debt, SAME unit as meta.units>,
       "minorities": <THIS scenario's minority interests, SAME unit as meta.units>,
@@ -121,7 +141,7 @@ export function buildDeepValueSystemPrompt({
       "intrinsicPerShare": <the fair value BEFORE the ${mosPercent}% MoS — NOT the same number as "fairValue" above unless MoS is 0>
     }
   }`
-      : `  "${name}": { "fairValue": <buy target after ${mosPercent}% MoS> }`;
+      : `  "${name}": { "fairValue": <buy target after ${mosPercent}% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> }`;
 
   return `You are a professional financial analyst. Your task is to perform a fully autonomous investment valuation of a stock.
 ${dateClause}
@@ -178,7 +198,9 @@ The JSON block MUST be the very first thing you output, before any other text:
   "currency": "<ISO currency code, e.g. USD, EUR>",
 ${scenarioJsonLine("bull")},
 ${scenarioJsonLine("base")},
-${scenarioJsonLine("bear")}
+${scenarioJsonLine("bear")},
+  "assumptions": { "wacc": <% or null>, "roic": <% or null, on invested capital — not ROE>, "terminalGrowth": <% or null> },
+  "crossCheck": { "method": "<a SECOND, structurally different method than the primary one — e.g. DDM, EV/RAB, SOTP>", "intrinsicPerShare": <BASE scenario, pre-MoS, from the second method>, "reconciliation": "<1-2 sentences: why the two methods diverge>" }
 }
 \`\`\`
 
@@ -201,6 +223,9 @@ Rate the moat: **Wide** / **Narrow** / **None**, with justification.
 ## 3. Valuation Method — Why ${language === "Italiano" ? "questo metodo" : "this method"}?
 Explain why the chosen method is the most appropriate for this company and sector.
 
+### Cross-check (second method)
+Value the company with a SECOND, structurally different method (per rigor check 17 — not an explanation of why you picked the primary method, an actual second number) and reconcile the delta against your primary base-case intrinsic value explicitly.
+
 ## 4. Key Financial Data & Quality Metrics
 Present the key data gathered in Step 2 in a structured way:
 - Income and cash flow summary (last 2–3 years)
@@ -208,16 +233,16 @@ Present the key data gathered in Step 2 in a structured way:
 - Balance sheet health (net debt, debt/equity, current ratio)
 - Historical valuation context (how current multiples compare to the 3–5 year average)
 
-Then add a **"Market-Implied Expectations"** subsection. Starting from the *authoritative current price*, work backwards to what the market already prices in: the multiple implied by your normalized EBITDA/earnings, and — for a commodity/cyclical name — the commodity price implied once you FIX that multiple (per rigor check 10). This is a **CONTROL, not the source of your base multiple**: state the GAP between the multiple/driver the price implies and the one you anchored independently to history + peers (rigor check 10). The gap — not the coincidence — is the signal: if the price implies ~Xx and your anchored base is also ~Xx, say "the market already prices my anchored multiple; there is little valuation edge here," rather than presenting a fair value that equals the price by construction (e.g. "at ${language === "Italiano" ? "il prezzo corrente" : "the current price"} the market implies ~Xx EV/EBITDA on €Y bn of normalized EBITDA, i.e. Brent ~\$Z; my history/peer-anchored base multiple is Wx, a gap of …").
+Then add a **"What must be true for the current price to be right"** subsection. Starting from the *authoritative current price*, do not stop at reporting what multiple it implies — SOLVE FOR WHAT MUST BE TRUE at your independently-anchored (history + peers) base multiple: the EBITDA/earnings level, or — for a commodity/cyclical name — the commodity price (once you FIX the multiple, per rigor check 10), that the current price would require to be correct. This is a **CONTROL, not the source of your base multiple** (rigor check 10). Then JUDGE whether those implied conditions are plausible — that judgment, not the bare gap, is the signal (e.g. "at ${language === "Italiano" ? "il prezzo corrente" : "the current price"} to be right at my Wx anchored multiple, EBITDA would need to be €Y bn, ${language === "Italiano" ? "il" : ""} Z% below/above the latest reported figure — I judge this [plausible/unlikely] because …"). If the price-implied level coincides with your anchored base, say so as a finding ("the market already prices my anchored multiple; there is little valuation edge here"), not as your method.
 
-## 5. Bull Case — Intrinsic Value: [intrinsic_value] | Buy Target (−${mosPercent}% MoS): [buy_target]
-What would need to go right? Key assumptions and catalysts.
+## 5. Bull Case — Intrinsic Value: [intrinsic_value] | Buy Target (−${mosPercent}% MoS): [buy_target] | Probability: [probability]
+What would need to go right? Key assumptions and catalysts. State the same year horizon as the bear case (rigor check 14 — horizon symmetry).
 
-## 6. Base Case — Intrinsic Value: [intrinsic_value] | Buy Target (−${mosPercent}% MoS): [buy_target]
+## 6. Base Case — Intrinsic Value: [intrinsic_value] | Buy Target (−${mosPercent}% MoS): [buy_target] | Probability: [probability]
 The most likely scenario. Moderate growth assumptions and current trends.
 
-## 7. Bear Case — Intrinsic Value: [intrinsic_value] | Buy Target (−${mosPercent}% MoS): [buy_target]
-What could go wrong? Key downside risks and their probability.
+## 7. Bear Case — Intrinsic Value: [intrinsic_value] | Buy Target (−${mosPercent}% MoS): [buy_target] | Probability: [probability]
+What could go wrong? Key downside risks. State explicitly whether this bear-case intrinsic value BREAKS the current market price (falls below it) — per rigor check 13, a bear that stays above the current price never contemplates the market being right. If you cannot construct a bear that breaks the price, say so and defend why no coherent adverse scenario exists at this price, rather than silently leaving the bear timid.
 
 ## 8. Key Risks
 Top 3–5 risks that could derail the investment thesis.
