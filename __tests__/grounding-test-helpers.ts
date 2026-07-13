@@ -1,4 +1,4 @@
-// Fixture builders shared by the 4 grounding-*.test.ts files — not itself a test file
+// Fixture builders shared by the grounding-*.test.ts files — not itself a test file
 // (no .test. in the name, vitest won't collect it as a suite).
 import type {
   FiscalYearFinancials,
@@ -7,6 +7,7 @@ import type {
   GroundedFinancials,
   GroundingMeta,
 } from "@/types/grounding";
+import type { BasisReconciliation } from "@/lib/grounding/basis";
 
 export function makeFinancialsRow(overrides: Partial<FiscalYearFinancials> & { fiscalYear: number }): FiscalYearFinancials {
   return {
@@ -39,6 +40,8 @@ export function makeMultiplesRow(overrides: Partial<FiscalYearMultiples> & { fis
     pb: null,
     fcfYield: null,
     dividendYield: null,
+    marketCap: null,
+    enterpriseValue: null,
     ...overrides,
   };
 }
@@ -72,6 +75,27 @@ export function makeExtract(overrides: Partial<GroundedFinancials> = {}): Ground
     multiples: [],
     estimates: [],
     peers: [],
+    ...overrides,
+  };
+}
+
+/** A "quiet" BasisReconciliation — kE=1 (sameBasis, no basis_mismatch/basis_unverifiable)
+ *  and kB=null (assumed, no ev_bridge_mismatch) — for tests that exercise ONE reconcile.ts
+ *  check in isolation without also having to fabricate a full basis fixture. Tests that
+ *  specifically target basis-derived warnings should build a real one via
+ *  computeBasisReconciliation() instead, or override the relevant field here. */
+export function makeBasis(overrides: Partial<BasisReconciliation> = {}): BasisReconciliation {
+  return {
+    years: [],
+    kE: 1,
+    kEn: 5,
+    kESpread: 0,
+    confidence: "high",
+    sameBasis: true,
+    kB: null,
+    evBridgeConfidence: "assumed",
+    evBridgeSameBasis: null,
+    adjustedEvEbitda: null,
     ...overrides,
   };
 }

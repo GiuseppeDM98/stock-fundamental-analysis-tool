@@ -6,7 +6,7 @@
 import { useLanguage } from "@/context/language-context";
 import type { Translations } from "@/lib/i18n/translations";
 import type { GroundingExtractResponse } from "@/lib/grounding-client";
-import type { MultipleKey } from "@/lib/grounding/anchors";
+import type { MultipleKey, ValuationGrid } from "@/lib/grounding/anchors";
 import type { ReconciliationWarning } from "@/lib/grounding/reconcile";
 import type { FiscalYearMultiples, GroundingMeta } from "@/types/grounding";
 
@@ -37,6 +37,10 @@ const WARNING_KEY: Partial<Record<ReconciliationWarning["code"], keyof Translati
   no_multiples: "groundingWarnNoMultiples",
   missing_bridge_inputs: "groundingWarnMissingBridgeInputs",
   block_extract_failed: "groundingWarnBlockExtractFailed",
+  basis_mismatch: "groundingWarnBasisMismatch",
+  basis_unverifiable: "groundingWarnBasisUnverifiable",
+  ev_bridge_mismatch: "groundingWarnEvBridgeMismatch",
+  dividend_not_covered: "groundingWarnDividendNotCovered",
 };
 
 // Exported — reused by grounding-card.tsx so the two surfaces that render
@@ -73,9 +77,18 @@ type Props = {
   onConfirm: () => void;
 };
 
+function formatGrid(grid: ValuationGrid, t: (key: keyof Translations) => string): string {
+  const header = `${grid.columns.map((c) => `${c.label} ${c.multiple.toFixed(1)}x`).join(" | ")}`;
+  const rows = grid.rows.map((row, ri) => {
+    const cells = grid.cells[ri].map((c) => (c ? c.perShare.toFixed(2) : "—")).join(" | ");
+    return `${row.label}: ${cells}`;
+  });
+  return [header, ...rows].join("\n") + (grid.basisApplied ? "" : `\n(${t("groundingGridUnverifiedNote")})`);
+}
+
 export function GroundingPreview({ ticker, result, confirmed, onEdit, onConfirm }: Props) {
   const { t } = useLanguage();
-  const { extract, stats, marketImplied, warnings } = result;
+  const { extract, basis, stats, grid, marketImplied, warnings } = result;
 
   const years = extract.financials.map((f) => f.fiscalYear);
   const yearRange = years.length > 0 ? `${Math.min(...years)}-${Math.max(...years)}` : null;
@@ -115,6 +128,23 @@ export function GroundingPreview({ ticker, result, confirmed, onEdit, onConfirm 
         )}
       </div>
 
+      {/* Basis reconciliation — a property of the PASTE, shown before any AI run is spent
+          (spec §7.1: "il momento più economico possibile per scoprirlo"). */}
+      {basis.kE == null ? (
+        <div>
+          <p className="text-sm font-medium text-warning">⚠ {t("groundingBasisUnverifiableLabel")}</p>
+          <p className="mt-0.5 text-xs text-muted">{t("groundingValuationMultiplesHint")}</p>
+        </div>
+      ) : !basis.sameBasis ? (
+        <p className="text-sm font-medium text-warning">
+          ⚠ {t("groundingBasisMismatchLabel")} — kE {basis.kE.toFixed(2)} (n={basis.kEn})
+        </p>
+      ) : (
+        <p className="text-sm text-success">
+          ✓ {t("groundingBasisSameLabel")} (kE {basis.kE.toFixed(2)}, n={basis.kEn})
+        </p>
+      )}
+
       {evEbitdaStats && (
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-muted">
@@ -126,8 +156,8 @@ export function GroundingPreview({ ticker, result, confirmed, onEdit, onConfirm 
           </p>
           {yearHalves && evEbitdaStats.earlyMean != null && evEbitdaStats.lateMean != null && (
             <p className="mt-0.5 text-xs text-muted">
-              {yearHalves.earlyRange} {t("groundingMedianLabel")} {evEbitdaStats.earlyMean.toFixed(1)}x → {yearHalves.lateRange}{" "}
-              {t("groundingMedianLabel")} {evEbitdaStats.lateMean.toFixed(1)}x{trend ? ` (${trend})` : ""}
+              {yearHalves.earlyRange} {t("groundingMeanLabel")} {evEbitdaStats.earlyMean.toFixed(1)}x → {yearHalves.lateRange}{" "}
+              {t("groundingMeanLabel")} {evEbitdaStats.lateMean.toFixed(1)}x{trend ? ` (${trend})` : ""}
             </p>
           )}
         </div>
@@ -147,10 +177,25 @@ export function GroundingPreview({ ticker, result, confirmed, onEdit, onConfirm 
         </p>
       )}
 
+      {grid && (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted">{t("groundingGridTitle")}</p>
+          <pre className="mt-1 whitespace-pre-wrap font-mono text-xs text-slate-300">{formatGrid(grid, t)}</pre>
+        </div>
+      )}
+
       {marketImplied ? (
         <p className="text-sm text-slate-300">
-          {t("groundingPriceImpliesLabel")} {marketImplied.impliedMultiple.toFixed(2)}x → {t("groundingPercentileLabel")}{" "}
-          {marketImplied.percentile.toFixed(0)}
+          {t("groundingPriceImpliesLabel")} {marketImplied.impliedOnStatement.toFixed(2)}x
+          {marketImplied.impliedOnProvider != null ? (
+            <>
+              {" "}
+              ({t("groundingImpliedOnProviderLabel")} {marketImplied.impliedOnProvider.toFixed(2)}x) → {t("groundingPercentileLabel")}{" "}
+              {marketImplied.percentile?.toFixed(0)}
+            </>
+          ) : (
+            <span className="text-muted"> — {t("groundingBasisUnverifiableLabel").toLowerCase()}</span>
+          )}
         </p>
       ) : (
         <p className="text-sm text-muted">{t("groundingNoMarketImplied")}</p>
