@@ -1,14 +1,17 @@
 // Client-side fetch helper for the Grounded Deep Value extraction endpoint. Thin wrapper
 // over POST /api/ai/grounding/extract — keeps components clean (mirrors lib/earnings-client.ts).
 import type { GroundingBlock, GroundedFinancials } from "@/types/grounding";
-import type { MultipleStats, ValuationGrid, MarketImplied } from "@/lib/grounding/anchors";
+import type { MultipleStats, ValuationGrid, MarketImplied, ImpliedExpectations } from "@/lib/grounding/anchors";
+import type { BasisReconciliation } from "@/lib/grounding/basis";
 import type { ReconciliationWarning } from "@/lib/grounding/reconcile";
 
 export type GroundingExtractResponse = {
   extract: GroundedFinancials;
+  basis: BasisReconciliation;
   stats: MultipleStats[];
   grid: ValuationGrid | null;
   marketImplied: MarketImplied;
+  impliedExpectations: ImpliedExpectations | null;
   warnings: ReconciliationWarning[];
 };
 

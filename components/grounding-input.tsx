@@ -31,6 +31,16 @@ const KIND_LABEL_KEY: Record<GroundingBlockKind, keyof Translations> = {
   other: "groundingKindOther",
 };
 
+// Per-kind help text shown above the textarea when a block is expanded. Only
+// valuation_multiples has one today — it's the single most important UX point in
+// docs/deep-value-rigor-v2-spec.md §2.1: without an EV/Revenue or Enterprise Value column,
+// the basis-reconciliation engine (lib/grounding/basis.ts) has nothing to compute kE from
+// and degrades to "unavailable" for the whole paste, silently. Asking for it here, at
+// paste time, is far cheaper than discovering it after a run.
+const KIND_HINT_KEY: Partial<Record<GroundingBlockKind, keyof Translations>> = {
+  valuation_multiples: "groundingValuationMultiplesHint",
+};
+
 function loadDraftBlocks(ticker: string): GroundingBlock[] {
   if (typeof window === "undefined") return [];
   try {
@@ -244,6 +254,9 @@ export function GroundingInput({ ticker, value, onChange }: Props) {
 
                     {expandedBlockId === block.id && (
                       <div className="mt-2 space-y-2">
+                        {KIND_HINT_KEY[block.kind] && (
+                          <p className="text-xs text-muted">{t(KIND_HINT_KEY[block.kind]!)}</p>
+                        )}
                         {block.kind === "peer_valuation" && (
                           <input
                             type="text"

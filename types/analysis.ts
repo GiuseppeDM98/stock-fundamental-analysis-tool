@@ -47,6 +47,15 @@ export type SavedAnalysis = {
   qualityFairValueBase?: number | null;
   qualityFairValueBear?: number | null;
   qualityValuationMethod?: string | null;
+  // Blind-first commitment (docs/deep-value-rigor-v2-spec.md §6) — JSON.stringify'd
+  // DeepValueResult (bridge/probability/assumptions/crossCheck + killPrice for skeptic),
+  // committed by this lens BEFORE it saw the report. Null until a Grounded blind-first run
+  // completes Phase 1; persisted ALONGSIDE the *FairValue* columns above, which remain the
+  // FINAL (post-reconciliation) triple — see components/report/analyst-blind-card.tsx for
+  // the blind-vs-final drift this exists to make visible.
+  reviewBlindJson?: string | null;
+  optimistBlindJson?: string | null;
+  qualityBlindJson?: string | null;
   createdAt: string; // ISO 8601 string (JSON serialized from Date)
   // groundingJson is DELIBERATELY NOT a field here. This type mirrors the GET
   // /api/analyses list's `select` (app/api/analyses/route.ts), which omits
@@ -71,6 +80,11 @@ export type AnalystOpinionUpdate = {
   fairValueBase?: number;
   fairValueBear?: number;
   valuationMethod?: string;
+  // Blind-first commitment (docs/deep-value-rigor-v2-spec.md §6.4) — JSON.stringify'd
+  // DeepValueResult from Phase 1, present only for a Grounded blind-first run whose Phase 1
+  // parsed successfully. Omitted (not null) leaves any prior commitment untouched, same
+  // convention as the fairValue* fields above.
+  blindJson?: string;
 };
 
 /** Payload required to save a new analysis. */

@@ -30,6 +30,8 @@ const KIND_CONFIG: Record<GroundingBlockKind, KindConfig> = {
 - eps (diluted, per share)
 - sharesDiluted — the weighted-average diluted share count, on the SAME scale as the monetary values (see UNIT NOTE)
 - dividendsPerShare
+SAME-BASIS PAIRING (critical): some sources show MULTIPLE net income bases for the same year (e.g. "Net Income to Common Incl. Extra/Unusual Items" vs "...Excl. Extra/Unusual Items") but only ONE clearly-labeled "Diluted EPS" row. You MUST pick netIncome and eps from the SAME basis — never pair a net income figure computed on one basis with an EPS figure computed on a different one, even if that means using a less prominent row. When both bases are present, prefer the "Excl. Extra/Unusual/Non-recurring Items" (normalized) basis for BOTH netIncome and eps — it matches this app's other normalized-earnings conventions. If only one basis is shown, use it as given.
+EBITDA BASIS (same principle): if the source shows more than one EBITDA figure for the same year (e.g. an "as reported" line alongside a company-labeled "Adjusted EBITDA" or "Normalized EBITDA"), extract the ADJUSTED/NORMALIZED one, not the "as reported" one — write-offs and impairments baked into a raw "as reported" EBITDA make it a different, non-comparable basis from the figures this app's own downstream analysis uses elsewhere. If the source shows only a single, unlabeled EBITDA line, use it as given — do not invent an adjustment.
 Do NOT extract balance-sheet or cash-flow fields here (no totalEquity, netDebt, cfo, etc.) — those come from other blocks.`,
     example: `{
   "meta": { "reportingCurrency": "EUR", "units": "millions", "latestPeriodLabel": "FY2025", "fiscalYearEnd": "December" },
@@ -70,11 +72,12 @@ Do NOT extract income-statement or balance-sheet fields here.`,
     label: "historical valuation multiples",
     instructions: `For this HISTORICAL MULTIPLES block, extract one row per fiscal year with ONLY these fields:
 - evEbitda, evSales, pe, pb
-- fcfYield, dividendYield — as PERCENTAGES (e.g. 6.2 for 6.2%, not 0.062)`,
+- fcfYield, dividendYield — as PERCENTAGES (e.g. 6.2 for 6.2%, not 0.062)
+- marketCap and enterpriseValue: if the table has explicit Market Cap / Enterprise Value columns, transcribe them (same unit as meta.units). Do NOT compute them from other columns — if they are not present as their own column, output null.`,
     example: `{
   "meta": { "reportingCurrency": "EUR", "units": "millions", "latestPeriodLabel": "FY2025", "fiscalYearEnd": "December" },
   "rows": [
-    { "fiscalYear": 2025, "evEbitda": 3.8, "evSales": 0.6, "pe": 9.2, "pb": 0.9, "fcfYield": 8.1, "dividendYield": 6.2 }
+    { "fiscalYear": 2025, "evEbitda": 3.8, "evSales": 0.6, "pe": 9.2, "pb": 0.9, "fcfYield": 8.1, "dividendYield": 6.2, "marketCap": 71400, "enterpriseValue": 91900 }
   ]
 }`,
   },
@@ -94,13 +97,13 @@ Do NOT extract or infer a target price, target multiple, or analyst rating — t
     label: "peer valuation",
     instructions: `For this PEER block, extract:
 - companyName — the peer's full company name, if stated (null if not)
-- rows — one row per fiscal year (or a single "current"/TTM row) with ONLY: evEbitda, evSales, pe, pb, fcfYield, dividendYield (percentages)
+- rows — one row per fiscal year (or a single "current"/TTM row) with ONLY: evEbitda, evSales, pe, pb, fcfYield, dividendYield (percentages), marketCap, enterpriseValue (same unit as meta.units; null unless the table has its own column for them — never computed)
 The peer's ticker is already known from context — do not try to extract it.`,
     example: `{
   "meta": { "reportingCurrency": "EUR", "units": "millions", "latestPeriodLabel": "FY2025", "fiscalYearEnd": "December" },
   "companyName": "Shell plc",
   "rows": [
-    { "fiscalYear": 2025, "evEbitda": 4.1, "evSales": null, "pe": 10.1, "pb": 1.2, "fcfYield": null, "dividendYield": 4.0 }
+    { "fiscalYear": 2025, "evEbitda": 4.1, "evSales": null, "pe": 10.1, "pb": 1.2, "fcfYield": null, "dividendYield": 4.0, "marketCap": null, "enterpriseValue": null }
   ]
 }`,
   },
