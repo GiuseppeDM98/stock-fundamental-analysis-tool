@@ -21,6 +21,9 @@ export type AnalystColumns = {
   bear: keyof SavedAnalysis;
   method: keyof SavedAnalysis;
   critique: keyof SavedAnalysis;
+  // Blind-first commitment (docs/deep-value-rigor-v2-spec.md §6.4) — JSON blob, not a
+  // scalar like the four fields above.
+  blind: keyof SavedAnalysis;
 };
 
 // skeptic keeps the legacy `review*` prefix (it shipped as the sole reviewer, before the
@@ -32,6 +35,7 @@ export const ANALYST_COLUMNS: Record<AnalystAngle, AnalystColumns> = {
     bear: "reviewFairValueBear",
     method: "reviewValuationMethod",
     critique: "reviewMd",
+    blind: "reviewBlindJson",
   },
   optimist: {
     bull: "optimistFairValueBull",
@@ -39,6 +43,7 @@ export const ANALYST_COLUMNS: Record<AnalystAngle, AnalystColumns> = {
     bear: "optimistFairValueBear",
     method: "optimistValuationMethod",
     critique: "optimistCritiqueMd",
+    blind: "optimistBlindJson",
   },
   quality: {
     bull: "qualityFairValueBull",
@@ -46,6 +51,7 @@ export const ANALYST_COLUMNS: Record<AnalystAngle, AnalystColumns> = {
     bear: "qualityFairValueBear",
     method: "qualityValuationMethod",
     critique: "qualityCritiqueMd",
+    blind: "qualityBlindJson",
   },
 };
 

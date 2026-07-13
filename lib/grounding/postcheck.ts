@@ -66,6 +66,7 @@ export type GateCode =
   | "roic_vs_wacc"
   | "probabilities"
   | "cross_check"
+  | "cross_check_basis" // the cross-check's OWN same-basis check — see CrossCheckBridgeCheck
   | "kill_price"; // analyst lenses only
 
 export type Gate = {
@@ -86,6 +87,21 @@ export type PostCheck = {
    *  or don't sum to ≈1 — display only, never fed back into any stored column (spec §4:
    *  "il buco vero non era la MoS, era l'assenza di un valore atteso"). */
   expectedValue: { intrinsic: number; buyTarget: number; upsidePct: number } | null;
+  /** The cross-check's OWN bridge, recomputed the same way scenario bridges are (Check A +
+   *  implied multiple/percentile) — null when the model declared no crossCheck.bridge
+   *  (Quick mode, or a Grounded cross-check with no multiple, e.g. DDM). Added after a live
+   *  run (Webuild) showed the primary method can have no `multiple` for basis_same to check
+   *  at all (DCF), while the cross-check is exactly where an unverified basis mismatch
+   *  surfaced instead — see the cross_check_basis gate below. */
+  crossCheckBridge: CrossCheckBridgeCheck | null;
+};
+
+export type CrossCheckBridgeCheck = {
+  recomputedIntrinsic: number | null; // from the cross-check's own multiple × driverValue − netDebt − minorities / shares
+  arithmeticOk: boolean | null; // recomputedIntrinsic ≈ crossCheck.intrinsicPerShare, within ±1% — Check A, never run on the cross-check before this
+  impliedMultiple: number | null; // method-agnostic, statement basis, derived from crossCheck.intrinsicPerShare
+  impliedMultipleProvider: number | null; // same-basis (provider) via toProviderBasis — the only figure percentile-able
+  impliedPercentile: number | null; // percentileOf(impliedMultipleProvider, raw historical series)
 };
 
 // Check A/B tolerance — the model's own declared numbers being cross-checked against each
@@ -322,6 +338,69 @@ function checkCrossCheck(result: BridgeCheckInput, baseIntrinsic: number): Gate 
   return { code: "cross_check", status, detail };
 }
 
+/** Check A + implied multiple/percentile on the cross-check's OWN bridge — mirrors
+ *  checkOneScenario's arithmetic, but crossCheck.intrinsicPerShare is already intrinsic-scale
+ *  (no fairValue/MoS gross-up applies, unlike a bull/base/bear Scenario). null when the
+ *  model declared no crossCheck.bridge at all. */
+function checkCrossCheckBridge(
+  result: BridgeCheckInput,
+  extract: GroundedFinancials,
+  basis: BasisReconciliation
+): CrossCheckBridgeCheck | null {
+  const crossCheck = result.crossCheck;
+  if (!crossCheck?.bridge) return null;
+  const { bridge, intrinsicPerShare } = crossCheck;
+
+  let recomputedIntrinsic: number | null = null;
+  let arithmeticOk: boolean | null = null;
+  if (bridge.multiple != null && bridge.shares !== 0) {
+    recomputedIntrinsic = (bridge.multiple * bridge.driverValue - bridge.netDebt - bridge.minorities) / bridge.shares;
+    arithmeticOk = relDiff(recomputedIntrinsic, intrinsicPerShare) < ARITHMETIC_TOLERANCE;
+  }
+
+  let impliedMultiple: number | null = null;
+  let impliedMultipleProvider: number | null = null;
+  let impliedPercentile: number | null = null;
+  const series = extract.multiples.map((m) => m.evEbitda).filter((v): v is number => v != null);
+  if (bridge.shares !== 0 && bridge.driverValue !== 0) {
+    impliedMultiple = (intrinsicPerShare * bridge.shares + bridge.netDebt + bridge.minorities) / bridge.driverValue;
+    impliedMultipleProvider = toProviderBasis(impliedMultiple, basis);
+    if (impliedMultipleProvider != null && series.length > 0) {
+      impliedPercentile = percentileOf(impliedMultipleProvider, series);
+    }
+  }
+
+  return { recomputedIntrinsic, arithmeticOk, impliedMultiple, impliedMultipleProvider, impliedPercentile };
+}
+
+/** Same signature-matching logic as checkBasisSame (the "raw table multiple applied to a
+ *  same-basis driver" pattern), but reading the CROSS-CHECK's own declared multiple instead
+ *  of the base scenario's. Defense-in-depth for an Iren-style error occurring in the
+ *  cross-check rather than the primary bridge — NOT what caught the Webuild case (there the
+ *  cross-check's multiple came from PEERS, not from Webuild's own historical distribution,
+ *  so it doesn't match this specific signature; the existing cross_check delta gate is what
+ *  caught that). */
+function checkCrossCheckBasis(result: BridgeCheckInput, basis: BasisReconciliation): Gate {
+  if (!result.crossCheck) {
+    return { code: "cross_check_basis", status: "unavailable", detail: "no cross-check declared" };
+  }
+  if (basis.kE == null) {
+    return { code: "cross_check_basis", status: "unavailable", detail: "kE unavailable" };
+  }
+  const adjMedian = basis.adjustedEvEbitda!.median;
+  const rawMedian = adjMedian / basis.kE;
+  const declaredMultiple = result.crossCheck.bridge?.multiple;
+  const detail = `kE ${basis.kE.toFixed(2)} · cross-check multiple ${declaredMultiple != null ? `${declaredMultiple.toFixed(2)}x` : "n/a"} · same-basis median ${adjMedian.toFixed(2)}x · raw median ${rawMedian.toFixed(2)}x`;
+
+  if (basis.sameBasis) return { code: "cross_check_basis", status: "pass", detail };
+  if (declaredMultiple == null) return { code: "cross_check_basis", status: "unavailable", detail };
+
+  const closeToRaw = relDiff(declaredMultiple, rawMedian) < BASIS_SAME_MULTIPLE_TOLERANCE;
+  const closeToAdjusted = relDiff(declaredMultiple, adjMedian) < BASIS_SAME_MULTIPLE_TOLERANCE;
+  const status: Gate["status"] = closeToRaw && !closeToAdjusted ? "fail" : "pass";
+  return { code: "cross_check_basis", status, detail };
+}
+
 /** Analyst lenses only — pass if a numeric kill price was declared, fail if null/absent.
  *  Exported standalone since it operates on the lens's own `killPrice` field, not on the
  *  bull/base/bear scenario set this module otherwise checks. */
@@ -399,6 +478,8 @@ export function checkValuationBridges(
     };
   }
 
+  const crossCheckBridge = checkCrossCheckBridge(result, extract, basis);
+
   const gates: Gate[] = [
     checkBasisSame(basis, result.base),
     checkHorizonConsistent(result.bull, result.base, result.bear),
@@ -409,6 +490,7 @@ export function checkValuationBridges(
     checkRoicVsWacc(result, basis),
     checkProbabilities(result.bull, result.base, result.bear),
     checkCrossCheck(result, baseCheck.statedIntrinsic),
+    checkCrossCheckBasis(result, basis),
   ];
   // kill_price only applies to analyst lenses — its presence in `gates` is gated on the
   // caller having included the `killPrice` key at all (even as null), not on its value,
@@ -419,5 +501,5 @@ export function checkValuationBridges(
 
   const expectedValue = computeExpectedValue(scenarios, result.bull, result.base, result.bear, mosPercent, price);
 
-  return { scenarios, marketImplied, priceAnchoringFlag, gates, basis, expectedValue };
+  return { scenarios, marketImplied, priceAnchoringFlag, gates, basis, expectedValue, crossCheckBridge };
 }

@@ -43,6 +43,7 @@ const GATE_LABEL_KEY: Record<GateCode, keyof Translations> = {
   roic_vs_wacc: "groundingGateRoicVsWacc",
   probabilities: "groundingGateProbabilities",
   cross_check: "groundingGateCrossCheck",
+  cross_check_basis: "groundingGateCrossCheckBasis",
   kill_price: "groundingGateKillPrice",
 };
 
@@ -144,6 +145,26 @@ export function GroundingCard({ result, extract, mosPercent, currentPrice, curre
                   <span className="text-muted">({t("groundingWedgeCaveat")})</span>
                 </>
               )}
+            </>
+          )}
+        </p>
+      )}
+
+      {postCheck.crossCheckBridge && (
+        <p className="text-sm text-slate-300">
+          <span className="font-medium text-slate-100">{t("groundingCrossCheckBridgeLabel")}</span>:{" "}
+          {postCheck.crossCheckBridge.arithmeticOk != null && (
+            <span className={postCheck.crossCheckBridge.arithmeticOk ? "text-success" : "text-danger"}>
+              {postCheck.crossCheckBridge.arithmeticOk ? "✓" : "✗"} {t("groundingCardArithmeticLabel")}
+            </span>
+          )}
+          {postCheck.crossCheckBridge.impliedMultiple != null && (
+            <>
+              {postCheck.crossCheckBridge.arithmeticOk != null && " · "}
+              {postCheck.crossCheckBridge.impliedMultiple.toFixed(2)}x
+              {postCheck.crossCheckBridge.impliedMultipleProvider != null &&
+                ` (${t("groundingImpliedOnProviderLabel")} ${postCheck.crossCheckBridge.impliedMultipleProvider.toFixed(2)}x)`}
+              {postCheck.crossCheckBridge.impliedPercentile != null && ` (${t("groundingPercentileLabel")} ${postCheck.crossCheckBridge.impliedPercentile.toFixed(0)})`}
             </>
           )}
         </p>

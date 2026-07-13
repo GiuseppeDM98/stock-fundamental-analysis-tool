@@ -460,6 +460,207 @@ describe("gate: cross_check", () => {
   });
 });
 
+describe("gate: cross_check_basis", () => {
+  // Same Iren-shaped fixture as the basis_same describe block above, but the raw/adjusted
+  // multiple is now applied inside the CROSS-CHECK's own bridge instead of the base
+  // scenario's — the primary method (a DCF, per the Webuild live test) may have no
+  // `bridge.multiple` at all for basis_same to check; this gate is the same signature
+  // check, run on the cross-check's bridge instead.
+  const statementEbitda = 1353;
+  const years = [
+    { fiscalYear: 2020, kE: 0.81, evEbitda: 6.6 },
+    { fiscalYear: 2021, kE: 0.82, evEbitda: 6.9 },
+    { fiscalYear: 2022, kE: 0.83, evEbitda: 7.1 },
+    { fiscalYear: 2023, kE: 0.83, evEbitda: 7.1 },
+    { fiscalYear: 2024, kE: 0.84, evEbitda: 7.3 },
+    { fiscalYear: 2025, kE: 0.85, evEbitda: 7.6 },
+  ];
+  const irenExtract = makeExtract({
+    meta: makeMeta({ reportingCurrency: "EUR" }),
+    financials: years.map((y) => makeFinancialsRow({ fiscalYear: y.fiscalYear, ebitda: statementEbitda, netDebt: 0, minorityInterest: 0, sharesDiluted: 908.8 })),
+    multiples: years.map((y) => {
+      const ebitdaProvider = y.kE * statementEbitda;
+      return makeMultiplesRow({ fiscalYear: y.fiscalYear, evEbitda: y.evEbitda, enterpriseValue: y.evEbitda * ebitdaProvider });
+    }),
+  });
+
+  it("fails when the cross-check applies the raw provider-basis multiple to statement EBITDA", () => {
+    const postCheck = checkValuationBridges(
+      makeInput({
+        crossCheck: {
+          method: "EV/EBITDA",
+          intrinsicPerShare: (7.1 * statementEbitda) / 908.8,
+          reconciliation: "n/a",
+          bridge: { driver: "EBITDA", driverValue: statementEbitda, driverYear: 2025, multiple: 7.1, netDebt: 0, minorities: 0, shares: 908.8 },
+        },
+      }),
+      0,
+      2.95,
+      "EUR",
+      irenExtract
+    );
+    const gate = postCheck!.gates.find((g) => g.code === "cross_check_basis")!;
+    expect(gate.status).toBe("fail");
+    expect(gate.detail).toContain("kE 0.83");
+  });
+
+  it("passes when the cross-check applies the same-basis (adjusted) multiple instead", () => {
+    const appliedMultiple = 5.893;
+    const postCheck = checkValuationBridges(
+      makeInput({
+        crossCheck: {
+          method: "EV/EBITDA",
+          intrinsicPerShare: (appliedMultiple * statementEbitda) / 908.8,
+          reconciliation: "n/a",
+          bridge: { driver: "EBITDA", driverValue: statementEbitda, driverYear: 2025, multiple: appliedMultiple, netDebt: 0, minorities: 0, shares: 908.8 },
+        },
+      }),
+      0,
+      2.95,
+      "EUR",
+      irenExtract
+    );
+    expect(postCheck!.gates.find((g) => g.code === "cross_check_basis")!.status).toBe("pass");
+  });
+
+  it("passes (not this signature) when the cross-check's multiple comes from peers, matching neither the raw nor adjusted median — the actual Webuild case", () => {
+    // Webuild's real cross-check used a 6.2x peer average against neither the 11.84x raw
+    // nor the 10.40x same-basis median of Webuild's OWN history — this gate is not the one
+    // that catches that divergence (the delta-tolerance `cross_check` gate is).
+    const postCheck = checkValuationBridges(
+      makeInput({
+        crossCheck: {
+          method: "EV/EBITDA (peers)",
+          intrinsicPerShare: (6.2 * statementEbitda) / 908.8,
+          reconciliation: "n/a",
+          bridge: { driver: "Peer EV/EBITDA", driverValue: statementEbitda, driverYear: 2025, multiple: 6.2, netDebt: 0, minorities: 0, shares: 908.8 },
+        },
+      }),
+      0,
+      2.95,
+      "EUR",
+      irenExtract
+    );
+    expect(postCheck!.gates.find((g) => g.code === "cross_check_basis")!.status).toBe("pass");
+  });
+
+  it("unavailable when no cross-check is declared", () => {
+    const postCheck = checkValuationBridges(makeInput(), 0, 14.18, "EUR", EXTRACT);
+    expect(postCheck!.gates.find((g) => g.code === "cross_check_basis")!.status).toBe("unavailable");
+  });
+
+  it("unavailable when a cross-check is declared but with no bridge (e.g. DDM, no multiple) — using a basis that ISN'T already same, so the missing-multiple path is actually reached", () => {
+    // On EXTRACT (kE≈1, sameBasis true) this gate would trivially "pass" regardless of the
+    // multiple (mirrors basis_same's own early-return) — irenExtract (kE 0.83) is needed to
+    // exercise the "no multiple to check" degradation instead.
+    const postCheck = checkValuationBridges(
+      makeInput({ crossCheck: { method: "DDM", intrinsicPerShare: 13.0, reconciliation: "n/a" } }),
+      0,
+      2.95,
+      "EUR",
+      irenExtract
+    );
+    expect(postCheck!.gates.find((g) => g.code === "cross_check_basis")!.status).toBe("unavailable");
+  });
+
+  it("unavailable when kE is unverifiable", () => {
+    const postCheck = checkValuationBridges(
+      makeInput({
+        crossCheck: {
+          method: "EV/EBITDA",
+          intrinsicPerShare: 10,
+          reconciliation: "n/a",
+          bridge: { driver: "EBITDA", driverValue: DRIVER_VALUE, driverYear: LATEST_FY, multiple: 5, netDebt: NET_DEBT, minorities: MINORITIES, shares: SHARES },
+        },
+      }),
+      0,
+      14.18,
+      "EUR",
+      UNVERIFIED_EXTRACT
+    );
+    expect(postCheck!.gates.find((g) => g.code === "cross_check_basis")!.status).toBe("unavailable");
+  });
+});
+
+describe("PostCheck.crossCheckBridge — Check A on the cross-check's own bridge", () => {
+  it("is null when there's no crossCheck at all", () => {
+    const postCheck = checkValuationBridges(makeInput(), 0, 14.18, "EUR", EXTRACT);
+    expect(postCheck!.crossCheckBridge).toBeNull();
+  });
+
+  it("is null when the model declared a crossCheck with no bridge", () => {
+    const postCheck = checkValuationBridges(
+      makeInput({ crossCheck: { method: "DDM", intrinsicPerShare: 13.0, reconciliation: "n/a" } }),
+      0,
+      14.18,
+      "EUR",
+      EXTRACT
+    );
+    expect(postCheck!.crossCheckBridge).toBeNull();
+  });
+
+  it("arithmeticOk passes when the declared intrinsicPerShare matches the bridge's own math (the Webuild cross-check, verified by hand)", () => {
+    const multiple = 6.2;
+    const driverValue = 1195.4;
+    const netDebt = -444; // net cash
+    const minorities = 130;
+    const shares = 984.15;
+    const intrinsicPerShare = (multiple * driverValue - netDebt - minorities) / shares;
+    const postCheck = checkValuationBridges(
+      makeInput({
+        crossCheck: {
+          method: "EV/EBITDA (peers)",
+          intrinsicPerShare,
+          reconciliation: "n/a",
+          bridge: { driver: "Peer EV/EBITDA 2026e", driverValue, driverYear: 2026, multiple, netDebt, minorities, shares },
+        },
+      }),
+      0,
+      2.15,
+      "EUR",
+      EXTRACT
+    );
+    expect(postCheck!.crossCheckBridge!.arithmeticOk).toBe(true);
+  });
+
+  it("arithmeticOk fails when the declared intrinsicPerShare does NOT match the bridge's own math — a check that runs on NOTHING today", () => {
+    const postCheck = checkValuationBridges(
+      makeInput({
+        crossCheck: {
+          method: "EV/EBITDA (peers)",
+          intrinsicPerShare: 7.85,
+          reconciliation: "n/a",
+          bridge: { driver: "Peer EV/EBITDA 2026e", driverValue: 1195.4, driverYear: 2026, multiple: 2.0, netDebt: 500, minorities: 130, shares: 984.15 },
+        },
+      }),
+      0,
+      2.15,
+      "EUR",
+      EXTRACT
+    );
+    expect(postCheck!.crossCheckBridge!.arithmeticOk).toBe(false);
+  });
+
+  it("arithmeticOk is null (not computable) when the bridge has no multiple (a DDM-style cross-check), but the method-agnostic implied multiple still computes", () => {
+    const postCheck = checkValuationBridges(
+      makeInput({
+        crossCheck: {
+          method: "DDM",
+          intrinsicPerShare: 4.4,
+          reconciliation: "n/a",
+          bridge: { driver: "Dividend stream", driverValue: DRIVER_VALUE, driverYear: LATEST_FY, netDebt: NET_DEBT, minorities: MINORITIES, shares: SHARES },
+        },
+      }),
+      0,
+      2.15,
+      "EUR",
+      EXTRACT
+    );
+    expect(postCheck!.crossCheckBridge!.arithmeticOk).toBeNull();
+    expect(postCheck!.crossCheckBridge!.impliedMultiple).not.toBeNull();
+  });
+});
+
 describe("gate: kill_price (analyst lenses only)", () => {
   it("is absent from PostCheck.gates for a base-report call (no killPrice key at all)", () => {
     const postCheck = checkValuationBridges(makeInput(), 0, 14.18, "EUR", EXTRACT);

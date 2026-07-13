@@ -417,6 +417,18 @@ export type Translations = {
   analystOptimistDesc: string;
   analystQualityDesc: string;
   analystRunButton: string;
+  // ─── Blind-first lenses (docs/deep-value-rigor-v2-spec.md §6, Grounded mode only) ─────
+  analystPhaseBlind: string;
+  analystPhaseReconcile: string;
+  analystBlindCardTitle: string;
+  analystBlindCardHint: string;
+  analystBlindScenario: string;
+  analystBlindPhase1: string;
+  analystBlindFinal: string;
+  analystBlindDrift: string;
+  analystBlindKillPrice: string;
+  analystBlindRevisions: string;
+  analystBlindNoRevisions: string;
 
   // ─── Pipeline actions ─────────────────────────────────────────────────────
   addToWatchlist: string;
@@ -526,7 +538,9 @@ export type Translations = {
   groundingGateRoicVsWacc: string;
   groundingGateProbabilities: string;
   groundingGateCrossCheck: string;
+  groundingGateCrossCheckBasis: string;
   groundingGateKillPrice: string;
+  groundingCrossCheckBridgeLabel: string;
   groundingExpectedValueTitle: string;
   groundingExpectedValueIntrinsicLabel: string;
   groundingExpectedValueBuyTargetLabel: string;
@@ -947,6 +961,17 @@ const en: Translations = {
   analystOptimistDesc: "A constructive bull case — surfaces upside the base case under-weights.",
   analystQualityDesc: "A long-term owner — judges moat, returns on capital and durability.",
   analystRunButton: "Run",
+  analystPhaseBlind: "Forming an independent view (report hidden)…",
+  analystPhaseReconcile: "Reconciling with the report…",
+  analystBlindCardTitle: "Blind commitment vs. final",
+  analystBlindCardHint: "Committed before this lens saw the report — the drift below shows whether it anchored to the conclusion.",
+  analystBlindScenario: "Scenario",
+  analystBlindPhase1: "Blind",
+  analystBlindFinal: "Final",
+  analystBlindDrift: "Drift",
+  analystBlindKillPrice: "Kill price",
+  analystBlindRevisions: "Revisions",
+  analystBlindNoRevisions: "No revisions — the final numbers match the blind commitment exactly.",
 
   // Pipeline actions
   addToWatchlist: "Add to Watchlist",
@@ -1058,7 +1083,9 @@ const en: Translations = {
   groundingGateRoicVsWacc: "Returns vs. cost of capital",
   groundingGateProbabilities: "Scenario probabilities",
   groundingGateCrossCheck: "Second-method cross-check",
+  groundingGateCrossCheckBasis: "Cross-check same basis",
   groundingGateKillPrice: "Kill price declared",
+  groundingCrossCheckBridgeLabel: "Cross-check bridge",
   groundingExpectedValueTitle: "Expected value (probability-weighted)",
   groundingExpectedValueIntrinsicLabel: "Intrinsic",
   groundingExpectedValueBuyTargetLabel: "Buy target",
@@ -1479,6 +1506,17 @@ const it: Translations = {
   analystOptimistDesc: "Un caso rialzista costruttivo — evidenzia l'upside che la base sottopesa.",
   analystQualityDesc: "Un proprietario di lungo periodo — valuta moat, ritorni sul capitale e durabilità.",
   analystRunButton: "Avvia",
+  analystPhaseBlind: "Sta formando una valutazione indipendente (report nascosto)…",
+  analystPhaseReconcile: "Sta riconciliando con il report…",
+  analystBlindCardTitle: "Impegno cieco vs. finale",
+  analystBlindCardHint: "Impegnato prima che questa lente vedesse il report — lo scarto sotto mostra se si è ancorata alla conclusione.",
+  analystBlindScenario: "Scenario",
+  analystBlindPhase1: "Cieco",
+  analystBlindFinal: "Finale",
+  analystBlindDrift: "Scarto",
+  analystBlindKillPrice: "Prezzo di rottura",
+  analystBlindRevisions: "Revisioni",
+  analystBlindNoRevisions: "Nessuna revisione — i numeri finali coincidono esattamente con l'impegno cieco.",
 
   // Pipeline actions
   addToWatchlist: "Aggiungi alla Watchlist",
@@ -1591,7 +1629,9 @@ const it: Translations = {
   groundingGateRoicVsWacc: "Rendimenti vs. costo del capitale",
   groundingGateProbabilities: "Probabilità degli scenari",
   groundingGateCrossCheck: "Cross-check con secondo metodo",
+  groundingGateCrossCheckBasis: "Stessa base nel cross-check",
   groundingGateKillPrice: "Kill price dichiarato",
+  groundingCrossCheckBridgeLabel: "Ponte del cross-check",
   groundingExpectedValueTitle: "Valore atteso (ponderato per probabilità)",
   groundingExpectedValueIntrinsicLabel: "Intrinseco",
   groundingExpectedValueBuyTargetLabel: "Target d'acquisto",

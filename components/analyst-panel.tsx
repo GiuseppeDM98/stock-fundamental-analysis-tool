@@ -11,17 +11,28 @@
 //
 // Each analyst is on-demand (its own button) — never auto-run: each is an Opus xhigh + web
 // search pass that costs real tokens and takes 10–30s.
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useLanguage } from "@/context/language-context";
 import { APP_TO_AI_LANGUAGE } from "@/lib/i18n/translations";
 import { updateAnalystOpinion } from "@/lib/analyses";
-import { parseDeepValueJson, stripJsonBlock } from "@/lib/report/parse-deep-value-json";
+import {
+  parseDeepValueJson,
+  parseBlindJson,
+  stripJsonBlock,
+  stripAnalystStreamArtifacts,
+  currentAnalystPhase,
+} from "@/lib/report/parse-deep-value-json";
 import ReportBody from "@/components/report/report-body";
+import AnalystBlindCard from "@/components/report/analyst-blind-card";
 import { AiSettingsControl } from "@/components/ai-settings-control";
 import { fetchAiSettings } from "@/lib/ai-settings-client";
 import { DEFAULT_AI_SETTINGS, type AiSettings } from "@/types/ai-settings";
 import type { AnalystAngle } from "@/types/analysis";
 import { ANALYST_ANGLES } from "@/types/analysis";
+import type { AnalystResult } from "@/components/report/types";
+import type { Triple } from "@/lib/report/valuation";
+import type { GroundedFinancials } from "@/types/grounding";
+import { checkValuationBridges, type BridgeCheckInput } from "@/lib/grounding/postcheck";
 
 type Status = "idle" | "loading" | "streaming" | "done" | "error";
 
@@ -35,9 +46,32 @@ type PanelProps = {
   mosPercent: number;
   // Existing critique per lens, if this analysis already has one (keyed by angle).
   initialCritiques: Partial<Record<AnalystAngle, string | null>>;
+  // Blind-first commitment persisted per lens (docs/deep-value-rigor-v2-spec.md §6.4) —
+  // JSON.stringify'd DeepValueResult, null until a Grounded blind-first run completes
+  // Phase 1. Undefined entries (Quick-mode analyses) render no blind card for that lens.
+  initialBlind: Partial<Record<AnalystAngle, string | null>>;
+  // Each lens's FINAL (post-reconciliation) buy-target triple, reconstructed from the
+  // existing *FairValue* columns via analystTriple() — lets the blind card show
+  // blind-vs-final drift even after a page reload (a fresh run recomputes this live).
+  initialFinal: Partial<Record<AnalystAngle, Triple | null>>;
+  // Grounded-mode inputs for the blind bridge's own gate check (spec §7.3 "free win").
+  groundingExtract: GroundedFinancials | null;
+  currentPrice: number | null;
+  currency: string;
 };
 
-export default function AnalystPanel({ analysisId, ticker, reportMd, mosPercent, initialCritiques }: PanelProps) {
+export default function AnalystPanel({
+  analysisId,
+  ticker,
+  reportMd,
+  mosPercent,
+  initialCritiques,
+  initialBlind,
+  initialFinal,
+  groundingExtract,
+  currentPrice,
+  currency,
+}: PanelProps) {
   const { t } = useLanguage();
   const [aiSettings, setAiSettings] = useState<AiSettings>(DEFAULT_AI_SETTINGS);
 
@@ -78,6 +112,11 @@ export default function AnalystPanel({ analysisId, ticker, reportMd, mosPercent,
             reportMd={reportMd}
             mosPercent={mosPercent}
             initialCritiqueMd={initialCritiques[angle] ?? null}
+            initialBlindJson={initialBlind[angle] ?? null}
+            initialFinalTriple={initialFinal[angle] ?? null}
+            groundingExtract={groundingExtract}
+            currentPrice={currentPrice}
+            currency={currency}
             aiSettings={aiSettings}
           />
         ))}
@@ -95,6 +134,11 @@ type SlotProps = {
   reportMd: string;
   mosPercent: number;
   initialCritiqueMd: string | null;
+  initialBlindJson: string | null;
+  initialFinalTriple: Triple | null;
+  groundingExtract: GroundedFinancials | null;
+  currentPrice: number | null;
+  currency: string;
   aiSettings: AiSettings;
 };
 
@@ -107,6 +151,11 @@ function AnalystSlot({
   reportMd,
   mosPercent,
   initialCritiqueMd,
+  initialBlindJson,
+  initialFinalTriple,
+  groundingExtract,
+  currentPrice,
+  currency,
   aiSettings,
 }: SlotProps) {
   const { language: globalLanguage, t } = useLanguage();
@@ -114,7 +163,43 @@ function AnalystSlot({
   const [critique, setCritique] = useState<string>(initialCritiqueMd ?? "");
   // If a critique already exists we start "done"; otherwise idle until run.
   const [status, setStatus] = useState<Status>(initialCritiqueMd ? "done" : "idle");
+  // Blind-first streaming phase (docs/deep-value-rigor-v2-spec.md §7.3) — null on a
+  // Quick-mode/non-blind-first run, which never emits a phase marker.
+  const [phase, setPhase] = useState<"blind" | "reconcile" | null>(null);
+  // The lens's OWN parsed commitments from the most recent LIVE run — null until one
+  // completes, at which point they take precedence over the initial* props (a fresh run
+  // supersedes what was persisted before it).
+  const [liveBlind, setLiveBlind] = useState<AnalystResult | null>(null);
+  const [liveFinal, setLiveFinal] = useState<AnalystResult | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  const blindResult: AnalystResult | null = useMemo(() => {
+    if (liveBlind) return liveBlind;
+    if (!initialBlindJson) return null;
+    try {
+      return JSON.parse(initialBlindJson) as AnalystResult;
+    } catch {
+      return null;
+    }
+  }, [liveBlind, initialBlindJson]);
+
+  const finalTriple: Triple | null = liveFinal
+    ? { bear: liveFinal.bear.fairValue, base: liveFinal.base.fairValue, bull: liveFinal.bull.fairValue }
+    : initialFinalTriple;
+
+  // Only present on a fresh run in the same session — the FINAL JSON's own revisions[]
+  // aren't persisted as a blob (only the scalar fairValue* columns are, spec §6.4), so
+  // this is always undefined after a page reload with no re-run.
+  const revisions = liveFinal?.revisions;
+
+  // "Free win" (spec §7.3): the lens's own blind bridge is exactly the artifact
+  // checkValuationBridges was built to verify — recomputed client-side whenever the
+  // grounding/price inputs are available, live or from a reload.
+  const blindGates = useMemo(() => {
+    if (!blindResult || !groundingExtract || currentPrice == null || !currency) return undefined;
+    const postCheck = checkValuationBridges(blindResult as BridgeCheckInput, mosPercent, currentPrice, currency, groundingExtract);
+    return postCheck?.gates;
+  }, [blindResult, groundingExtract, currentPrice, currency, mosPercent]);
 
   async function handleRun() {
     abortRef.current?.abort();
@@ -123,6 +208,7 @@ function AnalystSlot({
 
     setCritique("");
     setStatus("loading");
+    setPhase(null);
 
     try {
       const res = await fetch("/api/ai/deep-value/verify", {
@@ -159,23 +245,29 @@ function AnalystSlot({
         if (value) {
           accumulated += decoder.decode(value, { stream: !streamDone });
           setCritique(accumulated);
+          setPhase(currentAnalystPhase(accumulated));
         }
       }
 
       setStatus("done");
 
-      // Persist the critique (JSON block stripped) plus this analyst's own fair values.
-      // Null-safe — omitted when no valid JSON was emitted. A save failure is non-fatal:
+      // Persist the critique (blind fence/phase markers + FINAL JSON block all stripped)
+      // plus this analyst's own fair values, and — for a blind-first run whose Phase 1
+      // parsed — the blind commitment. Null-safe throughout: a save failure is non-fatal,
       // the critique is still shown; re-run to retry.
-      const parsed = parseDeepValueJson(accumulated);
+      const parsed = parseDeepValueJson(accumulated) as AnalystResult | null;
+      const blindParsed = parseBlindJson(accumulated) as AnalystResult | null;
+      setLiveFinal(parsed);
+      setLiveBlind(blindParsed);
       try {
         await updateAnalystOpinion(analysisId, {
           angle,
-          critiqueMd: stripJsonBlock(accumulated),
+          critiqueMd: stripJsonBlock(stripAnalystStreamArtifacts(accumulated)),
           fairValueBull: parsed?.bull.fairValue,
           fairValueBase: parsed?.base.fairValue,
           fairValueBear: parsed?.bear.fairValue,
           valuationMethod: parsed?.method,
+          blindJson: blindParsed ? JSON.stringify(blindParsed) : undefined,
         });
       } catch (saveErr) {
         console.error(`Failed to persist ${angle} opinion:`, saveErr);
@@ -211,7 +303,7 @@ function AnalystSlot({
         {isRunning && (
           <span className="flex shrink-0 items-center gap-2 text-xs text-violet-300 print:hidden">
             <span className="h-3 w-3 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />
-            {t("analystReviewRunning")}
+            {phase === "blind" ? t("analystPhaseBlind") : phase === "reconcile" ? t("analystPhaseReconcile") : t("analystReviewRunning")}
           </span>
         )}
 
@@ -237,12 +329,19 @@ function AnalystSlot({
         </div>
       )}
 
+      {/* The blind card appears as soon as Phase 1 parses (spec §7.3) — the final column
+          fills in once turn 2 completes, while it's still streaming below, or immediately
+          on mount from a persisted commitment. */}
+      {blindResult && (
+        <AnalystBlindCard blind={blindResult} final={finalTriple} revisions={revisions} gates={blindGates} />
+      )}
+
       {critique && (
         <div className="mt-3">
           {status === "streaming" && (
             <span className="mb-2 inline-block h-3 w-1.5 animate-pulse bg-violet-400 print:hidden" />
           )}
-          <ReportBody markdown={stripJsonBlock(critique)} />
+          <ReportBody markdown={stripJsonBlock(stripAnalystStreamArtifacts(critique))} />
         </div>
       )}
     </div>

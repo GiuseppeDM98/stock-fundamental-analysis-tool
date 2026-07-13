@@ -10,6 +10,7 @@ import type { MultipleStats, MultipleKey, ValuationGrid, MarketImplied, ImpliedE
 import { computeBasisReconciliation, type BasisReconciliation } from "@/lib/grounding/basis";
 import { checkReconciliation } from "@/lib/grounding/reconcile";
 import type { ReconciliationWarning } from "@/lib/grounding/reconcile";
+import type { Gate } from "@/lib/grounding/postcheck";
 
 /** Everything formatGroundingForPrompt needs — the raw blocks (section 1) plus the
  * extract, the basis reconciliation and the anchors computed FROM it (sections 2-4) plus
@@ -243,6 +244,19 @@ export function formatGroundingForPrompt(ctx: GroundingPromptContext): string {
     (s): s is string => s != null
   );
   return sections.join("\n\n");
+}
+
+/**
+ * Renders the deterministic gates already run against the BASE report's own declared
+ * bridge, for injection into a blind-first analyst lens's RECONCILE-phase user message
+ * (docs/deep-value-rigor-v2-spec.md §5.4: "la lente ora riceve i gate deterministici già
+ * calcolati e deve pronunciarsi su ogni fail"). Lives here, not in GroundingPromptContext,
+ * because it needs the base report's own JSON — which doesn't exist yet when
+ * buildGroundingPromptContext runs (pre-generation preview / the base run itself).
+ */
+export function formatGatesForPrompt(gates: Gate[]): string {
+  const lines = gates.map((g) => `${g.status === "pass" ? "✓" : g.status === "fail" ? "✗" : "—"} ${g.code}: ${g.detail}`);
+  return `--- DETERMINISTIC GATES ON THE BASE REPORT (computed in code — NOT the model's judgment) ---\n${lines.join("\n")}\n--- END DETERMINISTIC GATES ---`;
 }
 
 /**

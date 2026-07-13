@@ -80,6 +80,18 @@ model Analysis {
   qualityFairValueBear   Float?
   qualityValuationMethod String?
   qualityCritiqueMd      String?
+  // Blind-first commitment (docs/deep-value-rigor-v2-spec.md §6) — the lens's OWN
+  // bull/base/bear JSON (DeepValueResult, incl. killPrice/revisions for skeptic),
+  // committed BEFORE it ever saw the report. Null until a blind-first (Grounded) lens run
+  // completes Phase 1 successfully; never set for a Quick-mode or degraded-Phase-1 run.
+  // Persisted ALONGSIDE the existing *FairValue* columns (which hold the FINAL,
+  // post-reconciliation triple and remain what feeds the consensus/ruler/watchlist/digest —
+  // spec §6.4: "zero churn a valle"), one flat column per lens (not a shared blob — the
+  // panel can run all three lenses in parallel, and a shared blob would race on
+  // read-modify-write).
+  reviewBlindJson    String?
+  optimistBlindJson  String?
+  qualityBlindJson   String?
   // Grounded Deep Value mode (docs/deep-value-grounding-spec.md): the confirmed
   // GroundingPayload (raw paste blocks + the structured extract) as JSON, when the
   // analysis was generated with pasted financial data. Null for Quick-mode analyses.

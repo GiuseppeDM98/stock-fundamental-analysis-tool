@@ -56,6 +56,10 @@
 
 - Added a **deterministic "reality check" on every Grounded report**. After a Grounded analysis completes, a new **"Deterministic post-check"** card verifies the AI's own math: whether its bull/base/bear valuation bridge reconciles with the fair value it reported, whether your margin of safety was applied correctly, and — the key signal — whether its base-case valuation multiple happens to land suspiciously close to what the current price already implies, a sign the "fair value" might just be reverse-engineered from the price rather than independently derived.
 
+- Added a **"blind commitment vs. final" view on Analyst Panel reviews** for Grounded analyses. Each reviewer (Skeptic, Optimist, Quality) now commits to its own Bull/Base/Bear valuation **before it ever sees your saved report**, then reconciles against it in a visible second pass. A new card shows both numbers side by side with the drift between them, plus the specific reason for any change — so you can tell whether a reviewer gave a genuinely independent second opinion or just converged on the report's own number. The card appears as soon as the reviewer's blind take is ready, while it's still working on the reconciliation.
+
+- Added a **kill price to the Skeptic review**. Instead of only critiquing the report, the Skeptic now states the specific price below which it believes the investment thesis is dead — or explicitly says it couldn't construct one, which is itself a meaningful signal.
+
 ## 🐛 Bug Fixes
 
 - Fixed the **PDF export from the analysis page including an app "screenshot"** as the first page (the search box, disclaimer, market-data header, and Margin of Safety slider). The PDF now starts cleanly at the report, matching the saved-analysis export.
@@ -106,6 +110,12 @@
 
 - Fixed **an occasional stray non-Latin character** (e.g. a Chinese character) slipping into a report or review written in another language.
 
+- Fixed **Analyst Panel reviews occasionally returning a silently incomplete or empty result** after a long web-search session — a rare pausing behavior in the underlying search is now handled correctly instead of cutting the review short partway through.
+
+- Fixed **pasted financial data occasionally failing to extract** on the Grounded "Prepare data" step, especially on longer or more complex pastes.
+
+- Fixed a **Grounded data-extraction issue** where net income and earnings-per-share could be read from two different reporting bases in the same year (e.g. "including" vs. "excluding" one-off items), occasionally triggering a false "EPS doesn't reconcile" warning.
+
 ## 🔧 Improvements
 
 - **Deep Value analyses are more rigorous** — reports now incorporate the latest quarterly results (not just annual figures), verify that any cited guidance or business plan is the current version, separate official guidance from estimates, use normalized (recurring) earnings for valuation multiples, differentiate the Bull/Base/Bear scenarios on real fundamentals, and benchmark against the closest comparable companies rather than only large global peers. These directly address blind spots a second opinion used to catch.
@@ -139,6 +149,12 @@
 - **Buy/Watch/Over verdict now factors in every analyst opinion** — on Saved Analyses, the Watchlist, and the email digest, the verdict badge, the ruler's buy/watch zones, and the buy-target percentage now use the **consensus** (the base analysis plus every analyst lens that ran) once you've run at least one, instead of only the base analysis — a more robust signal when you've gathered a second opinion. The percentage now also states its source, "... (analysis)" or "... (consensus)", so it's never ambiguous which buy target it's measured against.
 
 - **The Analyst Panel now sees your pasted data too** — when you run the Skeptic, Optimist, or Quality lens on a Grounded analysis, each one reasons over the same historical data and anchors you provided instead of re-deriving everything from the finished report — so a lens's critique is checked against the same numbers you supplied, not guessed at from scratch.
+
+- **Grounded Deep Value analyses now reconcile your historical multiples table to the same accounting basis as your pasted financials** before applying any multiple to them. Previously, a historical multiple computed on a different EBITDA definition than your income statement could silently inflate or deflate the fair value; the report and the deterministic post-check now detect this, show the basis difference, and use the corrected, apples-to-apples multiple.
+
+- **The deterministic post-check on Grounded analyses is significantly more thorough.** Beyond the existing bridge-arithmetic check, it now verifies: whether the bear case genuinely falls below today's price; whether the bull and bear scenarios are underwritten to the same year; whether the dividend is actually covered by free cash flow; whether a business earning below its cost of capital is being valued at a rich multiple without justification; and whether the mandatory second valuation method reconciles with the primary one, including a check on that second method's own accounting basis. It also now shows a probability-weighted expected value across your bull/base/bear scenarios.
+
+- **Analyst reviews no longer open with praise.** Every review now leads with the errors found, the single most fragile assumption, and the one number that would flip the conclusion, rather than a compliment on the report's execution — a sharper, more useful second opinion.
 
 ## 🔒 Security
 

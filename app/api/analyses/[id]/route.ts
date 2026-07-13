@@ -24,6 +24,9 @@ const patchSchema = z.object({
   fairValueBase: z.number().positive().optional(),
   fairValueBear: z.number().positive().optional(),
   valuationMethod: z.string().optional(),
+  // Blind-first commitment (docs/deep-value-rigor-v2-spec.md §6.4) — a JSON.stringify'd
+  // DeepValueResult, present only for a Grounded blind-first run whose Phase 1 parsed.
+  blindJson: z.string().max(20000).optional(),
 });
 
 export async function GET(_request: Request, context: RouteContext) {
@@ -73,6 +76,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     [cols.base]: body.fairValueBase,
     [cols.bear]: body.fairValueBear,
     [cols.method]: body.valuationMethod,
+    [cols.blind]: body.blindJson,
   };
 
   const updated = await db.analysis.update({ where: { id }, data });

@@ -7,6 +7,7 @@ import SavedValuationSummary, { type SavedValuationMeta } from "@/components/sav
 import AnalystPanel from "@/components/analyst-panel";
 import DownloadPdfButton from "@/components/download-pdf-button";
 import type { GroundingPayload } from "@/types/grounding";
+import type { Triple } from "@/lib/report/valuation";
 
 /**
  * Parses the persisted GroundingPayload (spec §6.5) — malformed/legacy rows (or Quick-
@@ -20,6 +21,12 @@ function parseGroundingPayload(raw: string | null): GroundingPayload | null {
   } catch {
     return null;
   }
+}
+
+/** null unless all three legs are present — a partial triple isn't a usable FINAL
+ *  triple for the blind-vs-final drift card (components/report/analyst-blind-card.tsx). */
+function tripleOrNull(bull: number | null, base: number | null, bear: number | null): Triple | null {
+  return bull != null && base != null && bear != null ? { bull, base, bear } : null;
 }
 
 type PageProps = { params: Promise<{ id: string }> };
@@ -154,6 +161,19 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
             optimist: analysis.optimistCritiqueMd,
             quality: analysis.qualityCritiqueMd,
           }}
+          initialBlind={{
+            skeptic: analysis.reviewBlindJson,
+            optimist: analysis.optimistBlindJson,
+            quality: analysis.qualityBlindJson,
+          }}
+          initialFinal={{
+            skeptic: tripleOrNull(analysis.reviewFairValueBull, analysis.reviewFairValueBase, analysis.reviewFairValueBear),
+            optimist: tripleOrNull(analysis.optimistFairValueBull, analysis.optimistFairValueBase, analysis.optimistFairValueBear),
+            quality: tripleOrNull(analysis.qualityFairValueBull, analysis.qualityFairValueBase, analysis.qualityFairValueBear),
+          }}
+          groundingExtract={groundingPayload?.extract ?? null}
+          currentPrice={analysis.priceAtAnalysis ?? null}
+          currency={valuationMeta.currency}
         />
       )}
 

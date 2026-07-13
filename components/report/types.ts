@@ -50,6 +50,16 @@ export type CrossCheck = {
   method: string; // e.g. "DDM" | "EV/RAB" | "SOTP" — different from the primary `method`
   intrinsicPerShare: number; // BASE scenario, pre-MoS
   reconciliation: string; // 1-2 sentences: why the two methods diverge
+  /** The cross-check's OWN EV→equity bridge — Grounded mode only, omitted when the
+   *  cross-check method has no multiple (e.g. DDM). Lets lib/grounding/postcheck.ts verify
+   *  the cross-check's own arithmetic (today nothing does) and same-basis-ness, the same
+   *  way it already does for bull/base/bear. `intrinsicPerShare` is deliberately NOT
+   *  repeated here — it's the field above, shared with the recomputed value. Added after a
+   *  live run (Webuild) showed the primary method can have no `multiple` to basis-check at
+   *  all (DCF/DDM) while the cross-check is exactly where an unverified basis mismatch
+   *  surfaces (docs/deep-value-rigor-v2-spec.md's basis_same gate is "unavailable" in that
+   *  case — this bridge is what a same-basis check on the cross-check needs instead). */
+  bridge?: Omit<ValuationBridge, "intrinsicPerShare">;
 };
 
 export type DeepValueResult = {
