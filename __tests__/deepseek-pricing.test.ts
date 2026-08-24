@@ -23,6 +23,11 @@ describe("isDeepSeekPeakHour", () => {
   it("is false outside both windows entirely", () => {
     expect(isDeepSeekPeakHour(new Date("2026-07-10T15:00:00Z"))).toBe(false);
   });
+
+  it("is false on weekends even inside a peak window's hours", () => {
+    expect(isDeepSeekPeakHour(new Date("2026-07-11T08:30:00Z"))).toBe(false); // Saturday
+    expect(isDeepSeekPeakHour(new Date("2026-07-12T02:00:00Z"))).toBe(false); // Sunday
+  });
 });
 
 describe("formatDeepSeekPeakWindows", () => {

@@ -37,7 +37,7 @@ describe("resolveAiSettings", () => {
   it("clamps an effort level the selected model doesn't support down to the model's max", async () => {
     findUniqueMock.mockResolvedValueOnce({
       aiModel: "deepseek-v4-pro",
-      aiEffort: "low", // not in deepseek's ["high","max"] catalog list
+      aiEffort: "xhigh", // not in deepseek's ["low","high","max"] catalog list
       aiThinkingEnabled: true,
     });
     const result = await resolveAiSettings("user4", undefined, FALLBACK);
@@ -53,7 +53,7 @@ describe("resolveAiSettings", () => {
     });
     const result = await resolveAiSettings("user5", { model: "deepseek-v4-pro" }, FALLBACK);
     expect(result.model).toBe("deepseek-v4-pro");
-    // stored effort "high" is valid for deepseek's catalog (["high","max"]) so it survives
+    // stored effort "high" is valid for deepseek's catalog (["low","high","max"]) so it survives
     expect(result.effort).toBe("high");
   });
 });

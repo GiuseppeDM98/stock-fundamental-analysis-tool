@@ -1,7 +1,8 @@
-// DeepSeek is expected to adopt peak/valley pricing starting mid-July 2026 — peak-hour
-// prices are 2x the regular price, applied to all billing items. Peak windows are fixed
-// in UTC (01:00–04:00 and 06:00–10:00); this converts them to a display timezone (DST-
-// aware) so the UI can show the user's local peak hours instead of raw UTC. Pure —
+// DeepSeek adopted peak/off-peak pricing on 2026-08-16 (confirmed against
+// https://api-docs.deepseek.com/quick_start/pricing/ on 2026-08-24) — off-peak prices
+// are 50% of peak, applied to all billing items. Peak windows are fixed in UTC
+// (01:00–04:00 and 06:00–10:00, Mon–Fri); this converts them to a display timezone
+// (DST-aware) so the UI can show the user's local peak hours instead of raw UTC. Pure —
 // no server-only import, safe to use in a client component.
 const PEAK_WINDOWS_UTC = [
   { startHour: 1, endHour: 4 },
@@ -9,6 +10,8 @@ const PEAK_WINDOWS_UTC = [
 ] as const;
 
 export function isDeepSeekPeakHour(date: Date = new Date()): boolean {
+  const utcDay = date.getUTCDay(); // 0 = Sunday, 6 = Saturday — peak windows are Mon–Fri only
+  if (utcDay === 0 || utcDay === 6) return false;
   const utcHour = date.getUTCHours();
   return PEAK_WINDOWS_UTC.some((w) => utcHour >= w.startHour && utcHour < w.endHour);
 }

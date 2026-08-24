@@ -60,6 +60,10 @@
 
 - Added a **kill price to the Skeptic review**. Instead of only critiquing the report, the Skeptic now states the specific price below which it believes the investment thesis is dead — or explicitly says it couldn't construct one, which is itself a meaningful signal.
 
+- Added **DeepSeek V4 Flash** as a selectable AI model — a faster, lower-cost alternative to DeepSeek V4 Pro, available anywhere you can already choose DeepSeek.
+
+- Added a **"Low" reasoning-effort option** for DeepSeek models — previously only High and Max were available, so simpler runs can now trade some depth for speed and cost.
+
 ## 🐛 Bug Fixes
 
 - Fixed the **PDF export from the analysis page including an app "screenshot"** as the first page (the search box, disclaimer, market-data header, and Margin of Safety slider). The PDF now starts cleanly at the report, matching the saved-analysis export.
@@ -115,6 +119,8 @@
 - Fixed **pasted financial data occasionally failing to extract** on the Grounded "Prepare data" step, especially on longer or more complex pastes.
 
 - Fixed a **Grounded data-extraction issue** where net income and earnings-per-share could be read from two different reporting bases in the same year (e.g. "including" vs. "excluding" one-off items), occasionally triggering a false "EPS doesn't reconcile" warning.
+
+- Fixed the **DeepSeek peak-pricing indicator** showing "peak pricing" on weekends — DeepSeek's peak-pricing hours only apply Monday–Friday, so the badge now correctly shows normal pricing on Saturdays and Sundays.
 
 ## 🔧 Improvements
 

@@ -4,6 +4,7 @@ export const AI_MODEL_IDS = [
   "claude-opus-4-8",
   "claude-sonnet-5",
   "deepseek-v4-pro",
+  "deepseek-v4-flash",
 ] as const;
 export type AiModelId = (typeof AI_MODEL_IDS)[number];
 
@@ -40,9 +41,12 @@ export const AI_MODEL_CATALOG: Record<AiModelId, AiModelInfo> = {
   "deepseek-v4-pro": {
     label: "DeepSeek V4 Pro",
     provider: "deepseek",
-    // DeepSeek maps low/medium down to high internally — only offer the levels
-    // that actually change behavior.
-    efforts: ["high", "max"],
+    // As of the V4-Pro GA update (2026-08-13), DeepSeek maps effort as:
+    // low->low, medium->high, high->high, xhigh->high, max->max — "low" is a
+    // genuinely distinct (cheaper/faster) level now, so it's offered; medium/xhigh
+    // are omitted since they're indistinguishable from high. Verified against
+    // https://api-docs.deepseek.com/guides/thinking_mode/ on 2026-08-24.
+    efforts: ["low", "high", "max"],
     // DeepSeek's SERVER-SIDE web_search tool call parsing is unreliable through the
     // Anthropic-compat proxy — reproduced in production (Advisor, 2026-07-10): a failed
     // tool-call parse leaked raw internal template syntax ("<｜DSML｜tool_calls>...")
@@ -51,6 +55,18 @@ export const AI_MODEL_CATALOG: Record<AiModelId, AiModelInfo> = {
     // web_search tool instead (lib/ai/web-search-tool.ts, via Tavily) — ordinary
     // function-calling, parsed as a normal tool_use block, not DeepSeek's flaky
     // server-tool translation. See lib/ai/tool-loop.ts for the client-side loop.
+    // DeepSeek added a genuine server-side web_search tool, but only on its newer
+    // Responses API (OpenAI SDK/format, different endpoint) — not on the
+    // Anthropic-compat endpoint this app uses, so the Tavily workaround still applies.
+    supportsWebSearch: true,
+  },
+  "deepseek-v4-flash": {
+    label: "DeepSeek V4 Flash",
+    provider: "deepseek",
+    // Same effort mapping as v4-pro (both updated together on 2026-08-13) — see
+    // the comment on deepseek-v4-pro above.
+    efforts: ["low", "high", "max"],
+    // Same Tavily-based client-executed web search as v4-pro — see the comment above.
     supportsWebSearch: true,
   },
 };
