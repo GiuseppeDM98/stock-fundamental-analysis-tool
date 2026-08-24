@@ -13,7 +13,7 @@ import { db } from "@/lib/db";
 import { buildEarningsSystemPrompt, buildEarningsUserPrompt } from "@/lib/ai/earnings-prompt";
 import { getAiClient, buildThinkingParam, buildEffortConfig, buildWebSearchTools } from "@/lib/ai/client";
 import { resolveAiSettings } from "@/lib/ai/ai-preferences";
-import { runCreateWithToolLoop } from "@/lib/ai/tool-loop";
+import { runCreateWithToolLoop, DEEP_RESEARCH_MAX_TOOL_ITERATIONS } from "@/lib/ai/tool-loop";
 import type { AiSettings } from "@/types/ai-settings";
 import type { EarningsConfidence, EarningsEstimate } from "@/types/earnings";
 
@@ -95,15 +95,26 @@ export async function POST(request: Request) {
 
     // Non-streaming: a single small fact. Sonnet 5 rejects temperature and has adaptive
     // thinking on by default; web-search + thinking tokens count toward max_tokens.
-    const response = await runCreateWithToolLoop(client, {
-      model: aiSettings.model,
-      max_tokens: 6000,
-      thinking: buildThinkingParam(aiSettings.thinking),
-      output_config: buildEffortConfig(aiSettings.effort),
-      system: buildEarningsSystemPrompt({ currentDate }),
-      tools: buildWebSearchTools(aiSettings.model),
-      messages: [{ role: "user", content: buildEarningsUserPrompt({ ticker, companyName: body.companyName }) }],
-    });
+    // maxIterations: DeepSeek's web search is client-executed one query at a time (unlike
+    // Claude's server-side search, which never surfaces a client tool_use here), so the
+    // default 10-round cap could exhaust itself mid-research on a DeepSeek run, returning
+    // the last tool_use call instead of a final answer — the route then finds no ```json
+    // block and 502s ("AI returned no parseable result"), reproduced in production
+    // (2026-08-24). Reuse the same higher cap as Deep Value/verify rather than inventing a
+    // separate knob for a route with much lighter research needs — DeepSeek-only in effect.
+    const response = await runCreateWithToolLoop(
+      client,
+      {
+        model: aiSettings.model,
+        max_tokens: 6000,
+        thinking: buildThinkingParam(aiSettings.thinking),
+        output_config: buildEffortConfig(aiSettings.effort),
+        system: buildEarningsSystemPrompt({ currentDate }),
+        tools: buildWebSearchTools(aiSettings.model),
+        messages: [{ role: "user", content: buildEarningsUserPrompt({ ticker, companyName: body.companyName }) }],
+      },
+      DEEP_RESEARCH_MAX_TOOL_ITERATIONS
+    );
 
     // With web search the content array holds several text blocks (reasoning between tool
     // calls + the final answer). Concatenate ALL of them before matching — the first block
