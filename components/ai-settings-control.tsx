@@ -70,7 +70,7 @@ export function AiSettingsControl({ value, onChange, className }: AiSettingsCont
       {catalog.provider === "deepseek" && isPeakNow !== null && (
         <span
           className={isPeakNow ? "text-danger" : "text-muted"}
-          title={`DeepSeek prevede una tariffazione a fasce dalla metà di luglio 2026: prezzo doppio nelle ore di punta. Fasce di punta (ora italiana): ${formatDeepSeekPeakWindows().join(", ")}.`}
+          title={`DeepSeek applica una tariffazione a fasce dal 16 agosto 2026: prezzo doppio nelle ore di punta, solo dal lunedì al venerdì (weekend sempre a tariffa normale). Fasce di punta (ora italiana): ${formatDeepSeekPeakWindows().join(", ")}.`}
         >
           {isPeakNow ? "💰 tariffa doppia ora" : "tariffa normale"}
         </span>
