@@ -122,6 +122,10 @@
 
 - Fixed the **DeepSeek peak-pricing indicator** showing "peak pricing" on weekends — DeepSeek's peak-pricing hours only apply Monday–Friday, so the badge now correctly shows normal pricing on Saturdays and Sundays.
 
+- Fixed a saved analysis occasionally showing as **raw, unformatted text with no fair-value data** on its detail page — the report now always displays with proper formatting, even on the rare run where the underlying valuation summary couldn't be fully reconstructed.
+
+- Fixed the **next-earnings lookup returning an error** on some tickers when using the DeepSeek model — it now gets more room to finish its research before giving up.
+
 ## 🔧 Improvements
 
 - **Deep Value analyses are more rigorous** — reports now incorporate the latest quarterly results (not just annual figures), verify that any cited guidance or business plan is the current version, separate official guidance from estimates, use normalized (recurring) earnings for valuation multiples, differentiate the Bull/Base/Bear scenarios on real fundamentals, and benchmark against the closest comparable companies rather than only large global peers. These directly address blind spots a second opinion used to catch.

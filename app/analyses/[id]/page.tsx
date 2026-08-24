@@ -3,6 +3,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import OpenPositionBanner from "@/components/open-position-banner";
+import ReportBody from "@/components/report/report-body";
 import SavedValuationSummary, { type SavedValuationMeta } from "@/components/saved-valuation-summary";
 import AnalystPanel from "@/components/analyst-panel";
 import DownloadPdfButton from "@/components/download-pdf-button";
@@ -135,15 +136,16 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
           groundingExtract={groundingPayload?.extract ?? null}
         />
       ) : (
-        // Fallback for older/non-Deep-Value analyses without a parseable JSON block.
+        // Fallback for older/non-Deep-Value analyses, or a Deep Value report whose JSON
+        // block failed to parse (e.g. a malformed field from the model) — the Markdown
+        // body itself is still perfectly readable, so render it through the same
+        // ReportBody every other report uses instead of dumping raw text.
         <div className="card">
           <h1 className="mb-1 text-2xl font-bold text-slate-100">{analysis.companyName}</h1>
           <p className="mb-4 text-sm text-slate-500">
             <span className="font-mono text-sky-400">{analysis.ticker}</span> · {formattedDate}
           </p>
-          <div className="prose prose-invert prose-report prose-sm max-w-none">
-            {markdown}
-          </div>
+          <ReportBody markdown={markdown} />
         </div>
       )}
 
