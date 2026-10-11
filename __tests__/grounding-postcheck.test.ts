@@ -77,7 +77,7 @@ function makeInput(overrides: Partial<BridgeCheckInput> = {}): BridgeCheckInput 
   };
 }
 
-describe("checkValuationBridges — Check A/B (unchanged since v1)", () => {
+describe("checkValuationBridges — Check A/B", () => {
   it("THE ENI CASE: flags priceAnchoringFlag (and the multiple_vs_market gate) when the base multiple coincides with the price-implied one", () => {
     // base multiple 4.2x vs. market-implied 4.18x at price €14.18 — Δ ≈ 0.46%, well under
     // the 3% threshold. This is the exact pathology ANALYTICAL_RIGOR_BLOCK item 10 exists
@@ -98,6 +98,18 @@ describe("checkValuationBridges — Check A/B (unchanged since v1)", () => {
     expect(base.impliedMultiple).toBeCloseTo(4.2, 6);
   });
 
+  it("THE ENI CASE without an Enterprise Value column: still flags anchoring — the comparison runs on the statement basis and needs no kE", () => {
+    // UNVERIFIED_EXTRACT has neither enterpriseValue nor evSales ⇒ kE null ⇒ no
+    // provider-basis read at all. Statement basis: base (4.2 × 14200) / 14200 = 4.2x vs
+    // market (14.18 × 3150 + 14700) / 14200 ≈ 4.1808x ⇒ Δ = 0.0192 / 4.1808 ≈ 0.46% < 3%.
+    const postCheck = checkValuationBridges(makeInput(), 0, 14.18, "EUR", UNVERIFIED_EXTRACT);
+    expect(postCheck!.basis.kE).toBeNull();
+    expect(postCheck!.priceAnchoringFlag).toBe(true);
+    const gate = postCheck!.gates.find((g) => g.code === "multiple_vs_market")!;
+    expect(gate.status).toBe("fail");
+    expect(gate.detail).toBe("base 4.20x · market 4.18x · Δ 0.5% (statement basis)");
+  });
+
   it("does NOT flag anchoring when the base multiple sits far from the price-implied one", () => {
     const result = makeInput({ bear: scenarioAt(2.0), base: scenarioAt(3.0), bull: scenarioAt(4.0) });
     const postCheck = checkValuationBridges(result, 0, 14.18, "EUR", EXTRACT);
@@ -115,7 +127,7 @@ describe("checkValuationBridges — Check A/B (unchanged since v1)", () => {
     expect(baseCheck.arithmeticOk).toBe(false);
   });
 
-  it("§5.4 THE MoS TRAP: applies grossUpToIntrinsic before comparing fairValue against intrinsicPerShare", () => {
+  it("THE MoS TRAP: applies grossUpToIntrinsic before comparing fairValue against intrinsicPerShare", () => {
     const result = makeInput({ bear: scenarioAt(3.0, 25), base: scenarioAt(4.2, 25), bull: scenarioAt(5.5, 25) });
     const postCheck = checkValuationBridges(result, 25, 14.18, "EUR", EXTRACT);
     const base = postCheck!.scenarios.find((s) => s.scenario === "base")!;
@@ -134,7 +146,7 @@ describe("checkValuationBridges — Check A/B (unchanged since v1)", () => {
 
   it("degrades gracefully for a DCF/DDM scenario with no declared multiple (method-agnostic)", () => {
     const base = scenarioAt(4.2);
-    delete base.bridge!.multiple; // DCF/DDM never declares a multiple (spec §5.5)
+    delete base.bridge!.multiple; // DCF/DDM never declares a multiple
     const postCheck = checkValuationBridges(makeInput({ base }), 0, 14.18, "EUR", EXTRACT);
     const baseCheck = postCheck!.scenarios.find((s) => s.scenario === "base")!;
     expect(baseCheck.recomputedIntrinsic).toBeNull();
@@ -232,6 +244,33 @@ describe("gate: basis_same", () => {
     };
     const postCheck = checkValuationBridges(makeInput({ base }), 0, 2.95, "EUR", extract);
     expect(postCheck!.gates.find((g) => g.code === "basis_same")!.status).toBe("pass");
+  });
+
+  it("unavailable (never pass) when the base multiple matches NEITHER the raw nor the same-basis median", () => {
+    const statementEbitda = 1353;
+    const years = [
+      { fiscalYear: 2020, kE: 0.81, evEbitda: 6.6 },
+      { fiscalYear: 2021, kE: 0.82, evEbitda: 6.9 },
+      { fiscalYear: 2022, kE: 0.83, evEbitda: 7.1 },
+      { fiscalYear: 2023, kE: 0.83, evEbitda: 7.1 },
+      { fiscalYear: 2024, kE: 0.84, evEbitda: 7.3 },
+      { fiscalYear: 2025, kE: 0.85, evEbitda: 7.6 },
+    ];
+    const extract = makeExtract({
+      meta: makeMeta({ reportingCurrency: "EUR" }),
+      financials: years.map((y) => makeFinancialsRow({ fiscalYear: y.fiscalYear, ebitda: statementEbitda, netDebt: 0, minorityInterest: 0, sharesDiluted: 908.8 })),
+      multiples: years.map((y) => makeMultiplesRow({ fiscalYear: y.fiscalYear, evEbitda: y.evEbitda, enterpriseValue: y.evEbitda * y.kE * statementEbitda })),
+    });
+    // 6.5x vs same-basis median 5.893x: |6.5 − 5.893| / 5.893 ≈ 10.3% > 5%;
+    // 6.5x vs raw median 7.1x: |6.5 − 7.1| / 7.1 ≈ 8.5% > 5% ⇒ basis can't be inferred.
+    const intrinsicPerShare = (6.5 * statementEbitda) / 908.8;
+    const base: BridgeScenario = {
+      fairValue: intrinsicPerShare,
+      bridge: { driver: "EBITDA", driverValue: statementEbitda, driverYear: 2025, multiple: 6.5, netDebt: 0, minorities: 0, shares: 908.8, intrinsicPerShare },
+    };
+    const gate = checkValuationBridges(makeInput({ base }), 0, 2.95, "EUR", extract)!.gates.find((g) => g.code === "basis_same")!;
+    expect(gate.status).toBe("unavailable");
+    expect(gate.detail).toContain("matches neither median");
   });
 });
 
@@ -345,6 +384,15 @@ describe("gate: netdebt_trajectory", () => {
   it("passes (vacuously) when no scenario targets latestFy+1", () => {
     const postCheck = checkValuationBridges(makeInput(), 0, 14.18, "EUR", extract); // all scenarios at driverYear=2025
     expect(postCheck!.gates.find((g) => g.code === "netdebt_trajectory")!.status).toBe("pass");
+  });
+
+  it("unavailable (not a vacuous pass) when NO scenario declared a bridge at all", () => {
+    // Same FY data as above, so the only thing missing is the model's own bridges.
+    const noBridge = (multiple: number): BridgeScenario => ({ fairValue: scenarioAt(multiple).fairValue });
+    const postCheck = checkValuationBridges(makeInput({ bear: noBridge(3.0), base: noBridge(4.2), bull: noBridge(5.5) }), 0, 14.18, "EUR", extract);
+    const gate = postCheck!.gates.find((g) => g.code === "netdebt_trajectory")!;
+    expect(gate.status).toBe("unavailable");
+    expect(gate.detail).toBe("no scenario declared a bridge");
   });
 
   it("unavailable when freeCashFlow or dividendsPerShare are missing", () => {
@@ -682,6 +730,26 @@ describe("gate: kill_price (analyst lenses only)", () => {
     expect(checkKillPrice(null).status).toBe("fail");
     expect(checkKillPrice(undefined).status).toBe("fail");
   });
+
+  it("unavailable (not fail) when killPrice is null but the lens explained why in killPriceNote", () => {
+    const note = "Regulated asset base: no single price level invalidates the thesis";
+    const postCheck = checkValuationBridges(makeInput({ killPrice: null, killPriceNote: note }), 0, 14.18, "EUR", EXTRACT);
+    const gate = postCheck!.gates.find((g) => g.code === "kill_price")!;
+    expect(gate.status).toBe("unavailable");
+    expect(gate.detail).toBe(note);
+  });
+
+  it("still fails when the note is empty/whitespace — an empty reason is no reason", () => {
+    expect(checkKillPrice(null, "   ").status).toBe("fail");
+    expect(checkKillPrice(null, "").status).toBe("fail");
+  });
+
+  it("a numeric kill price passes regardless of any note, and an over-long note is clipped in the detail", () => {
+    expect(checkKillPrice(9.5, "ignored").detail).toBe("9.50");
+    const detail = checkKillPrice(null, "x".repeat(500)).detail;
+    expect(detail).toHaveLength(200);
+    expect(detail.endsWith("…")).toBe(true);
+  });
 });
 
 describe("PostCheck.basis is always the recomputed BasisReconciliation for the given extract", () => {
@@ -689,5 +757,117 @@ describe("PostCheck.basis is always the recomputed BasisReconciliation for the g
     const postCheck = checkValuationBridges(makeInput(), 0, 14.18, "EUR", UNVERIFIED_EXTRACT);
     expect(postCheck!.basis.kE).toBeNull();
     expect(postCheck!.basis.confidence).toBe("unavailable");
+  });
+});
+
+describe("provider-basis reads scale the declared EV bridge by kB", () => {
+  // kE = 0.9 (EV_P 4500 / evEbitda 5 = 900 vs EBITDA_S 1000); kB = (4500 − 3700) / (500 + 200)
+  // = 800 / 700 ≈ 1.142857 — see grounding-anchors.test.ts for the same fixture.
+  const kbExtract = makeExtract({
+    meta: makeMeta({ reportingCurrency: "EUR" }),
+    financials: [makeFinancialsRow({ fiscalYear: 2025, ebitda: 1000, netDebt: 500, minorityInterest: 200, sharesDiluted: 100 })],
+    multiples: [makeMultiplesRow({ fiscalYear: 2025, evEbitda: 5, enterpriseValue: 4500, marketCap: 3700 })],
+  });
+  const bridgeAt = (driverValue: number, driverYear: number, intrinsicPerShare: number) => ({
+    driver: "EBITDA",
+    driverValue,
+    driverYear,
+    netDebt: 500,
+    minorities: 200,
+    shares: 100,
+    intrinsicPerShare,
+  });
+
+  it("impliedMultipleProvider = (intrinsic × shares + kB × bridge) / (kE × driver)", () => {
+    const base: BridgeScenario = { fairValue: 37, bridge: bridgeAt(1000, 2025, 37) };
+    const baseCheck = checkValuationBridges(makeInput({ base }), 0, 30, "EUR", kbExtract)!.scenarios.find((s) => s.scenario === "base")!;
+    // statement: (3700 + 700) / 1000 = 4.4 — our own bridge, unscaled
+    expect(baseCheck.impliedMultiple).toBeCloseTo(4.4, 9);
+    // provider: (3700 + 8/7 × 700) / (0.9 × 1000) = 4500 / 900 = 5.0 (kE-only: 4.4 / 0.9 ≈ 4.8889)
+    expect(baseCheck.impliedMultipleProvider).toBeCloseTo(5.0, 9);
+  });
+
+  it("the LTM-equivalent read of a forward driver is scaled the same way", () => {
+    const base: BridgeScenario = { fairValue: 37, bridge: bridgeAt(1200, 2026, 37) };
+    const baseCheck = checkValuationBridges(makeInput({ base }), 0, 30, "EUR", kbExtract)!.scenarios.find((s) => s.scenario === "base")!;
+    // forward: (3700 + 800) / (0.9 × 1200) = 4500 / 1080 ≈ 4.166667
+    expect(baseCheck.impliedMultipleProvider).toBeCloseTo(4.166667, 5);
+    // LTM-equivalent on EBITDA_S 2025 = 1000: 4500 / 900 = 5.0
+    expect(baseCheck.impliedMultipleLtm).toBeCloseTo(5.0, 9);
+  });
+
+  it("the cross-check's own bridge is scaled the same way", () => {
+    const { intrinsicPerShare: _omit, ...ccBridge } = bridgeAt(1000, 2025, 37);
+    const postCheck = checkValuationBridges(
+      makeInput({ crossCheck: { method: "EV/EBITDA", intrinsicPerShare: 37, reconciliation: "n/a", bridge: ccBridge } }),
+      0,
+      30,
+      "EUR",
+      kbExtract
+    );
+    // (3700 + 800) / 900 = 5.0
+    expect(postCheck!.crossCheckBridge!.impliedMultipleProvider).toBeCloseTo(5.0, 9);
+  });
+});
+
+describe("robustness: malformed model JSON degrades to unavailable, never throws, never passes", () => {
+  it("a missing bear/base/bull key does not crash; the dependent gates read unavailable", () => {
+    const garbage = { method: "EV/EBITDA", sector: "Energy", currency: "EUR", base: scenarioAt(4.2), bull: scenarioAt(5.5) } as unknown as BridgeCheckInput;
+    const postCheck = checkValuationBridges(garbage, 0, 14.18, "EUR", EXTRACT)!;
+    expect(postCheck).not.toBeNull();
+    const bear = postCheck.scenarios.find((s) => s.scenario === "bear")!;
+    expect(bear.statedIntrinsic).toBeNull();
+    expect(bear.mosOk).toBeNull();
+    const status = (code: string) => postCheck.gates.find((g) => g.code === code)!.status;
+    expect(status("bear_breaks_price")).toBe("unavailable");
+    expect(status("horizon_consistent")).toBe("unavailable");
+    expect(postCheck.expectedValue).toBeNull();
+  });
+
+  it("a missing BASE scenario makes the base-dependent gates unavailable, not pass", () => {
+    const garbage = { method: "EV/EBITDA", sector: "Energy", currency: "EUR", bear: scenarioAt(3.0), bull: scenarioAt(5.5), crossCheck: { method: "DDM", intrinsicPerShare: 13, reconciliation: "" } } as unknown as BridgeCheckInput;
+    const postCheck = checkValuationBridges(garbage, 0, 14.18, "EUR", EXTRACT)!;
+    const status = (code: string) => postCheck.gates.find((g) => g.code === code)!.status;
+    expect(status("multiple_vs_market")).toBe("unavailable");
+    expect(status("cross_check")).toBe("unavailable");
+    expect(status("trailing_forward")).toBe("unavailable");
+    expect(postCheck.priceAnchoringFlag).toBe(false);
+  });
+
+  it("null/string fields in bridges, probabilities, assumptions and crossCheck are dropped, not computed on", () => {
+    const base = scenarioAt(4.2) as unknown as Record<string, unknown>;
+    (base.bridge as Record<string, unknown>).netDebt = null; // a bridge missing a term can't be recomputed
+    const bull = { ...scenarioAt(5.5), probability: "0.25" } as unknown as BridgeScenario;
+    const bear = { ...scenarioAt(3.0), probability: null } as unknown as BridgeScenario;
+    const garbage = {
+      method: "EV/EBITDA",
+      sector: "Energy",
+      currency: "EUR",
+      bull,
+      base,
+      bear,
+      assumptions: { roic: "4.5", wacc: 6.5, terminalGrowth: null },
+      crossCheck: { method: "DDM", intrinsicPerShare: "13", reconciliation: "x" },
+    } as unknown as BridgeCheckInput;
+    const postCheck = checkValuationBridges(garbage, 0, 14.18, "EUR", EXTRACT)!;
+    const baseCheck = postCheck.scenarios.find((s) => s.scenario === "base")!;
+    expect(baseCheck.arithmeticOk).toBeNull();
+    expect(baseCheck.impliedMultiple).toBeNull();
+    const status = (code: string) => postCheck.gates.find((g) => g.code === code)!.status;
+    expect(status("probabilities")).toBe("unavailable");
+    expect(status("roic_vs_wacc")).toBe("unavailable");
+    expect(status("cross_check")).toBe("unavailable");
+    expect(status("cross_check_basis")).toBe("unavailable");
+    expect(status("multiple_vs_market")).toBe("unavailable");
+  });
+
+  it("a garbage killPrice (declared but not numeric) still produces the gate, and it fails", () => {
+    const postCheck = checkValuationBridges({ ...makeInput(), killPrice: "n/a" } as unknown as BridgeCheckInput, 0, 14.18, "EUR", EXTRACT)!;
+    expect(postCheck.gates.find((g) => g.code === "kill_price")!.status).toBe("fail");
+  });
+
+  it("returns null (not a throw) when the result isn't an object at all", () => {
+    expect(checkValuationBridges(null as unknown as BridgeCheckInput, 0, 14.18, "EUR", EXTRACT)).toBeNull();
+    expect(checkValuationBridges("garbage" as unknown as BridgeCheckInput, 0, 14.18, "EUR", EXTRACT)).toBeNull();
   });
 });

@@ -11,9 +11,9 @@ import type { GroundingPayload } from "@/types/grounding";
 import type { Triple } from "@/lib/report/valuation";
 
 /**
- * Parses the persisted GroundingPayload (spec §6.5) — malformed/legacy rows (or Quick-
- * mode analyses, where the column is simply null) degrade to null rather than crash the
- * page render.
+ * Parses the persisted GroundingPayload (Analysis.groundingJson) — malformed/legacy rows
+ * (or Quick-mode analyses, where the column is simply null) degrade to null rather than
+ * crash the page render.
  */
 function parseGroundingPayload(raw: string | null): GroundingPayload | null {
   if (!raw) return null;
@@ -78,7 +78,9 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
 
   // Check for an open portfolio position on this ticker (server-side, no extra round-trip).
   const positions = await db.position.findMany({
-    where: { ticker: analysis.ticker, userId: session.user.id },
+    // Only open lots: a closed (sold) lot is realized P&L, not a holding, so summing it would
+    // overstate the shares and skew the weighted-average cost the banner shows.
+    where: { ticker: analysis.ticker, userId: session.user.id, closedAt: null },
   });
   const totalShares = positions.reduce((s, p) => s + p.shares, 0);
   const wac =

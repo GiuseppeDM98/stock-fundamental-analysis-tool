@@ -60,7 +60,7 @@ export default function OpenPositionBanner({
       </span>
       {pnl != null ? (
         <span
-          className={`rounded px-1.5 py-0.5 text-xs font-semibold ${
+          className={`rounded-sm px-1.5 py-0.5 text-xs font-semibold ${
             isPositive ? "bg-emerald-500/15 text-success" : "bg-red-500/15 text-danger"
           }`}
         >

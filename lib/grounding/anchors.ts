@@ -1,15 +1,15 @@
 // Deterministic, price-independent anchors for the Grounded Deep Value mode: historical
 // multiple statistics, the 3×3 valuation grid, the market-implied read (a CONTROL, never
 // an input — see ANALYTICAL_RIGOR_BLOCK item 10 in lib/ai/deep-value-prompts.ts) and the
-// reverse-engineered "what must be true" read. Pure, no server-only. See
-// docs/deep-value-grounding-spec.md §5.1 and docs/deep-value-rigor-v2-spec.md §2.3/§2.4 —
-// the grid and market-implied reads are now SAME-BASIS: every consumer that multiplies a
+// reverse-engineered "what must be true" read. Pure, no server-only.
+//
+// The grid and market-implied reads are SAME-BASIS: every consumer that multiplies a
 // historical multiple by a statement-basis EBITDA, or ranks a statement-basis multiple
 // against the raw historical distribution, goes through the BasisReconciliation computed
 // in lib/grounding/basis.ts. Doing this ungrounded (kE=kB=1 implicitly) is exactly the bug
-// that produced the Iren misvaluation — see docs/deep-value-rigor-v2-spec.md §0.
+// that inflated a real Iren valuation.
 import type { FiscalYearFinancials, FiscalYearMultiples, GroundedFinancials } from "@/types/grounding";
-import { toProviderBasis, type BasisReconciliation } from "@/lib/grounding/basis";
+import { bridgeToProviderMultiple, type BasisReconciliation } from "@/lib/grounding/basis";
 
 /**
  * The p-th quantile of `sorted` (ascending), via linear interpolation between the two
@@ -36,15 +36,21 @@ function average(values: number[]): number {
 }
 
 /**
- * The percentile rank of `value` within `series` — the fraction (as 0-100) of observations
- * at or below `value`. The exact inverse of `quantile()` above (PERCENTRANK.INC): given
- * `v = s[i] + frac*(s[i+1]-s[i])`, solves for the rank position `h = i + frac`, then
- * `p = h / (n-1)`. Caller must ensure `series` is non-empty.
+ * The interpolated percentile rank of `value` within `series`, on a 0-100 scale — Excel's
+ * PERCENTRANK.INC, the exact inverse of `quantile()` above. It is NOT the share of
+ * observations at or below `value`: it locates `value` between its two bracketing order
+ * statistics, `v = s[i] + frac*(s[i+1]-s[i])`, takes the fractional rank position
+ * `h = i + frac`, and returns `h / (n-1) × 100`. So the minimum ranks 0 and the maximum
+ * 100 (values outside the range clamp to those), and when `value` equals a repeated
+ * observation the LOWEST matching position is used. A single-point series has no rank
+ * scale: it returns 0 at or below that point, 100 above it. Caller must ensure `series` is
+ * non-empty.
  *
- * CALLER CONTRACT (docs/deep-value-rigor-v2-spec.md Regola 2): `series` is always the RAW
+ * CALLER CONTRACT: `series` is always the RAW
  * historical multiple series, which lives in PROVIDER basis. `value` must therefore also be
- * in provider basis — run it through `toProviderBasis()` first if it was derived from a
- * statement-basis figure. Passing a statement-basis value directly reproduces the exact
+ * in provider basis — build it with `bridgeToProviderMultiple()` when it comes from an
+ * equity value plus a statement-basis bridge (or `toProviderBasis()` for a bare statement
+ * multiple with no bridge decomposition). Passing a statement-basis value directly reproduces the exact
  * cross-basis bug that misranked the Iren report.
  */
 export function percentileOf(value: number, series: number[]): number {
@@ -121,9 +127,9 @@ export type ValuationGridRow = {
   driverValue: number;
   // "trailing" = last reported fiscal year (comparable to the historical distribution
   // as-is); "midcycle" = multi-year median (smooths, not tied to one year); "forward" = a
-  // future estimate (NOT comparable to a TRAILING historical distribution — spec §1
-  // Regola 3, "the trailing/forward gate"). driverYear is null for "midcycle" (it spans
-  // several years, not one).
+  // future estimate (NOT comparable to a TRAILING historical distribution: a growing
+  // company's forward multiple is structurally lower — see the trailing_forward gate).
+  // driverYear is null for "midcycle" (it spans several years, not one).
   horizon: "trailing" | "midcycle" | "forward";
   driverYear: number | null;
 };
@@ -147,10 +153,8 @@ const GRID_LOOKBACK_YEARS = 5;
  * The 3×3 grid the Grounded prompt injects as FACTS: 3 historical EV/EBITDA multiples
  * (p25/median/p75, SAME-BASIS — rescaled by kE when `basis.adjustedEvEbitda` is available)
  * × 3 EBITDA bases (last FY, 5y median, next forward estimate). The bridge deduction in
- * every cell is scaled by kB (`basis.kB ?? 1`) — docs/deep-value-rigor-v2-spec.md §2.3.
- * Row labels are plain English placeholders — not yet wired to i18n `t()`, since no UI
- * consumes this grid until a later session; whichever session renders it can adapt the
- * shape then.
+ * every cell is scaled by kB (`basis.kB ?? 1`). Row labels are plain English, not wired
+ * to i18n `t()` — grounding-preview.tsx currently renders them untranslated.
  *
  * Returns null when there's no EV/EBITDA history to anchor to, or when the latest fiscal
  * year is missing a bridge input (net debt / minorities / shares).
@@ -220,8 +224,9 @@ export type MarketImplied = {
   driverYear: number;
   // (price×shares + netDebt + minorities) / EBITDA_S — OUR OWN bridge, unscaled. Space S.
   impliedOnStatement: number;
-  // impliedOnStatement re-expressed in provider space via toProviderBasis (kE-only) — the
-  // ONLY figure from this type that may be passed to percentileOf. null when kE is null.
+  // The same read re-expressed in provider space via bridgeToProviderMultiple (bridge
+  // scaled by kB, EBITDA by kE) — the ONLY figure from this type that may be passed to
+  // percentileOf. null when kE is null.
   impliedOnProvider: number | null;
   // percentileOf(impliedOnProvider, raw historical series) — null when impliedOnProvider
   // is null (kE unverifiable) or there's no historical series to rank against.
@@ -236,11 +241,10 @@ export type MarketImplied = {
  * fiscal year's bridge inputs — a CONTROL that reports the gap vs. the history-anchored
  * base multiple, never an input to it (rigor block item 10). Returns BOTH the statement-
  * basis read (our own bridge) and the provider-basis read (comparable to the raw
- * historical distribution) — see docs/deep-value-rigor-v2-spec.md §2.3: showing only one
- * of these, or ranking the statement-basis figure against the provider-basis distribution
- * directly, is the exact bug this rewrite fixes.
+ * historical distribution): showing only one of these, or ranking the statement-basis
+ * figure against the provider-basis distribution directly, silently misranks the price.
  *
- * CURRENCY GUARD (mandatory, spec §5.1): returns null whenever the extract's reporting
+ * CURRENCY GUARD (mandatory): returns null whenever the extract's reporting
  * currency doesn't match the quote's currency, rather than silently mixing units — a price
  * in one currency divided against an EBITDA in another is a silently wrong number, the
  * worst bug class in this app.
@@ -269,8 +273,10 @@ export function computeMarketImplied(
   const series = extract.multiples.map((m) => m.evEbitda).filter((v): v is number => v != null);
   if (series.length === 0) return null;
 
-  const impliedOnStatement = (price * latestFy.sharesDiluted + latestFy.netDebt + latestFy.minorityInterest) / latestFy.ebitda;
-  const impliedOnProvider = toProviderBasis(impliedOnStatement, basis);
+  const equityAtPrice = price * latestFy.sharesDiluted;
+  const evBridgeStatement = latestFy.netDebt + latestFy.minorityInterest;
+  const impliedOnStatement = (equityAtPrice + evBridgeStatement) / latestFy.ebitda;
+  const impliedOnProvider = bridgeToProviderMultiple(equityAtPrice, evBridgeStatement, latestFy.ebitda, basis);
   const percentile = impliedOnProvider != null ? percentileOf(impliedOnProvider, series) : null;
 
   return {
@@ -303,7 +309,7 @@ export type ImpliedExpectations = {
 };
 
 /**
- * The reverse-engineering read (docs/deep-value-rigor-v2-spec.md §2.4): not "the market is
+ * The reverse-engineering read: not "the market is
  * at 5.5x and I anchor at 7.1x, therefore upside" but "what would have to be true for
  * today's price to be correct at the historical median multiple?" — turns the
  * market-implied check from rhetoric into arithmetic. Same currency guard as
@@ -348,11 +354,15 @@ export function computeImpliedExpectations(
     if (requiredEbitdaAtMedian != null && nextEstimate.ebitda !== 0) {
       vsNextEstimatePct = (requiredEbitdaAtMedian - nextEstimate.ebitda) / nextEstimate.ebitda;
     }
-    // Same pattern as computeMarketImplied: our own (unscaled) bridge in statement space,
-    // then translated to provider space via toProviderBasis — so it's rankable against
-    // the raw historical series alongside impliedOnProvider above.
-    const sMultipleAtNextEstimate = (price * latestFy.sharesDiluted + latestFy.netDebt + latestFy.minorityInterest) / nextEstimate.ebitda;
-    const provider = toProviderBasis(sMultipleAtNextEstimate, basis);
+    // Same pattern as computeMarketImplied: our own statement-space bridge translated to
+    // provider space (bridge × kB, EBITDA × kE) — so it's rankable against the raw
+    // historical series alongside impliedOnProvider above.
+    const provider = bridgeToProviderMultiple(
+      price * latestFy.sharesDiluted,
+      latestFy.netDebt + latestFy.minorityInterest,
+      nextEstimate.ebitda,
+      basis
+    );
     if (provider != null) {
       multipleAtNextEstimate = provider;
       const series = extract.multiples.map((m) => m.evEbitda).filter((v): v is number => v != null);

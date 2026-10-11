@@ -1,5 +1,5 @@
 // GET  /api/earnings          — the user's stored next-earnings estimates (all tickers)
-// POST /api/earnings          — run Sonnet 5 + web search for one ticker, upsert & return it
+// POST /api/earnings          — run Sonnet 5.5 + web search for one ticker, upsert & return it
 //
 // The date comes only from the AI here (Yahoo was dropped because it doesn't refresh the
 // field for many Borsa Italiana tickers). Results are persisted so the calendar survives
@@ -17,7 +17,7 @@ import { runCreateWithToolLoop, DEEP_RESEARCH_MAX_TOOL_ITERATIONS } from "@/lib/
 import type { AiSettings } from "@/types/ai-settings";
 import type { EarningsConfidence, EarningsEstimate } from "@/types/earnings";
 
-const DEFAULT_SETTINGS: AiSettings = { model: "claude-sonnet-5", effort: "medium", thinking: true };
+const DEFAULT_SETTINGS: AiSettings = { model: "claude-sonnet-5-5", effort: "medium", thinking: true };
 
 const requestSchema = z.object({
   ticker: z.string().min(1).max(20),
@@ -93,7 +93,7 @@ export async function POST(request: Request) {
     const aiSettings = await resolveAiSettings(session.user.id, undefined, DEFAULT_SETTINGS);
     const client = getAiClient(aiSettings.model);
 
-    // Non-streaming: a single small fact. Sonnet 5 rejects temperature and has adaptive
+    // Non-streaming: a single small fact. Sonnet 5.5 rejects temperature and has adaptive
     // thinking on by default; web-search + thinking tokens count toward max_tokens.
     // maxIterations: DeepSeek's web search is client-executed one query at a time (unlike
     // Claude's server-side search, which never surfaces a client tool_use here), so the
@@ -102,12 +102,12 @@ export async function POST(request: Request) {
     // block and 502s ("AI returned no parseable result"), reproduced in production
     // (2026-08-24). Reuse the same higher cap as Deep Value/verify rather than inventing a
     // separate knob for a route with much lighter research needs — DeepSeek-only in effect.
-    const response = await runCreateWithToolLoop(
+    const { message: response, hitIterationCap } = await runCreateWithToolLoop(
       client,
       {
         model: aiSettings.model,
         max_tokens: 6000,
-        thinking: buildThinkingParam(aiSettings.thinking),
+        thinking: buildThinkingParam(aiSettings.thinking, aiSettings.model, aiSettings.effort),
         output_config: buildEffortConfig(aiSettings.effort),
         system: buildEarningsSystemPrompt({ currentDate }),
         tools: buildWebSearchTools(aiSettings.model),
@@ -115,6 +115,16 @@ export async function POST(request: Request) {
       },
       DEEP_RESEARCH_MAX_TOOL_ITERATIONS
     );
+
+    // The loop gave up mid-research: the last message is another tool call or a paused
+    // partial turn, not an answer. Say so instead of the generic "no parseable result",
+    // which would read as a malformed model response.
+    if (hitIterationCap) {
+      return NextResponse.json(
+        { error: "AI ran out of web search rounds before answering. Try again." },
+        { status: 502 }
+      );
+    }
 
     // With web search the content array holds several text blocks (reasoning between tool
     // calls + the final answer). Concatenate ALL of them before matching — the first block

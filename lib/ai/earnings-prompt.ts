@@ -1,5 +1,5 @@
 /**
- * Prompt builders for the on-demand next-earnings lookup (Claude Sonnet 5 + web search).
+ * Prompt builders for the on-demand next-earnings lookup (Claude Sonnet 5.5 + web search).
  *
  * The model's only job is to find the *next* scheduled financial-results release date for
  * one ticker — whatever the company's reporting cadence is (quarterly, half-year or annual)

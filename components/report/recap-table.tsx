@@ -64,7 +64,7 @@ export default function RecapTable({
               <tr
                 key={row.label}
                 className={`border-b border-slate-700/30 last:border-0 print:border-slate-200 ${
-                  isBase ? "ring-1 ring-inset ring-violet-500/30 rounded" : ""
+                  isBase ? "ring-1 ring-inset ring-violet-500/30 rounded-sm" : ""
                 }`}
               >
                 <td

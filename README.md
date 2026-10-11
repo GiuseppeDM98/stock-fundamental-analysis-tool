@@ -8,7 +8,7 @@ A Next.js web app for value investors: an AI-assisted pipeline from idea **Disco
 ![License](https://img.shields.io/badge/license-AGPL--3.0-green)
 ![Next.js](https://img.shields.io/badge/Next.js-15.5.12-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7.3-blue)
-![Vitest](https://img.shields.io/badge/Vitest-3.2.4-yellow)
+![Vitest](https://img.shields.io/badge/Vitest-4.1.11-yellow)
 
 ---
 
@@ -39,7 +39,7 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **Exit signal ("At Fair Value")** — when a position's current price reaches the **intrinsic base fair value** from your most recent saved analysis (i.e. the margin of safety is fully consumed), an amber ⚠ badge appears in the portfolio row (always visible). Its "Re-analyze →" button runs a fresh, **position-blind** Deep Value analysis (no cost basis is ever fed to the AI, so the valuation stays independent); use the Advisor afterwards to decide hold / add / exit
 - **Estimate-evolution history** — when a ticker has two or more saved analyses, its saved-analyses card traces the estimate's move at **every step across your full save history** (Δ Analysis / Consensus base fair value per dated step). Pure arithmetic on your saved numbers — never sent to the AI
 - **Weak-signal indicator** — a muted "weak signal" tag next to the Buy/Watch/Over verdict (Saved Analyses + Watchlist) when the Bull–Bear range is so wide that the price-vs-fair-value gap sits inside the model's own uncertainty. Deterministic, self-calibrating (silent on high-conviction, tight-range names)
-- **Choose your AI model** — pick which model powers each analysis (Claude Opus 4.8, Claude Sonnet 5, or **DeepSeek V4 Pro / V4 Flash**), plus a reasoning-effort level (Low/High/Max) and thinking on/off, as a global default (gear icon in the nav bar) with a per-run override on Deep Value, the Advisor, and the Analyst Panel. DeepSeek models also show a live peak/off-peak pricing indicator
+- **Choose your AI model** — pick which model powers each analysis (Claude Opus 4.8, Claude Sonnet 5 / 5.5, or **DeepSeek V4 Pro / V4 Flash**), plus a reasoning-effort level (Low/High/Max) and thinking on/off, as a global default (gear icon in the nav bar) with a per-run override on Deep Value, the Advisor, and the Analyst Panel. DeepSeek models also show a live peak/off-peak pricing indicator
 
 ### What Problem Does It Solve?
 
@@ -233,10 +233,10 @@ This accounts for model uncertainty and provides downside protection.
 | **Business Logic** | TypeScript (pure functions) | DCF calculations |
 | **Data Source** | yahoo-finance2 | Market quotes & fundamentals |
 | **Validation** | Zod | Request payload validation |
-| **Styling** | Tailwind CSS | Dark theme UI |
+| **Styling** | Tailwind CSS 4 | Dark theme UI (needs Safari 16.4+, Chrome 111+, Firefox 128+) |
 | **Charts** | Recharts | Data visualization |
 | **Animation** | Framer Motion | Reveal animations |
-| **Testing** | Vitest + Testing Library | Unit & component tests |
+| **Testing** | Vitest + Testing Library + Playwright | Unit, component and end-to-end tests |
 
 ---
 
@@ -305,6 +305,11 @@ npm run dev
 | `npm run lint` | Run ESLint |
 | `npm run test` | Run all tests once |
 | `npm run test:watch` | Run tests in watch mode |
+| `npm run typecheck` | Type-check the whole project (app, tests, e2e, scripts) |
+| `npm run e2e` | End-to-end suite (Playwright) on an isolated local database, no AI or market-data calls |
+| `npm run e2e:visual` | Visual screenshot comparison (baselines are generated per session with `npm run e2e:visual:update`) |
+| `npm run seed:e2e` | Re-create the isolated e2e database with its fixtures |
+| `npm run ci:local` | Local quality gate: unit tests, type-check, production build and the e2e suite |
 
 ### Running Tests
 
@@ -317,7 +322,15 @@ npm run test:watch
 
 # Specific test file
 npm run test dcf.test.ts
+
+# End-to-end (Playwright) on an isolated local database, never production
+npm run e2e
+
+# Everything a PR needs: unit tests, type-check, production build, e2e
+npm run ci:local
 ```
+
+The e2e tooling forces its own SQLite file (`.e2e/e2e.db`), stubs market data and blocks every AI call, so it costs nothing and cannot touch your Turso database. Details in [WORKFLOW.md](WORKFLOW.md).
 
 **Test Coverage:**
 - ✅ DCF calculation logic (deterministic outputs, constraint validation)
@@ -489,7 +502,7 @@ turso db shell <your-db-name> < prisma/migrations/<latest>/migration.sql
 
 **Workaround**: run these three AI routes against `npm run dev` (localhost) instead of a Hobby deployment, or set `export const maxDuration = 300` on the three routes after upgrading to Vercel Pro.
 
-**Future**: an async queue+polling architecture (job written to the DB immediately, generation done by a worker outside Vercel's function limit, client polls for the result) would remove the ceiling entirely on Hobby, at the cost of losing live token-by-token streaming. Explored but not implemented — see [`docs/async-ai-analysis-architecture.md`](docs/async-ai-analysis-architecture.md) for the trade-off analysis against just upgrading to Pro.
+**Future**: an async queue+polling architecture (job written to the DB immediately, generation done by a worker outside Vercel's function limit, client polls for the result) would remove the ceiling entirely on Hobby, at the cost of losing live token-by-token streaming. Evaluated and not planned: for a personal tool, upgrading to Vercel Pro (one `maxDuration` line per route) costs far less than the new data model, external worker and client refactor, and keeps live streaming.
 
 ---
 
@@ -501,7 +514,7 @@ turso db shell <your-db-name> < prisma/migrations/<latest>/migration.sql
 - [ ] Enhanced error messages with "Try Again" button
 
 ### Phase 2: Data & Calculations
-- [x] **Grounded mode + deterministic multiple anchor** — optional "Grounded" mode: paste the statements/valuation/peers from any source, a historical-multiple anchor computed in code, and a post-check that verifies the model's own valuation bridge and flags price-anchoring (spec in `docs/deep-value-grounding-spec.md`)
+- [x] **Grounded mode + deterministic multiple anchor** — optional "Grounded" mode: paste the statements/valuation/peers from any source, a historical-multiple anchor computed in code, and a post-check that verifies the model's own valuation bridge and flags price-anchoring
 - [ ] Deterministic quant cards (Piotroski / Altman Z / multiples percentile)
 - [ ] Sensitivity analysis matrix (WACC vs growth)
 

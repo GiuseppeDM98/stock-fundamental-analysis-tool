@@ -3,6 +3,7 @@ export type AiProvider = "anthropic" | "deepseek";
 export const AI_MODEL_IDS = [
   "claude-opus-4-8",
   "claude-sonnet-5",
+  "claude-sonnet-5-5",
   "deepseek-v4-pro",
   "deepseek-v4-flash",
 ] as const;
@@ -34,6 +35,12 @@ export const AI_MODEL_CATALOG: Record<AiModelId, AiModelInfo> = {
   },
   "claude-sonnet-5": {
     label: "Claude Sonnet 5",
+    provider: "anthropic",
+    efforts: AI_EFFORT_LEVELS,
+    supportsWebSearch: true,
+  },
+  "claude-sonnet-5-5": {
+    label: "Claude Sonnet 5.5",
     provider: "anthropic",
     efforts: AI_EFFORT_LEVELS,
     supportsWebSearch: true,

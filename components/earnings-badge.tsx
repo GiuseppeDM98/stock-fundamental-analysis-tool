@@ -8,7 +8,7 @@ import type { EarningsConfidence } from "@/types/earnings";
 
 /**
  * Next-earnings badge + refresh control, shared across /analyses, the watchlist and the
- * portfolio. The date is fetched on demand by the AI (Sonnet 5 + web search) and persisted;
+ * portfolio. The date is fetched on demand by the AI (Sonnet 5.5 + web search) and persisted;
  * this component renders whatever the caller loaded from the store and exposes the button
  * that triggers a (re)fetch.
  *

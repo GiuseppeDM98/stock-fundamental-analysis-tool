@@ -12,7 +12,7 @@ export async function fetchEarnings(): Promise<EarningsEstimate[]> {
 }
 
 /**
- * Run the AI lookup for one ticker (Sonnet 5 + web search on the server), persist the
+ * Run the AI lookup for one ticker (Sonnet 5.5 + web search on the server), persist the
  * result, and return the fresh estimate. Slow (~10–30s) — callers should show a spinner.
  */
 export async function refreshEarnings(

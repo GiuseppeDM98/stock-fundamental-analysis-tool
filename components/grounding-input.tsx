@@ -5,21 +5,32 @@
 // Owns the block list (add/edit/remove), a per-ticker localStorage draft, the
 // "Prepare data" extraction call, and hands off a confirmed GroundingPayload to the
 // parent via a controlled value/onChange pair (same convention as AiSettingsControl).
-// See docs/deep-value-grounding-spec.md §5.2/§5.3.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom";
 
 import { useLanguage } from "@/context/language-context";
 import type { Translations } from "@/lib/i18n/translations";
-import { GROUNDING_BLOCK_KINDS, type GroundingBlock, type GroundingBlockKind, type GroundingPayload } from "@/types/grounding";
+import {
+  GROUNDING_BLOCK_KINDS,
+  GROUNDING_MAX_BLOCK_CHARS,
+  GROUNDING_MAX_BLOCKS,
+  GROUNDING_MAX_TOTAL_CHARS,
+  type GroundingBlock,
+  type GroundingBlockKind,
+  type GroundingPayload,
+} from "@/types/grounding";
 import { extractGrounding, type GroundingExtractResponse } from "@/lib/grounding-client";
+import { remapFailedBlockPositions, selectSubmittableBlocks } from "@/lib/grounding-blocks";
 import { GroundingPreview } from "@/components/report/grounding-preview";
 
-// Caps mirrored server-side (app/api/ai/grounding/extract/route.ts) — never trust the
-// client alone, but enforcing them here gives immediate feedback instead of a round trip.
-const MAX_BLOCK_CHARS = 40000;
-const MAX_TOTAL_CHARS = 200000;
+// The caps are enforced server-side too (the client is never trusted); checking them here
+// gives immediate feedback instead of a round trip.
 const WARN_TOTAL_CHARS = 120000;
+
+// Textarea auto-grow bounds: starts at ~6 lines, grows with the paste, then scrolls — a
+// full statement table is hundreds of lines and must not push the Prepare button off-screen.
+const TEXTAREA_MIN_HEIGHT_PX = 120;
+const TEXTAREA_MAX_HEIGHT_PX = 420;
 
 const KIND_LABEL_KEY: Record<GroundingBlockKind, keyof Translations> = {
   income_statement: "groundingKindIncomeStatement",
@@ -32,14 +43,57 @@ const KIND_LABEL_KEY: Record<GroundingBlockKind, keyof Translations> = {
 };
 
 // Per-kind help text shown above the textarea when a block is expanded. Only
-// valuation_multiples has one today — it's the single most important UX point in
-// docs/deep-value-rigor-v2-spec.md §2.1: without an EV/Revenue or Enterprise Value column,
-// the basis-reconciliation engine (lib/grounding/basis.ts) has nothing to compute kE from
-// and degrades to "unavailable" for the whole paste, silently. Asking for it here, at
-// paste time, is far cheaper than discovering it after a run.
+// valuation_multiples has one today — it's the single most important paste-time hint:
+// without an EV/Revenue or Enterprise Value column, the basis-reconciliation engine
+// (lib/grounding/basis.ts) has nothing to compute kE from and degrades to "unavailable"
+// for the whole paste, silently. Asking for it here, at paste time, is far cheaper than
+// discovering it after a run.
 const KIND_HINT_KEY: Partial<Record<GroundingBlockKind, keyof Translations>> = {
   valuation_multiples: "groundingValuationMultiplesHint",
 };
+
+/**
+ * A monospace textarea that grows with its content between the min/max heights above,
+ * then scrolls. Height is recomputed from scrollHeight after every value change — reset to
+ * "auto" first, or the box could only ever grow, never shrink back when text is removed.
+ */
+function AutoGrowTextarea({
+  value,
+  onChange,
+  textareaRef,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  textareaRef: (el: HTMLTextAreaElement | null) => void;
+  placeholder: string;
+}) {
+  const localRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useLayoutEffect(() => {
+    const el = localRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const height = Math.min(Math.max(el.scrollHeight, TEXTAREA_MIN_HEIGHT_PX), TEXTAREA_MAX_HEIGHT_PX);
+    el.style.height = `${height}px`;
+    el.style.overflowY = el.scrollHeight > TEXTAREA_MAX_HEIGHT_PX ? "auto" : "hidden";
+  }, [value]);
+
+  return (
+    <textarea
+      ref={(el) => {
+        localRef.current = el;
+        textareaRef(el);
+      }}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      maxLength={GROUNDING_MAX_BLOCK_CHARS}
+      placeholder={placeholder}
+      style={{ minHeight: TEXTAREA_MIN_HEIGHT_PX, maxHeight: TEXTAREA_MAX_HEIGHT_PX }}
+      className="w-full resize-none rounded-lg border border-slate-700 bg-slate-800/60 px-2 py-1.5 font-mono text-xs text-slate-200 focus:border-violet-500 focus:outline-hidden"
+    />
+  );
+}
 
 function loadDraftBlocks(ticker: string): GroundingBlock[] {
   if (typeof window === "undefined") return [];
@@ -77,12 +131,19 @@ export function GroundingInput({ ticker, value, onChange }: Props) {
   const [extractStatus, setExtractStatus] = useState<"idle" | "loading" | "error">("idle");
   const [extractError, setExtractError] = useState<string | null>(null);
   const [extractResult, setExtractResult] = useState<GroundingExtractResponse | null>(null);
+  // The exact blocks the current extractResult was produced from — confirmed into the
+  // payload instead of the live list, which may still hold empty blocks the deep-value
+  // route's payload schema would reject.
+  const [extractedBlocks, setExtractedBlocks] = useState<GroundingBlock[]>([]);
 
   // Two separate refs because the menu itself is portaled to document.body (see below)
   // — it's no longer a DOM descendant of the trigger button, so the outside-click check
   // must test against both.
   const addButtonRef = useRef<HTMLButtonElement>(null);
   const addMenuRef = useRef<HTMLDivElement>(null);
+  const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
+  // Set by the pencil button: the next render that shows this block's textarea focuses it.
+  const pendingFocusIdRef = useRef<string | null>(null);
 
   // Re-key everything to the current ticker: a different stock is a different (or
   // empty) paste session, and any previously-confirmed payload no longer applies to it.
@@ -90,6 +151,7 @@ export function GroundingInput({ ticker, value, onChange }: Props) {
     setBlocks(loadDraftBlocks(ticker));
     setView("edit");
     setExtractResult(null);
+    setExtractedBlocks([]);
     setExtractStatus("idle");
     setExtractError(null);
     setExpandedBlockId(null);
@@ -127,6 +189,13 @@ export function GroundingInput({ ticker, value, onChange }: Props) {
     };
   }, [addMenuOpen]);
 
+  useEffect(() => {
+    const id = pendingFocusIdRef.current;
+    if (!id || expandedBlockId !== id) return;
+    pendingFocusIdRef.current = null;
+    textareaRefs.current[id]?.focus();
+  }, [expandedBlockId]);
+
   function toggleAddMenu() {
     if (!addMenuOpen && addButtonRef.current) {
       const rect = addButtonRef.current.getBoundingClientRect();
@@ -154,6 +223,17 @@ export function GroundingInput({ ticker, value, onChange }: Props) {
     invalidateConfirmed();
   }
 
+  function editBlock(id: string) {
+    pendingFocusIdRef.current = id;
+    if (expandedBlockId === id) {
+      // Already open: the effect above won't re-run, so focus directly.
+      pendingFocusIdRef.current = null;
+      textareaRefs.current[id]?.focus();
+      return;
+    }
+    setExpandedBlockId(id);
+  }
+
   function updateBlockText(id: string, text: string) {
     setBlocks((prev) => prev.map((b) => (b.id === id ? { ...b, text } : b)));
     invalidateConfirmed();
@@ -171,17 +251,25 @@ export function GroundingInput({ ticker, value, onChange }: Props) {
   }
 
   const totalChars = blocks.reduce((sum, b) => sum + b.text.length, 0);
-  const overCap = totalChars > MAX_TOTAL_CHARS;
+  const overCap = totalChars > GROUNDING_MAX_TOTAL_CHARS;
   const nearCap = !overCap && totalChars > WARN_TOTAL_CHARS;
-  const hasEmptyPeerTicker = blocks.some((b) => b.kind === "peer_valuation" && !b.peerTicker?.trim());
-  const canPrepare = blocks.length > 0 && !overCap && !hasEmptyPeerTicker && extractStatus !== "loading";
+  const atBlockCap = blocks.length >= GROUNDING_MAX_BLOCKS;
+  // Empty blocks are skipped rather than sent — they would make the route reject the
+  // whole request. Only the blocks that will actually be sent gate the Prepare button.
+  const submittableBlocks = selectSubmittableBlocks(blocks);
+  const allBlocksEmpty = blocks.length > 0 && submittableBlocks.length === 0;
+  const someBlocksEmpty = submittableBlocks.length > 0 && submittableBlocks.length < blocks.length;
+  const hasEmptyPeerTicker = submittableBlocks.some((b) => b.kind === "peer_valuation" && !b.peerTicker?.trim());
+  const canPrepare = submittableBlocks.length > 0 && !overCap && !hasEmptyPeerTicker && extractStatus !== "loading";
 
   async function handlePrepare() {
+    const sent = submittableBlocks;
     setExtractStatus("loading");
     setExtractError(null);
     try {
-      const result = await extractGrounding(ticker, blocks);
-      setExtractResult(result);
+      const result = await extractGrounding(ticker, sent);
+      setExtractResult({ ...result, warnings: remapFailedBlockPositions(result.warnings, sent, blocks) });
+      setExtractedBlocks(sent);
       setView("preview");
       setExtractStatus("idle");
     } catch (err) {
@@ -192,7 +280,7 @@ export function GroundingInput({ ticker, value, onChange }: Props) {
 
   function handleConfirm() {
     if (!extractResult) return;
-    onChange({ blocks, extract: extractResult.extract });
+    onChange({ blocks: extractedBlocks, extract: extractResult.extract });
   }
 
   return (
@@ -204,7 +292,7 @@ export function GroundingInput({ ticker, value, onChange }: Props) {
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-semibold text-slate-100">{t("groundingSectionTitle")}</span>
             {value && (
-              <span className="shrink-0 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-success">
+              <span className="shrink-0 rounded-sm bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-success">
                 ✓ {t("groundingReadyBadge")}
               </span>
             )}
@@ -213,7 +301,7 @@ export function GroundingInput({ ticker, value, onChange }: Props) {
         </button>
         <button
           onClick={() => setSectionOpen((v) => !v)}
-          aria-label={sectionOpen ? "Collapse" : "Expand"}
+          aria-label={sectionOpen ? t("groundingCollapseSection") : t("groundingExpandSection")}
           className="tap shrink-0 rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-slate-600 hover:text-slate-200"
         >
           <span className={`inline-block transition-transform duration-150 ${sectionOpen ? "rotate-180" : ""}`}>▾</span>
@@ -231,8 +319,8 @@ export function GroundingInput({ ticker, value, onChange }: Props) {
               <div className="space-y-2">
                 {blocks.map((block) => (
                   <div key={block.id} className="rounded-lg border border-slate-700/60 bg-slate-900/40 p-2">
-                    {/* Two sibling buttons, not nested (gotcha #24): the label toggles
-                        the textarea, ✕ removes the block. */}
+                    {/* Sibling buttons, never nested (gotcha #24): the label toggles the
+                        textarea, the pencil opens and focuses it, ✕ removes the block. */}
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => setExpandedBlockId((id) => (id === block.id ? null : block.id))}
@@ -242,6 +330,15 @@ export function GroundingInput({ ticker, value, onChange }: Props) {
                         {block.kind === "peer_valuation" && block.peerTicker ? ` — ${block.peerTicker}` : ""}
                         {" · "}
                         {block.text.length.toLocaleString()} {t("groundingCharsSuffix")}
+                        {!block.text.trim() && <span className="text-muted"> · {t("groundingBlockEmptyTag")}</span>}
+                      </button>
+                      <button
+                        onClick={() => editBlock(block.id)}
+                        aria-label={t("groundingEditBlock")}
+                        title={t("groundingEditBlock")}
+                        className="tap shrink-0 rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-slate-600 hover:text-slate-200"
+                      >
+                        ✎
                       </button>
                       <button
                         onClick={() => removeBlock(block.id)}
@@ -263,16 +360,16 @@ export function GroundingInput({ ticker, value, onChange }: Props) {
                             value={block.peerTicker ?? ""}
                             onChange={(e) => updateBlockPeerTicker(block.id, e.target.value.toUpperCase())}
                             placeholder={t("groundingPeerTickerPlaceholder")}
-                            className="w-full rounded-lg border border-slate-700 bg-slate-800/60 px-2 py-1.5 text-xs text-slate-200 focus:border-violet-500 focus:outline-none"
+                            className="w-full rounded-lg border border-slate-700 bg-slate-800/60 px-2 py-1.5 text-xs text-slate-200 focus:border-violet-500 focus:outline-hidden"
                           />
                         )}
-                        <textarea
+                        <AutoGrowTextarea
                           value={block.text}
-                          onChange={(e) => updateBlockText(block.id, e.target.value)}
-                          maxLength={MAX_BLOCK_CHARS}
+                          onChange={(text) => updateBlockText(block.id, text)}
+                          textareaRef={(el) => {
+                            textareaRefs.current[block.id] = el;
+                          }}
                           placeholder={t("groundingTextareaPlaceholder")}
-                          rows={6}
-                          className="w-full rounded-lg border border-slate-700 bg-slate-800/60 px-2 py-1.5 font-mono text-xs text-slate-200 focus:border-violet-500 focus:outline-none"
                         />
                       </div>
                     )}
@@ -283,11 +380,12 @@ export function GroundingInput({ ticker, value, onChange }: Props) {
               <button
                 ref={addButtonRef}
                 onClick={toggleAddMenu}
-                className="tap rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200 transition hover:border-slate-400 hover:text-slate-100"
+                disabled={atBlockCap}
+                className="tap rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200 transition hover:border-slate-400 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {t("groundingAddBlockBtn")} ▾
               </button>
-              {/* Portaled to <body>: `.card`'s backdrop-blur creates its own stacking
+              {/* Portaled to <body>: `.card`'s backdrop-blur-sm creates its own stacking
                   context, so an absolutely-positioned menu confined to this card can
                   render BEHIND a later sibling card (e.g. the Deep Value panel) no
                   matter its z-index (AGENTS.md › Modals/Overlays). Fixed-positioned at
@@ -328,6 +426,8 @@ export function GroundingInput({ ticker, value, onChange }: Props) {
                 </button>
               </div>
 
+              {allBlocksEmpty && <p className="text-xs text-warning">{t("groundingAllBlocksEmpty")}</p>}
+              {someBlocksEmpty && <p className="text-xs text-muted">{t("groundingEmptyBlocksSkipped")}</p>}
               {hasEmptyPeerTicker && <p className="text-xs text-warning">{t("groundingPeerTickerRequired")}</p>}
               {extractStatus === "error" && extractError && (
                 <p className="text-xs text-danger">

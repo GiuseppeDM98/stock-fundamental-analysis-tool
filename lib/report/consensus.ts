@@ -21,7 +21,7 @@ export type AnalystColumns = {
   bear: keyof SavedAnalysis;
   method: keyof SavedAnalysis;
   critique: keyof SavedAnalysis;
-  // Blind-first commitment (docs/deep-value-rigor-v2-spec.md §6.4) — JSON blob, not a
+  // Blind-first (Phase-1) commitment — JSON blob, not a
   // scalar like the four fields above.
   blind: keyof SavedAnalysis;
 };

@@ -46,7 +46,7 @@ export default function LoginForm() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1">
+          <div>
             <label className="text-sm text-slate-300" htmlFor="email">
               {t("emailLabel")}
             </label>
@@ -56,12 +56,12 @@ export default function LoginForm() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:outline-none"
+              className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:outline-hidden"
               placeholder="you@example.com"
             />
           </div>
 
-          <div className="space-y-1">
+          <div>
             <label className="text-sm text-slate-300" htmlFor="password">
               {t("passwordLabel")}
             </label>
@@ -71,7 +71,7 @@ export default function LoginForm() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:outline-none"
+              className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:outline-hidden"
               placeholder="••••••••"
             />
           </div>
