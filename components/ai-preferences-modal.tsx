@@ -39,8 +39,8 @@ export function AiPreferencesModal({ onClose }: AiPreferencesModalProps) {
   }
 
   const modal = (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm">
-      <div className="card w-full max-w-md space-y-4 p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-xs">
+      <div className="card w-full max-w-md space-y-4">
         <h2 className="text-lg font-semibold text-slate-100">AI preferences</h2>
         <p className="text-xs text-muted">
           Default model, effort and thinking used across Deep Value, the Analyst panel, the

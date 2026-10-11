@@ -27,7 +27,7 @@ function preprocessMarkdown(content: string): string {
 function MessageContent({ content }: { content: string }) {
   const { t } = useLanguage();
   return (
-    <div className="prose prose-invert prose-sm max-w-none prose-headings:text-slate-100 prose-headings:mt-4 prose-headings:mb-1.5 prose-p:text-slate-300 prose-p:leading-relaxed prose-p:my-1.5 prose-strong:text-slate-100 prose-li:text-slate-300 prose-li:my-0.5 prose-a:text-sky-400 prose-table:w-full prose-th:text-slate-200 prose-td:text-slate-300 prose-hr:border-slate-700/50 prose-code:text-sky-300 prose-code:bg-slate-800 prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
+    <div className="prose prose-invert prose-sm max-w-none prose-headings:text-slate-100 prose-headings:mt-4 prose-headings:mb-1.5 prose-p:text-slate-300 prose-p:leading-relaxed prose-p:my-1.5 prose-strong:text-slate-100 prose-li:text-slate-300 prose-li:my-0.5 prose-a:text-sky-400 prose-table:w-full prose-th:text-slate-200 prose-td:text-slate-300 prose-hr:border-slate-700/50 prose-code:text-sky-300 prose-code:bg-slate-800 prose-code:px-1 prose-code:py-0.5 prose-code:rounded-sm">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -62,7 +62,7 @@ function MessageContent({ content }: { content: string }) {
 function UserBubble({ content }: { content: string }) {
   return (
     <div className="flex justify-end">
-      <div className="max-w-[76%] rounded-2xl rounded-tr-sm border border-sky-500/20 bg-[rgba(56,189,248,0.07)] px-4 py-2.5 text-sm text-slate-100">
+      <div className="max-w-[76%] rounded-2xl rounded-tr-xs border border-sky-500/20 bg-[rgba(56,189,248,0.07)] px-4 py-2.5 text-sm text-slate-100">
         <span className="whitespace-pre-wrap break-words">{content}</span>
       </div>
     </div>
@@ -72,7 +72,7 @@ function UserBubble({ content }: { content: string }) {
 function AssistantBubble({ content, isStreaming }: { content: string; isStreaming?: boolean }) {
   return (
     <div className="flex justify-start">
-      <div className="w-full rounded-2xl rounded-tl-sm border border-slate-700/30 bg-[#0f172a] px-4 py-3 text-sm text-slate-200 shadow-[0_4px_20px_-8px_rgba(56,189,248,0.10)]">
+      <div className="w-full rounded-2xl rounded-tl-xs border border-slate-700/30 bg-[#0f172a] px-4 py-3 text-sm text-slate-200 shadow-[0_4px_20px_-8px_rgba(56,189,248,0.10)]">
         <MessageContent content={content} />
         {isStreaming && content && (
           <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse bg-sky-400" />
@@ -85,7 +85,7 @@ function AssistantBubble({ content, isStreaming }: { content: string; isStreamin
 function ThinkingBubble({ label }: { label: string }) {
   return (
     <div className="flex justify-start">
-      <div className="rounded-2xl rounded-tl-sm border border-slate-700/30 bg-[#0f172a] px-4 py-3 shadow-[0_4px_20px_-8px_rgba(56,189,248,0.10)]">
+      <div className="rounded-2xl rounded-tl-xs border border-slate-700/30 bg-[#0f172a] px-4 py-3 shadow-[0_4px_20px_-8px_rgba(56,189,248,0.10)]">
         <span className="flex items-center gap-2.5 text-xs text-slate-500">
           <span className="flex gap-1">
             <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-sky-500 [animation-delay:0ms]" />
@@ -130,6 +130,7 @@ function SidebarBody({
   onNew: () => void;
   onDelete: (id: string) => void;
 }) {
+  const { t } = useLanguage();
   function formatDate(iso: string) {
     return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   }
@@ -140,7 +141,7 @@ function SidebarBody({
   return (
     <>
       <p className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
-        Conversations
+        {t("advisorConversations")}
       </p>
 
       <button
@@ -148,7 +149,7 @@ function SidebarBody({
         className="tap mb-3 flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-400 transition hover:border-sky-500/40 hover:text-sky-300"
       >
         <PlusIcon />
-        New chat
+        {t("advisorNewChat")}
       </button>
 
       <div className="flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -174,7 +175,7 @@ function SidebarBody({
                 <button
                   onClick={(e) => { e.stopPropagation(); onDelete(s.id); }}
                   // Shown on hover (mouse) and always on touch — group-hover never fires on coarse pointers.
-                  className="absolute right-1 top-2 hidden rounded p-1.5 text-slate-600 transition hover:text-rose-400 group-hover:block [@media(pointer:coarse)]:block"
+                  className="absolute right-1 top-2 hidden rounded-sm p-1.5 text-slate-600 transition hover:text-rose-400 group-hover:block [@media(pointer:coarse)]:block"
                   aria-label="Delete session"
                 >
                   <TrashIcon />
@@ -192,7 +193,7 @@ function SidebarBody({
 
 function ArrowRight() {
   return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" className="flex-shrink-0 opacity-40">
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" className="shrink-0 opacity-40">
       <path d="M2.5 7h9M8 3.5 11.5 7 8 10.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
@@ -498,7 +499,7 @@ export default function AdvisorClient() {
   return (
     <div className="flex flex-1 gap-5 overflow-hidden">
       {/* Desktop sidebar (≥ lg); below lg it lives in the slide-in drawer below. */}
-      <aside className="hidden w-52 flex-shrink-0 flex-col border-r border-slate-800 pr-3 lg:flex">
+      <aside className="hidden w-52 shrink-0 flex-col border-r border-slate-800 pr-3 lg:flex">
         <SidebarBody
           sessions={sessions}
           activeId={activeSessionId}
@@ -514,21 +515,21 @@ export default function AdvisorClient() {
         <div className="flex items-center justify-between gap-2 pb-3">
           <button
             onClick={() => setSidebarOpen(true)}
-            aria-label="Conversations"
+            aria-label={t("advisorConversations")}
             aria-expanded={sidebarOpen}
             className="tap inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-1 text-xs font-medium text-slate-400 transition hover:border-sky-500/40 hover:text-sky-300 lg:hidden"
           >
             <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
               <path d="M2 3.5h11M2 7.5h11M2 11.5h7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
             </svg>
-            Conversations
+            {t("advisorConversations")}
           </button>
           <div className="inline-flex gap-0.5 rounded-lg border border-slate-800 bg-slate-900/60 p-0.5">
             <button
               onClick={() => setMode("portfolio")}
               className={`tap rounded-md px-3 py-1 text-xs font-medium transition ${
                 mode === "portfolio"
-                  ? "bg-slate-700 text-slate-100 shadow-sm"
+                  ? "bg-slate-700 text-slate-100 shadow-xs"
                   : "text-slate-500 hover:text-slate-300"
               }`}
             >
@@ -538,7 +539,7 @@ export default function AdvisorClient() {
               onClick={() => setMode("discovery")}
               className={`tap rounded-md px-3 py-1 text-xs font-medium transition ${
                 mode === "discovery"
-                  ? "bg-slate-700 text-slate-100 shadow-sm"
+                  ? "bg-slate-700 text-slate-100 shadow-xs"
                   : "text-slate-500 hover:text-slate-300"
               }`}
             >
@@ -587,13 +588,13 @@ export default function AdvisorClient() {
               onKeyDown={handleKeyDown}
               disabled={isStreaming}
               placeholder={t("advisorInputPlaceholder")}
-              className="flex-1 resize-none bg-transparent text-sm text-slate-100 placeholder-slate-600 focus:outline-none disabled:opacity-50"
+              className="flex-1 resize-none bg-transparent text-sm text-slate-100 placeholder-slate-600 focus:outline-hidden disabled:opacity-50"
               style={{ minHeight: "1.5rem", maxHeight: "120px" }}
             />
             <button
               onClick={() => sendMessage(input)}
               disabled={isStreaming || !input.trim()}
-              className="tap mb-0.5 flex-shrink-0 rounded-lg bg-sky-500 px-3.5 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-40"
+              className="tap mb-0.5 shrink-0 rounded-lg bg-sky-500 px-3.5 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {t("advisorSend")}
             </button>
@@ -617,13 +618,13 @@ export default function AdvisorClient() {
                 transition={{ duration: 0.2 }}
               >
                 <div
-                  className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                  className="absolute inset-0 bg-black/60 backdrop-blur-xs"
                   onClick={() => setSidebarOpen(false)}
                 />
                 <motion.div
                   role="dialog"
                   aria-modal="true"
-                  aria-label="Conversations"
+                  aria-label={t("advisorConversations")}
                   className="absolute inset-y-0 left-0 flex w-72 max-w-[80vw] flex-col border-r border-slate-800 bg-[#070d19] p-4 pt-[max(1rem,env(safe-area-inset-top))]"
                   initial={reduceMotion ? { opacity: 0 } : { x: "-100%" }}
                   animate={reduceMotion ? { opacity: 1 } : { x: 0 }}

@@ -81,7 +81,7 @@ function PerformanceBadge({
         {formatPrice(priceAtAnalysis)} → {formatPrice(currentPrice)}
       </span>
       <span
-        className={`rounded px-1.5 py-0.5 text-xs font-semibold ${
+        className={`rounded-sm px-1.5 py-0.5 text-xs font-semibold ${
           isPositive ? "bg-emerald-500/15 text-success" : "bg-red-500/15 text-danger"
         }`}
       >
@@ -119,7 +119,7 @@ function OpenPositionBadge({
       </span>
       {pnl != null && (
         <span
-          className={`rounded px-1.5 py-0.5 text-xs font-semibold ${
+          className={`rounded-sm px-1.5 py-0.5 text-xs font-semibold ${
             isPositive ? "bg-emerald-500/15 text-success" : "bg-red-500/15 text-danger"
           }`}
         >
@@ -170,14 +170,14 @@ function AnalysisRow({
       <div className="flex shrink-0 items-center gap-1.5">
         <button
           onClick={onView}
-          className="tap rounded border border-slate-700 px-2 py-1 text-xs text-accent transition hover:border-sky-400/40"
+          className="tap rounded-sm border border-slate-700 px-2 py-1 text-xs text-accent transition hover:border-sky-400/40"
         >
           →
         </button>
         <button
           onClick={onDelete}
           disabled={isDeleting}
-          className="tap rounded border border-slate-700 px-2 py-1 text-xs text-muted transition hover:border-red-500/50 hover:text-danger disabled:opacity-50"
+          className="tap rounded-sm border border-slate-700 px-2 py-1 text-xs text-muted transition hover:border-red-500/50 hover:text-danger disabled:opacity-50"
         >
           {isDeleting ? "…" : deleteLabel}
         </button>
@@ -203,7 +203,7 @@ function DeltaFigure({ delta }: { delta: SourceDelta }) {
   return (
     <span className="flex items-center gap-1.5 font-mono text-slate-300">
       {delta.prev.toFixed(2)} → {delta.curr.toFixed(2)}
-      <span className={`rounded px-1.5 py-0.5 font-sans font-semibold ${deltaBadgeClass(delta.pctDelta)}`}>
+      <span className={`rounded-sm px-1.5 py-0.5 font-sans font-semibold ${deltaBadgeClass(delta.pctDelta)}`}>
         {delta.pctDelta >= 0 ? "+" : ""}
         {(delta.pctDelta * 100).toFixed(1)}%
       </span>
@@ -391,12 +391,12 @@ function TickerGroup({
             <span className="shrink-0 font-mono text-base font-bold text-accent">{ticker}</span>
             <span className="truncate text-sm text-slate-400">{latest.companyName}</span>
             {latest.valuationMethod && (
-              <span className="shrink-0 rounded bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-medium text-slate-400">
+              <span className="shrink-0 rounded-sm bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-medium text-slate-400">
                 {latest.valuationMethod}
               </span>
             )}
             {(latest.reviewMd || latest.optimistCritiqueMd || latest.qualityCritiqueMd) && (
-              <span className="shrink-0 rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-300">
+              <span className="shrink-0 rounded-sm bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-300">
                 ✓ {t("analystReviewBadge")}
               </span>
             )}
@@ -411,14 +411,14 @@ function TickerGroup({
                 <span className="text-slate-600">{t("priceNa")}</span>
               )}
               {verdict && buyTargetPct != null && (
-                <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${VERDICT_BADGE[verdict]}`}>
+                <span className={`rounded-sm px-1.5 py-0.5 text-[10px] font-semibold ${VERDICT_BADGE[verdict]}`}>
                   {verdictLabel(verdict)} {buyTargetPct > 0 ? "+" : ""}
                   {buyTargetPct.toFixed(0)}%
                 </span>
               )}
               {weakSignal && (
                 <span
-                  className="rounded bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-medium text-slate-300"
+                  className="rounded-sm bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-medium text-slate-300"
                   title={t("weakSignalHint")}
                 >
                   {t("weakSignalLabel")}
@@ -521,7 +521,7 @@ function TickerGroup({
                       key={lv}
                       onClick={() => setLevel(lv)}
                       aria-pressed={level === lv}
-                      className={`tap rounded px-2 py-0.5 transition ${
+                      className={`tap rounded-sm px-2 py-0.5 transition ${
                         level === lv ? "bg-sky-500/15 text-sky-300" : "text-slate-400 hover:text-slate-200"
                       }`}
                     >
@@ -846,7 +846,7 @@ export default function AnalysesList() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t("searchPlaceholder")}
-          className="min-w-[180px] flex-1 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm text-slate-200 placeholder:text-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
+          className="min-w-[180px] flex-1 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm text-slate-200 placeholder:text-slate-600 focus:border-sky-500/50 focus:outline-hidden focus:ring-1 focus:ring-sky-500/30"
         />
 
         {/* Under FV toggle */}
@@ -867,7 +867,7 @@ export default function AnalysesList() {
           <select
             value={sortMode}
             onChange={(e) => setSortMode(e.target.value as SortMode)}
-            className="tap rounded-lg border border-slate-700 bg-slate-800/80 px-2 py-1.5 text-xs text-slate-300 focus:border-sky-500/50 focus:outline-none"
+            className="tap rounded-lg border border-slate-700 bg-slate-800/80 px-2 py-1.5 text-xs text-slate-300 focus:border-sky-500/50 focus:outline-hidden"
           >
             <option value="recent">{t("sortRecent")}</option>
             <option value="ticker">{t("sortTicker")}</option>

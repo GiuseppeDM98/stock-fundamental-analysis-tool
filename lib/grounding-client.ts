@@ -17,7 +17,7 @@ export type GroundingExtractResponse = {
 
 /**
  * Transcribes the user's pasted blocks into structured JSON + deterministic anchors
- * (Sonnet 5, no web search — pure transcription). One call per block server-side, in
+ * (Sonnet 5.5, no web search — pure transcription). One call per block server-side, in
  * parallel, but still a multi-second round trip — callers should show a loading state.
  */
 export async function extractGrounding(ticker: string, blocks: GroundingBlock[]): Promise<GroundingExtractResponse> {

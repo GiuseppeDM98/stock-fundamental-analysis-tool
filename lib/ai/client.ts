@@ -22,8 +22,23 @@ export function getAiClient(model: AiModelId): Anthropic {
   return (_anthropicClient ??= new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }));
 }
 
-export function buildThinkingParam(thinking: boolean): Anthropic.ThinkingConfigParam {
-  return thinking ? { type: "adaptive" } : { type: "disabled" };
+/** Maps the user's "thinking" toggle to the API's thinking config.
+ *
+ * Claude Sonnet 5.5 rejects `{type: "disabled"}` with a 400. Its way to switch thinking
+ * off is `{type: "between_tools"}`, which the API accepts only at effort `high` or below,
+ * so at `xhigh`/`max` thinking cannot be turned off and stays adaptive. `between_tools`
+ * is not in the pinned SDK's (^0.78) union, hence the cast (compile-time only). */
+export function buildThinkingParam(
+  thinking: boolean,
+  model?: AiModelId,
+  effort?: AiEffort
+): Anthropic.ThinkingConfigParam {
+  if (thinking) return { type: "adaptive" };
+  if (model === "claude-sonnet-5-5") {
+    if (effort === "xhigh" || effort === "max") return { type: "adaptive" };
+    return { type: "between_tools" } as unknown as Anthropic.ThinkingConfigParam;
+  }
+  return { type: "disabled" };
 }
 
 /** `xhigh`/`max` aren't in the pinned SDK's (^0.78) effort union (low|medium|high|max

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { checkReconciliation } from "@/lib/grounding/reconcile";
+import { checkReconciliation, checkCurrencyMismatch } from "@/lib/grounding/reconcile";
 import { computeBasisReconciliation } from "@/lib/grounding/basis";
-import { makeFinancialsRow, makeMultiplesRow, makeExtract, makeBasis } from "./grounding-test-helpers";
+import { makeFinancialsRow, makeMultiplesRow, makeExtract, makeBasis, makeMeta } from "./grounding-test-helpers";
 
 describe("checkReconciliation", () => {
   it("does not fire when every figure ties out", () => {
@@ -232,10 +232,51 @@ describe("dividend_not_covered", () => {
     expect(checkReconciliation(extract, makeBasis()).some((w) => w.code === "dividend_not_covered")).toBe(false);
   });
 
+  it("averages the last 3 years that REPORT an FCF — a recent gap pushes the window back instead of shrinking it", () => {
+    const extract = makeExtract({
+      financials: [
+        makeFinancialsRow({ fiscalYear: 2021, freeCashFlow: 100 }),
+        makeFinancialsRow({ fiscalYear: 2022, freeCashFlow: 100 }),
+        makeFinancialsRow({ fiscalYear: 2023 }), // no FCF line
+        makeFinancialsRow({ fiscalYear: 2024 }), // no FCF line
+        makeFinancialsRow({ fiscalYear: 2025, freeCashFlow: 150, dividendsPerShare: 0.14, sharesDiluted: 1000 }),
+      ],
+    });
+    // dividendTotal = 0.14 × 1000 = 140. Last 3 non-null FCF years: 2021, 2022, 2025 ⇒
+    // mean (100 + 100 + 150) / 3 ≈ 116.7 < 140 ⇒ fires. (The last 3 ROWS hold only 150,
+    // which would have read as covered.)
+    const warning = checkReconciliation(extract, makeBasis()).find((w) => w.code === "dividend_not_covered");
+    expect(warning).toBeDefined();
+    expect(warning!.detail).toBe("140.0 vs 116.7 (3y mean)");
+  });
+
   it("does not fire when either input is unavailable (degrades silently, never guesses)", () => {
     const extract = makeExtract({
       financials: [makeFinancialsRow({ fiscalYear: 2025, dividendsPerShare: 0.5, sharesDiluted: 900 })], // no freeCashFlow anywhere
     });
     expect(checkReconciliation(extract, makeBasis()).some((w) => w.code === "dividend_not_covered")).toBe(false);
+  });
+});
+
+describe("checkCurrencyMismatch", () => {
+  it("returns null when the reporting currency matches the quote currency", () => {
+    expect(checkCurrencyMismatch(makeExtract({ meta: makeMeta({ reportingCurrency: "EUR" }) }), "EUR")).toBeNull();
+  });
+
+  it("warns on a different currency, with both codes as the (language-invariant) detail", () => {
+    expect(checkCurrencyMismatch(makeExtract({ meta: makeMeta({ reportingCurrency: "EUR" }) }), "USD")).toEqual({
+      code: "currency_mismatch",
+      severity: "warn",
+      fiscalYear: null,
+      detail: "EUR vs USD",
+    });
+  });
+
+  it("is case-sensitive like the anchors' guard — GBp (pence) is NOT GBP (pounds)", () => {
+    expect(checkCurrencyMismatch(makeExtract({ meta: makeMeta({ reportingCurrency: "GBP" }) }), "GBp")?.detail).toBe("GBP vs GBp");
+  });
+
+  it("warns with '?' when the reporting currency was never determined (the anchors skip that case too)", () => {
+    expect(checkCurrencyMismatch(makeExtract(), "EUR")?.detail).toBe("? vs EUR");
   });
 });

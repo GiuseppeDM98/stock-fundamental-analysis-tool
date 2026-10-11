@@ -218,7 +218,7 @@ export default function NavBar() {
                 transition={{ duration: 0.2 }}
               >
                 <div
-                  className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                  className="absolute inset-0 bg-black/60 backdrop-blur-xs"
                   onClick={() => setMenuOpen(false)}
                 />
                 <motion.div

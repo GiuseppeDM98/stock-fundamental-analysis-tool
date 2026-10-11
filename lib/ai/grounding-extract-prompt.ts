@@ -1,14 +1,14 @@
 /**
- * Prompt builders for the Grounded Deep Value extraction endpoint (Sonnet 5, no web
+ * Prompt builders for the Grounded Deep Value extraction endpoint (Sonnet 5.5, no web
  * search — pure transcription, not judgment). One call per pasted block, scoped by
  * `GroundingBlockKind` so the model only ever attempts the fields relevant to that
  * block's statement type — narrower schema, fewer degrees of freedom, less hallucination
- * risk (docs/deep-value-grounding-spec.md §6.2).
+ * risk.
  *
- * KEEP THE JSON EXAMPLE BELOW IN SYNC, FIELD-FOR-FIELD, WITH THE ZOD SCHEMA in
- * app/api/ai/grounding/extract/route.ts — the pair together IS the output contract
- * (spec §6.2: "il JSON di esempio nel prompt deve stare in corrispondenza 1:1 con lo
- * schema Zod"). Plain string builders (no server-only): imported by that route only.
+ * KEEP THE JSON EXAMPLES BELOW IN SYNC, FIELD-FOR-FIELD, WITH THE ZOD SCHEMAS in
+ * lib/ai/grounding-extract-schema.ts — the pair together IS the output contract, and
+ * __tests__/grounding-extract-contract.test.ts fails when they drift.
+ * Plain string builders (no server-only): imported by the extraction route only.
  */
 import type { GroundingBlockKind } from "@/types/grounding";
 
@@ -18,7 +18,7 @@ type KindConfig = {
   label: string;
   // Bullet list of exactly which fields to extract for this block kind.
   instructions: string;
-  // Fenced-JSON example — must match the kind's Zod schema in the extract route field-for-field.
+  // Fenced-JSON example — must match the kind's Zod schema (lib/ai/grounding-extract-schema.ts) field-for-field.
   example: string;
 };
 
@@ -109,14 +109,14 @@ The peer's ticker is already known from context — do not try to extract it.`,
   },
   other: {
     label: "financial data",
-    instructions: `This block didn't fit one of the specific categories. Extract whatever you can find into the appropriate array(s) — "financials" (income/balance/cash-flow fields, full shape below), "multiples" (valuation multiples), "estimates" (forward operating estimates). OMIT an entire array if the text has nothing for it (do not emit an empty array). Every row you DO include must state EVERY field of its shape — null for anything not present, never omit a key.`,
+    instructions: `This block didn't fit one of the specific categories. Extract whatever you can find into the appropriate array(s) — "financials" (income/balance/cash-flow fields, full shape below), "multiples" (valuation multiples), "estimates" (forward operating estimates). OMIT an entire array if the text has nothing for it (do not emit an empty array). Every row you DO include must state EVERY field of its shape — null for anything not present, never omit a key. In "multiples", fcfYield/dividendYield are PERCENTAGES (6.2 for 6.2%), and marketCap/enterpriseValue are transcribed only from an explicit Market Cap / Enterprise Value column (same unit as meta.units) — never computed from other columns; null otherwise.`,
     example: `{
   "meta": { "reportingCurrency": "EUR", "units": "millions", "latestPeriodLabel": "FY2025", "fiscalYearEnd": "December" },
   "financials": [
     { "fiscalYear": 2025, "revenue": 93727, "ebitda": 14700, "ebit": 6200, "netIncome": 4765, "eps": 1.51, "totalEquity": 45200, "minorityInterest": 3200, "totalDebt": 20100, "cashAndEquivalents": 8600, "netDebt": 11500, "sharesDiluted": 3150, "cfo": 12800, "capex": -8200, "freeCashFlow": 4600, "dividendsPerShare": 0.94 }
   ],
   "multiples": [
-    { "fiscalYear": 2025, "evEbitda": 3.8, "evSales": 0.6, "pe": 9.2, "pb": 0.9, "fcfYield": 8.1, "dividendYield": 6.2 }
+    { "fiscalYear": 2025, "evEbitda": 3.8, "evSales": 0.6, "pe": 9.2, "pb": 0.9, "fcfYield": 8.1, "dividendYield": 6.2, "marketCap": null, "enterpriseValue": null }
   ],
   "estimates": [
     { "fiscalYear": 2026, "revenue": 95000, "ebitda": 15100, "ebit": 6500, "netIncome": 4900, "eps": 1.58 }
@@ -137,8 +137,8 @@ export function buildGroundingExtractSystemPrompt({ kind }: { kind: GroundingBlo
 
 RULES (mandatory):
 - Transcribe ONLY what is explicitly present in the text. If a value is not stated, output null — never estimate, infer, or carry a value forward from another year.
-- Do NOT perform any arithmetic (no computing ratios, no summing, no unit conversion) — copy the numbers as given in the source.
-- UNIT NOTE (critical): infer meta.units — the paste's reporting scale ("billions" | "millions" | "thousands" | "units") — from the table's headers/footnotes, and report EVERY monetary value on that SAME scale. Share counts MUST be on the SAME scale as the monetary values too: if units is "millions", a share count of 3.15 billion shares is reported as 3150 — not 3150000000 and not 3.15.
+- Do NOT perform any arithmetic: no computing ratios, no summing, no currency conversion, and no rescaling of monetary values or multiples — copy them exactly as given in the source. The ONLY permitted conversion is the share-count rescaling described in the UNIT NOTE below.
+- UNIT NOTE (critical): infer meta.units — the scale the table's MONETARY values are stated in ("billions" | "millions" | "thousands" | "units") — from its headers/footnotes, and copy every monetary value as shown, on that scale. Share counts must end up on that SAME scale: if the source already states them on it, copy them as-is; if it states them on a different scale (e.g. raw shares, or "in thousands" while money is "in millions"), rescale ONLY the share count to the monetary scale. Example: units "millions" and a share count of 3.15 billion shares → 3150 (not 3150000000, not 3.15). Per-share values (eps, dividendsPerShare), multiples and percentages are never rescaled.
 - meta.reportingCurrency is the currency the table is denominated in (e.g. "EUR", "USD") — infer from a header/footnote symbol or label; null if genuinely unclear.
 - meta.latestPeriodLabel is the most recent period covered by THIS block (e.g. "FY2025" or "Q1 2026"). meta.fiscalYearEnd is the month the fiscal year ends (e.g. "December"), if stated.
 - Preserve the sign shown in the source (e.g. capex is often shown as a negative outflow) — don't force a sign convention.

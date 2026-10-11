@@ -1,10 +1,8 @@
-// Golden capture-and-diff test for Quick mode (no `grounding`, no `blindFirst`) — spec
-// docs/deep-value-rigor-v2-spec.md §0 hard invariant: "Quick mode resta byte-identico."
-// Snapshots are captured from the pre-v2 prompt builders and MUST NOT change as the rest
-// of the v2 spec is implemented. If a snapshot in this file needs updating, that is a
-// signal the change leaked into Quick mode — stop and verify it was intentional before
-// re-running with `-u`. Written FIRST, before touching lib/ai/deep-value-prompts.ts
-// (spec §9 commit 1).
+// Golden capture-and-diff test for Quick mode (no `grounding`, no `blindFirst`). Hard
+// invariant: Grounded and blind-first work must leave Quick-mode prompts byte-identical,
+// so these snapshots MUST NOT change when the shared prompt builders are touched. If a
+// snapshot in this file needs updating, that is a signal the change leaked into Quick
+// mode — stop and verify it was intentional before re-running with `-u`.
 import { describe, it, expect } from "vitest";
 import {
   buildDeepValueSystemPrompt,

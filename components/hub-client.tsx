@@ -70,7 +70,7 @@ export default function HubClient({ isAuthed }: { isAuthed: boolean }) {
             onChange={(e) => setTicker(e.target.value)}
             placeholder={t("hubTickerPlaceholder")}
             maxLength={12}
-            className="w-full rounded-lg border border-slate-700/60 bg-[var(--card)] px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-sky-500/50 focus:ring-2 focus:ring-sky-400/30"
+            className="w-full rounded-lg border border-slate-700/60 bg-[var(--card)] px-3 py-2.5 text-sm text-slate-100 outline-hidden transition focus:border-sky-500/50 focus:ring-2 focus:ring-sky-400/30"
           />
           <button
             type="submit"

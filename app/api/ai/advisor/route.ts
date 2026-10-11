@@ -12,7 +12,7 @@ import { resolveAiSettings } from "@/lib/ai/ai-preferences";
 import { runStreamWithToolLoop } from "@/lib/ai/tool-loop";
 import { AI_MODEL_IDS, AI_EFFORT_LEVELS, type AiSettings } from "@/types/ai-settings";
 
-const DEFAULT_SETTINGS: AiSettings = { model: "claude-sonnet-5", effort: "high", thinking: true };
+const DEFAULT_SETTINGS: AiSettings = { model: "claude-sonnet-5-5", effort: "high", thinking: true };
 
 const messageSchema = z.object({
   role: z.enum(["user", "assistant"]),
@@ -151,7 +151,7 @@ export async function POST(request: Request) {
               // stop_reason "max_tokens". This is a ceiling, not a target — the model
               // still stops at end_turn, so normal replies cost the same.
               max_tokens: 16000,
-              thinking: buildThinkingParam(aiSettings.thinking),
+              thinking: buildThinkingParam(aiSettings.thinking, aiSettings.model, aiSettings.effort),
               output_config: buildEffortConfig(aiSettings.effort),
               system: systemPrompt,
               tools: buildWebSearchTools(aiSettings.model),

@@ -1,7 +1,7 @@
 // Reconciliation "linter" for the Grounded Deep Value mode — spots numbers in the pasted
 // financials that don't tie together (a transcription slip, a unit-scale mistake, a stale
-// share count). Pure, no server-only — shared by the extraction route and any future UI
-// preview. See docs/deep-value-grounding-spec.md §5.1.
+// share count). Pure, no server-only — shared by the extraction route and the Grounded
+// prompt builder (lib/grounding/prompt-format.ts).
 //
 // These warnings are surfaced to the user, never blocking: stopping a 30-60s streaming run
 // on a suspected transcription error is bad UX, and the human reviewing the preview is
@@ -21,7 +21,11 @@ export type ReconciliationWarning = {
     | "no_multiples"
     | "missing_bridge_inputs"
     | "block_extract_failed"
-    // NEW (docs/deep-value-rigor-v2-spec.md §2.5) — the basis-reconciliation warnings.
+    // Two statement blocks declared a different reporting currency / unit scale — emitted
+    // by lib/grounding/merge.ts; the merged meta keeps the first-seen value.
+    | "meta_currency_conflict"
+    | "meta_units_conflict"
+    // Basis-reconciliation warnings, derived from lib/grounding/basis.ts.
     | "basis_mismatch"
     | "basis_unverifiable"
     | "ev_bridge_mismatch"
@@ -39,8 +43,9 @@ const RATIO_TOLERANCE = 0.1; // 10%
 // netDebt ≈ totalDebt − cash is a straight arithmetic identity — tighter tolerance.
 const IDENTITY_TOLERANCE = 0.02; // 2%
 const SHARE_COUNT_JUMP_THRESHOLD = 0.1; // 10% YoY
-// dividend_not_covered looks back this many non-null FCF years for its average — enough to
-// smooth a single weak year without diluting a genuine multi-year coverage shortfall.
+// dividend_not_covered averages the latest this-many fiscal years that actually REPORT a
+// free cash flow (gaps are skipped, not counted) — enough to smooth a single weak year
+// without diluting a genuine multi-year coverage shortfall.
 const PAYOUT_LOOKBACK_YEARS = 3;
 
 function relDiff(stated: number, derived: number): number {
@@ -124,7 +129,7 @@ export function checkReconciliation(extract: GroundedFinancials, basis: BasisRec
     }
   }
 
-  // Basis-reconciliation warnings (spec §2.5) — these depend on `basis`, not just `extract`,
+  // Basis-reconciliation warnings — these depend on `basis`, not just `extract`,
   // so they can't be folded into the per-row loop above.
   if (basis.kE == null) {
     warnings.push({ code: "basis_unverifiable", severity: "warn", fiscalYear: null, detail: "evSales/enterpriseValue absent" });
@@ -143,14 +148,16 @@ export function checkReconciliation(extract: GroundedFinancials, basis: BasisRec
   }
 
   // dividend_not_covered — a high payout funded by debt rather than cash generation is a
-  // RISK, never support for the thesis (spec §2.5 — the one check no reviewer ran on Iren).
+  // RISK, never support for the thesis (a real Iren report read a debt-funded payout as support).
   const latestFy = rows[rows.length - 1];
   if (latestFy?.dividendsPerShare != null && latestFy.sharesDiluted != null) {
     const dividendTotal = latestFy.dividendsPerShare * latestFy.sharesDiluted;
+    // Filter BEFORE slicing: a recent year with no FCF line must push the window further
+    // back, not shrink it — otherwise one gap turns a 3-year mean into a 1-year read.
     const recentFcf = rows
-      .slice(-PAYOUT_LOOKBACK_YEARS)
       .map((r) => r.freeCashFlow)
-      .filter((v): v is number => v != null);
+      .filter((v): v is number => v != null)
+      .slice(-PAYOUT_LOOKBACK_YEARS);
     if (recentFcf.length > 0) {
       const fcfMean = recentFcf.reduce((s, v) => s + v, 0) / recentFcf.length;
       if (dividendTotal > fcfMean) {
@@ -165,4 +172,27 @@ export function checkReconciliation(extract: GroundedFinancials, basis: BasisRec
   }
 
   return warnings;
+}
+
+/**
+ * `currency_mismatch` when the extract's reporting currency is unknown or differs from the
+ * quote currency, else null. Mirrors the currency guard in computeMarketImplied /
+ * computeImpliedExpectations (lib/grounding/anchors.ts) EXACTLY — same strict comparison,
+ * so "GBp" (pence quote) vs "GBP" (pound statements) is a mismatch, as it must be — so
+ * whenever those reads are dropped for currency reasons, this warning is what explains it.
+ * Shared by the prompt context builder (so the model and the analyst lenses are told why
+ * the market-implied section is missing) and the UI surfaces.
+ *
+ * @param extract Only `meta.reportingCurrency` is read; the whole extract may be passed.
+ * @param quoteCurrency The live quote's currency.
+ */
+export function checkCurrencyMismatch(extract: Pick<GroundedFinancials, "meta">, quoteCurrency: string): ReconciliationWarning | null {
+  const reporting = extract.meta.reportingCurrency;
+  if (reporting && reporting === quoteCurrency) return null;
+  return {
+    code: "currency_mismatch",
+    severity: "warn",
+    fiscalYear: null,
+    detail: `${reporting ?? "?"} vs ${quoteCurrency || "?"}`,
+  };
 }

@@ -1,8 +1,125 @@
 @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap");
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/*
+ * Tailwind CSS 4. Class names are scanned only where Tailwind 3's `content` globs looked
+ * (app/, components/, lib/): automatic detection would also read the Markdown docs, whose
+ * prose mentions class names, and ship CSS for them.
+ */
+@import "tailwindcss" source(none);
+@import "./tailwind-v3-palette.css";
+@source "../app";
+@source "../components";
+@source "../lib";
+
+/* Only the typography plugin's `prose-report` variant still needs the JS config. */
+@config "../tailwind.config.ts";
+
+/*
+ * Design tokens. The colour values live in the plain custom properties in :root below;
+ * these register them as Tailwind colours so `bg-card`, `text-muted`, … work. `inline` makes
+ * the utilities reference var(--card) etc. directly, as Tailwind 3 did.
+ */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-accent: var(--accent);
+  --color-muted: var(--muted);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+}
+
+/* `font-display` / `font-body`. Not inline: the `prose-report` variant in tailwind.config.ts
+   reads these variables. */
+@theme {
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui;
+  --font-body: Manrope, ui-sans-serif, system-ui;
+  /* Tailwind 3's sans stack (`font-sans`, and the page default): Tailwind 4.3 starts it with
+     -apple-system/BlinkMacSystemFont instead. */
+  --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+
+  /* Tailwind 3 line heights. Tailwind 4 states them as ratios (text-xs: 1.333) instead of
+     lengths (text-xs: 1rem): the same on the element itself, but a child that only changes
+     the font size (`text-[10px]` inside `text-xs`) inherits the ratio and shrinks its line. */
+  --text-xs--line-height: 1rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl--line-height: 2rem;
+  --text-3xl--line-height: 2.25rem;
+  --text-4xl--line-height: 2.5rem;
+}
+
+/*
+ * Keep hover styles on touch devices too: Tailwind 4 wraps `hover:` in
+ * `@media (hover: hover)`, Tailwind 3 did not.
+ */
+@custom-variant hover (&:hover);
+
+/*
+ * Tailwind 3 preflight defaults that Tailwind 4 changed. Elements that rely on them
+ * (a `border` with no colour, a placeholder with no colour, any <button>, an unpadded
+ * table cell) render as they did before the upgrade.
+ */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-gray-400);
+  }
+
+  button,
+  [role="button"] {
+    cursor: pointer;
+  }
+
+  :disabled {
+    cursor: default;
+  }
+
+  /* Tailwind 4 zeroes every element's padding; Tailwind 3 left table cells the browsers'
+     default 1px (a `revert` would not restore it: Chromium applies it as a presentational
+     hint, not a user-agent rule). */
+  td,
+  th {
+    padding: 1px;
+  }
+
+  /* Tailwind 4 resizes date inputs to the height of a text input (2px shorter in Chromium);
+     these hand the date/time internals back to the browser, as Tailwind 3 did. */
+  ::-webkit-date-and-time-value {
+    min-height: revert;
+    text-align: revert;
+  }
+  ::-webkit-datetime-edit {
+    display: revert;
+  }
+  ::-webkit-datetime-edit-fields-wrapper {
+    padding: revert;
+  }
+  ::-webkit-datetime-edit,
+  ::-webkit-datetime-edit-year-field,
+  ::-webkit-datetime-edit-month-field,
+  ::-webkit-datetime-edit-day-field,
+  ::-webkit-datetime-edit-hour-field,
+  ::-webkit-datetime-edit-minute-field,
+  ::-webkit-datetime-edit-second-field,
+  ::-webkit-datetime-edit-millisecond-field,
+  ::-webkit-datetime-edit-meridiem-field {
+    padding-block: revert;
+  }
+  ::-webkit-calendar-picker-indicator {
+    line-height: revert;
+  }
+}
 
 :root {
   --bg: #0a101f;
@@ -14,88 +131,106 @@
   --danger: #ef4444;
 }
 
-body {
-  min-height: 100vh;
-  background:
-    radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.14), transparent 30%),
-    radial-gradient(circle at 80% 20%, rgba(16, 185, 129, 0.13), transparent 35%),
-    linear-gradient(140deg, #070d19 0%, #0c1628 45%, #0d1f2e 100%);
-}
-
-.card {
-  @apply rounded-2xl border border-slate-800/70 bg-card p-5 shadow-[0_10px_40px_-20px_rgba(56,189,248,0.45)] backdrop-blur-sm;
-}
-
-/*
- * Touch-target floor (WCAG 2.5.5 / 44px).
- *
- * Gated on `pointer: coarse` rather than a viewport width so the desktop's
- * intentionally compact, data-dense controls keep their density, while real
- * touch input (phone, tablet, touchscreen laptop) gets a finger-sized hit area.
- * Apply `.tap` to the small quick-action / icon buttons that are too small to
- * tap reliably; full-width form controls don't need it.
- */
-@media (pointer: coarse) {
-  .tap {
-    min-height: 44px;
-    min-width: 44px;
+/* In the base layer so utilities on <body> (`bg-bg`) still take precedence, as in Tailwind 3. */
+@layer base {
+  body {
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.14), transparent 30%),
+      radial-gradient(circle at 80% 20%, rgba(16, 185, 129, 0.13), transparent 35%),
+      linear-gradient(140deg, #070d19 0%, #0c1628 45%, #0d1f2e 100%);
   }
 }
 
 /*
- * Responsive table → cards (below sm / 640px).
- *
- * Add `.rtable` to a <table> and each row renders as a card on phones: the
- * header is hidden and every cell becomes a label/value row, the label taken
- * from the cell's `data-label`. Cells that carry their own heading or a button
- * cluster opt out with `.rcell-block` (full-width, no generated label). This
- * keeps one markup + logic source — no duplicated mobile component to drift.
+ * In the components layer, so any utility on the same element wins: `print:` and `hover:`
+ * variants on a card override its border/background/shadow.
  */
-@media (max-width: 639px) {
-  .rtable,
-  .rtable tbody,
-  .rtable tr,
-  .rtable td {
-    display: block;
-    width: 100%;
+@layer components {
+  .card {
+    @apply rounded-2xl border border-slate-800/70 bg-card p-5 shadow-[0_10px_40px_-20px_rgba(56,189,248,0.45)] backdrop-blur-xs;
   }
-  .rtable thead {
-    display: none;
+}
+
+/*
+ * The two helpers below sit in the utilities layer, after Tailwind's own utilities: they
+ * override a plain utility on the same element (`.rtable td` beats a cell's `py-2.5`, as
+ * documented), while a variant with a higher specificity (`last:border-0`) still overrides
+ * them, which is how they behaved with Tailwind 3. Outside any layer they would beat every
+ * utility.
+ */
+@layer utilities {
+  /*
+   * Touch-target floor (WCAG 2.5.5 / 44px).
+   *
+   * Gated on `pointer: coarse` rather than a viewport width so the desktop's
+   * intentionally compact, data-dense controls keep their density, while real
+   * touch input (phone, tablet, touchscreen laptop) gets a finger-sized hit area.
+   * Apply `.tap` to the small quick-action / icon buttons that are too small to
+   * tap reliably; full-width form controls don't need it.
+   */
+  @media (pointer: coarse) {
+    .tap {
+      min-height: 44px;
+      min-width: 44px;
+    }
   }
-  .rtable tr {
-    margin-bottom: 0.75rem;
-    border: 1px solid rgb(30 41 59 / 0.6); /* slate-800/60 */
-    border-radius: 0.75rem;
-    padding: 0.5rem 0.875rem;
-  }
-  .rtable tr:last-child {
-    margin-bottom: 0;
-  }
-  .rtable td {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 0.3rem 0;
-    text-align: right;
-    border: 0;
-  }
-  .rtable td::before {
-    content: attr(data-label);
-    text-align: left;
-    white-space: nowrap;
-    color: var(--muted);
-    font-size: 0.7rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  .rtable td.rcell-block {
-    display: block;
-    text-align: left;
-    padding: 0.25rem 0;
-  }
-  .rtable td.rcell-block::before {
-    content: none;
+
+  /*
+   * Responsive table → cards (below sm / 640px).
+   *
+   * Add `.rtable` to a <table> and each row renders as a card on phones: the
+   * header is hidden and every cell becomes a label/value row, the label taken
+   * from the cell's `data-label`. Cells that carry their own heading or a button
+   * cluster opt out with `.rcell-block` (full-width, no generated label). This
+   * keeps one markup + logic source — no duplicated mobile component to drift.
+   */
+  @media (max-width: 639px) {
+    .rtable,
+    .rtable tbody,
+    .rtable tr,
+    .rtable td {
+      display: block;
+      width: 100%;
+    }
+    .rtable thead {
+      display: none;
+    }
+    .rtable tr {
+      margin-bottom: 0.75rem;
+      border: 1px solid rgb(30 41 59 / 0.6); /* slate-800/60 */
+      border-radius: 0.75rem;
+      padding: 0.5rem 0.875rem;
+    }
+    .rtable tr:last-child {
+      margin-bottom: 0;
+    }
+    .rtable td {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.3rem 0;
+      text-align: right;
+      border: 0;
+    }
+    .rtable td::before {
+      content: attr(data-label);
+      text-align: left;
+      white-space: nowrap;
+      color: var(--muted);
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .rtable td.rcell-block {
+      display: block;
+      text-align: left;
+      padding: 0.25rem 0;
+    }
+    .rtable td.rcell-block::before {
+      content: none;
+    }
   }
 }

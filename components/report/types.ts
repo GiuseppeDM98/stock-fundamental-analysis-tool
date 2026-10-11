@@ -2,12 +2,12 @@
 // either live (deep-value-panel) or reconstructed from a saved Analysis.reportMd.
 
 /**
- * A scenario's declared EV→equity bridge — Grounded mode only (spec
- * §5.5/deep-value-grounding-spec.md). `fairValue` on `Scenario` is a MoS-adjusted buy
- * target; `intrinsicPerShare` here is the PRE-MoS value the bridge arithmetic produces —
- * never the same number as `fairValue` unless MoS is 0 (the §5.4 "MoS trap":
- * lib/grounding/postcheck.ts grosses `fairValue` up via `grossUpToIntrinsic` before
- * comparing it against this field, precisely because they are NOT interchangeable).
+ * A scenario's declared EV→equity bridge — Grounded mode only. `fairValue` on `Scenario`
+ * is a MoS-adjusted buy target; `intrinsicPerShare` here is the PRE-MoS value the bridge
+ * arithmetic produces — never the same number as `fairValue` unless MoS is 0 (comparing
+ * them directly would fail every check: lib/grounding/postcheck.ts grosses `fairValue` up
+ * via `grossUpToIntrinsic` before comparing it against this field, precisely because they
+ * are NOT interchangeable).
  * `multiple` is absent for DCF/DDM, where no single multiple exists.
  */
 export type ValuationBridge = {
@@ -15,8 +15,7 @@ export type ValuationBridge = {
   driverValue: number;
   /** The fiscal year driverValue refers to — feeds the horizon_consistent gate (bull/base/
    *  bear must be underwritten to the same year) and the trailing_forward gate (a forward
-   *  driverYear isn't directly comparable to a trailing historical distribution). See
-   *  docs/deep-value-rigor-v2-spec.md §3/§4. */
+   *  driverYear isn't directly comparable to a trailing historical distribution). */
   driverYear: number;
   multiple?: number;
   netDebt: number;
@@ -28,8 +27,8 @@ export type ValuationBridge = {
 export type Scenario = {
   fairValue: number;
   /** 0..1 — bull+base+bear should sum to ≈1. Feeds the probabilities gate and
-   *  PostCheck.expectedValue (docs/deep-value-rigor-v2-spec.md §4). Optional: absent on
-   *  older saved reports and on any report where the model didn't declare one. */
+   *  PostCheck.expectedValue. Optional: absent on older saved reports and on any report
+   *  where the model didn't declare one. */
   probability?: number;
   bridge?: ValuationBridge;
 };
@@ -52,13 +51,13 @@ export type CrossCheck = {
   reconciliation: string; // 1-2 sentences: why the two methods diverge
   /** The cross-check's OWN EV→equity bridge — Grounded mode only, omitted when the
    *  cross-check method has no multiple (e.g. DDM). Lets lib/grounding/postcheck.ts verify
-   *  the cross-check's own arithmetic (today nothing does) and same-basis-ness, the same
-   *  way it already does for bull/base/bear. `intrinsicPerShare` is deliberately NOT
+   *  the cross-check's own arithmetic and same-basis-ness, the same way it does for
+   *  bull/base/bear. `intrinsicPerShare` is deliberately NOT
    *  repeated here — it's the field above, shared with the recomputed value. Added after a
    *  live run (Webuild) showed the primary method can have no `multiple` to basis-check at
    *  all (DCF/DDM) while the cross-check is exactly where an unverified basis mismatch
-   *  surfaces (docs/deep-value-rigor-v2-spec.md's basis_same gate is "unavailable" in that
-   *  case — this bridge is what a same-basis check on the cross-check needs instead). */
+   *  surfaces (the basis_same gate is "unavailable" in that case — this bridge is what
+   *  the cross_check_basis gate checks instead). */
   bridge?: Omit<ValuationBridge, "intrinsicPerShare">;
 };
 
@@ -74,15 +73,20 @@ export type DeepValueResult = {
 };
 
 /** Analyst-lens-only fields, layered on top of DeepValueResult — the shape one lens's JSON
- *  block actually carries (docs/deep-value-rigor-v2-spec.md §3). Everything else in a
- *  lens's block is identical to DeepValueResult. */
+ *  block actually carries. Everything else in a lens's block is identical to
+ *  DeepValueResult. */
 export type AnalystResult = DeepValueResult & {
   /** Skeptic lens only. The price below which the thesis is dead. null ONLY when the lens
    *  explicitly declares it cannot construct one — never a silent omission. Feeds the
    *  kill_price gate. */
   killPrice?: number | null;
-  /** Blind-first mode only (docs/deep-value-rigor-v2-spec.md §6) — the machine-readable
-   *  drift between the lens's blind (pre-report) commitment and its final (post-report)
-   *  one. Empty array = no revisions, not "not applicable". */
+  /** Skeptic lens only. Why no kill price could be constructed — set together with a null
+   *  `killPrice` when the lens explicitly declines (e.g. a thesis that has no single price
+   *  trigger). A null killPrice WITH a non-empty note is an honest "unavailable" for the
+   *  kill_price gate; a null WITHOUT one is a silent omission and fails it. */
+  killPriceNote?: string;
+  /** Blind-first mode only — the machine-readable drift between the lens's blind
+   *  (pre-report) commitment and its final (post-report) one. Empty array = no revisions,
+   *  not "not applicable". */
   revisions?: { scenario: "bull" | "base" | "bear"; from: number; to: number; reason: string }[];
 };

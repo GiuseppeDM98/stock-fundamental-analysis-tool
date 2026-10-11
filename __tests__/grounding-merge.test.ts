@@ -143,14 +143,92 @@ describe("mergeExtractedBlocks", () => {
     expect(tte.companyName).toBe("TotalEnergies");
   });
 
-  it("first non-null value wins per meta field across blocks", () => {
+  it("first non-null value wins per meta field across statement blocks, and a currency clash is warned, not silently outvoted", () => {
     const results: BlockExtractResult[] = [
       { kind: "income_statement", meta: { reportingCurrency: "EUR" } },
       { kind: "balance_sheet", meta: { reportingCurrency: "USD", units: "millions" } },
     ];
-    const { extract } = mergeExtractedBlocks(results);
+    const { extract, warnings } = mergeExtractedBlocks(results);
     expect(extract.meta.reportingCurrency).toBe("EUR"); // first-seen wins
     expect(extract.meta.units).toBe("millions"); // only source — fills the gap
+    expect(warnings).toEqual([{ code: "meta_currency_conflict", severity: "warn", fiscalYear: null, detail: "EUR vs USD" }]);
+  });
+
+  it("a peer block in another currency never sets the subject's reportingCurrency (and isn't a conflict)", () => {
+    const results: BlockExtractResult[] = [
+      // The peer comes FIRST — under a first-non-null-across-all-blocks rule it would win.
+      { kind: "peer_valuation", peerTicker: "SHEL", meta: { reportingCurrency: "USD", units: "billions" }, multiples: [makeMultiplesRow({ fiscalYear: 2025, evEbitda: 4.1 })] },
+      { kind: "income_statement", meta: { reportingCurrency: "EUR", units: "millions" } },
+    ];
+    const { extract, warnings } = mergeExtractedBlocks(results);
+    expect(extract.meta.reportingCurrency).toBe("EUR");
+    expect(extract.meta.units).toBe("millions");
+    expect(warnings).toEqual([]);
+  });
+
+  it("an estimates block's (future) label never becomes the coverage date", () => {
+    const results: BlockExtractResult[] = [
+      { kind: "estimates", meta: { latestPeriodLabel: "FY2027" }, estimates: [makeEstimateRow({ fiscalYear: 2027, ebitda: 1 })] },
+      { kind: "income_statement", meta: { latestPeriodLabel: "FY2025" } },
+    ];
+    expect(mergeExtractedBlocks(results).extract.meta.latestPeriodLabel).toBe("FY2025");
+  });
+
+  it("takes the LATEST coverage label across statement blocks, not the first", () => {
+    const results: BlockExtractResult[] = [
+      { kind: "income_statement", meta: { latestPeriodLabel: "FY2025" } },
+      { kind: "balance_sheet", meta: { latestPeriodLabel: "Q1 2026" } }, // 2026 × 12 + 3 > 2025 × 12 + 12
+      { kind: "cash_flow", meta: { latestPeriodLabel: "H1 2025" } },
+    ];
+    expect(mergeExtractedBlocks(results).extract.meta.latestPeriodLabel).toBe("Q1 2026");
+  });
+
+  it("orders quarter labels within the same year and falls back to the first label when none is datable", () => {
+    expect(
+      mergeExtractedBlocks([
+        { kind: "income_statement", meta: { latestPeriodLabel: "Q2 2026" } },
+        { kind: "balance_sheet", meta: { latestPeriodLabel: "Q3 2026" } },
+      ]).extract.meta.latestPeriodLabel
+    ).toBe("Q3 2026");
+    expect(
+      mergeExtractedBlocks([
+        { kind: "income_statement", meta: { latestPeriodLabel: "latest" } },
+        { kind: "balance_sheet", meta: { latestPeriodLabel: "most recent" } },
+      ]).extract.meta.latestPeriodLabel
+    ).toBe("latest");
+  });
+
+  it("warns on a thousands-vs-millions clash between statement blocks (every ratio would be off by 1000×)", () => {
+    const results: BlockExtractResult[] = [
+      { kind: "income_statement", meta: { units: "millions" } },
+      { kind: "balance_sheet", meta: { units: "thousands" } },
+      { kind: "cash_flow", meta: { units: "thousands" } }, // same clash again — reported once
+    ];
+    const { extract, warnings } = mergeExtractedBlocks(results);
+    expect(extract.meta.units).toBe("millions");
+    expect(warnings).toEqual([{ code: "meta_units_conflict", severity: "warn", fiscalYear: null, detail: "millions vs thousands" }]);
+  });
+
+  it("an estimates block in a different unit scale is warned (its EBITDA feeds the grid) but never sets meta", () => {
+    const results: BlockExtractResult[] = [
+      { kind: "estimates", meta: { units: "billions", reportingCurrency: "EUR" }, estimates: [makeEstimateRow({ fiscalYear: 2026, ebitda: 15 })] },
+      { kind: "income_statement", meta: { units: "millions", reportingCurrency: "EUR" } },
+    ];
+    const { extract, warnings } = mergeExtractedBlocks(results);
+    expect(extract.meta.units).toBe("millions");
+    expect(warnings.map((w) => w.code)).toEqual(["meta_units_conflict"]);
+  });
+
+  it("an 'other' block counts as a statement source only when it contributed financials/multiples rows", () => {
+    const withRows = mergeExtractedBlocks([
+      { kind: "other", meta: { reportingCurrency: "CHF" }, financials: [makeFinancialsRow({ fiscalYear: 2025, revenue: 1 })] },
+    ]);
+    expect(withRows.extract.meta.reportingCurrency).toBe("CHF");
+    const estimatesOnly = mergeExtractedBlocks([
+      { kind: "other", meta: { reportingCurrency: "CHF", latestPeriodLabel: "FY2027" }, estimates: [makeEstimateRow({ fiscalYear: 2027 })] },
+    ]);
+    expect(estimatesOnly.extract.meta.reportingCurrency).toBeNull();
+    expect(estimatesOnly.extract.meta.latestPeriodLabel).toBeNull();
   });
 
   it("returns an empty, well-shaped extract on garbage/empty input", () => {

@@ -1,6 +1,7 @@
 import "server-only";
 import type Anthropic from "@anthropic-ai/sdk";
 import { executeWebSearch } from "@/lib/ai/web-search-tool";
+import { AI_MODEL_CATALOG, type AiModelId } from "@/types/ai-settings";
 
 // Default cap for the client-side agentic loop for the custom web_search tool (DeepSeek
 // path). Claude's web_search runs server-side and never surfaces a client-visible
@@ -31,34 +32,77 @@ const DEFAULT_MAX_TOOL_ITERATIONS = 10;
 export const DEEP_RESEARCH_MAX_TOOL_ITERATIONS = 35;
 
 // Cap for Grounded-mode Deep Value runs (and its analyst lenses) — lower than the Quick
-// cap above because the web search is RESCOPED, not eliminated (spec §5.6): the model no
+// cap above because the web search is RESCOPED, not eliminated: the model no
 // longer needs to research 5y of financials/multiples/comparables (they're provided), it
 // only needs the post-coverage-date update + qualitative material. DeepSeek-only in
 // effect, same as DEEP_RESEARCH_MAX_TOOL_ITERATIONS — Claude's server-side web_search
 // never surfaces a client tool_use, so its loop exits after one iteration regardless.
 export const GROUNDED_MAX_TOOL_ITERATIONS = 12;
 
-// Cap for the blind-first analyst lenses' RECONCILE turn (docs/deep-value-rigor-v2-spec.md
-// §6.1.5) — that turn reconciles a commitment already made against the finished report, it
-// does not research from scratch, so it needs far fewer rounds than either research cap
-// above. Left at the shared default (10) would double the cost of the loop for no benefit.
+// Cap for the blind-first analyst lenses' RECONCILE turn — that turn reconciles a
+// commitment already made against the finished report, it does not research from scratch,
+// so it needs far fewer rounds than either research cap above. Left at the shared default
+// (10) would double the cost of the loop for no benefit.
 export const RECONCILE_MAX_TOOL_ITERATIONS = 4;
 
 type StreamParams = Omit<Anthropic.MessageStreamParams, "messages"> & {
   messages: Anthropic.MessageParam[];
 };
 
+/**
+ * Top-level automatic prompt-caching param for one request, or an empty object when the
+ * provider can't take it. Spread into the request params.
+ *
+ * A cache READ only happens at a breakpoint present in the CURRENT request, so a caller
+ * that wants turn N+1 to reuse turn N's prefix must send this on BOTH requests — setting
+ * it only on the first one pays the write premium and never reads it back. Anthropic
+ * only: DeepSeek's Anthropic-compat proxy rejects `cache_control`.
+ */
+export function buildPromptCacheParam(model: AiModelId): { cache_control?: { type: "ephemeral" } } {
+  return AI_MODEL_CATALOG[model].provider === "anthropic" ? { cache_control: { type: "ephemeral" } } : {};
+}
+
+// Logged per round so the extra token cost of the blind-first two-turn flow (roughly
+// 1.9x per lens, since turn 2 replays turn 1's thinking as input) and whether the prompt
+// cache is actually read are measured, not guessed. Shared by both loop variants so the
+// non-streaming earnings lookup is just as observable as the streaming routes.
+function logRoundUsage(round: number, usage: Anthropic.Usage): void {
+  console.log(
+    `[tool-loop] round ${round} usage: input=${usage.input_tokens} output=${usage.output_tokens}` +
+      (usage.cache_read_input_tokens != null ? ` cache_read=${usage.cache_read_input_tokens}` : "") +
+      (usage.cache_creation_input_tokens != null ? ` cache_creation=${usage.cache_creation_input_tokens}` : "")
+  );
+}
+
+/** Runs every client-executed `web_search` call in `message` and returns the tool_result
+ * user turn to send back — or null when the turn is final (no tool call to answer). */
+async function answerSearchCalls(message: Anthropic.Message): Promise<Anthropic.MessageParam | null> {
+  const searchCalls = message.content.filter(
+    (b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === "web_search"
+  );
+  if (message.stop_reason !== "tool_use" || searchCalls.length === 0) return null;
+
+  const toolResults = await Promise.all(
+    searchCalls.map(async (call) => ({
+      type: "tool_result" as const,
+      tool_use_id: call.id,
+      content: await executeWebSearch((call.input as { query: string }).query),
+    }))
+  );
+  return { role: "user", content: toolResults };
+}
+
 interface StreamLoopResult {
   stopReason: string | null;
   // True when the loop exhausted MAX_TOOL_ITERATIONS while the model was still calling
-  // tools — distinct from a normal stop, so callers can surface a "still researching"
-  // note instead of silently returning an empty/partial answer.
+  // tools (or still paused) — distinct from a normal stop, so callers can surface a
+  // "still researching" note instead of silently returning an empty/partial answer.
   hitIterationCap: boolean;
   // The full message array (params.messages + every assistant turn + every tool_result
   // user turn), fit to be replayed verbatim as the next call's `messages` — the blind-first
-  // analyst lenses' turn 2 (docs/deep-value-rigor-v2-spec.md §6.1) needs this to reconcile
-  // against turn 1 without re-sending a stripped-down history that could trigger a 400 on
-  // an orphaned server_tool_use/tool_use block.
+  // analyst lenses' turn 2 needs this to reconcile against turn 1 without re-sending a
+  // stripped-down history that could trigger a 400 on an orphaned server_tool_use/tool_use
+  // block.
   messages: Anthropic.MessageParam[];
   // Concatenation of every text delta across every round of the loop.
   text: string;
@@ -92,40 +136,18 @@ export async function runStreamWithToolLoop(
 
     const finalMessage = await stream.finalMessage();
     messages.push({ role: "assistant", content: finalMessage.content });
-
-    // No usage was logged anywhere in this loop before — without it, the ~1.9x
-    // token-per-lens cost the blind-first two-turn flow is expected to add (spec §6.6)
-    // stays a guess instead of a measured fact.
-    console.log(
-      `[tool-loop] round ${i + 1} usage: input=${finalMessage.usage.input_tokens} output=${finalMessage.usage.output_tokens}` +
-        (finalMessage.usage.cache_read_input_tokens != null ? ` cache_read=${finalMessage.usage.cache_read_input_tokens}` : "") +
-        (finalMessage.usage.cache_creation_input_tokens != null ? ` cache_creation=${finalMessage.usage.cache_creation_input_tokens}` : "")
-    );
+    logRoundUsage(i + 1, finalMessage.usage);
 
     // Claude's server-side web_search interrupts the turn with stop_reason "pause_turn"
-    // after ~10 internal search rounds — a real, ongoing turn, not a terminal state. This
-    // was previously treated as terminal (falling through to the `stop_reason !== "tool_use"`
-    // branch below): a paused turn returned silently with a partial/often-empty answer.
-    // Resume by re-sending the SAME messages array (the assistant turn is already appended
-    // above) — never append a new user message after a pause, only after resuming it.
+    // after ~10 internal search rounds — a real, ongoing turn, not a terminal state.
+    // Treating it as terminal returns a partial/often-empty answer silently. Resume by
+    // re-sending the SAME messages array (the assistant turn is already appended above)
+    // — never append a new user message after a pause, only after resuming it.
     if (finalMessage.stop_reason === "pause_turn") continue;
 
-    const searchCalls = finalMessage.content.filter(
-      (b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === "web_search"
-    );
-
-    if (finalMessage.stop_reason !== "tool_use" || searchCalls.length === 0) {
-      return { stopReason, hitIterationCap: false, messages, text };
-    }
-
-    const toolResults = await Promise.all(
-      searchCalls.map(async (call) => ({
-        type: "tool_result" as const,
-        tool_use_id: call.id,
-        content: await executeWebSearch((call.input as { query: string }).query),
-      }))
-    );
-    messages.push({ role: "user", content: toolResults });
+    const toolResultTurn = await answerSearchCalls(finalMessage);
+    if (!toolResultTurn) return { stopReason, hitIterationCap: false, messages, text };
+    messages.push(toolResultTurn);
   }
 
   return { stopReason, hitIterationCap: true, messages, text };
@@ -135,38 +157,44 @@ type CreateParams = Omit<Anthropic.MessageCreateParamsNonStreaming, "messages"> 
   messages: Anthropic.MessageParam[];
 };
 
+export interface CreateLoopResult {
+  // The last assistant message received — the final answer unless hitIterationCap.
+  message: Anthropic.Message;
+  stopReason: string | null;
+  // Same meaning as StreamLoopResult.hitIterationCap: the cap ran out while the model was
+  // still calling tools or still paused, so `message` is NOT a final answer (typically
+  // another tool_use or a paused partial turn). Callers must not parse it as one.
+  hitIterationCap: boolean;
+  messages: Anthropic.MessageParam[];
+}
+
 /** Non-streaming equivalent of `runStreamWithToolLoop`, for one-shot structured-JSON
- * lookups (e.g. the earnings route). Returns the final message once the model stops
- * calling tools. */
+ * lookups (e.g. the earnings route). Same loop semantics: resumes on `pause_turn`,
+ * answers client-executed `web_search` calls, logs usage per round, and reports
+ * `hitIterationCap` when it gave up before a final answer. */
 export async function runCreateWithToolLoop(
   client: Anthropic,
   params: CreateParams,
   maxIterations: number = DEFAULT_MAX_TOOL_ITERATIONS
-): Promise<Anthropic.Message> {
+): Promise<CreateLoopResult> {
   const messages = [...params.messages];
-  let finalMessage: Anthropic.Message | null = null;
+  let lastMessage: Anthropic.Message | null = null;
 
   for (let i = 0; i < maxIterations; i++) {
-    finalMessage = await client.messages.create({ ...params, messages });
-    messages.push({ role: "assistant", content: finalMessage.content });
+    lastMessage = await client.messages.create({ ...params, messages });
+    messages.push({ role: "assistant", content: lastMessage.content });
+    logRoundUsage(i + 1, lastMessage.usage);
 
-    const searchCalls = finalMessage.content.filter(
-      (b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === "web_search"
-    );
+    // Same resume-on-pause rule as the streaming loop above.
+    if (lastMessage.stop_reason === "pause_turn") continue;
 
-    if (finalMessage.stop_reason !== "tool_use" || searchCalls.length === 0) {
-      break;
+    const toolResultTurn = await answerSearchCalls(lastMessage);
+    if (!toolResultTurn) {
+      return { message: lastMessage, stopReason: lastMessage.stop_reason, hitIterationCap: false, messages };
     }
-
-    const toolResults = await Promise.all(
-      searchCalls.map(async (call) => ({
-        type: "tool_result" as const,
-        tool_use_id: call.id,
-        content: await executeWebSearch((call.input as { query: string }).query),
-      }))
-    );
-    messages.push({ role: "user", content: toolResults });
+    messages.push(toolResultTurn);
   }
 
-  return finalMessage!;
+  if (!lastMessage) throw new Error("runCreateWithToolLoop: maxIterations must be at least 1");
+  return { message: lastMessage, stopReason: lastMessage.stop_reason, hitIterationCap: true, messages };
 }

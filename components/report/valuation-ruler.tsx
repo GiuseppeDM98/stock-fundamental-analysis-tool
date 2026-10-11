@@ -171,7 +171,7 @@ export function ValuationRuler({
         )}
         {pricePct != null && (
           <div
-            className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-slate-900 bg-white shadow"
+            className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-slate-900 bg-white shadow-sm"
             style={{ left: `${pricePct}%` }}
           />
         )}

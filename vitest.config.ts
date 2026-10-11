@@ -1,5 +1,5 @@
 import path from "path";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 export default defineConfig({
   resolve: {
@@ -11,9 +11,16 @@ export default defineConfig({
       "server-only": path.resolve(__dirname, "./vitest.server-only-stub.ts"),
     },
   },
+  // tsconfig.json keeps "jsx": "preserve" for Next.js, which leaves JSX untransformed for
+  // Vitest — component tests (.tsx) need the automatic runtime spelled out here instead.
+  oxc: {
+    jsx: { runtime: "automatic" },
+  },
   test: {
     globals: true,
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
+    // e2e/*.spec.ts are Playwright specs (`npm run e2e`), not Vitest suites.
+    exclude: [...configDefaults.exclude, "e2e/**"],
   },
 });

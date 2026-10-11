@@ -1,12 +1,11 @@
-// Basis reconciliation — the highest-ROI piece of the Grounded Deep Value v2 rigor pass.
-// Pasted data lives in two coordinate spaces that today's code silently treats as one:
+// Basis reconciliation — the highest-ROI rigor check of the Grounded Deep Value mode.
+// Pasted data lives in two coordinate spaces that are easy to silently treat as one:
 // the STATEMENT basis (S, the income statement/balance sheet the model builds its bridge
 // from) and the PROVIDER basis (P, whatever EV/EBITDA definition the multiples-table
 // source used — reported vs adjusted EBITDA, pre/post IFRS-16 leases, etc). This module
 // estimates the conversion factors between them (kE for EBITDA, kB for the EV→equity
 // bridge) from the pasted data itself — arithmetic, not judgment; an LLM is the wrong tool
-// for a definitional mismatch. Pure, no server-only. See
-// docs/deep-value-rigor-v2-spec.md §1/§2.
+// for a definitional mismatch. Pure, no server-only.
 import type { FiscalYearFinancials, FiscalYearMultiples, GroundedFinancials } from "@/types/grounding";
 import { computeMultipleStats, quantile, type MultipleStats } from "@/lib/grounding/anchors";
 
@@ -57,8 +56,8 @@ export type BasisReconciliation = {
 };
 
 /** EV_P for one fiscal year: the reported column wins; falls back to evSales × revenue,
- *  which reconstructs the provider's own EV because revenue is almost never "adjusted"
- *  (spec §1: "il revenue non viene quasi mai adjusted"). */
+ *  which reconstructs the provider's own EV because revenue is almost never "adjusted" —
+ *  the least definition-contaminated line of the income statement. */
 function resolveEvProvider(
   m: FiscalYearMultiples,
   f: FiscalYearFinancials
@@ -71,7 +70,7 @@ function resolveEvProvider(
 /** MarketCap_P for one fiscal year: the reported column wins; otherwise falls back to a
  *  P/E- or P/B-implied estimate. When BOTH fallback estimates exist and disagree by more
  *  than MKTCAP_CROSSCHECK_TOLERANCE, neither is trustworthy — return null rather than
- *  guessing which one is right (spec §1 degradation table). When they agree (or only one
+ *  guessing which one is right. When they agree (or only one
  *  exists), the P/E-implied estimate is preferred as the deterministic tie-break — an
  *  arbitrary but stable choice; either is defensible when they already agree within
  *  tolerance. */
@@ -129,7 +128,7 @@ function median(values: number[]): number {
 /** The raw historical EV/EBITDA series rescaled by kE, then re-run through
  *  computeMultipleStats — a linear transform, so scaling the series and recomputing is
  *  identical to scaling the stats directly, and stays correct if a non-linear stat is
- *  ever added (spec §2.2 implementation note). */
+ *  ever added. */
 function computeAdjustedEvEbitda(extract: GroundedFinancials, kE: number): MultipleStats | null {
   const scaled: FiscalYearMultiples[] = extract.multiples
     .filter((m): m is FiscalYearMultiples & { evEbitda: number } => m.evEbitda != null)
@@ -150,7 +149,7 @@ function computeAdjustedEvEbitda(extract: GroundedFinancials, kE: number): Multi
 /**
  * Estimates kE (EBITDA basis ratio) and kB (EV-bridge basis ratio) from the pasted data,
  * year by year, then aggregates via median (robust to a single noisy year). Degrades
- * honestly per spec §1: never assumes kE = 1 when unverifiable, never silently picks a
+ * honestly: never assumes kE = 1 when unverifiable, never silently picks a
  * side when the P/E- and P/B-implied MarketCap estimates disagree.
  */
 export function computeBasisReconciliation(extract: GroundedFinancials): BasisReconciliation {
@@ -188,12 +187,46 @@ export function effectiveKb(basis: BasisReconciliation): number {
 
 /**
  * Converts a multiple expressed on STATEMENT EBITDA (S) into the equivalent multiple on
- * PROVIDER EBITDA (P) — the only legitimate entry point to `percentileOf` against the raw
- * historical distribution (which lives in P). The exact inverse of the same-basis
- * adjustment applied in `computeAdjustedEvEbitda`/Regola 1 (m_S = m_P × kE ⟺ m_P = m_S / kE).
+ * PROVIDER EBITDA (P) by the EBITDA ratio alone (m_P = m_S / kE — the exact inverse of
+ * `computeAdjustedEvEbitda`). Correct only for a multiple whose EV numerator is already in
+ * provider space, or when the EV→equity bridge is unknown. Whenever the multiple was
+ * BUILT from an equity value plus a statement-basis bridge (every market-implied and
+ * scenario-implied read in lib/grounding/*), use `bridgeToProviderMultiple` instead — it
+ * also rescales the bridge by kB, which this function cannot see.
  * Returns null when kE isn't verifiable — never a guessed number.
  */
 export function toProviderBasis(multipleOnStatementEbitda: number, basis: BasisReconciliation): number | null {
   if (basis.kE == null || basis.kE === 0) return null;
   return multipleOnStatementEbitda / basis.kE;
+}
+
+/**
+ * The provider-basis EV/EBITDA implied by an equity value and a STATEMENT-basis EV→equity
+ * bridge — the only legitimate way to rank such a read against the raw historical
+ * distribution with `percentileOf`.
+ *
+ * Both halves of the multiple change space, not just the denominator:
+ *   EV_P     = equity + kB × (netDebt_S + minorities_S)   (the provider's bridge differs
+ *                                                          by kB: leases, pensions, …)
+ *   EBITDA_P = kE × EBITDA_S
+ *   m_P      = (equity + kB × bridge_S) / (kE × EBITDA_S)
+ * With kB = 1 this reduces to ((equity + bridge_S) / EBITDA_S) / kE, i.e. exactly
+ * `toProviderBasis` of the statement multiple. kB falls back to 1 via `effectiveKb` when
+ * it isn't estimable — the same explicit default the valuation grid uses.
+ *
+ * @param equityValue      Price (or intrinsic) per share × shares, statement units.
+ * @param evBridgeStatement netDebt + minorities as used by the caller's own bridge.
+ * @param ebitdaStatement  The EBITDA_S the multiple is expressed on.
+ * @returns the provider-basis multiple, or null when kE is unverifiable or the inputs
+ *   can't produce a finite number.
+ */
+export function bridgeToProviderMultiple(
+  equityValue: number,
+  evBridgeStatement: number,
+  ebitdaStatement: number,
+  basis: BasisReconciliation
+): number | null {
+  if (basis.kE == null || basis.kE === 0 || ebitdaStatement === 0) return null;
+  const multiple = (equityValue + effectiveKb(basis) * evBridgeStatement) / (basis.kE * ebitdaStatement);
+  return Number.isFinite(multiple) ? multiple : null;
 }

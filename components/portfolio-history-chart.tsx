@@ -145,7 +145,7 @@ function LegendItem({
 function ChartSkeleton() {
   return (
     <div className="card mb-6 h-[272px] animate-pulse">
-      <div className="mb-3 h-3 w-48 rounded bg-slate-700/60" />
+      <div className="mb-3 h-3 w-48 rounded-sm bg-slate-700/60" />
       <div className="h-[220px] rounded-xl bg-slate-800/40" />
     </div>
   );

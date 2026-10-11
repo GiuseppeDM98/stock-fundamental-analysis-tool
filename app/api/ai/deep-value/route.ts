@@ -28,7 +28,8 @@ const requestSchema = z.object({
   thinking: z.boolean().optional(),
   // Grounded mode: the client sends only blocks + the confirmed extract; the route
   // recomputes stats/grid/marketImplied/warnings itself from `extract` and its own
-  // authoritative currentPrice — never trusting client-sent copies (spec §6.3).
+  // authoritative currentPrice — never trusting client-sent copies (smaller body, one
+  // source of truth).
   grounding: groundingPayloadSchema.optional(),
 });
 
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
 
     // Grounded mode: recompute the deterministic anchors server-side from the client's
     // confirmed extract + our own authoritative currentPrice/currency (never the
-    // client's own stats/grid/marketImplied — spec §6.3, single source of truth).
+    // client's own stats/grid/marketImplied — single source of truth).
     let groundingContext: GroundingPromptContext | undefined;
     if (body.grounding) {
       groundingContext = buildGroundingPromptContext(body.grounding.blocks, body.grounding.extract, currentPrice, currency);
@@ -100,7 +101,7 @@ export async function POST(request: Request) {
               // the full 10-section report without truncation. max_tokens is a cap, not a
               // target — the model generates only what it needs, so this doesn't raise cost.
               max_tokens: 64000,
-              thinking: buildThinkingParam(aiSettings.thinking),
+              thinking: buildThinkingParam(aiSettings.thinking, aiSettings.model, aiSettings.effort),
               output_config: buildEffortConfig(aiSettings.effort),
               system: systemPrompt,
               tools: buildWebSearchTools(aiSettings.model),
@@ -127,8 +128,8 @@ export async function POST(request: Request) {
             // mid-research, discarding everything silently (nothing had reached the
             // ```json fence yet) and returning an empty report with no error. See the
             // shared constant for why it's 35. Grounded mode rescopes (not eliminates)
-            // web search to just the post-coverage-date update + qualitative material
-            // (spec §5.6), so it converges in far fewer rounds — GROUNDED_MAX_TOOL_ITERATIONS.
+            // web search to just the post-coverage-date update + qualitative material,
+            // so it converges in far fewer rounds — GROUNDED_MAX_TOOL_ITERATIONS.
             body.grounding ? GROUNDED_MAX_TOOL_ITERATIONS : DEEP_RESEARCH_MAX_TOOL_ITERATIONS
           );
 

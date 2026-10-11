@@ -15,3 +15,13 @@ coverage
 
 # TypeScript incremental build cache
 *.tsbuildinfo
+
+# Per-session working notes (see WORKFLOW.md §3)
+SESSION_NOTES.md
+
+# End-to-end suite (Playwright): isolated database, dev-server cache, signed-in states,
+# reports. Visual baselines are generated on demand per session, never tracked.
+.e2e/
+playwright-report/
+test-results/
+e2e/**/*-snapshots/

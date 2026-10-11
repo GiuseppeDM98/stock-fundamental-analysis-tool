@@ -1,13 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { computeBasisReconciliation, effectiveKb, toProviderBasis } from "@/lib/grounding/basis";
+import { computeBasisReconciliation, effectiveKb, toProviderBasis, bridgeToProviderMultiple } from "@/lib/grounding/basis";
 import { makeFinancialsRow, makeMultiplesRow, makeExtract, makeMeta } from "./grounding-test-helpers";
 
-// THE IREN CASE — the fixture the spec's §9 commit 3 gate hinges on: kE ≈ 0.83, sameBasis
-// false, adjustedEvEbitda.median ≈ 5.9 (docs/deep-value-rigor-v2-spec.md §8). Six fiscal
-// years, EV_P reported directly (enterpriseValue column), a constant statement EBITDA of
-// 1353 (isolates the kE arithmetic from noise in the statement series itself) and a
-// per-year kE walking 0.81→0.85 (median 0.83, spread 0.04 — matches the spec's own
-// numbers verbatim).
+// THE IREN CASE — a real misvaluation (historical multiples applied to a statement EBITDA
+// on a different basis): kE ≈ 0.83, sameBasis false, adjustedEvEbitda.median ≈ 5.9. Six
+// fiscal years, EV_P reported directly (enterpriseValue column), a constant statement
+// EBITDA of 1353 (isolates the kE arithmetic from noise in the statement series itself)
+// and a per-year kE walking 0.81→0.85 (median 0.83, spread 0.04).
 const STATEMENT_EBITDA = 1353;
 const IREN_YEARS = [
   { fiscalYear: 2020, kE: 0.81, evEbitda: 6.6 },
@@ -212,13 +211,35 @@ describe("effectiveKb", () => {
 describe("toProviderBasis", () => {
   it("divides by kE — the exact inverse of the same-basis adjustment (m_S = m_P × kE)", () => {
     const basis = computeBasisReconciliation(IREN_EXTRACT); // kE ≈ 0.83
-    // A statement-basis multiple of 6.53x (the Iren "like-for-like LTM" figure from the
-    // spec's narrative) re-expressed on provider basis: 6.53 / 0.83 ≈ 7.867
+    // A statement-basis multiple of 6.53x (Iren's like-for-like LTM multiple) re-expressed
+    // on provider basis: 6.53 / 0.83 ≈ 7.867
     expect(toProviderBasis(6.53, basis)).toBeCloseTo(7.867469879, 6);
   });
 
   it("returns null when kE is unverifiable — never a guessed conversion", () => {
     const basis = computeBasisReconciliation(makeExtract());
     expect(toProviderBasis(6.53, basis)).toBeNull();
+  });
+});
+
+describe("bridgeToProviderMultiple", () => {
+  it("with kB = 1 (assumed) it equals toProviderBasis of the statement multiple — the kE-only path is unchanged", () => {
+    const basis = computeBasisReconciliation(IREN_EXTRACT); // kE ≈ 0.83, kB null ⇒ effective 1
+    // statement multiple = (2680.96 + 4411.6) / 1353 ≈ 5.242099; ÷ 0.83 ≈ 6.315782
+    const viaBridge = bridgeToProviderMultiple(2680.96, 4411.6, 1353, basis);
+    expect(viaBridge).toBeCloseTo(toProviderBasis((2680.96 + 4411.6) / 1353, basis)!, 9);
+    expect(viaBridge).toBeCloseTo(6.315782, 5);
+  });
+
+  it("with kB ≠ 1 it scales the bridge term BEFORE dividing by kE", () => {
+    const basis = { ...computeBasisReconciliation(IREN_EXTRACT), kE: 0.9, kB: 1.2 };
+    // (equity 3000 + 1.2 × bridge 700) / (0.9 × EBITDA 1000) = 3840 / 900 ≈ 4.266667
+    // (the kE-only conversion would give (3000 + 700) / 1000 / 0.9 ≈ 4.111111)
+    expect(bridgeToProviderMultiple(3000, 700, 1000, basis)).toBeCloseTo(4.266667, 5);
+  });
+
+  it("returns null when kE is unverifiable or EBITDA_S is zero — never a guessed conversion", () => {
+    expect(bridgeToProviderMultiple(3000, 700, 1000, computeBasisReconciliation(makeExtract()))).toBeNull();
+    expect(bridgeToProviderMultiple(3000, 700, 0, computeBasisReconciliation(IREN_EXTRACT))).toBeNull();
   });
 });

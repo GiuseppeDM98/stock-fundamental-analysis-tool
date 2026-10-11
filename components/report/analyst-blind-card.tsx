@@ -1,11 +1,11 @@
 "use client";
 
-// Blind-vs-final drift card for a blind-first analyst lens (docs/deep-value-rigor-v2-spec.md
-// §6/§7.3). The lens commits to bull/base/bear BEFORE it sees the report (Phase 1); this
-// renders that commitment next to the FINAL (post-reconciliation) triple so the drift is
-// verifiable in the UI, not just claimed in the critique text. "Drift is the real KPI of this
-// spec" (§7.3): if a lens keeps converging on the report even after committing blind, the
-// anchoring was never in the prompt.
+// Blind-vs-final drift card for a blind-first analyst lens. The lens commits to
+// bull/base/bear BEFORE it sees the report (Phase 1); this renders that commitment next to
+// the FINAL (post-reconciliation) triple so the drift is verifiable in the UI, not just
+// claimed in the critique text. Drift is the metric that tells whether blind-first works:
+// if a lens keeps converging on the report even after committing blind, the anchoring was
+// never in the prompt.
 import { useLanguage } from "@/context/language-context";
 import type { DeepValueResult } from "@/components/report/types";
 import type { Triple } from "@/lib/report/valuation";
@@ -13,30 +13,51 @@ import type { Gate } from "@/lib/grounding/postcheck";
 
 type Revision = { scenario: "bull" | "base" | "bear"; from: number; to: number; reason: string };
 
+// The Skeptic's kill-price fields as either JSON block carries them. `killPriceNote` is the
+// lens's own explanation of why it could not give a kill price (only meaningful when
+// killPrice is null).
+type KillPriceFields = { killPrice?: number | null; killPriceNote?: string };
+
 type Props = {
   // The lens's Phase-1 (blind) commitment — the full JSON so killPrice is available too.
-  blind: DeepValueResult & { killPrice?: number | null };
+  blind: DeepValueResult & KillPriceFields;
   // The lens's FINAL buy-target triple. Sourced either from a freshly parsed live run or
   // from the persisted *FairValue* columns on reload — same MoS-adjusted unit as `blind`.
-  // null while Phase 2 is still streaming (spec §7.3: the card renders as soon as the
-  // blind commitment parses, with the final column filling in once turn 2 completes).
+  // null while Phase 2 is still streaming (the card renders as soon as the blind
+  // commitment parses, with the final column filling in once turn 2 completes).
   final: Triple | null;
+  // The FINAL JSON's kill-price fields — live run only (the final JSON is not persisted as
+  // a blob), undefined after a reload or while Phase 2 is still streaming.
+  finalKillPrice?: KillPriceFields;
   // Only available on a fresh run in the same session — revisions[] lives in the FINAL
-  // JSON, which isn't persisted as a blob (only its scalar fairValue* columns are, spec
-  // §6.4), so this is undefined after a page reload.
+  // JSON, which isn't persisted as a blob (only its scalar fairValue* columns are), so
+  // this is undefined after a page reload.
   revisions?: Revision[];
-  // Optional bonus (spec §7.3, "free win"): the blind bridge's own deterministic gates,
+  // Optional: the blind bridge's own deterministic gates,
   // recomputed client-side via checkValuationBridges when grounding/price data is available.
   gates?: Gate[];
+  // The kill_price gate evaluated on the FINAL JSON, shown next to the blind gates so a
+  // kill price dropped or changed during reconciliation is visible. Display-only.
+  finalKillPriceGate?: Gate;
 };
 
 const SCENARIOS = ["bull", "base", "bear"] as const;
 
-export default function AnalystBlindCard({ blind, final, revisions, gates }: Props) {
+// "1.50", the lens's own note when it declared none, or null when the key is absent.
+function formatKillPrice(fields: KillPriceFields | undefined): string | null {
+  if (!fields) return null;
+  if (fields.killPrice != null) return fields.killPrice.toFixed(2);
+  if (fields.killPriceNote) return `— ${fields.killPriceNote}`;
+  return "killPrice" in fields ? "—" : null;
+}
+
+export default function AnalystBlindCard({ blind, final, finalKillPrice, revisions, gates, finalKillPriceGate }: Props) {
   const { t } = useLanguage();
 
   const scenarioLabel = (s: (typeof SCENARIOS)[number]) =>
     s === "bear" ? t("bearLabel") : s === "base" ? t("baseLabel") : t("bullLabel");
+  const blindKill = formatKillPrice(blind);
+  const finalKill = formatKillPrice(finalKillPrice);
 
   return (
     <div className="mt-3 rounded-lg border border-slate-700/60 bg-slate-950/40 p-3">
@@ -81,9 +102,20 @@ export default function AnalystBlindCard({ blind, final, revisions, gates }: Pro
         </tbody>
       </table>
 
-      {blind.killPrice != null && (
+      {(blindKill != null || finalKill != null) && (
         <p className="mt-2 text-[11px] text-slate-400">
-          {t("analystBlindKillPrice")}: <span className="tabular-nums text-slate-300">{blind.killPrice.toFixed(2)}</span>
+          {t("analystBlindKillPrice")}:{" "}
+          {blindKill != null && (
+            <>
+              {t("analystBlindPhase1")} <span className="tabular-nums text-slate-300">{blindKill}</span>
+            </>
+          )}
+          {blindKill != null && finalKill != null && " · "}
+          {finalKill != null && (
+            <>
+              {t("analystBlindFinal")} <span className="tabular-nums text-slate-300">{finalKill}</span>
+            </>
+          )}
         </p>
       )}
 
@@ -102,18 +134,23 @@ export default function AnalystBlindCard({ blind, final, revisions, gates }: Pro
         </div>
       )}
 
-      {gates != null && gates.length > 0 && (
+      {((gates != null && gates.length > 0) || finalKillPriceGate) && (
         <div className="mt-2 space-y-0.5 border-t border-slate-800/80 pt-2">
-          {gates.map((g) => (
-            <p
-              key={g.code}
-              className={`text-[11px] ${g.status === "fail" ? "text-red-300" : g.status === "pass" ? "text-slate-400" : "text-slate-600"}`}
-            >
-              {g.status === "pass" ? "✓" : g.status === "fail" ? "✗" : "—"} {g.code}: {g.detail}
-            </p>
-          ))}
+          {gates?.map((g) => <GateLine key={g.code} gate={g} />)}
+          {finalKillPriceGate && <GateLine gate={finalKillPriceGate} prefix={t("analystBlindFinal")} />}
         </div>
       )}
     </div>
+  );
+}
+
+function GateLine({ gate, prefix }: { gate: Gate; prefix?: string }) {
+  const tone = gate.status === "fail" ? "text-red-300" : gate.status === "pass" ? "text-slate-400" : "text-slate-600";
+  const mark = gate.status === "pass" ? "✓" : gate.status === "fail" ? "✗" : "—";
+  return (
+    <p className={`text-[11px] ${tone}`}>
+      {mark} {prefix ? `${prefix} · ` : ""}
+      {gate.code}: {gate.detail}
+    </p>
   );
 }

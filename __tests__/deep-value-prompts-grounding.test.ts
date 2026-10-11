@@ -38,7 +38,7 @@ describe("Quick mode stays untouched by the grounding param", () => {
     expect(withNoArg).not.toContain("AUTHORITATIVE FINANCIAL DATA");
   });
 
-  it("buildAnalystSystemPrompt/buildAnalystUserPrompt omit the grounding markers when grounding is not passed (commit 7)", () => {
+  it("buildAnalystSystemPrompt/buildAnalystUserPrompt omit the grounding markers when grounding is not passed", () => {
     const sys = buildAnalystSystemPrompt({ angle: "optimist", language: "English", currentDate: "July 12, 2026", mosPercent: 20 });
     expect(sys).not.toContain("Grounded mode");
     const usr = buildAnalystUserPrompt({ angle: "optimist", ticker: "ENI.MI", reportMd: "# R\nBody", language: "English" });
@@ -76,8 +76,8 @@ describe("Grounded mode injects the rules block + the data section", () => {
   });
 });
 
-describe("Grounded mode reaches the analyst lenses too (commit 7)", () => {
-  // The lenses get extract + anchors + warnings, never the raw paste (spec §6.4) —
+describe("Grounded mode reaches the analyst lenses too", () => {
+  // The lenses get extract + anchors + warnings, never the raw paste —
   // this fixture's blocks are intentionally empty, mirroring how the verify route
   // calls buildGroundingPromptContext([], ...) after re-reading Analysis.groundingJson.
   const LENS_GROUNDING = { ...GROUNDING, blocks: [] };
@@ -103,5 +103,92 @@ describe("Grounded mode reaches the analyst lenses too (commit 7)", () => {
     expect(usr).toContain("STRUCTURED EXTRACT");
     expect(usr).toContain("DETERMINISTIC ANCHORS");
     expect(usr).not.toContain("AUTHORITATIVE FINANCIAL DATA");
+  });
+
+  it("a lens on a currency-mismatched extract is told why the market-implied read is missing", () => {
+    // Same call shape as the verify route: no raw blocks, the route's own quote currency.
+    const mismatched = buildGroundingPromptContext([], EXTRACT, 15, "USD"); // extract is EUR
+    const usr = buildAnalystUserPrompt({ angle: "skeptic", ticker: "ENI.MI", reportMd: "# R\nBody", language: "English", grounding: mismatched });
+    expect(usr).toContain("currency_mismatch — EUR vs USD");
+    expect(usr).toContain("Market-implied: NOT computed — currency mismatch");
+  });
+});
+
+describe("Grounded mode rescopes web search in the base report prompts", () => {
+  it("system prompt Step 2 no longer says to gather the data via web search", () => {
+    const sys = buildDeepValueSystemPrompt({ language: "English", mosPercent: 20, grounding: GROUNDING });
+    expect(sys).not.toContain("Gather financial data via web search");
+    expect(sys).not.toContain("Search for the most recent annual financial data");
+    expect(sys).toContain("## Step 2 — Gather financial data\n");
+    expect(sys).toContain("Use web search only for what was published after that data's coverage period");
+  });
+
+  it("user prompt no longer says to find the financial data via web search", () => {
+    const usr = buildDeepValueUserPrompt({ ticker: "ENI.MI", currentPrice: 14.18, currency: "EUR", language: "English", grounding: GROUNDING });
+    expect(usr).not.toContain("Use web search to find the financial data");
+    expect(usr).toContain("use web search only for what was published after its coverage period");
+  });
+
+  it("Quick mode keeps the original web-search wording", () => {
+    const sys = buildDeepValueSystemPrompt({ language: "English", mosPercent: 20 });
+    expect(sys).toContain("## Step 2 — Gather financial data via web search");
+    const usr = buildDeepValueUserPrompt({ ticker: "ENI.MI", currentPrice: 14.18, currency: "EUR", language: "English" });
+    expect(usr).toContain("Use web search to find the financial data");
+  });
+});
+
+describe("Analyst prompts: blind-first wording, Skeptic framing, basis check, kill price note", () => {
+  const LENS_GROUNDING = { ...GROUNDING, blocks: [] };
+
+  it("mentions two JSON blocks only in a blind-first review", () => {
+    const quick = buildAnalystSystemPrompt({ angle: "optimist", mosPercent: 20 });
+    expect(quick).not.toContain("Phase 1");
+    expect(quick).toContain("The ONLY JSON you emit is the valuation block above;");
+    const blind = buildAnalystSystemPrompt({ angle: "optimist", mosPercent: 20, grounding: LENS_GROUNDING, blindFirst: true });
+    expect(blind).toContain("the two valuation blocks above (one in Phase 1, one in Phase 2)");
+  });
+
+  it("frames the Skeptic as breaking the thesis, not judging whether it holds up", () => {
+    const sys = buildAnalystSystemPrompt({ angle: "skeptic" });
+    expect(sys).not.toContain("does the base-case fair value hold up");
+    expect(sys).toContain("**break the thesis**");
+    expect(sys).toContain("**Kill price & verdict**");
+  });
+
+  it("adds the basis-reconciliation structural check only when grounding is present", () => {
+    const quick = buildAnalystSystemPrompt({ angle: "quality" });
+    expect(quick).not.toContain("Basis reconciliation");
+    const grounded = buildAnalystSystemPrompt({ angle: "quality", grounding: LENS_GROUNDING });
+    expect(grounded).toContain("7. **Basis reconciliation.**");
+    // Part of the structural checks, before the Grounded rules block.
+    expect(grounded.indexOf("7. **Basis reconciliation.**")).toBeLessThan(grounded.indexOf("Grounded mode —"));
+  });
+
+  it("puts killPriceNote in the Skeptic JSON contract only", () => {
+    expect(buildAnalystSystemPrompt({ angle: "skeptic" })).toContain('"killPriceNote"');
+    expect(buildAnalystSystemPrompt({ angle: "optimist" })).not.toContain("killPrice");
+    // Both blind-first blocks carry it.
+    const blind = buildAnalystSystemPrompt({ angle: "skeptic", grounding: LENS_GROUNDING, blindFirst: true });
+    expect(blind.split('"killPriceNote"')).toHaveLength(3);
+  });
+});
+
+describe("Analyst lenses do not tell the model to re-search pasted history", () => {
+  const LENS_GROUNDING = { ...GROUNDING, blocks: [] };
+
+  it("rescopes the spot-check to the pasted data in Grounded mode", () => {
+    const sys = buildAnalystSystemPrompt({ angle: "skeptic", language: "English", mosPercent: 20, grounding: LENS_GROUNDING });
+    const usr = buildAnalystUserPrompt({ angle: "skeptic", ticker: "ENI.MI", reportMd: "# R", language: "English", grounding: LENS_GROUNDING });
+    expect(sys).toContain("The pasted historical figures are authoritative");
+    expect(sys).not.toContain("against primary sources");
+    expect(usr).toContain("against the pasted data");
+    expect(usr).not.toContain("spot-check key figures via web search");
+  });
+
+  it("keeps the original web spot-check wording in Quick mode", () => {
+    const sys = buildAnalystSystemPrompt({ angle: "skeptic", language: "English", mosPercent: 20 });
+    const usr = buildAnalystUserPrompt({ angle: "skeptic", ticker: "ENI.MI", reportMd: "# R", language: "English" });
+    expect(sys).toContain("against primary sources");
+    expect(usr).toContain("spot-check key figures via web search");
   });
 });

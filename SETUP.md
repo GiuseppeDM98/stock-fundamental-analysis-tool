@@ -136,6 +136,8 @@ Use this option if you want to replicate the production setup or deploy to Verce
 npm run dev      # development server on :3000 with hot reload
 npm run test     # run the Vitest test suite once
 npm run build    # type-check + production build (use instead of npm run lint)
+npm run e2e      # Playwright end-to-end suite on an isolated local database
+npm run ci:local # tests + type-check + isolated build + e2e (the gate before a PR)
 ```
 
 ### Verify your setup
@@ -200,7 +202,7 @@ The three AI routes (`/api/ai/deep-value`, `/api/ai/deep-value/verify`, `/api/ai
 - **Run AI analyses from `npm run dev` on localhost** (no function-duration limit) and use the deployed instance for everything else, or
 - **Upgrade to Pro** and add `export const maxDuration = 300;` to each of the three route files.
 
-A queue+polling architecture (job persisted immediately, generation run by a worker outside Vercel's function limit) would remove this ceiling on Hobby entirely, at the cost of losing live streaming — explored but not implemented, see [`docs/async-ai-analysis-architecture.md`](docs/async-ai-analysis-architecture.md).
+A queue+polling architecture (job persisted immediately, generation run by a worker outside Vercel's function limit) would remove this ceiling on Hobby entirely, at the cost of losing live streaming — evaluated and not planned: upgrading to Pro is the cheaper fix for a personal tool.
 
 ---
 
