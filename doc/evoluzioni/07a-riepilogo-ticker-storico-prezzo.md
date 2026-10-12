@@ -154,7 +154,7 @@ Nessun DDL. Deploy insieme alla 07b (i link verso `/stocks/*` rispondono 404 fin
 
 ## 11. Prompt per implementarla
 
-> Modello: Claude Opus 4.8, effort `xhigh`. Taglia: M-L (summary + route + Advisor + 5 link + nav + email + ~9 test). Una sessione, un branch, un commit.
+> Modello: Claude Opus 5.5, effort `xhigh`. Taglia: M-L (summary + route + Advisor + 5 link + nav + email + ~9 test). Una sessione, un branch, un commit.
 
 ```
 Implementa la spec doc/evoluzioni/07a-riepilogo-ticker-storico-prezzo.md.

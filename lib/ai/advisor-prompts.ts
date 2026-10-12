@@ -144,7 +144,7 @@ ${analysesSection}
 
 ${GROUNDING_RULES_BLOCK}
 
-IMPORTANT RULES:
+RULES:
 1. When you recommend a specific stock ticker to investigate further, always wrap it in double square brackets, e.g. [[ENI.MI]] or [[AAPL]]. This lets the user launch a Deep Value analysis with one click. Only wrap actual tickers — not company names.
 2. You have access to web search. Use it to find current financial data, recent news, or stock ideas when needed.
 3. Be concise and specific. Use the portfolio and analysis data above to give personalised answers — don't give generic investing advice.
@@ -185,5 +185,5 @@ DISCOVERY FOCUS AREAS (adapt based on user's request):
 - Dividend growers: payout sustainability (FCF coverage > 1.5×), ≥5yr track record of dividend increases
 - Sector opportunities: specific industries with compelling risk/reward at the current macro setup
 
-IMPORTANT: For Italian stocks, tickers end in .MI (e.g. ENI.MI, ENEL.MI). For US stocks, use plain tickers (AAPL, MSFT). For other exchanges, use the appropriate suffix.`;
+TICKER FORMAT: For Italian stocks, tickers end in .MI (e.g. ENI.MI, ENEL.MI). For US stocks, use plain tickers (AAPL, MSFT). For other exchanges, use the appropriate suffix.`;
 }

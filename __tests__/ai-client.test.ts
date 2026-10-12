@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildThinkingParam, buildWebSearchTools } from "@/lib/ai/client";
+import { buildEffortConfig, buildThinkingParam, buildWebSearchTools, usesServerSideFallback } from "@/lib/ai/client";
 import { AI_MODEL_CATALOG } from "@/types/ai-settings";
 
 describe("buildThinkingParam", () => {
@@ -33,5 +33,21 @@ describe("Sonnet 5.5 catalog entry", () => {
     expect(buildWebSearchTools("claude-sonnet-5-5")).toEqual([
       { type: "web_search_20260209", name: "web_search" },
     ]);
+  });
+});
+
+describe("buildEffortConfig", () => {
+  it("passes every effort level through as typed, xhigh included", () => {
+    expect(buildEffortConfig("xhigh")).toEqual({ effort: "xhigh" });
+    expect(buildEffortConfig("low")).toEqual({ effort: "low" });
+  });
+});
+
+describe("usesServerSideFallback", () => {
+  it("opts in Sonnet 5.5 only: no other catalog model, and never DeepSeek", () => {
+    expect(usesServerSideFallback("claude-sonnet-5-5")).toBe(true);
+    for (const model of ["claude-opus-4-8", "claude-sonnet-5", "deepseek-v4-pro", "deepseek-v4-flash"]) {
+      expect(usesServerSideFallback(model)).toBe(false);
+    }
   });
 });

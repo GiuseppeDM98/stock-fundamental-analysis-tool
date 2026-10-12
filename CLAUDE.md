@@ -10,19 +10,19 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: October 11, 2026 — **Spec retirement, divergence fixes, WORKFLOW.md + local e2e/CI, Sonnet 5.5, Tailwind 4**. The Deep Value design specs in `docs/` were retired (the code now carries its own rationale) after a read-only audit of design vs. code; every divergence it found was fixed: gates that could throw or pass when unverifiable, the price-anchoring flag dying without kE, kB-aware provider-basis conversion, merged-extract meta taken only from statement blocks, grounding snapshotted at Generate, blind-first lens fixes (turn-2 cache, no phase-1 leak, mid-stream blind card), non-streaming tool loop parity. Standing session rules live in `WORKFLOW.md`; Playwright + a seed script + `npm run ci:local` (local only, isolated DB) now exist. Claude Sonnet 5.5 joined the catalog and pins the Grounded extraction. Tailwind 3→4 (visual-diff verified) removed the last `npm audit` findings: 30 → 0. Verified 2026-10-11 by `ci:local` (370 unit tests, typecheck, isolated build, 26 e2e) plus 24 screenshot comparisons; not verified: the real Print/PDF dialog, Safari/Firefox, AI-driven flows.
+**Last Updated**: October 12, 2026 — **Prompt-audit fixes, refusal handling, Sonnet 5.5 fallback, SDK 0.133, `.env` canonical**. Every AI route now names a `stop_reason: "refusal"` (a note on the streams, a specific error on earnings and extraction) and Deep Value names a `max_tokens` cut; a refused blind Phase 1 degrades to the single-phase review. Sonnet 5.5 calls opt into the server-side fallback (`fallbacks: "default"`) and a note names the model that answered when it serves. Route error statuses come from the SDK's error classes. `@anthropic-ai/sdk` 0.78 → 0.133 removed the `xhigh`/`between_tools` casts. `.env` is the one env file (SETUP, README, AGENTS aligned). Docs realigned with the code (model ids, thinking, catalog, versions, components tree, the `doc/evoluzioni/` roadmap). Verified 2026-10-12 by `ci:local` (390 unit tests, typecheck, isolated build, 26 e2e) and one live Sonnet 5.5 call per request shape (beta endpoint + `fallbacks`, adaptive/`between_tools`, stream + cache) accepted by the API; not verified: a real fallback or refusal (cannot be provoked on demand), the AI flows in the browser.
 
 ---
 
 ## Tech Stack
 
-- **Next.js** `15.5.12` (App Router) + **React** `19.0.0` + **TypeScript** `5.7.3`
-- **yahoo-finance2** `3.13.2` + **Zod** `3.24.1`
-- **Prisma** `7.4.2` + **Turso** (libSQL) via `@prisma/adapter-libsql`
-- **Auth.js** `next-auth@5.0.0-beta.30` + **bcryptjs**
-- **Anthropic SDK** + **Claude Opus 4.8** (Deep Value + Analyst Review, `effort: "xhigh"`) / **Claude Sonnet 5.5** (Advisor `effort: "high"`; next-earnings lookup `effort: "medium"`) / **DeepSeek V4 Pro** or **V4 Flash** (alternative providers, same SDK via its Anthropic-compat endpoint, user-selectable, `low`/`high`/`max` effort) — adaptive thinking, web search enabled (native for Claude, client-executed via Tavily for DeepSeek)
-- **Tailwind** `4.3.3` (`@tailwindcss/postcss`) + typography `0.5.20` + **Framer Motion** `11.18.2` + **Recharts** `2.15.1` + react-markdown + remark-gfm + node-html-parser
-- **Vitest** `4.1.11` + Testing Library `16.2.0` + **Playwright** `1.63.0` (e2e, isolated DB) + `tsx` (seed/e2e scripts)
+- **Next.js** `15.5.27` (App Router) + **React** `19.2.4` + **TypeScript** `5.9.3`
+- **yahoo-finance2** `3.13.2` + **Zod** `3.25.76`
+- **Prisma** client `7.4.2` (CLI `7.10.0`) + **Turso** (libSQL) via `@prisma/adapter-libsql`
+- **Auth.js** `next-auth@5.0.0-beta.32` + **bcryptjs**
+- **Anthropic SDK** `0.133.0` + **Claude Opus 4.8** (Deep Value + Analyst Review, `effort: "xhigh"`) / **Claude Sonnet 5.5** (Advisor `effort: "high"`; next-earnings lookup `effort: "medium"`) / **DeepSeek V4 Pro** or **V4 Flash** (alternative providers, same SDK via its Anthropic-compat endpoint, user-selectable, `low`/`high`/`max` effort) — adaptive thinking, web search enabled (native for Claude, client-executed via Tavily for DeepSeek)
+- **Tailwind** `4.3.3` (`@tailwindcss/postcss`) + typography `0.5.20` + **Framer Motion** `11.18.2` + **Recharts** `2.15.4` + react-markdown + remark-gfm + node-html-parser
+- **Vitest** `4.1.11` + Testing Library `16.3.2` + **Playwright** `1.63.0` (e2e, isolated DB) + `tsx` (seed/e2e scripts)
 
 ---
 
@@ -54,7 +54,7 @@ Slim, single path: ticker search → `GET /api/quote` (price header + reference 
 - The only AI analysis mode (violet panel). Claude picks the method (DCF/DDM/EV·EBITDA/P·B), sources all data via web search — no Yahoo fundamentals dependency; works for any global ticker. Gathers ~5y (min 3) of financials + quality metrics + historical multiples.
 - Output: JSON block (method + sector + bull/base/bear FVs) then a 10-section Markdown report (Overview → Moat → Method → Financial Data & Quality → Bull/Base/Bear → Risks → Catalysts → Summary). Fair-value cards + method badge after streaming.
 - 8 languages (EN, IT, ES, FR, DE, PT, ZH, JA); respects MoS. Builders in `lib/ai/deep-value-prompts.ts`, endpoint `/api/ai/deep-value`.
-- **Model**: `claude-opus-4-8`, adaptive thinking, `effort: "xhigh"` (cast `as unknown as "high"` — not in pinned SDK union), `max_tokens: 64000`, streaming + web search.
+- **Model**: `claude-opus-4-8`, adaptive thinking, `effort: "xhigh"`, `max_tokens: 64000`, streaming + web search.
 - **Prompt rigor**: `buildDeepValueSystemPrompt` injects `ANALYTICAL_RIGOR_BLOCK` (12 conditional checks distilled from real reviewer findings — see AGENTS.md; key one: **never anchor the multiple/lever to the current price; the market-implied read is a control that reports the GAP**). **Date injection**: `currentDate` from `new Date()` passed to both builders (else Claude anchors to its training year). **Stream suppression**: server buffers text until the ` ```json ` marker; pre-JSON reasoning is discarded.
 - **Analyst panel (`/verify`, saved analyses only)**: a panel of three independent second-opinion passes — **Skeptic** (adversarial by construction: must produce a **kill price**, the price below which the thesis is dead, or explicitly say it can't), **Optimist** (constructive bull case), **Quality** (long-term durability). All three share an unconditional no-praise rule (critique must be errors + the most fragile assumption + the one number that flips the conclusion). Each streams from `/api/ai/deep-value/verify` with an `angle` param (one route; `buildAnalystSystemPrompt(angle, …)` swaps only persona/focus, shared JSON block + authoritative-price guard + MoS clause). Each commits to its **own** bull/base/bear valuation (leading JSON block, same MoS-adjusted schema) + a critique. Runs **only on the saved-analysis detail page** (`components/analyst-panel.tsx`, one on-demand button per lens) — the live `/analyze` panel no longer runs any review. `AnalystAngle`/`ANALYST_ANGLES` canonical in `types/analysis.ts`.
 - **Blind-first (Grounded analyses only)**: when the saved analysis carries pasted data, each lens first commits to bull/base/bear from the extract/anchors alone — no report — in a hidden Phase 1 turn, then reconciles against the report in Phase 2, where a revision is only valid if it cites a fact or arithmetic error not available blind (`"the report argues X"` is not a reason). The blind-vs-final drift, any `revisions[]` (with the cited reason), and the Skeptic's kill price render in `<AnalystBlindCard>` (`components/report/analyst-blind-card.tsx`) as soon as Phase 1 parses — before Phase 2 even finishes. Quick-mode lenses are single-turn, unaffected. See AGENTS.md for the two-turn mechanics (`lib/ai/tool-loop.ts`, `verify/route.ts`).
@@ -98,7 +98,7 @@ Slim, single path: ticker search → `GET /api/quote` (price header + reference 
 - **Grounding rules** (both modes): module-level `GROUNDING_RULES_BLOCK` — LIVE PRICES is the sole current-price source; never quote historical `priceAtAnalysis` as current; **web-verify any cited cause/event/news/guidance with a date, else "unconfirmed"** (fixes invented narratives); separate verified facts from inference; read the live price + search news before hold/add/exit advice.
 - **`[[TICKER]]` chips**: Claude wraps tickers → `preprocessMarkdown()` → `/analyze?ticker=XXX` chip (full `window.location` nav — Router-Cache gotcha).
 - **Sessions**: `AdvisorSession` + `AdvisorMessage`; full sync per response via `DELETE + createMany` in a `$transaction`. Sidebar ordered by `updatedAt desc`, auto-loads most recent.
-- **Streaming**: `content_block_delta`, `max_tokens: 16000` (thinking + web search count toward budget). Tracks `stop_reason`; appends a visible "truncated" marker (EN/IT) on `max_tokens`.
+- **Streaming**: `content_block_delta`, `max_tokens: 16000` (thinking + web search count toward budget). Tracks `stop_reason`; appends a visible EN/IT note on `max_tokens` or `refusal`.
 - **Delisted guard**: both builders require web-verifying a ticker is currently listed before recommending it (prompt-level; a deterministic `/api/quote` check is a future enhancement).
 
 ### Watchlist + Email Digest (`/watchlist`)
@@ -110,7 +110,7 @@ Slim, single path: ticker search → `GET /api/quote` (price header + reference 
 
 ### AI Model Selection (multi-provider)
 - Every AI call site resolves `{model, effort, thinking}` via `resolveAiSettings()` (`lib/ai/ai-preferences.ts`): request-body override > the user's stored `User.ai{Model,Effort,ThinkingEnabled}` default > the route's own historical hardcoded fallback, then clamped to the chosen model's supported effort levels.
-- **Models**: `claude-opus-4-8`, `claude-sonnet-5`, `claude-sonnet-5-5`, `deepseek-v4-pro`, `deepseek-v4-flash` (catalog in `types/ai-settings.ts`; Sonnet 5.5 thinking-off and the pinned Grounded extraction: AGENTS.md › Multi-Provider AI Settings). DeepSeek exposes `low`/`high`/`max` effort only.
+- **Models**: `claude-opus-4-8`, `claude-sonnet-5`, `claude-sonnet-5-5`, `deepseek-v4-pro`, `deepseek-v4-flash` (catalog in `types/ai-settings.ts`; Sonnet 5.5 thinking-off and the pinned Grounded extraction: AGENTS.md › Multi-Provider AI Settings). DeepSeek exposes `low`/`high`/`max` effort only. Sonnet 5.5 calls carry the server-side refusal fallback (`fallbacks: "default"`); when it serves, a note names the model that answered (AGENTS.md › Anthropic AI Integration).
 - **Global default**: gear icon in `NavBar` → `<AiPreferencesModal>` → `GET/PATCH /api/settings/ai`. **Per-run override**: `<AiSettingsControl>` inline on Deep Value, Advisor, and the Analyst panel (one shared selector for all 3 lenses). Earnings lookup has no inline control — always the stored default.
 - **DeepSeek web search is client-executed**, not the provider's server-side tool — its Anthropic-compat translation of server-side tool calls proved unreliable in production (raw internal syntax leaked into the Advisor's visible stream). `lib/ai/web-search-tool.ts` (Tavily-backed) + `lib/ai/tool-loop.ts` (shared agentic loop, all 4 routes) replace it with standard function-calling. Deep Value + its verify route share a higher iteration cap (`DEEP_RESEARCH_MAX_TOOL_ITERATIONS = 35` vs. the default 10) with richer Tavily (`advanced`/8 results) so each round converges faster — their research/verification prompts need far more one-query-at-a-time rounds than the Advisor's. DeepSeek-only in effect.
 
@@ -153,7 +153,9 @@ lib/
   earnings.ts                # pure: isFutureEarnings, isAnalysisStalePreEarnings, formatEarningsDate
   earnings-client.ts         # client helpers: fetchEarnings / refreshEarnings
   yahoo-client.ts            # getQuote + extractRawNumber + mapFundamentalsFromTimeSeries
-  ai/client.ts               # server-only: getAiClient/buildThinkingParam/buildEffortConfig/buildWebSearchTools
+  ai/client.ts               # server-only: getAiClient/buildThinkingParam/buildEffortConfig/usesServerSideFallback/buildWebSearchTools
+  ai/fallback.ts             # pure: fallbackServedBy/prepareTurnForReplay/fallbackNote (Sonnet 5.5 refusal fallback)
+  ai/error-status.ts         # routeErrorStatus(): SDK error classes → 503/400 for the AI routes
   ai/ai-preferences.ts       # server-only: resolveAiSettings() — override > stored > fallback, effort-clamped
   ai/tool-loop.ts            # server-only: runStreamWithToolLoop/runCreateWithToolLoop — shared client-side tool loop (DeepSeek web search)
   ai/web-search-tool.ts      # server-only: CUSTOM_WEB_SEARCH_TOOL + executeWebSearch() (Tavily)
@@ -184,10 +186,10 @@ app/
       settings/ai (GET/PATCH — global AI model/effort/thinking default)
 components/                  # hub-client, analyze-client, deep-value-panel, analyses-list, grounding-input,
                              #   earnings-badge, analyst-panel (3-lens panel on saved detail),
-                             #   ai-settings-control (per-run selector), ai-preferences-modal (global default), …
-  report/                    #   portfolio-list, portfolio-history-chart, watchlist-client,
+                             #   ai-settings-control (per-run selector), ai-preferences-modal (global default),
+                             #   portfolio-list, portfolio-history-chart, watchlist-client,
                              #   advisor-client, nav-bar, download-pdf-button, …
-                             # report/: report-shell, recap-table, fair-value-cards, report-body,
+  report/                    # report-shell, recap-table, fair-value-cards, report-body,
                              #   method-badges, valuation-ruler (ValuationRuler + ComparisonTable),
                              #   grounding-card, grounding-preview, analyst-blind-card (blind vs. final drift)
 context/language-context.tsx
@@ -236,6 +238,7 @@ See `.env.example` for the full template.
 ---
 
 ## Next Priorities
+The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (eleven specs, 01…08b, one session each, in order); its index `00-INDICE.md` holds the series' state and the owner's decisions.
 1. Caching layer for `/api/quote`.
 2. Per-ticker yield-on-cost in the exit signal (needs per-position dividend exposure via snapshots).
 

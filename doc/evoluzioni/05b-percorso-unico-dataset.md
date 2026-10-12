@@ -118,7 +118,7 @@ Nessun DDL. Deploy; prima ricerca reale in produzione → `SELECT origin, length
 
 ## 11. Prompt per implementarla
 
-> Modello: Claude Opus 4.8, effort `xhigh`. Taglia: L (sezione UI + percorso unico nei builder + golden nuovo + route + comando + ~12 test + 3 run reali). Una sessione, un branch, un commit.
+> Modello: Claude Opus 5.5, effort `xhigh`. Taglia: L (sezione UI + percorso unico nei builder + golden nuovo + route + comando + ~12 test + 3 run reali). Una sessione, un branch, un commit.
 
 ```
 Implementa la spec doc/evoluzioni/05b-percorso-unico-dataset.md.

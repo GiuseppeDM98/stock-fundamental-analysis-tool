@@ -1,6 +1,8 @@
 import "server-only";
 import type Anthropic from "@anthropic-ai/sdk";
 import { executeWebSearch } from "@/lib/ai/web-search-tool";
+import { SERVER_SIDE_FALLBACK_BETA, usesServerSideFallback } from "@/lib/ai/client";
+import { fallbackServedBy, prepareTurnForReplay } from "@/lib/ai/fallback";
 import { AI_MODEL_CATALOG, type AiModelId } from "@/types/ai-settings";
 
 // Default cap for the client-side agentic loop for the custom web_search tool (DeepSeek
@@ -66,12 +68,30 @@ export function buildPromptCacheParam(model: AiModelId): { cache_control?: { typ
 // 1.9x per lens, since turn 2 replays turn 1's thinking as input) and whether the prompt
 // cache is actually read are measured, not guessed. Shared by both loop variants so the
 // non-streaming earnings lookup is just as observable as the streaming routes.
-function logRoundUsage(round: number, usage: Anthropic.Usage): void {
+function logRoundUsage(
+  round: number,
+  usage: Pick<Anthropic.Usage, "input_tokens" | "output_tokens" | "cache_read_input_tokens" | "cache_creation_input_tokens">
+): void {
   console.log(
     `[tool-loop] round ${round} usage: input=${usage.input_tokens} output=${usage.output_tokens}` +
       (usage.cache_read_input_tokens != null ? ` cache_read=${usage.cache_read_input_tokens}` : "") +
       (usage.cache_creation_input_tokens != null ? ` cache_creation=${usage.cache_creation_input_tokens}` : "")
   );
+}
+
+/** The assistant turn as it goes back into `messages`: unchanged unless a fallback
+ * happened mid-output, in which case the declined model's internal blocks are dropped
+ * (see `prepareTurnForReplay`). */
+function assistantTurn(message: Anthropic.Message): Anthropic.MessageParam {
+  return { role: "assistant", content: prepareTurnForReplay(message.content) };
+}
+
+/** Logs the switch when a fallback model served the round — the cost and the latency
+ * belong to that model, and nothing else in the server logs would show it. */
+function logFallback(round: number, requested: string, message: Anthropic.Message): string | null {
+  const servedBy = fallbackServedBy(message as unknown as Parameters<typeof fallbackServedBy>[0]);
+  if (servedBy) console.log(`[tool-loop] round ${round}: ${requested} declined, served by ${servedBy}`);
+  return servedBy;
 }
 
 /** Runs every client-executed `web_search` call in `message` and returns the tool_result
@@ -106,6 +126,10 @@ interface StreamLoopResult {
   messages: Anthropic.MessageParam[];
   // Concatenation of every text delta across every round of the loop.
   text: string;
+  // The model that actually answered when the server-side refusal fallback served the
+  // final round instead of the requested model (Sonnet 5.5 only), else null. Routes that
+  // show text append a note naming it, so the reader knows which model wrote it.
+  servedBy: string | null;
 }
 
 /** Runs a streaming Messages call, forwarding text deltas via `onTextDelta`. If the
@@ -121,9 +145,10 @@ export async function runStreamWithToolLoop(
   const messages = [...params.messages];
   let stopReason: string | null = null;
   let text = "";
+  let servedBy: string | null = null;
 
   for (let i = 0; i < maxIterations; i++) {
-    const stream = client.messages.stream({ ...params, messages });
+    const stream = openStream(client, { ...params, messages });
 
     for await (const event of stream) {
       if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
@@ -135,8 +160,9 @@ export async function runStreamWithToolLoop(
     }
 
     const finalMessage = await stream.finalMessage();
-    messages.push({ role: "assistant", content: finalMessage.content });
+    messages.push(assistantTurn(finalMessage));
     logRoundUsage(i + 1, finalMessage.usage);
+    servedBy = logFallback(i + 1, params.model, finalMessage);
 
     // Claude's server-side web_search interrupts the turn with stop_reason "pause_turn"
     // after ~10 internal search rounds — a real, ongoing turn, not a terminal state.
@@ -146,11 +172,42 @@ export async function runStreamWithToolLoop(
     if (finalMessage.stop_reason === "pause_turn") continue;
 
     const toolResultTurn = await answerSearchCalls(finalMessage);
-    if (!toolResultTurn) return { stopReason, hitIterationCap: false, messages, text };
+    if (!toolResultTurn) return { stopReason, hitIterationCap: false, messages, text, servedBy };
     messages.push(toolResultTurn);
   }
 
-  return { stopReason, hitIterationCap: true, messages, text };
+  return { stopReason, hitIterationCap: true, messages, text, servedBy };
+}
+
+/** The raw streaming events and final message the loop reads — the part the regular and
+ * the beta stream have in common. */
+interface LoopStream extends AsyncIterable<Anthropic.RawMessageStreamEvent> {
+  finalMessage(): Promise<Anthropic.Message>;
+}
+
+/** Opens one streaming round: on the beta endpoint with the server-side refusal fallback
+ * for the models that opt in (`usesServerSideFallback`), on the regular one otherwise.
+ * The casts are the seam between the beta and regular types: the loop reads only text
+ * deltas, `stop_reason`, content, model and usage, which both shapes share. (The SDK's
+ * beta namespace exports no stream-params alias; `.stream()` takes the same body as the
+ * non-streaming create, so that type stands in for it.) */
+function openStream(client: Anthropic, params: Anthropic.MessageStreamParams): LoopStream {
+  if (!usesServerSideFallback(params.model)) return client.messages.stream(params);
+  return client.beta.messages.stream({
+    ...(params as unknown as Anthropic.Beta.Messages.MessageCreateParamsNonStreaming),
+    betas: [SERVER_SIDE_FALLBACK_BETA],
+    fallbacks: "default",
+  }) as unknown as LoopStream;
+}
+
+/** Non-streaming twin of `openStream`. */
+function createMessage(client: Anthropic, params: Anthropic.MessageCreateParamsNonStreaming): Promise<Anthropic.Message> {
+  if (!usesServerSideFallback(params.model)) return client.messages.create(params);
+  return client.beta.messages.create({
+    ...(params as unknown as Anthropic.Beta.Messages.MessageCreateParamsNonStreaming),
+    betas: [SERVER_SIDE_FALLBACK_BETA],
+    fallbacks: "default",
+  }) as unknown as Promise<Anthropic.Message>;
 }
 
 type CreateParams = Omit<Anthropic.MessageCreateParamsNonStreaming, "messages"> & {
@@ -166,6 +223,8 @@ export interface CreateLoopResult {
   // another tool_use or a paused partial turn). Callers must not parse it as one.
   hitIterationCap: boolean;
   messages: Anthropic.MessageParam[];
+  // Same meaning as StreamLoopResult.servedBy.
+  servedBy: string | null;
 }
 
 /** Non-streaming equivalent of `runStreamWithToolLoop`, for one-shot structured-JSON
@@ -179,22 +238,24 @@ export async function runCreateWithToolLoop(
 ): Promise<CreateLoopResult> {
   const messages = [...params.messages];
   let lastMessage: Anthropic.Message | null = null;
+  let servedBy: string | null = null;
 
   for (let i = 0; i < maxIterations; i++) {
-    lastMessage = await client.messages.create({ ...params, messages });
-    messages.push({ role: "assistant", content: lastMessage.content });
+    lastMessage = await createMessage(client, { ...params, messages });
+    messages.push(assistantTurn(lastMessage));
     logRoundUsage(i + 1, lastMessage.usage);
+    servedBy = logFallback(i + 1, params.model, lastMessage);
 
     // Same resume-on-pause rule as the streaming loop above.
     if (lastMessage.stop_reason === "pause_turn") continue;
 
     const toolResultTurn = await answerSearchCalls(lastMessage);
     if (!toolResultTurn) {
-      return { message: lastMessage, stopReason: lastMessage.stop_reason, hitIterationCap: false, messages };
+      return { message: lastMessage, stopReason: lastMessage.stop_reason, hitIterationCap: false, messages, servedBy };
     }
     messages.push(toolResultTurn);
   }
 
   if (!lastMessage) throw new Error("runCreateWithToolLoop: maxIterations must be at least 1");
-  return { message: lastMessage, stopReason: lastMessage.stop_reason, hitIterationCap: true, messages };
+  return { message: lastMessage, stopReason: lastMessage.stop_reason, hitIterationCap: true, messages, servedBy };
 }

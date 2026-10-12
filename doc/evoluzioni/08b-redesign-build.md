@@ -98,7 +98,7 @@ Nessun DDL. Deploy. Giro dell'owner in produzione sulle stesse pagine (nessuna m
 
 ## 11. Prompt per implementarla
 
-> Modello: Claude Opus 4.8, effort `xhigh`. Taglia: XL (token + 10 pagine + a11y + email + documenter + visual). Una sessione, un branch, un commit.
+> Modello: Claude Opus 5.5, effort `xhigh`. Taglia: XL (token + 10 pagine + a11y + email + documenter + visual). Una sessione, un branch, un commit.
 
 ```
 Implementa la spec doc/evoluzioni/08b-redesign-build.md.

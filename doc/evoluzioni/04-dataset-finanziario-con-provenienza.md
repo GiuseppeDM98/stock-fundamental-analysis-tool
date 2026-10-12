@@ -222,7 +222,7 @@ Route: `POST /api/datasets` body `{ ticker: tickerSchema, origin: z.literal("pas
 
 ## 11. Prompt per implementarla
 
-> Modello: Claude Opus 4.8, effort `xhigh` (merge con provenienza e migrazione: trappole silenziose). Taglia: L (schema + 4 route + 5 componenti + store + ~22 test).
+> Modello: Claude Opus 5.5, effort `xhigh` (merge con provenienza e migrazione: trappole silenziose). Taglia: L (schema + 4 route + 5 componenti + store + ~22 test).
 
 ```
 Implementa la spec doc/evoluzioni/04-dataset-finanziario-con-provenienza.md.

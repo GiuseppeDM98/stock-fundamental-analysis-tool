@@ -9,7 +9,7 @@ Le produci tu (non l'endpoint dell'app), ma sotto il **contratto di prompt vero 
 
 ## Prima di iniziare
 
-Leggi `CLAUDE.md` e `AGENTS.md` (in particolare le sezioni *Analyst panel pattern*, *Prisma 7 + Turso*, *Anthropic AI Integration*).
+Leggi in `AGENTS.md` le sezioni *Analyst panel pattern*, *Prisma 7 + Turso* e *Anthropic AI Integration* (`CLAUDE.md` è già nel contesto).
 
 Poi verifica e chiedi solo ciò che cambia il lavoro:
 
@@ -97,9 +97,9 @@ Calcola il consenso come `lib/report/consensus.ts`: media dell'analisi base e di
 
 - **Heredoc bash fragile** con testo lungo accentato: usa `Write`, non `cat <<'EOF'`.
 - **Script nello scratchpad**: non risolvono `node_modules`. Lanciali dalla root del progetto con `node --input-type=module -e "$(cat percorso/script.mjs)"`. Nota che `process.argv` non passa argomenti in questa forma: metti i percorsi dentro lo script.
-- **Vitest non carica `.env.local`**: esporta le variabili prima, altrimenti Prisma fallisce con `URL_INVALID: The URL 'undefined'`.
+- **Vitest non carica i file `.env*`**: esporta le variabili prima, altrimenti Prisma fallisce con `URL_INVALID: The URL 'undefined'`. Le credenziali Turso stanno in `.env`, il file d'ambiente del repo; il comando legge anche un eventuale `.env.local` (che Next.js fa prevalere) e, se ci sono entrambi, vince quest'ultimo, letto per ultimo:
   ```bash
-  set -a && source <(grep -E '^(TURSO_DATABASE_URL|TURSO_AUTH_TOKEN)=' .env.local) && set +a
+  set -a && source <(grep -hE '^(TURSO_DATABASE_URL|TURSO_AUTH_TOKEN)=' .env .env.local 2>/dev/null) && set +a
   ```
 - **Prisma serve ambiente node**: metti `// @vitest-environment node` in cima al test (il default del progetto è jsdom).
 - **Cancella sempre i test temporanei** e verifica `git status` vuoto prima di chiudere.

@@ -142,6 +142,10 @@
 
 - Fixed the **next-earnings lookup returning an error** on some tickers when using the DeepSeek model — it now gets more room to finish its research before giving up.
 
+- Fixed **AI answers that ended empty or with a misleading error when the model declined a request.** When Claude's safety filters decline (this can happen with Claude Sonnet 5.5), the Advisor, Deep Value and the analyst lenses now end with a visible note saying so, and the next-earnings lookup and the pasted-data preparation say "the model declined" instead of "no parseable result" or "malformed data". A Deep Value report cut off by the length limit now says so too, instead of ending silently.
+
+- Fixed **a busy or rate-limited AI provider being reported as a bad request**: the AI features now answer "try again later" in that case.
+
 ## 🔧 Improvements
 
 - **Deep Value analyses are more rigorous** — reports now incorporate the latest quarterly results (not just annual figures), verify that any cited guidance or business plan is the current version, separate official guidance from estimates, use normalized (recurring) earnings for valuation multiples, differentiate the Bull/Base/Bear scenarios on real fundamentals, and benchmark against the closest comparable companies rather than only large global peers. These directly address blind spots a second opinion used to catch.
@@ -185,6 +189,8 @@
 - Improved the **pasted-data preview and the post-check card**: they now show the basis-reconciliation result, the multiple the model used next to the one the market implies, and what today's price requires you to believe. Block editors have an edit button and grow as you type.
 
 - Improved how **pasted data is merged**: currency, units and the coverage date now come only from your statements, never from peer comparables or forward estimates, and a currency or units conflict between your blocks raises a warning.
+
+- **Claude Sonnet 5.5 now falls back to Claude Sonnet 5 when it declines** certain requests (cybersecurity-adjacent or AI-research topics) instead of giving up, within the same answer. When that happens, a note at the end names the model that actually wrote the answer, since your model selector still shows Sonnet 5.5.
 
 ## 🔒 Security
 

@@ -28,6 +28,8 @@ import {
   GROUNDED_MAX_TOOL_ITERATIONS,
   RECONCILE_MAX_TOOL_ITERATIONS,
 } from "@/lib/ai/tool-loop";
+import { fallbackNote } from "@/lib/ai/fallback";
+import { routeErrorStatus } from "@/lib/ai/error-status";
 import { AI_MODEL_IDS, AI_EFFORT_LEVELS, type AiSettings } from "@/types/ai-settings";
 import { buildGroundingPromptContext, formatGatesForPrompt, type GroundingPromptContext } from "@/lib/grounding/prompt-format";
 import { parseDeepValueJson, ANALYST_PHASE_MARKERS } from "@/lib/report/parse-deep-value-json";
@@ -193,7 +195,7 @@ export async function POST(request: Request) {
             let jsonBlockStarted = false;
             let preJsonBuffer = "";
 
-            const { stopReason, hitIterationCap } = await runStreamWithToolLoop(
+            const { stopReason, hitIterationCap, servedBy } = await runStreamWithToolLoop(
               client,
               {
                 model: aiSettings.model,
@@ -243,11 +245,21 @@ export async function POST(request: Request) {
                 ? "_[Revisione troncata: raggiunto il limite di lunghezza. Riavviala per rigenerarla.]_"
                 : "_[Review truncated: length limit reached. Re-run it to regenerate.]_";
               controller.enqueue(new TextEncoder().encode(`\n\n${note}`));
+            } else if (stopReason === "refusal") {
+              const note = isItalian
+                ? "_[Il modello ha rifiutato questa revisione. Riavviala o scegli un altro modello.]_"
+                : "_[The model declined this review. Re-run it or pick another model.]_";
+              controller.enqueue(new TextEncoder().encode(`\n\n${note}`));
             } else if (hitIterationCap) {
               const note = isItalian
                 ? "_[Revisione interrotta: troppi cicli di ricerca web. Riavviala per rigenerarla.]_"
                 : "_[Review stopped: too many web search rounds. Re-run it to regenerate.]_";
               controller.enqueue(new TextEncoder().encode(`\n\n${note}`));
+            }
+            // The server-side refusal fallback (Sonnet 5.5) wrote this review with another
+            // model: name it, so the saved critique is not attributed to the requested one.
+            if (servedBy) {
+              controller.enqueue(new TextEncoder().encode(`\n\n${fallbackNote(aiSettings.model, servedBy, isItalian)}`));
             }
             return;
           }
@@ -294,7 +306,10 @@ export async function POST(request: Request) {
             GROUNDED_MAX_TOOL_ITERATIONS
           );
 
-          const blindCommitment = pickBlindCommitment(turn1.text);
+          // A refused Phase 1 (pre-output, or mid-stream after a partial block) is never
+          // trusted as a commitment: it degrades to the single-phase review below, which
+          // also lets turn 2 start without the refused transcript.
+          const blindCommitment = turn1.stopReason === "refusal" ? null : pickBlindCommitment(turn1.text);
 
           let turn2UserPrompt: string;
           if (blindCommitment) {
@@ -317,8 +332,8 @@ export async function POST(request: Request) {
               gatesText: baseGatesText,
             });
           } else {
-            // Degraded Phase 1 (max_tokens, prose, an unresolved pause, or unparseable
-            // JSON) — don't abort and don't pay a third turn: fall through to
+            // Degraded Phase 1 (max_tokens, a refusal, prose, an unresolved pause, or
+            // unparseable JSON) — don't abort and don't pay a third turn: fall through to
             // a normal single-phase review for turn 2. No blind fence is sent, so the
             // client shows no blind card and nothing is persisted as blindJson.
             turn2UserPrompt = buildAnalystUserPrompt({
@@ -350,8 +365,14 @@ export async function POST(request: Request) {
               tools: buildWebSearchTools(aiSettings.model),
               // The FULL turn-1 transcript, verbatim, with the same model and tools — never
               // a stripped-down history: dropped thinking blocks or an orphaned tool_use/
-              // server_tool_use block is rejected with a 400.
-              messages: [...turn1.messages, { role: "user", content: turn2UserPrompt }],
+              // server_tool_use block is rejected with a 400. Except after a turn-1
+              // refusal: its assistant turn can be empty, which the API rejects as history,
+              // and the degraded single-phase prompt above stands on its own — so turn 2
+              // starts fresh instead.
+              messages:
+                turn1.stopReason === "refusal"
+                  ? [{ role: "user", content: turn2UserPrompt }]
+                  : [...turn1.messages, { role: "user", content: turn2UserPrompt }],
               // Same breakpoint as turn 1 — this is what actually lets turn 2 read the
               // cached turn-1 prefix (and caches the longer prefix for any resumed round).
               ...buildPromptCacheParam(aiSettings.model),
@@ -392,11 +413,19 @@ export async function POST(request: Request) {
               ? "_[Revisione troncata: raggiunto il limite di lunghezza. Riavviala per rigenerarla.]_"
               : "_[Review truncated: length limit reached. Re-run it to regenerate.]_";
             controller.enqueue(new TextEncoder().encode(`\n\n${note}`));
+          } else if (turn2.stopReason === "refusal") {
+            const note = isItalian
+              ? "_[Il modello ha rifiutato questa revisione. Riavviala o scegli un altro modello.]_"
+              : "_[The model declined this review. Re-run it or pick another model.]_";
+            controller.enqueue(new TextEncoder().encode(`\n\n${note}`));
           } else if (turn2.hitIterationCap) {
             const note = isItalian
               ? "_[Revisione interrotta: troppi cicli di ricerca web. Riavviala per rigenerarla.]_"
               : "_[Review stopped: too many web search rounds. Re-run it to regenerate.]_";
             controller.enqueue(new TextEncoder().encode(`\n\n${note}`));
+          }
+          if (turn2.servedBy) {
+            controller.enqueue(new TextEncoder().encode(`\n\n${fallbackNote(aiSettings.model, turn2.servedBy, isItalian)}`));
           }
         } catch (streamErr) {
           const msg = streamErr instanceof Error ? streamErr.message : "AI error";
@@ -416,7 +445,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Review failed";
-    const status = message.toLowerCase().includes("rate limit") ? 503 : 400;
+    const status = routeErrorStatus(error);
     return NextResponse.json({ error: message }, { status });
   }
 }

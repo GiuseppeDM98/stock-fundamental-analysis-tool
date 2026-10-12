@@ -74,7 +74,7 @@ Nessun deploy (solo documenti). Voce in CLAUDE.md § Last Updated (sostituisce l
 
 ## 11. Prompt per implementarla
 
-> Modello: Claude Opus 4.8, effort `xhigh`. Taglia: M (audit di 13 route + direzione + 3 comp + 3 batch di domande). Una sessione, un branch, un commit (solo documenti).
+> Modello: Claude Opus 5.5, effort `xhigh`. Taglia: M (audit di 13 route + direzione + 3 comp + 3 batch di domande). Una sessione, un branch, un commit (solo documenti).
 
 ```
 Implementa la spec doc/evoluzioni/08a-redesign-direzione.md.
