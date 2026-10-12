@@ -29,6 +29,7 @@ import { buildGroundingExtractSystemPrompt, buildGroundingExtractUserPrompt } fr
 import { EXTRACTION_SCHEMA_BY_KIND } from "@/lib/ai/grounding-extract-schema";
 import { getAiClient, buildThinkingParam, buildEffortConfig } from "@/lib/ai/client";
 import { runStreamWithToolLoop } from "@/lib/ai/tool-loop";
+import { routeErrorStatus } from "@/lib/ai/error-status";
 import type { AiSettings } from "@/types/ai-settings";
 import { mergeExtractedBlocks, type BlockExtractResult } from "@/lib/grounding/merge";
 import { checkReconciliation } from "@/lib/grounding/reconcile";
@@ -137,7 +138,7 @@ async function extractBlock(
   // `onTextDelta` just accumulates locally, same shape as the non-streaming `response`
   // used to have, so the parsing logic below is unchanged.
   let allText = "";
-  await runStreamWithToolLoop(
+  const { stopReason } = await runStreamWithToolLoop(
     client,
     {
       model: aiSettings.model,
@@ -163,8 +164,19 @@ async function extractBlock(
     }
   );
 
+  // Sonnet 5.5's safety classifiers can decline with HTTP 200 and no text (after the
+  // server-side fallback has retried what it can): name it, so the block's warning
+  // doesn't read as a malformed paste.
+  if (stopReason === "refusal") throw new Error(`Block ${block.id}: the model declined to transcribe this block.`);
+
   const match = allText.match(/```json\s*([\s\S]*?)\s*```/);
-  if (!match) throw new Error(`Block ${block.id}: no JSON block in the AI response.`);
+  if (!match) {
+    throw new Error(
+      stopReason === "max_tokens"
+        ? `Block ${block.id}: the AI response hit the length limit before the JSON block closed.`
+        : `Block ${block.id}: no JSON block in the AI response.`
+    );
+  }
 
   const raw = JSON.parse(match[1]); // throws on malformed JSON — caller treats it as a failed block
   const parsed = EXTRACTION_SCHEMA_BY_KIND[block.kind].safeParse(raw);
@@ -239,7 +251,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Extraction failed.";
-    const status = message.toLowerCase().includes("rate limit") ? 503 : 400;
+    const status = routeErrorStatus(error);
     return NextResponse.json({ error: message }, { status });
   }
 }

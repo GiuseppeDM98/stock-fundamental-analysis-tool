@@ -357,7 +357,7 @@ the guide for everything else. Gotchas #25-#29 become one line each pointing at 
 
 ## 11. Prompt per implementarla
 
-> Modello consigliato: Claude Opus 4.8, effort `xhigh` (prompt engineering + contratto + persistenza: alta densità di trappole silenziose). Taglia: L (≈ 40 file, 1 migrazione, ~17 test, 1 guida). Una sessione lunga; la guida `doc/guide/valutazione.md` è l'ultima cosa da scrivere e, se il contesto si riempie, la prima da riprendere.
+> Modello consigliato: Claude Opus 5.5, effort `xhigh` (prompt engineering + contratto + persistenza: alta densità di trappole silenziose). Taglia: L (≈ 40 file, 1 migrazione, ~17 test, 1 guida). Una sessione lunga; la guida `doc/guide/valutazione.md` è l'ultima cosa da scrivere e, se il contesto si riempie, la prima da riprendere.
 
 ```
 Implementa la spec doc/evoluzioni/02-contratto-di-valutazione-v3.md di questo repo.

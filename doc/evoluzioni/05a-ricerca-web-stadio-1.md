@@ -10,7 +10,7 @@
 2. **Nessuna fonte per numero**: il prompt dice «Cite your sources» (`:298`); nessun URL, nessuna data, nessuna cattura dei `web_search_tool_result` (il tool-loop inoltra solo `text_delta`, `lib/ai/tool-loop.ts:129-131`); il transcript ritornato (`:101-108`) viene scartato dalla route (`route.ts:95`). Nessun `web_fetch`: il modello vede snippet, non il bilancio.
 3. **Nessuna anteprima prima della spesa**: in Quick si preme «Deep Value» e si aspetta 1–2 minuti di Opus xhigh; il dataset arriva (in prosa) insieme al verdetto.
 4. **Tavily** (DeepSeek) resta com'è: `search_depth: "advanced"`, 8 risultati, snippet di 800 caratteri (`lib/ai/web-search-tool.ts:43-66`) — serve solo allo stadio 2 con DeepSeek (rescoped), non alla ricerca (Claude-only, D-5/D-11).
-5. **L'SDK pinnato (0.78.0) tipizza già** `WebSearchTool20260209`, `WebFetchTool20260209` (in `ToolUnion`), `WebSearchToolResultBlockParam`, `WebFetchToolResultBlockParam`: nessun cast serve. Lo stesso SDK dice che `max_content_tokens` «does not apply to binary content such as PDFs» (`messages.d.ts:1466`).
+5. **L'SDK pinnato (0.78.0 quando la spec è stata scritta, `^0.133` dal 2026-10-12) tipizza già** `WebSearchTool20260209`, `WebFetchTool20260209` (in `ToolUnion`), `WebSearchToolResultBlockParam`, `WebFetchToolResultBlockParam`: nessun cast serve. Lo stesso SDK dice che `max_content_tokens` «does not apply to binary content such as PDFs» (`messages.d.ts:1466`).
 
 ## 2. Obiettivo e criteri di accettazione
 
@@ -205,7 +205,7 @@ Nessun DDL (la tabella è della 04). Deploy; prima ricerca reale (dopo la 05b, c
 
 ## 11. Prompt per implementarla
 
-> Modello: Claude Opus 4.8, effort `xhigh`. Taglia: L (prompt nuovo + schema + route + fusione al server + ~9 test + 2 run reali). Una sessione, un branch, un commit.
+> Modello: Claude Opus 5.5, effort `xhigh`. Taglia: L (prompt nuovo + schema + route + fusione al server + ~9 test + 2 run reali). Una sessione, un branch, un commit.
 
 ```
 Implementa la spec doc/evoluzioni/05a-ricerca-web-stadio-1.md.

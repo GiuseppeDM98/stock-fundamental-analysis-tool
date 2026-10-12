@@ -28,10 +28,10 @@ cd stock-fundamental-analysis-tool
 
 npm install
 
-cp .env.example .env.local
+cp .env.example .env
 ```
 
-Edit `.env.local` and set these two values:
+Edit `.env` and set these two values:
 
 ```bash
 NEXTAUTH_SECRET="$(openssl rand -hex 32)"   # paste the output
@@ -53,7 +53,9 @@ Open [http://localhost:3000](http://localhost:3000). Search for a ticker such as
 
 ## Environment Variables
 
-Full reference for every variable in `.env.local`.
+Full reference for every variable in `.env`.
+
+`.env` is the one env file this repo uses: Next.js reads it, and so does the Prisma CLI (`prisma.config.ts` loads it through `dotenv/config`), which ignores `.env.local`. Next.js also reads a `.env.local` and lets it win over `.env`; avoid keeping one, or the app and `npx prisma migrate dev` can end up on different values. A variable already set in the shell wins over both files (WORKFLOW.md §3 relies on this to keep a manual run off the production database).
 
 | Variable | Required | Local default | How to get it |
 |----------|----------|---------------|---------------|
@@ -119,7 +121,7 @@ Use this option if you want to replicate the production setup or deploy to Verce
    turso db tokens create stock-analysis
    ```
 
-5. Update `.env.local`:
+5. Update `.env`:
 
    ```bash
    TURSO_DATABASE_URL="libsql://stock-analysis-<org>.turso.io"
@@ -156,7 +158,7 @@ After `npm run dev`, check each feature:
 
 The portfolio snapshot cron runs automatically on Vercel every weekday at 20:00 UTC. To trigger it manually in local dev:
 
-1. Set `CRON_SECRET` in `.env.local`:
+1. Set `CRON_SECRET` in `.env`:
 
    ```bash
    CRON_SECRET="dev-cron-secret-local"
@@ -218,10 +220,10 @@ Some non-US tickers lack this field in Yahoo Finance. This is a data availabilit
 You have not run the migrations yet. Run `npx prisma migrate dev` and restart the dev server.
 
 **`NEXTAUTH_SECRET` missing or invalid**
-Generate a new value with `openssl rand -hex 32` and add it to `.env.local`.
+Generate a new value with `openssl rand -hex 32` and add it to `.env`.
 
 **AI Analysis returns an error**
-Verify that `ANTHROPIC_API_KEY` in `.env.local` is a valid key from [console.anthropic.com](https://console.anthropic.com) and that your account has available credits.
+Verify that `ANTHROPIC_API_KEY` in `.env` is a valid key from [console.anthropic.com](https://console.anthropic.com) and that your account has available credits.
 
 **`prisma generate` errors after pulling changes**
 Run `npx prisma generate` to regenerate the Prisma client after any schema changes pulled from the repo.

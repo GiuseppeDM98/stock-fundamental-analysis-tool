@@ -271,7 +271,7 @@ Nessun DDL. Deploy; su un'analisi salvata in produzione: la card compare e i gat
 
 ## 11. Prompt per implementarla
 
-> Modello: Claude Opus 4.8, effort `xhigh`. Taglia: M-L (postcheck + 4 componenti + route verify + ~24 test). Una sessione.
+> Modello: Claude Opus 5.5, effort `xhigh`. Taglia: M-L (postcheck + 4 componenti + route verify + ~24 test). Una sessione.
 
 ```
 Implementa la spec doc/evoluzioni/03-gate-universali-e-scheda-verifiche.md.

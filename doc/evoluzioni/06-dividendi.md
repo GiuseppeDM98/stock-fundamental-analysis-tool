@@ -211,7 +211,7 @@ Nessun DDL. Deploy. Voce in CLAUDE.md § Last Updated (sostituisce la precedente
 
 ## 11. Prompt per implementarla
 
-> Modello: Claude Opus 4.8, effort `high`. Taglia: M (1 modulo puro, 3 componenti, postcheck, page/AnalysisDetailBody, token, ~12 test).
+> Modello: Claude Opus 5.5, effort `high`. Taglia: M (1 modulo puro, 3 componenti, postcheck, page/AnalysisDetailBody, token, ~12 test).
 
 ```
 Implementa la spec doc/evoluzioni/06-dividendi.md.

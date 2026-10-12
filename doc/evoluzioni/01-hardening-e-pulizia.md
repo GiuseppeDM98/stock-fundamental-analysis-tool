@@ -318,7 +318,7 @@ Ambiente: `npm run seed:e2e` + dev server isolato (`WORKFLOW.md § 3`). Esiti at
 
 ## 11. Prompt per implementarla
 
-> Modello consigliato: Claude Opus 4.8, effort `high`. Taglia stimata: M-L (≈ 45 file toccati fra creati e modificati, 1 migrazione, ~13 test). Una sessione.
+> Modello consigliato: Claude Opus 5.5, effort `high`. Taglia stimata: M-L (≈ 45 file toccati fra creati e modificati, 1 migrazione, ~13 test). Una sessione.
 
 ```
 Implementa la spec doc/evoluzioni/01-hardening-e-pulizia.md di questo repo.

@@ -10,6 +10,8 @@ import { buildAdvisorSystemPrompt, buildAdvisorUserPrompt, buildDiscoverySystemP
 import { getAiClient, buildThinkingParam, buildEffortConfig, buildWebSearchTools } from "@/lib/ai/client";
 import { resolveAiSettings } from "@/lib/ai/ai-preferences";
 import { runStreamWithToolLoop } from "@/lib/ai/tool-loop";
+import { fallbackNote } from "@/lib/ai/fallback";
+import { routeErrorStatus } from "@/lib/ai/error-status";
 import { AI_MODEL_IDS, AI_EFFORT_LEVELS, type AiSettings } from "@/types/ai-settings";
 
 const DEFAULT_SETTINGS: AiSettings = { model: "claude-sonnet-5-5", effort: "high", thinking: true };
@@ -140,7 +142,7 @@ export async function POST(request: Request) {
     const readable = new ReadableStream({
       async start(controller) {
         try {
-          const { stopReason, hitIterationCap } = await runStreamWithToolLoop(
+          const { stopReason, hitIterationCap, servedBy } = await runStreamWithToolLoop(
             client,
             {
               model: aiSettings.model,
@@ -168,12 +170,25 @@ export async function POST(request: Request) {
               ? "_[Risposta troncata: raggiunto il limite di lunghezza.]_"
               : "_[Response truncated: length limit reached.]_";
             controller.enqueue(new TextEncoder().encode(`\n\n${note}`));
+          } else if (stopReason === "refusal") {
+            // A safety classifier declined the turn: HTTP 200, stop_reason "refusal",
+            // little or no text. Say so instead of ending on an empty reply.
+            const note = body.language === "Italian"
+              ? "_[Il modello ha rifiutato questa richiesta. Riformulala o scegli un altro modello.]_"
+              : "_[The model declined this request. Rephrase it or pick another model.]_";
+            controller.enqueue(new TextEncoder().encode(`\n\n${note}`));
           } else if (hitIterationCap) {
             // The DeepSeek custom web_search tool loop (lib/ai/tool-loop.ts) ran out of
             // rounds while still researching — surface it instead of returning silence.
             const note = body.language === "Italian"
               ? "_[Ricerca interrotta: troppi cicli di ricerca web. Riprova con una domanda più mirata.]_"
               : "_[Research stopped: too many web search rounds. Try a more specific question.]_";
+            controller.enqueue(new TextEncoder().encode(`\n\n${note}`));
+          }
+          // The server-side refusal fallback (Sonnet 5.5) answered with another model:
+          // name it, since the selector still shows the one that was requested.
+          if (servedBy) {
+            const note = fallbackNote(aiSettings.model, servedBy, body.language === "Italian");
             controller.enqueue(new TextEncoder().encode(`\n\n${note}`));
           }
         } catch (streamErr) {
@@ -194,7 +209,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Advisor request failed";
-    const status = message.toLowerCase().includes("rate limit") ? 503 : 400;
+    const status = routeErrorStatus(error);
     return NextResponse.json({ error: message }, { status });
   }
 }

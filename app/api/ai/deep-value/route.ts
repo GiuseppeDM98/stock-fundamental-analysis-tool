@@ -13,6 +13,8 @@ import {
 import { getAiClient, buildThinkingParam, buildEffortConfig, buildWebSearchTools } from "@/lib/ai/client";
 import { resolveAiSettings } from "@/lib/ai/ai-preferences";
 import { runStreamWithToolLoop, DEEP_RESEARCH_MAX_TOOL_ITERATIONS, GROUNDED_MAX_TOOL_ITERATIONS } from "@/lib/ai/tool-loop";
+import { fallbackNote } from "@/lib/ai/fallback";
+import { routeErrorStatus } from "@/lib/ai/error-status";
 import { AI_MODEL_IDS, AI_EFFORT_LEVELS, type AiSettings } from "@/types/ai-settings";
 import { groundingPayloadSchema } from "@/lib/grounding/schema";
 import { buildGroundingPromptContext, type GroundingPromptContext } from "@/lib/grounding/prompt-format";
@@ -92,7 +94,7 @@ export async function POST(request: Request) {
           let jsonBlockStarted = false;
           let preJsonBuffer = "";
 
-          const { hitIterationCap } = await runStreamWithToolLoop(
+          const { stopReason, hitIterationCap, servedBy } = await runStreamWithToolLoop(
             client,
             {
               model: aiSettings.model,
@@ -140,12 +142,29 @@ export async function POST(request: Request) {
             controller.enqueue(new TextEncoder().encode(preJsonBuffer));
           }
 
-          if (hitIterationCap) {
-            const isItalian = body.language === "Italiano" || body.language === "Italian";
+          const isItalian = body.language === "Italiano" || body.language === "Italian";
+          // Surface a token-cap cut or a safety-classifier decline (HTTP 200,
+          // stop_reason "refusal") instead of ending on a partial or empty report.
+          if (stopReason === "max_tokens") {
+            const note = isItalian
+              ? "\n\n_[Analisi troncata: raggiunto il limite di lunghezza. Riavviala per rigenerarla.]_"
+              : "\n\n_[Analysis truncated: length limit reached. Re-run it to regenerate.]_";
+            controller.enqueue(new TextEncoder().encode(note));
+          } else if (stopReason === "refusal") {
+            const note = isItalian
+              ? "\n\n_[Il modello ha rifiutato questa analisi. Riavviala o scegli un altro modello.]_"
+              : "\n\n_[The model declined this analysis. Re-run it or pick another model.]_";
+            controller.enqueue(new TextEncoder().encode(note));
+          } else if (hitIterationCap) {
             const note = isItalian
               ? "\n\n_[Analisi interrotta: troppi cicli di ricerca web. Riprova, magari con un margine di sicurezza diverso.]_"
               : "\n\n_[Analysis stopped: too many web search rounds. Try again, maybe with a different margin of safety.]_";
             controller.enqueue(new TextEncoder().encode(note));
+          }
+          // The server-side refusal fallback (Sonnet 5.5) wrote this report with another
+          // model: say which, so the saved report is not attributed to the requested one.
+          if (servedBy) {
+            controller.enqueue(new TextEncoder().encode(`\n\n${fallbackNote(aiSettings.model, servedBy, isItalian)}`));
           }
         } catch (streamErr) {
           const msg = streamErr instanceof Error ? streamErr.message : "AI error";
@@ -165,7 +184,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Analysis failed";
-    const status = message.toLowerCase().includes("rate limit") ? 503 : 400;
+    const status = routeErrorStatus(error);
     return NextResponse.json({ error: message }, { status });
   }
 }

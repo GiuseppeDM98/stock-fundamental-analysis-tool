@@ -5,7 +5,7 @@ vi.mock("@/lib/ai/web-search-tool", () => ({
   executeWebSearch: vi.fn(async (query: string) => `results for ${query}`),
 }));
 
-import { runCreateWithToolLoop, buildPromptCacheParam } from "@/lib/ai/tool-loop";
+import { runCreateWithToolLoop, runStreamWithToolLoop, buildPromptCacheParam } from "@/lib/ai/tool-loop";
 
 const USAGE = { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: null, cache_creation_input_tokens: null };
 
@@ -94,5 +94,126 @@ describe("buildPromptCacheParam", () => {
 
   it("adds nothing for DeepSeek, whose Anthropic-compat proxy rejects cache_control", () => {
     expect(buildPromptCacheParam("deepseek-v4-pro")).toEqual({});
+  });
+});
+
+// A refusal arrives as HTTP 200 with stop_reason "refusal" and little or no content; the
+// loop must hand it to the route as such (not as a cap, not as a normal end) so the route
+// can say the model declined instead of "no parseable result".
+const REFUSED = message("refusal", []);
+
+function fallbackMessage(model: string, stop_reason: string, content: unknown[]): Anthropic.Message {
+  return {
+    id: "m",
+    type: "message",
+    role: "assistant",
+    model,
+    content,
+    stop_reason,
+    usage: { ...USAGE, iterations: [{ type: "message" }, { type: "fallback_message" }] },
+  } as unknown as Anthropic.Message;
+}
+
+/** A client whose regular and beta endpoints are recorded separately, so a test can tell
+ * which one a call went through and with which params. */
+function mockDualClient(replies: Anthropic.Message[]) {
+  const queue = [...replies];
+  const calls: { endpoint: "regular" | "beta"; params: Record<string, unknown> }[] = [];
+  const record = (endpoint: "regular" | "beta") =>
+    vi.fn(async (params: Record<string, unknown>) => {
+      calls.push({ endpoint, params: { ...params, messages: [...(params.messages as unknown[])] } });
+      return queue.shift()!;
+    });
+  const streamOf = (endpoint: "regular" | "beta") =>
+    vi.fn((params: Record<string, unknown>) => {
+      calls.push({ endpoint, params: { ...params, messages: [...(params.messages as unknown[])] } });
+      const reply = queue.shift()!;
+      const events = [
+        ...reply.content
+          .filter((b) => b.type === "text")
+          .map((b) => ({ type: "content_block_delta", delta: { type: "text_delta", text: (b as Anthropic.TextBlock).text } })),
+        { type: "message_delta", delta: { stop_reason: reply.stop_reason } },
+      ];
+      return {
+        async *[Symbol.asyncIterator]() {
+          yield* events;
+        },
+        finalMessage: async () => reply,
+      };
+    });
+  const client = {
+    messages: { create: record("regular"), stream: streamOf("regular") },
+    beta: { messages: { create: record("beta"), stream: streamOf("beta") } },
+  } as unknown as Anthropic;
+  return { client, calls };
+}
+
+describe("refusal and the server-side fallback", () => {
+  beforeEach(() => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("returns a refusal as stopReason 'refusal', not as an iteration cap (non-streaming)", async () => {
+    const { client } = mockDualClient([REFUSED]);
+    const result = await runCreateWithToolLoop(client, PARAMS, 5);
+    expect(result.stopReason).toBe("refusal");
+    expect(result.hitIterationCap).toBe(false);
+    expect(result.servedBy).toBeNull();
+  });
+
+  it("returns a refusal as stopReason 'refusal' from the streaming loop, with no text", async () => {
+    const { client } = mockDualClient([REFUSED]);
+    const deltas: string[] = [];
+    const result = await runStreamWithToolLoop(client, PARAMS, (t) => deltas.push(t), 5);
+    expect(result.stopReason).toBe("refusal");
+    expect(result.hitIterationCap).toBe(false);
+    expect(result.text).toBe("");
+    expect(deltas).toEqual([]);
+  });
+
+  it("sends Sonnet 5.5 through the beta endpoint with fallbacks: 'default' and its beta header", async () => {
+    const { client, calls } = mockDualClient([TEXT_ANSWER, TEXT_ANSWER]);
+    await runCreateWithToolLoop(client, { ...PARAMS, model: "claude-sonnet-5-5" }, 5);
+    await runStreamWithToolLoop(client, { ...PARAMS, model: "claude-sonnet-5-5" }, () => {}, 5);
+    expect(calls.map((c) => c.endpoint)).toEqual(["beta", "beta"]);
+    for (const call of calls) {
+      expect(call.params.fallbacks).toBe("default");
+      expect(call.params.betas).toEqual(["server-side-fallback-2026-07-01"]);
+    }
+  });
+
+  it("keeps every other model, DeepSeek included, on the regular endpoint without the fallback", async () => {
+    for (const model of ["claude-opus-4-8", "claude-sonnet-5", "deepseek-v4-pro"]) {
+      const { client, calls } = mockDualClient([TEXT_ANSWER]);
+      await runStreamWithToolLoop(client, { ...PARAMS, model }, () => {}, 5);
+      expect(calls).toHaveLength(1);
+      expect(calls[0].endpoint).toBe("regular");
+      expect(calls[0].params).not.toHaveProperty("fallbacks");
+      expect(calls[0].params).not.toHaveProperty("betas");
+    }
+  });
+
+  it("reports the model that actually answered when the fallback served the turn", async () => {
+    const served = fallbackMessage("claude-sonnet-5", "end_turn", [{ type: "text", text: "answer" }]);
+    const { client } = mockDualClient([served]);
+    const result = await runStreamWithToolLoop(client, { ...PARAMS, model: "claude-sonnet-5-5" }, () => {}, 5);
+    expect(result.servedBy).toBe("claude-sonnet-5");
+    expect(result.stopReason).toBe("end_turn");
+  });
+
+  it("drops the declined model's internal blocks before resuming a paused fallback turn", async () => {
+    const paused = fallbackMessage("claude-sonnet-5", "pause_turn", [
+      { type: "thinking", thinking: "", signature: "s" },
+      { type: "text", text: "partial" },
+      { type: "fallback", from: { model: "claude-sonnet-5-5" }, to: { model: "claude-sonnet-5" } },
+      { type: "text", text: "continued" },
+    ]);
+    const { client, calls } = mockDualClient([paused, TEXT_ANSWER]);
+    await runStreamWithToolLoop(client, { ...PARAMS, model: "claude-sonnet-5-5" }, () => {}, 5);
+    const resumed = calls[1].params.messages as Anthropic.MessageParam[];
+    expect((resumed[1].content as { type: string }[]).map((b) => b.type)).toEqual(["text", "fallback", "text"]);
   });
 });

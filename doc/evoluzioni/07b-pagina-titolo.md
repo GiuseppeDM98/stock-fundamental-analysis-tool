@@ -123,7 +123,7 @@ Nessun DDL. Deploy insieme alla 07a. Prima visita reale → nessuna misura DB; v
 
 ## 11. Prompt per implementarla
 
-> Modello: Claude Opus 4.8, effort `xhigh`. Taglia: L (loader + pagina + 10 componenti + seed/e2e/visual). Una sessione, un branch, un commit.
+> Modello: Claude Opus 5.5, effort `xhigh`. Taglia: L (loader + pagina + 10 componenti + seed/e2e/visual). Una sessione, un branch, un commit.
 
 ```
 Implementa la spec doc/evoluzioni/07b-pagina-titolo.md.

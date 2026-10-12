@@ -104,8 +104,8 @@ cd stock-fundamental-analysis-tool
 npm install
 
 # Copy env template and fill in your values
-cp .env.example .env.local
-# (edit .env.local: add NEXTAUTH_SECRET, ANTHROPIC_API_KEY)
+cp .env.example .env
+# (edit .env: add NEXTAUTH_SECRET, ANTHROPIC_API_KEY — SETUP.md explains why .env, not .env.local)
 
 # Run database migrations
 npx prisma migrate dev
