@@ -1,13 +1,14 @@
 # 01 — Hardening e pulizia
 
-> **Stato**: scritta 2026-10-11; riletta in modo adversariale il 2026-10-11: 36 rilievi, 7 decisioni (D-21, D-28, D-29, D-30, D-31; T-21, T-22). Pronta per l'implementazione.
+> **Stato**: scritta 2026-10-11; riletta in modo adversariale il 2026-10-11: 36 rilievi, 7 decisioni (D-21, D-28, D-29, D-30, D-31; T-21, T-22); integrata il 2026-10-18 con B10/A11 (la ricerca web di DeepSeek passa alla Search API di DeepSeek, Tavily esce — D-70, T-34) e B11/A12 (catalogo: `deepseek-flash` con alias — D-72). Pronta per l'implementazione.
 > **Branch**: `fix/hardening-and-cleanup` da `develop`. **Dipende da**: nessuna spec.
-> **Indice**: [00-INDICE.md](00-INDICE.md) — decisioni D-16, D-21, D-28, D-29, D-30, D-31; scelte T-15, T-16, T-19, T-21, T-22, T-23, T-24, T-26; contratti C-1, C-2, C-3, C-14.
+> **Indice**: [00-INDICE.md](00-INDICE.md) — decisioni D-16, D-21, D-28, D-29, D-30, D-31, D-70, D-72; scelte T-15, T-16, T-19, T-21, T-22, T-23, T-24, T-26, T-34; contratti C-1, C-2, C-3, C-14.
 
 ## 1. Il problema oggi (prove sul codice, commit `17e54b6`, 2026-10-11)
 
 Sei bug reali, un crash, due incoerenze di contratto e due oggetti morti, trovati dall'analisi di
-pianificazione. Nessuno ha un test che lo fissi.
+pianificazione, più una dipendenza esterna diventata superflua (B10, aggiunta il 2026-10-18).
+Nessuno ha un test che lo fissi.
 
 | # | Difetto | Prova |
 |---|---|---|
@@ -20,6 +21,8 @@ pianificazione. Nessuno ha un test che lo fissi.
 | B7 | **Crash** quando uno scenario manca nel JSON sanitizzato: `sanitizeDeepValueResult` può restituire un risultato senza `bull`/`base`/`bear` (`lib/report/parse-deep-value-json.ts:162-165`, test a `__tests__/parse-deep-value-json.test.ts:131`), ma `fair-value-cards.tsx:31-41`, `recap-table.tsx:43-45`, `deep-value-run.ts:48-50` (`result?.bull.fairValue`) e `analyst-panel.tsx:191` (`liveFinal.bear.fairValue`) dereferenziano senza guardia: il pannello live esplode in render, il salvataggio lancia un TypeError, la lente non persiste. Il tipo `AnalystResult` dichiara i tre scenari obbligatori (`components/report/types.ts:64-73`), quindi TypeScript non protegge nessun consumer. | citati |
 | B8 | Il ticker non è normalizzato lato server su `Analysis` e `Position` (`app/api/analyses/route.ts:12`: `max(10)`, nessun uppercase; `app/api/positions/route.ts:9`: idem) mentre watchlist ed earnings lo uppercasano e le route AI accettano `max(20)`. Un ticker di 11+ caratteri (es. `ABCDEFGHIJ.MI`, 13 caratteri) passa in Deep Value e fallisce al salvataggio; un ticker minuscolo spezza i raggruppamenti per ticker. | citati |
 | B9 | `WatchlistRun` (modello + tabella) e `User.watchlistFreq` sono morti: nessuna lettura (`grep` del 2026-10-11: solo `prisma/schema.prisma:22, 28, 139-154`, `scripts/seed-e2e.ts:249` e tre commenti). | citati |
+| B10 | La ricerca web di DeepSeek passa da **Tavily** (`lib/ai/web-search-tool.ts:31-57`: `search_depth: "advanced"`, 8 risultati, `topic: "finance"`, `content` troncato a 800 caratteri; ≈ 2 crediti = 0,016 $ a ricerca a consumo): un secondo fornitore con una seconda chiave (`TAVILY_API_KEY`) usato SOLO quando il modello è DeepSeek. Dal 2026-10 DeepSeek espone due endpoint REST autonomi — `POST https://api.deepseek.com/v1/tools/search` e `POST https://api.deepseek.com/v1/tools/fetch` — con la stessa chiave `DEEPSEEK_API_KEY` (bearer), 0,75 $ per 1.000 richieste riuscite ciascuno (≈ 21× meno di Tavily advanced; una richiesta con `results` vuoto, un errore o un timeout non si pagano), 5 QPS per account, `count` 1-50, query ≤ 128 caratteri. Verificato il 2026-10-18 con una chiamata reale dalla chiave del repo: HTTP 200, `{ results: [{ title, url, snippet, summary, date, site_name, authority, rerank_score }] }`. Sull'endpoint Anthropic-compat (`/anthropic`) la documentazione NON descrive alcun tool server-side di search/fetch: il gotcha #25 resta vero e il tool resta client-executed. | `lib/ai/web-search-tool.ts`; `lib/ai/client.ts:73-80`; `types/ai-settings.ts:57-67`; `.env.example:38-43`; `e2e/support/env.ts:81`; email «Notice of DeepSeek Search API Pricing» (DeepSeek, 2026-10-18); `https://api-docs.deepseek.com/guides/search`; `https://api-docs.deepseek.com/quick_start/pricing` |
+| B11 | L'id `deepseek-v4-flash` del catalogo è un alias RITIRATO dal fornitore: dal 2026-09-10 (`https://api-docs.deepseek.com/updates`) V4 Flash è dismesso e il nome è instradato «temporaneamente» su DeepSeek-V4.1-Flash, il cui id è `deepseek-flash` (dal 2026-10-17 versione 1017, vision, stesso prezzo di Flash); la pagina dei prezzi del 2026-10-18 elenca solo `deepseek-v4-pro` e `deepseek-flash`. L'app mostra l'etichetta «DeepSeek V4 Flash» e salva `User.aiModel = "deepseek-v4-flash"`: funziona finché DeepSeek tiene l'alias, con un nome falso in UI. `deepseek-v4-pro` resta il modello più capace del fornitore (nessun «V4.1 Pro» al 2026-10-18): non c'è altro da aggiungere. | `types/ai-settings.ts:3-9, :70-78`; `__tests__/ai-client.test.ts:49`; `README.md:42`; `CLAUDE.md:23, :113`; `AGENTS.md:286`; `https://api-docs.deepseek.com/updates` (voci 2026-09-10 e 2026-10-17) |
 
 ## 2. Obiettivo e criteri di accettazione
 
@@ -36,7 +39,9 @@ Codice corretto su cui costruire le spec successive; nessuna feature nuova; ness
 | A7 | Un JSON con uno scenario mancante non fa crashare né il pannello live né la lente: il parser restituisce `ParsedAnalystResult` (scenari opzionali) e `hasFullTriple` è l'unica porta verso `ReportShell`/`buildSaveAnalysisRequest`/`updateAnalystOpinion` — una dereferenza senza guardia non compila (D-31); il pannello mostra `t("deepValueIncompleteJson")` e il salvataggio resta disponibile SOLO per il Markdown (fair value e metodo omessi). | `npm run typecheck` (una dereferenza `result.bull` su un `ParsedAnalystResult` è un errore TS2532); `__tests__/parse-deep-value-json.test.ts` › `hasFullTriple`; `__tests__/deep-value-run.test.ts`: `buildSaveAnalysisRequest(run, md, { …senzaBear })` omette i tre fair value e `valuationMethod` senza lanciare; `__tests__/analyst-panel.test.tsx`: stream con JSON senza `bear` → nessun throw, PATCH con `fairValue*` e `valuationMethod` a `null` (D-28). |
 | A8 | `Analysis.ticker` e `Position.ticker` sono uppercasati e trimmati lato server, `max(20)` ovunque. | `__tests__/ticker-normalization.test.ts` sui due schemi Zod esportati da `lib/ticker.ts` (`normalizeTicker`, `tickerSchema`). e2e `authorization.spec.ts` (già esistente) resta verde. |
 | A9 | `WatchlistRun` e `User.watchlistFreq` non esistono più né nello schema, né nel client generato, né nel seed, né nei commenti. | `npm run typecheck` verde con `db.watchlistRun` rimosso dal seed; migrazione `drop_watchlist_run_and_freq` presente; `sqlite3 .e2e/e2e.db ".tables"` non elenca `WatchlistRun`; `grep -rn "WatchlistRun\|watchlistFreq" app components lib scripts` vuoto. |
-| A10 | `npm run ci:local` verde; la run reale di D-29 eseguita. | Esito registrato in `CLAUDE.md § Last Updated`. |
+| A10 | `npm run ci:local` verde; la run reale di D-29 eseguita (con il punto (3) su DeepSeek, § 7). | Esito registrato in `CLAUDE.md § Last Updated`. |
+| A11 | `executeWebSearch(query)` chiama la Search API di DeepSeek (`count: 8`, `need_content: false`, query troncata a 128 caratteri) con `DEEPSEEK_API_KEY`; il blocco di `tool_result` elenca `title`, `url`, data e `summary` di ogni risultato; `CUSTOM_WEB_SEARCH_TOOL` (schema), il loop, le costanti di iterazione e i prompt NON cambiano; `TAVILY_API_KEY` e la parola «Tavily» non esistono più nel repo. | `__tests__/web-search-tool.test.ts` (§ 6) con `fetch` mockato; `grep -rni "tavily" --exclude-dir=node_modules --exclude-dir=.next --exclude-dir=doc --exclude="Draft Release Temp.md" .` → zero righe (il draft delle release è append-only e la cita nella nota di rilascio); run reale (§ 7, punto 3). |
+| A12 | Il catalogo espone `deepseek-flash` con etichetta «DeepSeek V4.1 Flash» al posto di `deepseek-v4-flash`; un `User.aiModel` salvato con il vecchio id si risolve a `deepseek-flash` (alias in lettura, `normalizeAiModelId`); `PATCH /api/settings/ai` e gli override delle route accettano anche il vecchio id e lo normalizzano; la parola `deepseek-v4-flash` resta nel repo SOLO nella mappa degli alias e nei suoi test. | `__tests__/ai-settings-alias.test.ts` + `__tests__/ai-preferences.test.ts` (§ 6); `grep -rn "deepseek-v4-flash" --exclude-dir=node_modules --exclude-dir=.next --exclude-dir=doc --exclude="Draft Release Temp.md" .` → solo `types/ai-settings.ts` (mappa) e i due test; run reale (§ 7, punto 3, su `deepseek-flash`). |
 
 ## 3. Decisioni
 
@@ -45,6 +50,9 @@ Codice corretto su cui costruire le spec successive; nessuna feature nuova; ness
 - **D-29** (owner, 2026-10-11): la 01 esegue una run reale economica (§ 7) perché tocca tre percorsi AI, come vuole la regola 7 della serie.
 - **D-30** (owner, 2026-10-11): su `/analyses`, quando il salvataggio più recente non ha fair value, righello, verdetto, marker, segnale debole e filtro Under FV usano `latestAnalysisWithValues`; header, link «Open report», storico (`slice(1)`), `earningsStale` e ordinamenti restano su `analyses[0]`.
 - **D-31** (owner, 2026-10-11): `parseDeepValueJson`/`sanitizeDeepValueResult` restituiscono `ParsedAnalystResult` (bull/base/bear opzionali) e `hasFullTriple(r): r is AnalystResult` restringe davvero: C-1 ha questa firma.
+- **D-70** (owner, 2026-10-18, dall'email «Notice of DeepSeek Search API Pricing»): la ricerca web di DeepSeek passa dalla Search API di DeepSeek (stessa chiave, stesso saldo, 0,75 $ per 1.000 richieste riuscite); Tavily e `TAVILY_API_KEY` escono dal repo. Entra nella 01 come pulizia (un fornitore e una chiave in meno): nessun prompt, nessun contratto, nessuna route cambia. La Fetch API di DeepSeek non entra nella 01: nasce nella 05a come `web_fetch` client-executed per DeepSeek nello stadio 1 (D-71, che riapre D-5).
+- **D-72** (owner, 2026-10-18): il catalogo rinomina `deepseek-v4-flash` → `deepseek-flash` («DeepSeek V4.1 Flash») nella 01, con alias in lettura per i default salvati; nessun modello DeepSeek nuovo (V4 Pro resta il più capace). Nessuna migrazione: l'alias nel codice basta; § 8 ha il `SELECT` di controllo e l'`UPDATE` facoltativo per ritirare l'alias in futuro.
+- **T-34** (adottata, ribaltabile): il tool resta client-executed (`CUSTOM_WEB_SEARCH_TOOL` + `answerSearchCalls`, gotcha #25: l'endpoint Anthropic-compat non documenta search/fetch server-side e il leak del 2026-07-10 non è mai stato spiegato dal fornitore); `count: 8` (come gli 8 risultati di oggi), `need_content: false` (il `summary` di 600-800 caratteri è «model-facing» per documentazione e sostituisce il `content` troncato a 800 di Tavily senza pagare la pagina intera); `ori_question` e `localization` non si mandano; la query si tronca a 128 caratteri (limite dell'API, altrimenti 400) e la `description` del tool lo dice al modello; l'HTTP verso `api.deepseek.com/v1/tools/*` sta in un helper privato `callDeepSeekTool(path, body)` (chiave, header, non-2xx → messaggio) che la 05a riusa per `executeWebFetch`; una risposta non-2xx, un `results` vuoto o un errore di rete tornano un messaggio di `tool_result` in inglese che dice al modello di rispondere da conoscenza, mai un throw (come oggi).
 - **T-15** (adottata, ribaltabile): `GET /api/portfolio/dividends` con `byTicker`, calcolato server-side su tutti gli snapshot tramite `loadDividendTotals()` (T-24), che la pagina titolo (07b) riusa.
 - **T-16** (adottata, ribaltabile): `lib/report/latest-analysis.ts` come unica regola; il filtro «Under FV» e l'exit signal passano al CONSENSO quando esiste (stessa fonte del badge); il buy target della watchlist (client e digest) passa da `watchlistBuyTarget()` (T-23).
 - **T-19** (adottata, ribaltabile): la migrazione distruttiva si applica a Turso DOPO il deploy, con dump prima e conteggi di TUTTE le tabelle prima e dopo (§ 8).
@@ -240,6 +248,68 @@ export function toWatchlistMosFraction(mosPercent: number): number {
 - `e2e/pages.spec.ts` (portfolio): asserire che «Dividends Received» mostra 47,50 € = somma in JS di `entries[].dividendPaidEur` su TUTTE le righe `PortfolioSnapshot` di A (`queryAll`); che il pill «⚠ At Fair Value» su ORNT è ACCESO (consenso (135+90+120+105)/4 = 112,5 → intrinseco 150 = prezzo stub 150: prima era spento, 180 > 150); e che il badge posizione su `/analyses` per `TICKERS.panel` riporta le azioni del solo lotto aperto (`IDS.positionPanelOpen`), non la somma con `IDS.positionPanelClosed`.
 - Visual: `npm run e2e:visual:update` PRIMA, `npm run e2e:visual` DOPO; differenze attese su portfolio (totale dividendi E pill ORNT acceso) e `/analyses` (badge): riportarle in SESSION_NOTES.
 
+### 4.6 Ricerca web di DeepSeek — `lib/ai/web-search-tool.ts` (B10, D-70, T-34)
+
+`CUSTOM_WEB_SEARCH_TOOL` resta lo stesso oggetto (nome `web_search`, `input_schema` con la sola `query`); la `description` guadagna la frase finale «Keep the query under 128 characters.» (`__tests__/ai-client.test.ts` oggi asserisce solo il tool di Sonnet 5.5: aggiungere un caso in cui `buildWebSearchTools("deepseek-v4-pro")` restituisce un solo tool di nome `web_search`, senza `type`, con una `description` che contiene «128»; il golden Quick non contiene il tool — verificarlo verde). `executeWebSearch(query: string): Promise<string>` cambia solo l'HTTP (il codice sotto è lineare per leggibilità: nell'implementazione la parte chiave + header + `fetch` + non-2xx → messaggio va in un helper privato `callDeepSeekTool(path: "search" | "fetch", body: object): Promise<{ ok: true; data: unknown } | { ok: false; message: string }>`, che la 05a riusa per la Fetch API — T-34/T-35):
+
+```ts
+const DEEPSEEK_SEARCH_URL = "https://api.deepseek.com/v1/tools/search";
+const DEEPSEEK_SEARCH_QUERY_MAX = 128; // the API answers 400 above this
+const DEEPSEEK_SEARCH_COUNT = 8;
+
+interface DeepSeekSearchResult {
+  title: string;
+  url: string;
+  snippet: string;   // ~100-200 chars, display-oriented
+  summary: string;   // ~600-800 chars, written for a model
+  date: string | null; // RFC 3339, UTC
+}
+
+export async function executeWebSearch(query: string): Promise<string> {
+  const apiKey = process.env.DEEPSEEK_API_KEY; // same key as the model: one balance, one bill
+  if (!apiKey) return "Web search is not configured on this server (missing DEEPSEEK_API_KEY) — answer from existing knowledge and say so.";
+  try {
+    const res = await fetch(DEEPSEEK_SEARCH_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ query: query.slice(0, DEEPSEEK_SEARCH_QUERY_MAX), count: DEEPSEEK_SEARCH_COUNT, need_content: false }),
+    });
+    if (!res.ok) {
+      const hint = res.status === 402 ? ": DeepSeek balance exhausted" : "";
+      return `Web search request failed (HTTP ${res.status}${hint}) — answer from existing knowledge and say so.`;
+    }
+    const data = (await res.json()) as { results?: DeepSeekSearchResult[] };
+    if (!data.results?.length) return `No web search results found for "${query}".`;
+    return data.results
+      .map((r, i) => `${i + 1}. ${r.title}${r.date ? ` (${r.date.slice(0, 10)})` : ""}\n${r.url}\n${r.summary || r.snippet}`)
+      .join("\n\n");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    return `Web search failed (${message}) — answer from existing knowledge and say so.`;
+  }
+}
+```
+
+La data entra nel `tool_result` perché le regole di grounding dell'Advisor (`GROUNDING_RULES_BLOCK`) chiedono una data per ogni fatto citato: con Tavily il modello non la vedeva. Il commento di testa del modulo dice il perché con la data (COMMENTS.md): Tavily era un secondo fornitore per il solo DeepSeek; dal 2026-10-18 la Search API di DeepSeek costa 0,75 $ per 1.000 richieste contro ≈ 16 $ di Tavily advanced, con la stessa chiave; il tool resta client-executed perché l'endpoint Anthropic-compat non documenta un tool server-side (leak riprodotto in produzione il 2026-07-10). I commenti che citano Tavily si riscrivono, senza cambiare i valori: `lib/ai/tool-loop.ts` (commento di `DEEP_RESEARCH_MAX_TOOL_ITERATIONS`, «richer Tavily» → «8 results with model-facing summaries»), `types/ai-settings.ts:57-67, :76` (il paragrafo «DeepSeek added a genuine server-side web_search tool, but only on its newer Responses API» diventa «DeepSeek's Search/Fetch REST APIs (2026-10) back the client-executed tool; the Anthropic-compat endpoint still documents no server-side search tool»), `lib/ai/client.ts:68-72`, `app/api/earnings/route.ts:99-105` se nomina Tavily. `.env.example`: il blocco «Tavily API (DeepSeek web search)» (righe 38-43) si cancella; il commento di `DEEPSEEK_API_KEY` dice che la stessa chiave paga anche la ricerca web del modello (0,75 $ per 1.000 richieste riuscite) e che senza saldo la ricerca risponde «HTTP 402». `e2e/support/env.ts:81`: la riga `TAVILY_API_KEY: ""` si toglie (`DEEPSEEK_API_KEY: ""` già blocca la ricerca; `e2e/support/test.ts` blocca comunque ogni host fuori da localhost). Nessun cambiamento in `buildWebSearchTools`, in `answerSearchCalls`, nelle costanti di iterazione né nei prompt builder.
+
+### 4.7 Catalogo: `deepseek-flash` al posto di `deepseek-v4-flash` (B11, D-72)
+
+`types/ai-settings.ts`: in `AI_MODEL_IDS` e `AI_MODEL_CATALOG` la chiave diventa `"deepseek-flash"` con `label: "DeepSeek V4.1 Flash"`, stesso `provider`, stessi `efforts` (`low`/`high`/`max`: la pagina `thinking_mode` del 2026-10-18 conferma la mappa per entrambi i modelli), stesso `supportsWebSearch`; il commento dice che V4 Flash è stato ritirato il 2026-09-10 e che `deepseek-flash` è V4.1-Flash-1017 dal 2026-10-17. Nello stesso file:
+
+```ts
+/** Ids the provider retired but still routes: a stored default saved under the old id keeps
+ *  working and shows the current name. `deepseek-v4-flash` → V4.1 Flash since 2026-09-10. */
+export const LEGACY_AI_MODEL_IDS: Record<string, AiModelId> = { "deepseek-v4-flash": "deepseek-flash" };
+
+/** The catalog id for `value`, following a retired alias, or null when it is no model at all. */
+export function normalizeAiModelId(value: string): AiModelId | null {
+  if (isAiModelId(value)) return value;
+  return LEGACY_AI_MODEL_IDS[value] ?? null;
+}
+```
+
+`lib/ai/ai-preferences.ts` `resolveAiSettings`: il ramo `stored` usa `normalizeAiModelId(user.aiModel) ?? fallback.model`; l'`override.model` passa da `normalizeAiModelId` prima del merge (un client vecchio che manda il vecchio id non riceve un 400). `app/api/settings/ai/route.ts`: lo Zod del PATCH accetta `model` come `z.string().transform(normalizeAiModelId)` con `refine(Boolean)` (400 su un id sconosciuto) e salva l'id normalizzato — così un utente che riapre il gear e salva ritira da sé l'alias; il GET restituisce il valore normalizzato. `__tests__/ai-client.test.ts:49`: `"deepseek-v4-flash"` → `"deepseek-flash"`. `components/ai-settings-control.tsx` e `components/ai-preferences-modal.tsx` leggono dal catalogo: nessuna modifica (verificare con grep che non ci siano id letterali). `scripts/seed-e2e.ts`: se semina `aiModel`, usa l'id nuovo. Nessuna migrazione DDL: la colonna è una stringa.
+
 ## 5. Vincoli e trappole (AGENTS.md — «qui vuol dire che»)
 
 - **Gotcha #7 / Prisma 7 + Turso**: la migrazione locale non tocca Turso. Qui vuol dire che l'app in produzione continua a funzionare con le colonne morte presenti finché la migrazione non viene applicata, e che il client generato dopo la migrazione NON seleziona più `watchlistFreq`: deploy del codice PRIMA della migrazione distruttiva (T-19).
@@ -250,6 +320,10 @@ export function toWatchlistMosFraction(mosPercent: number): number {
 - **Testing tooling (gotcha #31b)**: i file di test NUOVI con `vi.mock` costruiscono gli elementi con `createElement`; i casi aggiunti a un file esistente seguono lo stile di quel file (`__tests__/analyst-panel.test.tsx` usa `vi.mock` con JSX ed è verde: resta in JSX).
 - **`e2e/support/test.ts`** fallisce ogni chiamata a `/api/ai/**`: il test A1 è unitario con `fetch` mockato, non e2e.
 - **COMMENTS.md**: i commenti nuovi dicono il PERCHÉ con la data (es. su `toWatchlistMosFraction`: «il pannello mandava 25 a uno schema max(0.8) — 2026-10-11»), mai «fix per la spec 01».
+- **Gotcha #25 (un tool server-side può perdere la traduzione e sporcare lo stream)**: qui vuol dire che la Search API NON si dichiara come tool server-side di DeepSeek e non si prova a usarla attraverso l'endpoint Anthropic-compat: resta `CUSTOM_WEB_SEARCH_TOOL` eseguito da `answerSearchCalls`; cambia solo l'HTTP dentro `executeWebSearch`. Una spike che «gira pulita» non autorizza a cambiare idea (lo dice il gotcha).
+- **QPS della Search API (5 al secondo per account, 429 oltre)**: `answerSearchCalls` esegue in `Promise.all` tutte le `tool_use` di una stessa turn; oggi una turn ne porta 1-3. Se la run reale (§ 7) mostrasse un 429, si annota in SESSION_NOTES e si serializza con un `for` in una sessione successiva: NON nella 01.
+- **`e2e/support/test.ts`** blocca ogni richiesta fuori da localhost: nessun e2e può raggiungere `api.deepseek.com`; la prova di A11 è unitaria (fetch mockato) + la run reale.
+- **Gotcha #26 (fence mai raggiunta)**: invariato; qui vuol dire che un 402 (saldo DeepSeek esaurito) non è un throw ma un `tool_result` di errore: il modello conclude da conoscenza e il report arriva, con la nota «answer from existing knowledge» visibile nel log, non nello stream.
 
 ## 6. Test, per livello, con la mutazione che li prova portanti
 
@@ -267,6 +341,10 @@ export function toWatchlistMosFraction(mosPercent: number): number {
 | unit (route) | `__tests__/advisor-route-positions.test.ts` | `db.position.findMany` mockato: `where.closedAt === null` | togliere il filtro |
 | unit (route) | `__tests__/analyses-patch-null.test.ts` | PATCH con `fairValueBase: null` → `db.analysis.update` riceve `reviewFairValueBase: null`; con il campo assente → non presente in `data` | trattare `null` come `undefined` |
 | unit | `__tests__/i18n-keys.test.ts` | ogni chiave nuova esiste in `en` e `it` e non è vuota | cancellare una chiave IT (il type fallisce prima, il test lo documenta) |
+| unit | `__tests__/web-search-tool.test.ts` (nuovo; `vi.stubGlobal("fetch", vi.fn(...))` + `vi.stubEnv("DEEPSEEK_API_KEY", "k")`, ripristinati in `afterEach`) | chiamata a `https://api.deepseek.com/v1/tools/search` con header `Authorization: Bearer k` e body `{ query, count: 8, need_content: false }`; query di 200 caratteri → body con 128; 3 risultati → testo con `1.`…`3.`, url, `(YYYY-MM-DD)` quando `date` c'è e niente parentesi quando è `null`, `summary` (e `snippet` quando `summary` è vuoto); `results: []` → «No web search results»; HTTP 402 → messaggio con «402» e «balance»; senza chiave → messaggio «missing DEEPSEEK_API_KEY» e `fetch` MAI chiamato; `fetch` che lancia → messaggio «failed», nessun throw | mandare `need_content: true`; usare `content` al posto di `summary`; togliere `slice(0, 128)`; lasciar propagare l'eccezione |
+| unit | `__tests__/ai-settings-alias.test.ts` (nuovo) | `normalizeAiModelId("deepseek-v4-flash") === "deepseek-flash"`; `normalizeAiModelId("deepseek-flash")` identità; `normalizeAiModelId("gpt-9")` → null; `AI_MODEL_IDS` non contiene `deepseek-v4-flash`; `AI_MODEL_CATALOG["deepseek-flash"].label === "DeepSeek V4.1 Flash"` | togliere la riga dalla mappa |
+| unit | `__tests__/ai-preferences.test.ts` (+2) | `aiModel: "deepseek-v4-flash"` salvato → `model: "deepseek-flash"`; override `{ model: "deepseek-v4-flash" }` → `deepseek-flash` | usare `isAiModelId` al posto di `normalizeAiModelId` nel ramo stored |
+| unit (route) | `__tests__/settings-ai-patch.test.ts` (nuovo) | PATCH `{ model: "deepseek-v4-flash" }` → `db.user.update` riceve `aiModel: "deepseek-flash"`; `{ model: "gpt-9" }` → 400 | salvare il body grezzo |
 | e2e | `e2e/pages.spec.ts` | portfolio: dividendi 47,50 € = somma su tutti gli snapshot; pill ORNT acceso; analyses: badge solo aperti | rimettere il limite 90 gg / base dell'analisi nell'exit signal / togliere il filtro |
 
 Mock per i test di route e di pannello (nessun test del repo copre oggi una route: non c'è un pattern da copiare): `advisor-route-positions.test.ts` apre con `// @vitest-environment node`, mocka `@/lib/auth` (`auth → { user: { id: "u1" } }`), `@/lib/db` (`position.findMany`, `analysis.findMany`, `user.findUnique`), `@/lib/yahoo-client`, `@/lib/ai/client` (con `importOriginal`, sostituendo solo `getAiClient`: in jsdom/node senza chiave il costruttore Anthropic lancia), `@/lib/ai/ai-preferences`, `@/lib/ai/tool-loop` (con `importOriginal`, sostituendo solo `runStreamWithToolLoop`); chiama `POST(new Request(..., { body: { messages: [{ role: "user", content: "x" }] } }))` e asserisce `findMany.mock.calls[0][0].where`. `deep-value-panel-watchlist.test.tsx` mocka `next-auth/react` (`useSession → session`), `next/navigation`, `@/lib/ai-settings-client`, `@/lib/analyses`, `@/components/ai-settings-control`; `fetch` stub: la prima chiamata restituisce uno stream con una fence json completa (bull/base/bear), la seconda la risposta di `/api/watchlist`; click su «Generate» poi su `t("addToWatchlist")` (il Decision Panel compare solo a `done` con terna completa).
@@ -282,8 +360,8 @@ Ambiente: `npm run seed:e2e` + dev server isolato (`WORKFLOW.md § 3`). Esiti at
 | C Nuovo | script Playwright throwaway, utente A: `POST /api/watchlist` con `{ ticker: "PNGL.MI", companyName: "x", mosPercent: toWatchlistMosFraction(25) }` → 201 e riga con `mosPercent = 0.25` (PNGL.MI non è in watchlist; ORNT lo è già e darebbe 409); controllo negativo dello stesso schema: `{ mosPercent: 25 }` → 400; poi `GET /api/portfolio/dividends` → `{ totalEur: 47.5, byTicker: { "FNCT.MI": 40, ORNT: 7.5 } }` | come dichiarato |
 | D Sotto la UI | `POST /api/analyses` con `ticker: " ornt "` → riga con `ORNT`; con 21 caratteri → 400 | come dichiarato |
 | E Negativi | `GET /api/portfolio/dividends` senza sessione → 401; con l'utente B il totale è 0 (nessuno snapshot con dividendi) — coppia propria/altrui | come dichiarato |
-| Run reale (D-29) | con `.env` reale ma `TURSO_DATABASE_URL` sull'isolato: (1) Advisor in modalità Portfolio con Sonnet 5.5 su A (che ha un lotto chiuso): il prompt nel log non contiene il lotto chiuso; (2) una Deep Value Quick su un ticker a scelta dell'owner con MoS 25, poi «Add to Watchlist» → 201 e riga con `mosPercent 0.25`. Costo stimato ≈ 0,5 $ (Opus) + 0,05 $ (Sonnet); costo ed esito in SESSION_NOTES | come dichiarato |
-| F Giro guidato (owner) | `/portfolio`: «Dividends Received» mostra 47,50 € (prima mostrava 40,00 €) e il pill ⚠ su ORNT; `/analyses` → card ORNT: badge posizione con le azioni del solo lotto aperto; `/analyses/e2e_an_panel` in IT: breadcrumb, «Scarica PDF», «Ripeti l'analisi», disclaimer e intestazioni tabella in italiano | Non copre: la mail del digest |
+| Run reale (D-29) | con `.env` reale ma `TURSO_DATABASE_URL` sull'isolato (e `TAVILY_API_KEY` già assente dall'ambiente, così la prova non può passare da Tavily per sbaglio): (1) Advisor in modalità Portfolio con Sonnet 5.5 su A (che ha un lotto chiuso): il prompt nel log non contiene il lotto chiuso; (2) una Deep Value Quick su un ticker a scelta dell'owner con MoS 25, poi «Add to Watchlist» → 201 e riga con `mosPercent 0.25`; (3) un lookup earnings (`POST /api/earnings` sullo stesso ticker) con `deepseek-flash` (DeepSeek V4.1 Flash), effort `low`, come default globale di A (impostato via `PATCH /api/settings/ai` dallo script — mandando il VECCHIO id `deepseek-v4-flash`, così la run prova anche l'alias: la riga `User` deve contenere `deepseek-flash` — e ripristinato in G): il log mostra `[tool-loop] round N` con N ≥ 2 (almeno una ricerca eseguita e risposta), nessun «Web search request failed», la risposta ha `nextEarningsDate` e `sourceUrl`; sulla console DeepSeek (`platform.deepseek.com` › Usage) compaiono le richieste Search del giorno. Costo stimato ≈ 0,5 $ (Opus) + 0,05 $ (Sonnet) + 0,01 $ (DeepSeek, ricerche comprese); costo ed esito in SESSION_NOTES | come dichiarato |
+| F Giro guidato (owner) | `/portfolio`: «Dividends Received» mostra 47,50 € (prima mostrava 40,00 €) e il pill ⚠ su ORNT; `/analyses` → card ORNT: badge posizione con le azioni del solo lotto aperto; `/analyses/e2e_an_panel` in IT: breadcrumb, «Scarica PDF», «Ripeti l'analisi», disclaimer e intestazioni tabella in italiano | Non copre: la mail del digest; DeepSeek nel browser (provato dalla run reale, punto 3) |
 | G Ripristino | `rm -rf .e2e/`, script cancellato, `git status` pulito a parte le modifiche della sessione | — |
 
 ## 8. Messa in esercizio
@@ -299,14 +377,17 @@ Ambiente: `npm run seed:e2e` + dev server isolato (`WORKFLOW.md § 3`). Esiti at
    Lo script ricostruisce `User` con `DROP TABLE`: `Analysis`, `Position`, `PortfolioSnapshot`, `WatchlistItem`, `EarningsEstimate`, `AdvisorSession` hanno FK `ON DELETE CASCADE` verso `User`, quindi il `PRAGMA foreign_keys=OFF` in testa al file deve valere sulla stessa connessione (lo script lo contiene; `turso db shell < file` esegue tutto su una connessione).
 3. Misura (sola lettura): la stessa query degli otto conteggi → gli stessi otto numeri (se uno cala, ripristino dal dump); `"SELECT name FROM sqlite_master WHERE type='table' AND name='WatchlistRun';"` → nessuna riga. Controllo ticker: `"SELECT id, ticker FROM Analysis WHERE ticker <> UPPER(TRIM(ticker));"` e lo stesso su `Position`: se tornano righe, `UPDATE Analysis SET ticker = UPPER(TRIM(ticker)) WHERE ticker <> UPPER(TRIM(ticker));` e lo stesso su `Position`, con la SELECT di controllo prima e dopo; l'esito (righe toccate) si registra in `CLAUDE.md § Last Updated`.
 4. Voce in `CLAUDE.md § Last Updated` con data, fasi del collaudo, esito della run reale e l'esito del punto 3.
+5. **Vercel › Settings › Environment Variables**: rimuovere `TAVILY_API_KEY` DOPO il deploy del codice che non la legge più (toglierla prima spegnerebbe la ricerca di DeepSeek in produzione fino al deploy). Nessun'altra variabile cambia: `DEEPSEEK_API_KEY` c'è già e paga anche la ricerca. Controllare il saldo DeepSeek: con saldo zero la ricerca risponde «HTTP 402» nei log e il modello conclude da conoscenza. L'account Tavily si può chiudere (owner).
+6. Alias Flash (sola lettura, facoltativo): `turso db shell stock-analysis "SELECT COUNT(*) FROM User WHERE aiModel = 'deepseek-v4-flash';"`. Il codice risolve l'alias da solo; se si vuole ritirarlo in una spec futura, prima `UPDATE User SET aiModel = 'deepseek-flash' WHERE aiModel = 'deepseek-v4-flash';` con la stessa `SELECT` prima e dopo. Non si esegue in questa sessione.
 
 ## 9. Documentazione
 
-- `CLAUDE.md` (misurare `wc -c` prima e dopo; oggi 39.070): la voce «Last Updated» SOSTITUISCE il paragrafo del 2026-10-11 (≤ 1.100 caratteri, in inglese — D-21); in «DB» togliere `WatchlistRun (dead)` (−22); in «Watchlist» togliere la frase sul modello morto e `watchlistFreq` (−110); in «Portfolio Tracker» una riga su `/api/portfolio/dividends` (+150); nella riga API di «Architecture» aggiungere `/api/portfolio/dividends` (+30); in «Project Structure» le righe `ticker.ts`, `watchlist-mos.ts`, `portfolio-dividends.ts`, `report/latest-analysis.ts` (+250); togliere il paragrafo «_Removed with the classic engine / Compare page: …_» di Architecture (−275) e il paragrafo «_Removed: Compare page + lite engine …_» di Current Features (−205); creare `## Not yet present` subito prima di `## Next Priorities` con la riga «Things the series deliberately left out, one line each (added by the spec that left them out).» (+120, T-21). Saldo atteso ≈ −60: `wc -c` finale ≤ 39.100.
-- `AGENTS.md` (misurare `wc -l` prima e dopo; oggi 720; tetto per la 01: 724): in «Watchlist is cadence-agnostic» togliere i riferimenti a `WatchlistRun`/`watchlistFreq`; in «API Route Pattern › Endpoints» aggiungere `/api/portfolio/dividends` inline; in «Design System › Shared valuation ruler» una riga: «la base del verdetto viene da `verdictBasis()` e il buy target della watchlist da `watchlistBuyTarget()` (`lib/report/latest-analysis.ts`), unici per /analyses, watchlist, exit signal, digest»; gotcha nuovo (#33, una riga): «`WatchlistItem.mosPercent` è una frazione, `Analysis.mosPercent` un percento — convertire con `toWatchlistMosFraction`»; gotcha #29 riscritto in una riga: «il parser restituisce `ParsedAnalystResult`: passare da `hasFullTriple` prima di ogni dereferenza».
+- `CLAUDE.md` (misurare `wc -c` prima e dopo; oggi 39.070): la voce «Last Updated» SOSTITUISCE il paragrafo del 2026-10-11 (≤ 1.100 caratteri, in inglese — D-21); in «DB» togliere `WatchlistRun (dead)` (−22); in «Watchlist» togliere la frase sul modello morto e `watchlistFreq` (−110); in «Portfolio Tracker» una riga su `/api/portfolio/dividends` (+150); nella riga API di «Architecture» aggiungere `/api/portfolio/dividends` (+30); in «Project Structure» le righe `ticker.ts`, `watchlist-mos.ts`, `portfolio-dividends.ts`, `report/latest-analysis.ts` (+250); togliere il paragrafo «_Removed with the classic engine / Compare page: …_» di Architecture (−275) e il paragrafo «_Removed: Compare page + lite engine …_» di Current Features (−205); creare `## Not yet present` subito prima di `## Next Priorities` con la riga «Things the series deliberately left out, one line each (added by the spec that left them out).» (+120, T-21; la prima voce la scrive la spec che per prima lascia fuori qualcosa — non la 01: la Fetch API di DeepSeek è nella 05a, D-71). **B10**: in «Tech Stack» «client-executed via Tavily for DeepSeek» → «client-executed via DeepSeek's Search API for DeepSeek» (+15); in «AI Model Selection» la frase «`lib/ai/web-search-tool.ts` (Tavily-backed)» → «(DeepSeek Search API, same key as the model)» e «with richer Tavily (`advanced`/8 results)» → «with 8 results carrying model-facing summaries» (+10); in «Project Structure» `ai/web-search-tool.ts … (Tavily)` → `(DeepSeek Search API)` (+12); in «Required ENV Vars» togliere la riga `TAVILY_API_KEY="tvly-..."` e il suo commento (−75) e al commento di `DEEPSEEK_API_KEY` aggiungere «+ its web search» (+18). **B11**: in «Tech Stack» «**DeepSeek V4 Pro** or **V4 Flash**» → «or **V4.1 Flash**» (+2); in «AI Model Selection» `deepseek-v4-flash` → `deepseek-flash` e la frase «(a stored `deepseek-v4-flash` resolves to it)» (+40). Saldo atteso ≈ −40: `wc -c` finale ≤ 39.100.
+- `AGENTS.md` (misurare `wc -l` prima e dopo; oggi 720; tetto per la 01: 724): in «Watchlist is cadence-agnostic» togliere i riferimenti a `WatchlistRun`/`watchlistFreq`; in «API Route Pattern › Endpoints» aggiungere `/api/portfolio/dividends` inline; in «Design System › Shared valuation ruler» una riga: «la base del verdetto viene da `verdictBasis()` e il buy target della watchlist da `watchlistBuyTarget()` (`lib/report/latest-analysis.ts`), unici per /analyses, watchlist, exit signal, digest»; gotcha nuovo (#33, una riga): «`WatchlistItem.mosPercent` è una frazione, `Analysis.mosPercent` un percento — convertire con `toWatchlistMosFraction`»; gotcha #29 riscritto in una riga: «il parser restituisce `ParsedAnalystResult`: passare da `hasFullTriple` prima di ogni dereferenza». **B10** (stesse righe, nessuna in più): in «Multi-Provider AI Settings › DeepSeek peak/off-peak pricing» la frase finale «DeepSeek's own `web_search` did gain a genuine server-side implementation, but only on their newer Responses API … still applies» → «DeepSeek's Search/Fetch REST APIs (2026-10, same key, $0.75 per 1k successful requests) back the client-executed tool; the Anthropic-compat endpoint still documents no server-side search tool, so gotcha #25 still applies»; nella riga «DeepSeek web search is client-executed…» «executed via Tavily `topic: "finance"`» → «executed via DeepSeek's Search API, `count: 8`»; in «Shared tool loop» «uses Tavily `search_depth: "advanced"` + `max_results: 8`» → «asks DeepSeek Search for 8 results with 600-800-char summaries»; gotcha #25 resta com'è (è ancora vero). **B11**: nella riga «Catalog» `deepseek-v4-flash` → `deepseek-flash` e «a retired id in `LEGACY_AI_MODEL_IDS` resolves to its successor (`normalizeAiModelId`)» (stessa riga).
+- `.env.example` ed `e2e/support/env.ts` come in § 4.6. `SETUP.md`: nessuna riga (non elenca né DeepSeek né Tavily). `README.md:42`: «DeepSeek V4 Pro / V4 Flash» → «DeepSeek V4 Pro / V4.1 Flash».
 - `WORKFLOW.md § 3 «Where things are recorded»`: dopo «`CLAUDE.md` takes only a new entry in its "Last Updated" paragraph» aggiungere «(the specs of a series may also rewrite the body sections they document, declaring the byte balance in their § 9 — T-22 of `doc/evoluzioni/00-INDICE.md`)».
-- `README.md`: nessun cambiamento utente visibile oltre al totale dividendi corretto → `Draft Release Temp.md` (sezione «🐛 Bug Fixes»): «Fix: Add to Watchlist from the Deep Value panel; Advisor and /analyses ignore sold lots; Dividends Received now sums the whole history; the portfolio exit signal and the Under-FV filter now use the analyst consensus, like the verdict; tickers are normalised (uppercase, max 20 chars); detail page fully translated in Italian».
-- La riga `> **Stato**` di questa spec e la riga 1 di `00-INDICE.md § 5` diventano «implementata il <data>, in attesa della migrazione Turso» (regola 4 della serie).
+- `README.md`: nessun cambiamento utente visibile oltre al totale dividendi corretto → `Draft Release Temp.md` (sezione «🐛 Bug Fixes»): «Fix: Add to Watchlist from the Deep Value panel; Advisor and /analyses ignore sold lots; Dividends Received now sums the whole history; the portfolio exit signal and the Under-FV filter now use the analyst consensus, like the verdict; tickers are normalised (uppercase, max 20 chars); detail page fully translated in Italian». E una riga nella sezione «🔧 Improvements» (quella che contiene «Claude Sonnet 5.5 now falls back…»): «**DeepSeek web search now runs on DeepSeek's own Search API** — one key and one bill instead of a separate Tavily account, about 20× cheaper per search, and every result now carries its publication date so the Advisor can cite it. The `TAVILY_API_KEY` variable is no longer used.» E una riga sotto: «**DeepSeek V4 Flash is now DeepSeek V4.1 Flash** (`deepseek-flash`): the provider retired the old model and routes it to the new one; a saved preference for the old name carries over automatically.»
+- La riga `> **Stato**` di questa spec e la riga 1 di `00-INDICE.md § 5` diventano «implementata il <data>, in attesa della migrazione Turso» (regola 4 della serie). Le spec 02, 05a e 05b sono già allineate a D-70 (aggiornate il 2026-10-18): nessuna modifica da parte di chi implementa.
 
 ## 10. Fuori ambito, dichiarato
 
@@ -315,18 +396,20 @@ Ambiente: `npm run seed:e2e` + dev server isolato (`WORKFLOW.md § 3`). Esiti at
 - Il JSON in coda, `resultJson`, lo `stop_reason` nella route Deep Value → spec 02.
 - Il prezzo unico sulla pagina salvata → spec 03.
 - Il digest che linka alla pagina titolo → spec 07a.
+- La Fetch API di DeepSeek come secondo tool client-executed (`web_fetch`) e DeepSeek nello stadio 1 → spec 05a (D-71, T-35), che riusa `callDeepSeekTool`. Serializzare le ricerche di una stessa turn sotto i 5 QPS → solo se la run reale mostra un 429 (§ 5).
+- Ritirare l'alias `deepseek-v4-flash` dal codice (dopo l'`UPDATE` di § 8, punto 6) → spec futura, quando il `SELECT` torna 0.
 
 ## 11. Prompt per implementarla
 
-> Modello consigliato: Claude Opus 5.5, effort `high`. Taglia stimata: M-L (≈ 45 file toccati fra creati e modificati, 1 migrazione, ~13 test). Una sessione.
+> Modello consigliato: Claude Opus 5.5, effort `high`. Taglia stimata: M-L (≈ 52 file toccati fra creati e modificati, 1 migrazione, ~17 test). Una sessione.
 
 ```
 Implementa la spec doc/evoluzioni/01-hardening-e-pulizia.md di questo repo.
 
 Prima di tutto leggi WORKFLOW.md, AGENTS.md, CLAUDE.md, COMMENTS.md, DEVELOPMENT_GUIDELINES.md,
-poi doc/evoluzioni/00-INDICE.md (decisioni D-16, D-21, D-28, D-29, D-30, D-31; scelte
-T-15/T-16/T-19/T-21/T-22/T-23/T-24; contratti C-1/C-2/C-3/C-14; regole della serie) e la spec
-INTERA. Crea SESSION_NOTES.md (se esiste ancora quello di una sessione precedente, smista prima
+poi doc/evoluzioni/00-INDICE.md (decisioni D-16, D-21, D-28, D-29, D-30, D-31, D-70, D-72; scelte
+T-15/T-16/T-19/T-21/T-22/T-23/T-24/T-34; contratti C-1/C-2/C-3/C-14; regole della serie) e la
+spec INTERA. Crea SESSION_NOTES.md (se esiste ancora quello di una sessione precedente, smista prima
 le sue voci come dice WORKFLOW § 3 e poi ricrealo). Branch fix/hardening-and-cleanup da
 develop. Rispondi in italiano.
 
@@ -339,13 +422,21 @@ spec successive li importano così.
 
 Ordine di lavoro: (1) baseline npm run ci:local + npm run e2e:visual:update; (2) moduli puri +
 test (il parser con ParsedAnalystResult per primo: il typecheck ti elenca i consumer da
-adeguare); (3) route; (4) componenti e i18n; (5) seed/e2e; (6) migrazione (locale) e
-typecheck; (7) collaudo guidato fase per fase come in § 7, esito atteso dichiarato prima, con
-script throwaway, inclusa la run reale di D-29 (dimmi il ticker e chiedimi l'OK: costa); (8)
-fase F con me, fixture vive; (9) documentazione come in § 9, misurando CLAUDE.md e AGENTS.md;
-(10) SESSION_NOTES → destinazioni, poi chiedimi l'OK per l'unico commit (Conventional Commit,
-oggetto ≤ 72 caratteri: "fix: harden watchlist add, sold lots, dividends, JSON guard; drop dead
-tables", dettaglio nel body).
+adeguare); (3) route, poi lib/ai/web-search-tool.ts con il suo test (§ 4.6: solo l'HTTP cambia,
+il tool resta client-executed; .env.example ed e2e/support/env.ts senza TAVILY_API_KEY; grep
+"tavily" vuoto fuori da doc/ e dal draft delle release), poi il catalogo con deepseek-flash e
+l'alias normalizeAiModelId nel resolver e nella PATCH delle impostazioni (§ 4.7, con i suoi
+test); (4) componenti e i18n; (5) seed/e2e;
+(6) migrazione (locale) e typecheck; (7) collaudo guidato fase per fase come in § 7, esito
+atteso dichiarato prima, con script throwaway, inclusa la run reale di D-29 nei suoi tre punti
+(dimmi il ticker e chiedimi l'OK: costa; il punto 3 vuole TAVILY_API_KEY assente dall'ambiente);
+(8) fase F con me, fixture vive; (9) documentazione come in § 9, misurando CLAUDE.md e
+AGENTS.md; (10) SESSION_NOTES → destinazioni, poi chiedimi l'OK per l'unico commit
+(Conventional Commit, oggetto ≤ 72 caratteri: "fix: hardening pass; drop dead tables; DeepSeek
+search replaces Tavily" — 70 caratteri; dettaglio nel body: watchlist add, sold lots, dividends,
+JSON guard, ticker normalisation, i18n, Tavily → DeepSeek Search API, deepseek-flash catalog id
+with alias).
+Post-merge, oltre alla migrazione Turso: rimuovere TAVILY_API_KEY da Vercel (§ 8, punto 5).
 La migrazione a Turso NON si applica in sessione: resta scritta in CLAUDE.md § Last Updated
 come azione post-merge (§ 8).
 ```
