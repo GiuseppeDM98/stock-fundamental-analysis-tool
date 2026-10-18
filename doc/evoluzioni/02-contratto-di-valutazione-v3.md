@@ -273,14 +273,15 @@ export function createStreamGate(marker: string): { push(chunk: string): string;
 
 ### 4.6 Guida di dominio (T-18, D-22)
 
-Creare `doc/guide/valutazione.md` (≈ 400 righe) con: (1) il contratto JSON v3 campo per campo (unità, MoS trap, `bridge` e la bridge rule, `sensitivity`, `dividends`, `killPrice`, `revisions`); (2) l'ordine ricerca→report→JSON e i marker; (3) la pipeline Deep Value (route, gate di streaming, parsing client, persistenza `resultJson`, header `X-AI-Settings`); (4) il pannello analisti (lenti, blind-first, persistenza); (5) i gate (rimando: la 03 completa); (6) le impostazioni AI multi-provider e l'integrazione Anthropic (effort per call-site, clamp, caching, tool loop, DeepSeek). Testo SPOSTATO da AGENTS.md: «Anthropic AI Integration» (:264-278), «Multi-Provider AI Settings» (:279-291), «Analyst panel pattern», «Blind-first two-turn pattern», «Shared prompt constant — ANALYTICAL_RIGOR_BLOCK», «Deep Value pattern», «Grounded Deep Value mode» (:292-317, :326-354) e i gotcha #25-#29 (:704-708); «On-demand structured AI lookup» (:318-325) resta in AGENTS.md. In AGENTS.md al loro posto uno stub:
+Creare `doc/guide/valutazione.md` (≈ 400 righe) con: (1) il contratto JSON v3 campo per campo (unità, MoS trap, `bridge` e la bridge rule, `sensitivity`, `dividends`, `killPrice`, `revisions`); (2) l'ordine ricerca→report→JSON e i marker; (3) la pipeline Deep Value (route, gate di streaming, parsing client, persistenza `resultJson`, header `X-AI-Settings`); (4) il pannello analisti (lenti, blind-first, persistenza); (5) i gate (rimando: la 03 completa); (6) le impostazioni AI multi-provider e l'integrazione Anthropic (effort per call-site, clamp, caching, tool loop, DeepSeek con la Search API di DeepSeek dietro il tool client-executed — 01, D-70; il testo di AGENTS.md da spostare è quello già riscritto dalla 01, senza Tavily). Testo SPOSTATO da AGENTS.md: «Anthropic AI Integration» (:264-278), «Multi-Provider AI Settings» (:279-291), «Analyst panel pattern», «Blind-first two-turn pattern», «Shared prompt constant — ANALYTICAL_RIGOR_BLOCK», «Deep Value pattern», «Grounded Deep Value mode» (:292-317, :326-354) e i gotcha #25-#29 (:704-708); «On-demand structured AI lookup» (:318-325) resta in AGENTS.md. In AGENTS.md al loro posto uno stub:
 
 ```
 ### Deep Value, analyst panel, Grounded mode, AI providers — see doc/guide/valutazione.md
 Twelve lines at most: where the prompt builders and the AI client live, the hard invariants
 (position-blind; research first, JSON last after <!--report-->; parse the LAST fence; stored
 fairValue* are MoS-adjusted; hasFullTriple before any dereference; the golden snapshot; the
-model declares, the code verifies; DeepSeek web search is client-executed), and the pointer to
+model declares, the code verifies; DeepSeek web search is client-executed, backed by DeepSeek's
+Search API), and the pointer to
 the guide for everything else. Gotchas #25-#29 become one line each pointing at the guide.
 ```
 

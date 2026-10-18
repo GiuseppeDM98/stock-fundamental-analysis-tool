@@ -22,7 +22,7 @@
 | A4 | Blind-first per ogni analisi con dataset (`verify/route.ts`): `blindFirst = groundingContext != null` resta la regola, ed è vera per ogni analisi con `datasetId` o `groundingJson`; sulle righe senza nessuno dei due il pannello disabilita «Run» e la route risponde 400 (D-40). | test di route; test componente. |
 | A5 | La route Deep Value richiede `datasetId` (400 senza) e usa `GROUNDED_MAX_TOOL_ITERATIONS` (12); `DEFAULT_SETTINGS` invariati. | test di route. |
 | A6 | `formatRowSources` rende le fonti per ogni riga di `financials`, `multiples`, `estimates` e `peers[].multiples`, con `UNVERIFIED` dove serve, e una riga in testa agli ANCHORS quando un multiplo usato da `computeMultipleStats` è non verificato. | test di `formatGroundingForPrompt`; golden. |
-| A7 | `/deep-value` esegue prima lo stadio 1 con la logica di `/api/ai/research`, salva il dataset e costruisce i prompt con `buildGroundingPromptContext`, salvando `datasetId` (D-41). | lettura del comando aggiornato; una run reale del comando. |
+| A7 | `/deep-value` esegue prima lo stadio 1 con la logica di `/api/ai/research` (modello da `researchAiSettings`; il comando accetta lo stesso override opzionale `aiSettings` della route — D-71/T-35), salva il dataset e costruisce i prompt con `buildGroundingPromptContext`, salvando `datasetId` (D-41). | lettura del comando aggiornato; una run reale del comando. |
 | A8 | `ci:local` verde; run reale (D-24): flusso completo su `/analyze` su un ticker a scelta (stadio 1 → anteprima → stadio 2 Opus xhigh → Scettico cieco con fase 1 visibile nella card); secondo giro: paste dell'owner sullo stesso ticker → merged → analisi. | SESSION_NOTES. |
 
 ## 3. Decisioni
@@ -67,8 +67,8 @@ Stati: `idle` → (ticker) `checking` → `reuse { stored }` | `empty` | `error 
 - **Position-blind**: nessun campo di posizione nel contesto.
 - **`e2e/support/test.ts`**: `/api/ai/research` e `/api/ai/deep-value` restano vietati: gli e2e provano solo gli stati senza AI.
 - **Report vecchi con JSON in testa e dataset collegato** (`e2e_an_panel_older`): la scheda verifiche legge l'extract dal dataset e il JSON dalla fence in testa; la riga non è nel visual.
-- **DeepSeek nello stadio 2** con un dataset web: il rescoping è come oggi; il test di route con `model: "deepseek-v4-pro"` asserisce che il contesto è lo stesso.
-- **Utente senza `ANTHROPIC_API_KEY`** (solo DeepSeek): lo stadio 1 non può girare: la route research risponde 503 «research requires an Anthropic key» e la UI mostra `t("datasetResearchError")` con il messaggio; resta il paste.
+- **DeepSeek nello stadio 2** con un dataset web: il rescoping è come oggi (la ricerca passa dalla Search API di DeepSeek dietro il tool client-executed, 01/D-70: niente da cambiare qui); il test di route con `model: "deepseek-v4-pro"` asserisce che il contesto è lo stesso.
+- **Utente con default globale DeepSeek**: lo stadio 1 gira con quel modello (D-71/T-35, 05a) — nessun selettore proprio nella `DatasetSection`; `researchDataset(ticker)` senza override. Senza la chiave del provider risolto la route research risponde 503 «research requires the Anthropic/DeepSeek API key» e la UI mostra `t("datasetResearchError")` con il messaggio; resta il paste. Il test componente del 503 usa quel messaggio.
 - **COMMENTS.md**: il perché del percorso unico (un solo prompt, un solo golden) con la data.
 
 ## 6. Test
@@ -93,7 +93,7 @@ Stati: `idle` → (ticker) `checking` → `reuse { stored }` | `empty` | `error 
 | D | `POST /api/ai/deep-value/verify` su `e2e_an_legacy` → 400 (nessun dataset) | come dichiarato |
 | E | `/analyses/e2e_an_legacy` → Run disabilitati; `/analyses/e2e_an_panel_older` → Run attivi | come dichiarato |
 | Run reale (D-24) | `/analyze` sull'isolato: ticker a scelta → ricerca → anteprima → stadio 2 Opus xhigh con `datasetId` → Scettico cieco (fase 1 visibile nella card). Secondo giro: paste dell'owner sullo stesso ticker → merged → analisi. Terzo: `/deep-value` su un ticker (stadio 1 + 2 + 3 lenti). Costo stimato ≈ 1 $ (ricerche) + 2 × 0,5 $ (Opus) + 4 × 0,4 $ (lenti) | come dichiarato |
-| F | giro owner: `/analyze` flusso completo su un ticker nuovo (ricerca → anteprima → analisi), chip 🌐 e «unverified», riuso, errore della ricerca (simulato con la chiave Anthropic rimossa) | non copre: DeepSeek |
+| F | giro owner: `/analyze` flusso completo su un ticker nuovo (ricerca → anteprima → analisi), chip 🌐 e «unverified», riuso, errore della ricerca (simulato con la chiave Anthropic rimossa) | non copre: DeepSeek nello stadio 1 dal browser (provato dalla run reale della 05a) |
 | G | ripristino | — |
 
 ## 8. Messa in esercizio
@@ -103,7 +103,7 @@ Nessun DDL. Deploy; prima ricerca reale in produzione → `SELECT origin, length
 ## 9. Documentazione
 
 - `doc/guide/valutazione.md § Flusso /analyze` e `§ Regole del dataset nel prompt`.
-- `CLAUDE.md` (misurare): «Deep Dive — /analyze» riscritta (dataset → anteprima → analisi, ≤ 500 caratteri, oggi 361: +140); «Financial dataset (paste)» (04) → «Financial dataset (web or paste)» con una riga sulla ricerca (+120); «Not yet present»: tre righe (prompt caching dello stadio 2, ricerca con DeepSeek/Tavily, aggiornamento incrementale del dataset: +240); si compensa togliendo da «Deep Value Analysis» (già dimezzata dalla 02) la frase sul «Stream suppression» e sulla «Date injection», ormai nella guida (−500). Saldo ≈ 0.
+- `CLAUDE.md` (misurare): «Deep Dive — /analyze» riscritta (dataset → anteprima → analisi, ≤ 500 caratteri, oggi 361: +140); «Financial dataset (paste)» (04) → «Financial dataset (web or paste)» con una riga sulla ricerca (+120); «Not yet present»: due righe (prompt caching dello stadio 2, aggiornamento incrementale del dataset: +160; la riga sulla ricerca con DeepSeek la scrive la 01, D-70); si compensa togliendo da «Deep Value Analysis» (già dimezzata dalla 02) la frase sul «Stream suppression» e sulla «Date injection», ormai nella guida (−500). Saldo ≈ −80.
 - `AGENTS.md` (saldo zero): nello stub la frase «un solo percorso: ogni analisi ha un dataset».
 - `README.md`: il flusso in due stadi e la nota costi/tempi.
 - `WORKFLOW.md § 3`: la frase sul golden Quick → «il golden `deep-value-prompts-golden.test.ts`».
@@ -125,7 +125,7 @@ Implementa la spec doc/evoluzioni/05b-percorso-unico-dataset.md.
 
 Letture: WORKFLOW.md, AGENTS.md, CLAUDE.md, COMMENTS.md, DEVELOPMENT_GUIDELINES.md,
 doc/guide/valutazione.md, doc/evoluzioni/00-INDICE.md (D-6, D-15, D-21, D-22, D-23, D-26, D-27,
-D-40, D-41, D-44; T-10, T-14, T-21, T-26; C-10, C-16) e la spec INTERA. Grep di partenza:
+D-40, D-41, D-44, D-71; T-10, T-14, T-21, T-26, T-35; C-10, C-16) e la spec INTERA. Grep di partenza:
 researchDataset, ResearchResponse, mergeDatasets, POST /api/datasets merged, e2e_ds_ornt (05a);
 DatasetSection, readAnalysisExtract (04); ValuationChecksCard (03); REPORT_START_MARKER (02):
 se mancano, fermati. SESSION_NOTES.md; branch feature/single-dataset-path da develop;

@@ -10,7 +10,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: October 12, 2026 — **Prompt-audit fixes, refusal handling, Sonnet 5.5 fallback, SDK 0.133, `.env` canonical**. Every AI route now names a `stop_reason: "refusal"` (a note on the streams, a specific error on earnings and extraction) and Deep Value names a `max_tokens` cut; a refused blind Phase 1 degrades to the single-phase review. Sonnet 5.5 calls opt into the server-side fallback (`fallbacks: "default"`) and a note names the model that answered when it serves. Route error statuses come from the SDK's error classes. `@anthropic-ai/sdk` 0.78 → 0.133 removed the `xhigh`/`between_tools` casts. `.env` is the one env file (SETUP, README, AGENTS aligned). Docs realigned with the code (model ids, thinking, catalog, versions, components tree, the `doc/evoluzioni/` roadmap). Verified 2026-10-12 by `ci:local` (390 unit tests, typecheck, isolated build, 26 e2e) and one live Sonnet 5.5 call per request shape (beta endpoint + `fallbacks`, adaptive/`between_tools`, stream + cache) accepted by the API; not verified: a real fallback or refusal (cannot be provoked on demand), the AI flows in the browser.
+**Last Updated**: October 18, 2026 — **Spec series amended for DeepSeek's Search/Fetch APIs** (docs only, no code). DeepSeek's notice of 2026-10-18 and its docs were verified, plus one live `POST /v1/tools/search` call with the repo key (HTTP 200; results carry title, url, summary, date). Decisions D-70…D-72 in `doc/evoluzioni/00-INDICE.md § 3.3`: spec 01 replaces Tavily with DeepSeek's Search API behind the same client-executed tool (gotcha #25 still holds: no server-side search tool on the Anthropic-compat endpoint) and renames the catalog id `deepseek-v4-flash` → `deepseek-flash` with a read alias; spec 05a reopens D-5 so the research stage runs on the user's DeepSeek model with a client-executed `web_fetch` on the Fetch API; 02 and 05b aligned. Gate: `ci:local` green on 2026-10-18. Not verified: nothing ships yet — Tavily stays the live search backend until spec 01 is in service.
 
 ---
 
@@ -238,7 +238,7 @@ See `.env.example` for the full template.
 ---
 
 ## Next Priorities
-The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (eleven specs, 01…08b, one session each, in order); its index `00-INDICE.md` holds the series' state and the owner's decisions.
+The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (eleven specs, 01…08b, one session each, in order); its index `00-INDICE.md` holds the series' state and the owner's decisions (amended 2026-10-18, § 3.3: DeepSeek Search/Fetch APIs).
 1. Caching layer for `/api/quote`.
 2. Per-ticker yield-on-cost in the exit signal (needs per-position dividend exposure via snapshots).
 
