@@ -140,7 +140,7 @@
 
 - Fixed **new saved analyses missing their price at analysis time**, which left the performance badge empty.
 
-- Fixed the **next-earnings lookup returning an error** on some tickers when using the DeepSeek model — it now gets more room to finish its research before giving up.
+- Fixed the **next-earnings lookup returning an error** on some tickers — with DeepSeek it now gets more room to finish its research, and with Claude it no longer runs out of room for its reasoning before giving the date.
 
 - Fixed **AI answers that ended empty or with a misleading error when the model declined a request.** When Claude's safety filters decline (this can happen with Claude Sonnet 5.5), the Advisor, Deep Value and the analyst lenses now end with a visible note saying so, and the next-earnings lookup and the pasted-data preparation say "the model declined" instead of "no parseable result" or "malformed data". A Deep Value report cut off by the length limit now says so too, instead of ending silently.
 

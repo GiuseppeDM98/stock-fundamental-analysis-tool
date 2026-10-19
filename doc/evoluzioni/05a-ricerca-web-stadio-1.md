@@ -199,12 +199,12 @@ export function preprocessResearchOutput(raw: unknown): unknown;
 
 ## 8. Messa in esercizio
 
-Nessun DDL (la tabella è della 04). Deploy; prima ricerca reale (dopo la 05b, che espone la UI) → `SELECT origin, length(dataJson), researchJson FROM FinancialDataset ORDER BY createdAt DESC LIMIT 1;`. Voce in CLAUDE.md § Last Updated con costo e durata medi (sostituisce la precedente).
+Nessun DDL (la tabella è della 04). Deploy; prima ricerca reale (dopo la 05b, che espone la UI) → `SELECT origin, length(dataJson), researchJson FROM FinancialDataset ORDER BY createdAt DESC LIMIT 1;`. Voce in CLAUDE.md § Last Updated (sostituisce la precedente, regola 11); costo e durata medi della prima ricerca reale nella guida `doc/guide/valutazione.md`, che li tiene come riferimento.
 
 ## 9. Documentazione
 
 - `doc/guide/valutazione.md § Ricerca (stadio 1)`: prompt, schema, verifica fonti, `blocksByCaller`, fusione al server, costi misurati.
-- `CLAUDE.md` (misurare): «Tech Stack»: Sonnet 5.5 anche per la ricerca, «or the user's DeepSeek model via DeepSeek's Search/Fetch APIs» (+80); API: `/api/ai/research` (+30); «Not yet present»: una riga «A model selector of its own for the research stage on /analyze (it follows the global default; override only in the route body), 2026-10-18.» (+150); riga con costo e durata medi nella voce Last Updated (che sostituisce la precedente). Nessuna sezione nuova: il flusso su `/analyze` lo descrive la 05b. Saldo ≈ +260: misurare, e se `wc -c` supera 39.800 togliere da «Deep Value Analysis» la frase sullo «Stream suppression» (che la 05b toglie comunque, −250).
+- `CLAUDE.md` (misurare): «Tech Stack»: Sonnet 5.5 anche per la ricerca, «or the user's DeepSeek model via DeepSeek's Search/Fetch APIs» (+80); API: `/api/ai/research` (+30); «Not yet present»: una riga «A model selector of its own for the research stage on /analyze (it follows the global default; override only in the route body), 2026-10-18.» (+150); costo e durata medi della ricerca nel messaggio del commit (regola 11). Nessuna sezione nuova: il flusso su `/analyze` lo descrive la 05b. Saldo ≈ +260: misurare, e se `wc -c` supera 39.800 togliere da «Deep Value Analysis» la frase sullo «Stream suppression» (che la 05b toglie comunque, −250).
 - `AGENTS.md` (saldo zero): nella riga di rimando «Multi-Provider AI Settings» la frase «la ricerca è Sonnet 5.5 high per Anthropic e il modello DeepSeek dell'utente a high per DeepSeek (`researchAiSettings`), con `web_fetch` client-executed sulla Fetch API per DeepSeek»; gotcha di una riga «un URL citato non è un URL aperto: verificare contro la trascrizione» al posto della riga su `max_content_tokens` (che per i PDF non vale).
 - `README.md` e `SETUP.md`: l'elenco delle route AI soggette al limite di 60 s su Hobby include `/api/ai/research`.
 - `Draft Release Temp.md`: «Structured web research stage: primary-source financial data with per-row verified sources, merged with pasted data on the server».

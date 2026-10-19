@@ -4,10 +4,12 @@
 > per-session: they hold until this file says otherwise.
 >
 > **Why they live in the repo and not in agent memory**: agent memory is per-machine and per
-> install, so the same rules drift into different versions on the laptop, the desktop and a cloud
+> install, so the same rules drift into different versions on each machine and in a cloud
 > session. A tracked file travels with the clone and can be reviewed in a diff. If you are an agent
 > with persistent memory, do **not** re-save these rules there — save one pointer to this file. If
-> the owner states a new rule, it is added *here*, in that session's commit.
+> the owner states a new rule, it is added *here*, in that session's commit: to section 3 if it holds
+> for this repo only; if it holds for every repo, ask the owner, because it enters the standard
+> first (`claude-config/prompts/WORKFLOW_STANDARD.md`) and reaches the repos from there.
 >
 > Sections 1-2 are the portable standard, identical across every repo that adopts it. Section 3 is
 > the only project-specific part: it says what "automate it yourself" and "show me the app"
@@ -37,6 +39,21 @@
    recommended option first; never a numbered list of questions in prose. The owner refines the
    wording through the free-text answer («hai pagato», not «pagherai», for a tax the broker
    withholds at the sale).
+
+6. **Figures in tests are invented and round, never the owner's** (2026-10-12). A unit-test
+   fixture, an E2E decoy or a seed carries amounts like 2500, 1120, 50: the owner's real data never
+   enters the repo, not even as an expected value. If § 3 provides a copy of real data for the
+   guided tour, it serves the tour only and phase G removes it.
+   **Nothing of the owner's real data in a tracked file** (2026-09-20, 2026-10-15): a draft, a
+   critique, a screenshot, a fixture or an example sentence takes invented figures and generic
+   names, never an amount, an account or a family detail copied from the real data. In a public
+   repo this has no exception. A private repo may waive it, or narrow it, only by saying so in § 3
+   with the owner's decision and its date; public data that is not the owner's (a listed company's
+   published accounts) is not the owner's data.
+
+7. **After an audit or an analysis, stop and wait for the owner's go-ahead** (2026-10-19). An audit,
+   a review or an analysis ends with the findings; no file changes until the owner has chosen which
+   fixes to apply and in what order (through rule 5).
 
 ---
 
@@ -73,7 +90,13 @@ disappear. The verification is done together, in chat, one phase at a time.
 5. **Before dismantling, let the owner look.** When the session touched something visible, ask for
    the OK and then walk the owner onto the dev server **with the fixtures still alive**: exact URLs,
    under which identity, and at most **five** things to look at — for each one, what must happen and
-   what would be the bug. Only what a probe cannot say: layout, whether the screen says what it must
+   what would be the bug. **The tour starts at the owner's go, not when the work is ready**
+   (2026-10-05): finish everything that needs no eyes, say it is ready, and wait. Where obligation 4
+   allows it, **open the page for the owner, already authenticated** — but one item per message and
+   one page at a time, waiting for the outcome before opening the next; two pages together only
+   when the item is a comparison (the same URL under two identities), saying which window is which.
+   The windows of a driven browser have no name: five at once turn the tour into working out which
+   belongs to which item. Only what a probe cannot say: layout, whether the screen says what it must
    say, the words, whether an action gives feedback that it happened. State also **what that tour
    does not cover**, and never ask the owner to redo by hand something already verified. Whatever
    the tour finds becomes an assertion before the session ends, or it will come back: the tour
@@ -101,6 +124,13 @@ resource** (the test — must fail), with the same identical file or record.
 Restore any configuration that was changed, remove fixtures and test attachments, delete the script,
 and **record the outcome somewhere that survives the session** (`CLAUDE.md` or equivalent).
 *A verification that was not recorded counts as not done.*
+
+**The outcome is one line, the signals are not** (2026-10-19). In `CLAUDE.md` the session's status
+entry says what was done, where it is documented, what is still open and what comes next; it
+replaces the previous one. The session's signals — type-check, test counts, E2E runs, flakes,
+skipped phases — go in the commit message and, where they teach something, in the area's guide,
+never in `CLAUDE.md`: that file is injected into every turn, and a status entry that collects them
+grows back into a diary after every trim.
 
 ---
 
@@ -133,6 +163,8 @@ The gates before a session's commit, in this order, with no lint stage (`next li
 4. `npm run e2e` against that production build (`E2E_SERVER=start`, i.e. `next start -p 3200`)
 
 `npm audit` is deliberately not a stage. Visual screenshots are not a stage either.
+
+**On Windows** (2026-10-19, first run of the gate there): the e2e tooling starts `npx`/`npm` through a shell (`e2e/prepare-db.ts`, `e2e/run-isolated.ts` — Node refuses a `.cmd` without one, `spawnSync EINVAL`), and a fresh checkout needs `npx playwright install chromium` once before stage 4.
 
 ### End-to-end suite (Playwright)
 
@@ -199,7 +231,7 @@ The owner's browser cannot reuse the script's `storageState`: run `npm run seed:
   - **Nota** — traps and measurements, each with its date; include post-merge deploy actions (for example the Turso migration to apply by hand) and the user impact for the release notes, or "no perceptible user impact".
   - **Dove va a fine sessione** — `AGENTS.md` if it holds for the whole repo (including any error that cost more than 30 minutes to debug) · `WORKFLOW.md` if it is a session rule · `CLAUDE.md` if it is project state · `Draft Release Temp.md` if it is a user-facing change (GitHub Release format, append only) · `README.md` / `SETUP.md` if it is user or setup documentation · a comment on the right line if it is the *why* of one line (see `COMMENTS.md`).
 
-  Pre-merge ritual, on the session branch and after the owner's OK: write every entry into its destination, delete `SESSION_NOTES.md`, then make the single commit that carries code and docs together. In `CLAUDE.md` the session's "Last Updated" entry replaces the previous one (in English), and any project-state section the session changed is updated in place; the file has a hard limit of 40,000 characters.
+  Pre-merge ritual, on the session branch and after the owner's OK: write every entry into its destination, delete `SESSION_NOTES.md`, then make the single commit that carries code and docs together. In `CLAUDE.md` the session's "Last Updated" entry replaces the previous one (in English), and any project-state section the session changed is updated in place; the file has a hard limit of 40,000 characters, measured as Unicode characters with CR excluded (`node -e "console.log([...require('fs').readFileSync('CLAUDE.md','utf8').replace(/\r/g,'')].length)"`). `wc -c` counts bytes — about 350 more on an LF checkout, about 600 more on a Windows one, where it counts the CRs too — so it is never the measure against the limit (2026-10-19).
 - **Outcome of a collaudo**: one line in `CLAUDE.md`'s "Last Updated" entry for that session (which phases ran, how, what was left to the owner's tour). Every finding that can be asserted by a test is promoted into `__tests__/` before the session ends.
 - **Conventions that already live elsewhere — not duplicated here**: `CLAUDE.md` (project state and hard invariants such as the position-blind Deep Value rule), `AGENTS.md` (implementation patterns and numbered gotchas: read the section of the domain you touch), `COMMENTS.md` and `DEVELOPMENT_GUIDELINES.md` (read both before writing code, every session). Touching a prompt builder in `lib/ai/deep-value-prompts.ts` requires the Quick-mode golden test (`__tests__/deep-value-prompts-quick-identical.test.ts`) to stay green.
-- **After an audit or analysis, stop and wait for the owner's explicit go-ahead** before changing code: they choose which fixes to apply and in what order.
+- **Rule 6 here** (the owner's decision, 2026-10-19): the regression fixtures built on a listed company's published accounts — the Iren case in `__tests__/grounding-basis.test.ts`, Iren and Webuild in the `grounding-postcheck`, `-anchors`, `-reconcile` and `-prompt-format` tests — are public data that is not the owner's, so they stay; a figure of the owner's own portfolio, positions or analyses never enters a test.

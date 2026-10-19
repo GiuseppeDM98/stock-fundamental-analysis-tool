@@ -20,7 +20,9 @@ const env = { ...process.env, ...buildIsolatedEnv() };
 assertIsolatedDatabaseUrl(env.TURSO_DATABASE_URL, "run-isolated");
 assertIsolatedDatabaseUrl(env.DATABASE_URL, "run-isolated");
 
-const result = spawnSync(command, args, { cwd: REPO_ROOT, env, stdio: "inherit" });
+// On Windows `npm` is a .cmd shim, which Node starts only through a shell (spawnSync EINVAL
+// or ENOENT otherwise, 2026-10-19); the command comes from scripts/ci-local.sh, not from users.
+const result = spawnSync(command, args, { cwd: REPO_ROOT, env, stdio: "inherit", shell: process.platform === "win32" });
 if (result.error) {
   console.error(`[run-isolated] could not start ${command}:`, result.error.message);
   process.exit(1);

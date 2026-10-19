@@ -1,5 +1,5 @@
 // GET  /api/earnings          — the user's stored next-earnings estimates (all tickers)
-// POST /api/earnings          — run Sonnet 5.5 + web search for one ticker, upsert & return it
+// POST /api/earnings          — run the default model + web search for one ticker, upsert & return it
 //
 // The date comes only from the AI here (Yahoo was dropped because it doesn't refresh the
 // field for many Borsa Italiana tickers). Results are persisted so the calendar survives
@@ -10,7 +10,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { buildEarningsSystemPrompt, buildEarningsUserPrompt } from "@/lib/ai/earnings-prompt";
+import { buildEarningsSystemPrompt, buildEarningsUserPrompt, EARNINGS_MAX_TOKENS } from "@/lib/ai/earnings-prompt";
 import { getAiClient, buildThinkingParam, buildEffortConfig, buildWebSearchTools } from "@/lib/ai/client";
 import { resolveAiSettings } from "@/lib/ai/ai-preferences";
 import { runCreateWithToolLoop, DEEP_RESEARCH_MAX_TOOL_ITERATIONS } from "@/lib/ai/tool-loop";
@@ -107,7 +107,7 @@ export async function POST(request: Request) {
       client,
       {
         model: aiSettings.model,
-        max_tokens: 6000,
+        max_tokens: EARNINGS_MAX_TOKENS,
         thinking: buildThinkingParam(aiSettings.thinking, aiSettings.model, aiSettings.effort),
         output_config: buildEffortConfig(aiSettings.effort),
         system: buildEarningsSystemPrompt({ currentDate }),

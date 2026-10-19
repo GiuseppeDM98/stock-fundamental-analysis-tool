@@ -1,5 +1,5 @@
 /**
- * Prompt builders for the on-demand next-earnings lookup (Claude Sonnet 5.5 + web search).
+ * Prompt builders for the on-demand next-earnings lookup (the user's default model + web search).
  *
  * The model's only job is to find the *next* scheduled financial-results release date for
  * one ticker — whatever the company's reporting cadence is (quarterly, half-year or annual)
@@ -11,6 +11,16 @@
  *
  * Plain string builders (no server-only): imported by the /api/earnings route.
  */
+
+/**
+ * Token ceiling of the lookup's non-streaming call. The lookup runs on the user's stored
+ * default (Opus 4.8 at `high` unless changed in Settings), whose adaptive thinking and
+ * web-search turns count toward it; the old 6000 had been sized for the Sonnet 5.5 `medium`
+ * route fallback, which a valid stored default never reaches (2026-10-19). It must stay
+ * under the SDK's non-streaming limit (~21.3k tokens: above it `messages.create` throws before
+ * sending anything) — past that, the route has to stream like the Grounded extraction.
+ */
+export const EARNINGS_MAX_TOKENS = 16000;
 
 /**
  * System prompt: role, grounding rules, and the exact JSON output contract.
