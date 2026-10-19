@@ -16,6 +16,10 @@ import { E2E_DB_URL, REPO_ROOT, assertIsolatedDatabaseUrl, buildIsolatedEnv, e2e
 import { seedE2eDatabase } from "../scripts/seed-e2e";
 
 const NPX = process.platform === "win32" ? "npx.cmd" : "npx";
+// Node (>= 18.20.2 / 20.12.2) refuses to start a .cmd file without a shell on Windows
+// (spawnSync EINVAL, seen 2026-10-19 on Node 24): the arguments below are fixed literals, so
+// a shell adds no injection surface.
+const SPAWN_SHELL = process.platform === "win32";
 
 function prismaClientIsStale(): boolean {
   // `prisma generate` normally runs inside `npm run build`; a standalone `npm run e2e` must
@@ -37,8 +41,8 @@ async function main(): Promise<void> {
   for (const suffix of ["", "-journal", "-wal", "-shm"]) fs.rmSync(dbPath + suffix, { force: true });
 
   // 3. Schema from prisma/migrations — the same SQL that is applied to Turso by hand.
-  if (prismaClientIsStale()) execFileSync(NPX, ["prisma", "generate"], { cwd: REPO_ROOT, env, stdio: "inherit" });
-  execFileSync(NPX, ["prisma", "migrate", "deploy"], { cwd: REPO_ROOT, env, stdio: "inherit" });
+  if (prismaClientIsStale()) execFileSync(NPX, ["prisma", "generate"], { cwd: REPO_ROOT, env, stdio: "inherit", shell: SPAWN_SHELL });
+  execFileSync(NPX, ["prisma", "migrate", "deploy"], { cwd: REPO_ROOT, env, stdio: "inherit", shell: SPAWN_SHELL });
 
   // 4. Fixtures.
   const today = await seedE2eDatabase(E2E_DB_URL);

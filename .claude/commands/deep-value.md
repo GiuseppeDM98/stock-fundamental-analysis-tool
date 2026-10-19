@@ -22,7 +22,7 @@ Riferimento di costo, da una run reale del 3/9/2026: 4 analisi base + 12 lenti =
 
 ## Pipeline
 
-Usa **due workflow in sequenza**, non uno solo. Serve a te per restare nel mezzo: verifichi e salvi le analisi base prima di lanciare le lenti, e i prompt degli analisti li assembli col builder vero invece di far montare il messaggio a un agente.
+Usa **due workflow in sequenza**, non uno solo. Serve a te per restare nel mezzo: verifichi e salvi le analisi base prima di lanciare le lenti, e i prompt degli analisti li assembli col builder vero invece di far montare il messaggio a un agente. Ogni `agent()` dei due workflow porta `model: 'opus'`: gli agenti di un workflow ereditano il modello della sessione, non quello dei subagent.
 
 ### 1 — Prezzo autoritativo
 
@@ -42,7 +42,7 @@ Non parafrasare i prompt: estraili dai builder. Servono `buildDeepValueSystemPro
 new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
 ```
 
-I builder sono TypeScript con alias `@/`, quindi **usa un test vitest temporaneo** in `__tests__/` che scrive i prompt su file, poi cancellalo. Vitest risolve gli alias via `vitest.config.ts`; un `.mjs` no.
+I builder sono TypeScript con alias `@/`: scrivi uno script `.mts` in `out/` (ignorata da git, la stessa cartella dei report) che scrive i prompt su file e lancialo dalla root con `npx tsx out/prompts.mts`. Da `out/` `tsx` risolve sia gli alias del `tsconfig.json` sia i pacchetti di `node_modules`; da una cartella fuori dal repo risolve gli alias ma non i pacchetti (`ERR_MODULE_NOT_FOUND`, verificato il 2026-10-19). Il `.mts` serve al top-level `await`.
 
 ### 3 — Workflow A: le analisi base
 
@@ -68,7 +68,7 @@ Attenzione: se cerchi intestazioni inglesi (`"What must be true"`) in un report 
 
 ### 5 — Salva le analisi base con Prisma
 
-Righe nuove ⇒ servono `id` (cuid) e `createdAt` generati come li genera l'app. **Non fare INSERT SQL a mano.** Usa il client Prisma vero da un test vitest temporaneo, con gli stessi campi di `POST /api/analyses`: `userId, ticker, companyName, reportMd` (JSON block **incluso**), `mosPercent, priceAtAnalysis, fairValue{Bull,Base,Bear}, valuationMethod`.
+Righe nuove ⇒ servono `id` (cuid) e `createdAt` generati come li genera l'app. **Non fare INSERT SQL a mano.** Usa il client Prisma vero (`import { db } from "@/lib/db"`) da uno script `.mts` lanciato con `tsx` come al passo 2, con gli stessi campi di `POST /api/analyses`: `userId, ticker, companyName, reportMd` (JSON block **incluso**), `mosPercent, priceAtAnalysis, fairValue{Bull,Base,Bear}, valuationMethod`.
 
 Metti una guardia `findFirst` contro il doppio-run. Risolvi lo `userId` dal DB, non a memoria.
 
@@ -96,13 +96,12 @@ Calcola il consenso come `lib/report/consensus.ts`: media dell'analisi base e di
 ## Trappole già pagate
 
 - **Heredoc bash fragile** con testo lungo accentato: usa `Write`, non `cat <<'EOF'`.
-- **Script nello scratchpad**: non risolvono `node_modules`. Lanciali dalla root del progetto con `node --input-type=module -e "$(cat percorso/script.mjs)"`. Nota che `process.argv` non passa argomenti in questa forma: metti i percorsi dentro lo script.
-- **Vitest non carica i file `.env*`**: esporta le variabili prima, altrimenti Prisma fallisce con `URL_INVALID: The URL 'undefined'`. Le credenziali Turso stanno in `.env`, il file d'ambiente del repo; il comando legge anche un eventuale `.env.local` (che Next.js fa prevalere) e, se ci sono entrambi, vince quest'ultimo, letto per ultimo:
+- **Dove stanno gli script**: in `out/`, lanciati dalla root con `npx tsx out/<script>.mts`. Un `.mjs` con `node` non risolve gli alias, e uno script fuori dal repo non risolve i pacchetti.
+- **`tsx` non carica i file `.env*`**: esporta le variabili prima, altrimenti Prisma fallisce con `URL_INVALID: The URL 'undefined'`. Le credenziali Turso stanno in `.env`, il file d'ambiente del repo; il comando legge anche un eventuale `.env.local` (che Next.js fa prevalere) e, se ci sono entrambi, vince quest'ultimo, letto per ultimo:
   ```bash
   set -a && source <(grep -hE '^(TURSO_DATABASE_URL|TURSO_AUTH_TOKEN)=' .env .env.local 2>/dev/null) && set +a
   ```
-- **Prisma serve ambiente node**: metti `// @vitest-environment node` in cima al test (il default del progetto è jsdom).
-- **Cancella sempre i test temporanei** e verifica `git status` vuoto prima di chiudere.
+- **Verifica `git status` vuoto prima di chiudere**: `out/` è ignorata, nel resto del repo non deve restare nulla; cancella gli script di `out/` a fine run.
 - **Prima di dare torto a un agente, controlla meglio.** Su Cembre ho segnalato come errore un minimo di €59,40 confrontandolo con le chiusure: era il minimo *intraday*, l'agente aveva ragione. Controlla `low`, non solo `close`.
 
 ## Come riportare

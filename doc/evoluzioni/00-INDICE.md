@@ -124,7 +124,7 @@ spec). Esiti che hanno orientato le decisioni:
 
 | # | Decisione | Spec |
 |---|---|---|
-| D-21 | La voce «Last Updated» di CLAUDE.md di ogni spec SOSTITUISCE la precedente (≤ 1.100 caratteri; la storia resta in git). Regola 11. | tutte |
+| D-21 | La voce «Last Updated» di CLAUDE.md di ogni spec SOSTITUISCE la precedente (≤ 1.100 caratteri; la storia resta in git; dal 2026-10-19 i segnali della sessione vanno nel commit, owner). Regola 11. | tutte |
 | D-22 | AGENTS.md ≤ 600 righe: la 02 sposta nella guida anche «Multi-Provider AI Settings», «Anthropic AI Integration» e i gotcha #25-#29 (una riga di rimando ciascuno); da lì 03…08b a saldo zero (una riga aggiunta = una tolta), dichiarato nel § 9. | 02, tutte |
 | D-23 | Le spec XL si dividono: 05 → 05a/05b, 07 → 07a/07b, 08 → 08a/08b; ciascuna con branch, commit e collaudo propri. | 05a, 05b, 07a, 07b, 08a, 08b |
 | D-24 | Ogni spec che chiede una run reale la rifà nella propria sessione sull'isolato (i dati reali non sopravvivono alla fase G); il costo previsto sta nel § 7 e l'owner dà l'OK prima. | tutte le spec con run reale |
@@ -171,6 +171,13 @@ spec). Esiti che hanno orientato le decisioni:
 | D-71 | (owner, 2026-10-18): **D-5 riaperta — lo stadio 1 accetta anche DeepSeek.** Con le Search/Fetch API non c'è più un vincolo tecnico: la route research risolve il modello con `researchAiSettings(userId, override)` (T-35) — Sonnet 5.5 `high` quando il provider risolto è Anthropic, il modello DeepSeek dell'utente a `high` quando è DeepSeek — e dichiara `buildResearchTools(model)`: i due tool nativi su Claude, i due tool client-executed `web_search` (Search API) + `web_fetch` (Fetch API, nuovo nella 05a) su DeepSeek, con il tetto di 8 fetch applicato dal loop. La verifica delle fonti legge anche i `tool_result` client. D-11 e T-11 riscritte di conseguenza; la riga «DeepSeek nello stadio 1» NON va più in `Not yet present`. Modelli DeepSeek vivi sul catalogo del fornitore al 2026-10-17: `deepseek-v4-pro` (il più capace) e `deepseek-flash` (= DeepSeek-V4.1-Flash-1017; `deepseek-v4-flash` è un alias ritirato): il rinomino è D-72. | 01, 05a, 05b |
 | D-72 | (owner, 2026-10-18): il catalogo dell'app rinomina `deepseek-v4-flash` → `deepseek-flash` con etichetta «DeepSeek V4.1 Flash», nella 01; `LEGACY_AI_MODEL_IDS` + `normalizeAiModelId` in `types/ai-settings.ts` risolvono in lettura i default salvati con il vecchio id (resolver e PATCH delle impostazioni), senza migrazione; nessun modello nuovo (V4 Pro resta il più capace del fornitore). Le spec successive scrivono `deepseek-flash` dove citano il modello Flash. | 01, 05a |
 
+### 3.4 Tagliando del 2026-10-19
+
+| # | Decisione | Spec |
+|---|---|---|
+| D-73 | (owner, 2026-10-19): l'estrazione Grounded passa all'output strutturato (`output_config.format`), con lo schema per tipo su `zod/v4`; deroga dichiarata a «nessun prompt toccato» per la sola riga OUTPUT del prompt di estrazione. | 01 (la 04 lo eredita) |
+| D-74 | (owner, 2026-10-19): a serie implementata ogni modello Claude dell'app è della serie 5.5 (Opus 5.5, Sonnet 5.5, Haiku 5.5), con alias in lettura per gli id vecchi; la migrazione sta nella 08b, non in una spec nuova. | 08b |
+
 ## 4. Scelte adottate dal pianificatore («adottata, ribaltabile» — rovesciabili prima dell'implementazione)
 
 | # | Scelta | Spec |
@@ -192,7 +199,7 @@ spec). Esiti che hanno orientato le decisioni:
 | T-15 | `GET /api/portfolio/dividends` → `{ totalEur, byTicker: Record<ticker, number> }`, somma di `data.entries[].dividendPaidEur` su TUTTI gli snapshot via `loadDividendTotals(userId)` (T-24); sostituisce la somma a 90 giorni del client (B4) e alimenta i dividendi ricevuti della pagina titolo (07b). Lo YoC della 06 è sul DPS forward, non sui ricevuti. | 01, 07b |
 | T-16 | `lib/report/latest-analysis.ts` è l'unico posto che dice «qual è l'ultima analisi utile di un ticker», «qual è la base del verdetto» (consenso se presente, altrimenti analisi) e «qual è il buy target della watchlist» (`watchlistBuyTarget`, T-23): lo usano `/analyses`, watchlist, exit signal del portfolio, digest, pagina titolo e Advisor. | 01, 07a |
 | T-17 | Storico prezzo: `yahooFinance.chart(ticker, { period1, interval: "1d" })`, range `1y \| 5y`, cache in memoria per processo (`createTtlMap`, TTL 1 h, potatura oltre 500 voci), risposta `PriceHistory = { ticker, currency, range, points: [{ date, close }] }`. | 07a |
-| T-18 | La narrazione lunga di Deep Value/Grounded/lenti/provider AI esce da AGENTS.md verso `doc/guide/valutazione.md` (stub ≤ 12 righe in AGENTS.md): AGENTS.md ≤ 600 righe dopo la 02 (D-22) e a saldo zero dopo; CLAUDE.md < 40.000 caratteri con il bilancio in byte dichiarato nel § 9 di ogni spec (regola 3). | 02, tutte |
+| T-18 | La narrazione lunga di Deep Value/Grounded/lenti/provider AI esce da AGENTS.md verso `doc/guide/valutazione.md` (stub ≤ 12 righe in AGENTS.md): AGENTS.md ≤ 600 righe dopo la 02 (D-22) e a saldo zero dopo; CLAUDE.md < 40.000 caratteri con il bilancio in caratteri dichiarato nel § 9 di ogni spec (regola 3). | 02, tutte |
 | T-19 | Ordine globale delle migrazioni: ogni spec con DDL (01, 02, 04) va promossa a `main` da sola, nell'ordine; la distruttiva della 01 (ricostruzione di `User`) si applica a Turso DOPO il deploy del codice che non legge più le colonne, con dump fuori dal repo e conteggi di TUTTE le tabelle prima e dopo; la 02 (10 `ADD COLUMN`) PRIMA del deploy; la 04 (ricostruzione di `Analysis`) PRIMA del deploy con dump e conteggi (D-37). | 01, 02, 04 |
 | T-20 | Il nome della pagina è `/stocks/[ticker]` (plurale, come `/analyses`); il ticker nell'URL è `encodeURIComponent` dell'uppercase; la pagina usa `safeDecode` + `tickerSchema` (non valido → 404); la nav non ha una voce nuova: «Saved Analyses» si evidenzia anche su `/analyses/*` e `/stocks/*` (prefix match, barra e drawer). | 07a, 07b |
 | T-21 | La 01 crea `## Not yet present` in CLAUDE.md (subito prima di «Next Priorities», ≈ 120 byte, pagata dalla riga «_Removed: Compare page_»): è la destinazione delle voci «fuori ambito» di tutta la serie, una riga per voce, scritta dalla spec che la lascia fuori e contata nel suo § 9. | 01, 04…08b |
@@ -269,10 +276,14 @@ Dopo la divisione (D-23) le spec vive sono `01 02 03 04 05a 05b 06 07a 07b 08a 0
    commenti, nomi o commit. Nel codice si scrive il PERCHÉ con la data (`COMMENTS.md`).
 2. **Numeri di riga datati**: ogni citazione `path:line` è al commit `17e54b6` (2026-10-11).
    Chi implementa fa `grep` del nome, non salta alla riga.
-3. **Limiti dei documenti** (misurati il 2026-10-11): `CLAUDE.md` 39.070 caratteri su un tetto
-   di 40.000 — il § 9 di ogni spec dichiara i byte aggiunti e i byte tolti sezione per sezione
-   (Project Structure compresa) e il `wc -c` atteso; `AGENTS.md` 720 righe/104 kB — la 02 lo
-   porta a ≤ 600 righe (D-22), poi saldo zero per ogni spec; `DESIGN.md` 312 righe e
+3. **Limiti dei documenti**: `CLAUDE.md` ha un tetto di 40.000 caratteri, **misurati sempre allo
+   stesso modo**: caratteri Unicode con i CR esclusi (`node -e "console.log([...require('fs').readFileSync('CLAUDE.md','utf8').replace(/\r/g,'')].length)"`,
+   WORKFLOW.md § 3; deciso il 2026-10-19, quando lo stesso file misurava 39.143 caratteri, 39.492
+   byte LF e 39.739 byte sul checkout Windows). Dove una spec scrive «`wc -c`» si legge questa
+   misura. Il § 9 di ogni spec dichiara i caratteri aggiunti e tolti sezione per sezione (Project
+   Structure compresa) e il saldo atteso sulla misura d'inizio sessione, mai un valore assoluto
+   (le basi del 2026-10-11 erano già superate il giorno dopo); `AGENTS.md` (`wc -l`; 723 righe il
+   2026-10-19) — la 02 lo porta a ≤ 600 righe (D-22), poi saldo zero per ogni spec; `DESIGN.md` 312 righe e
    `PRODUCT.md` 55 righe si rigenerano/correggono nella 08b; `doc/guide/valutazione.md` nasce
    nella 02 (≈ 400 righe) e cresce con 03, 04, 05a, 05b, 06, 07a, 07b con un tetto di 400 righe
    per file (D-57): la spec che la porta oltre la spezza per tema (`doc/guide/<tema>.md`:
@@ -287,7 +298,8 @@ Dopo la divisione (D-23) le spec vive sono `01 02 03 04 05a 05b 06 07a 07b 08a 0
    come segnale. Il caso reale non si aspetta.
 6. **Ritiro**: una spec in esercizio si ritira con `doc/evoluzioni/PROMPT-RITIRO.md` (generato
    con `08_CREA_RITIRO_SPEC` di claude-config e rigenerato il 2026-10-11 dopo la lettura
-   adversariale; si rigenera, non si corregge a mano, a ogni cambio di forma della serie):
+   adversariale; dal 2026-10-14 chi lo usa dopo un ritiro aggiorna in loco i precedenti e le
+   misure e lascia il corpo com'è, e si rigenera solo se cambia il metodo):
    verifica criterio per criterio, travaso del perché nei documenti, `git rm` della
    spec, stato chiuso con un grep. L'ultima spec (08b) ritira la cartella intera (storia della
    serie → `README.md § Documentazione`, sezione da creare al ritiro).
@@ -303,16 +315,20 @@ Dopo la divisione (D-23) le spec vive sono `01 02 03 04 05a 05b 06 07a 07b 08a 0
 9. **Position-blind**: nessuna spec porta posizione, PMC o stime precedenti nei prompt di
    Deep Value / lenti / ricerca. Lo yield on cost (06, 07b) è calcolato in codice sulla pagina,
    mai nel prompt.
-10. **Modello/effort nelle spec**: Claude Opus 4.8 `xhigh` per valutazione e lenti (D-9);
+10. **Modello/effort nelle spec**: Claude Opus 4.8 `xhigh` per valutazione e lenti (D-9), fino alla 08b che porta l'app sulla serie 5.5 (D-74);
     Claude Sonnet 5.5 `high` per la ricerca (D-5) e `medium` per l'estrazione (già oggi);
     i prompt in fondo alle spec consigliano il modello che IMPLEMENTA, non quello che gira.
     La ricerca web dei modelli DeepSeek (stadio 1, stadio 2, Advisor, earnings) passa dalle
     Search/Fetch API di DeepSeek dietro i tool client-executed (D-70 dalla 01, D-71 dalla
     05a): nessuna spec cita più Tavily; lo stadio 1 su DeepSeek usa il modello DeepSeek del
     default globale a `high` (T-35).
-11. **Last Updated** (D-21): la voce di CLAUDE.md di ogni sessione SOSTITUISCE la precedente,
-    ≤ 1.100 caratteri, in inglese, con: fasi del collaudo, run reale (ticker, costo), misure
-    (`wc -c CLAUDE.md`, `wc -l AGENTS.md`), azioni post-merge.
+11. **Last Updated** (D-21, riletta il 2026-10-19 sullo standard WORKFLOW § Closing): la voce di
+    CLAUDE.md di ogni sessione SOSTITUISCE la precedente, ≤ 1.100 caratteri, in inglese, e dice che
+    cosa è stato fatto, dove è scritto, che cosa resta aperto (le azioni post-merge comprese) e che
+    cosa viene dopo. Fasi del collaudo, run reale (ticker, costo, durata), misure (CLAUDE.md nella
+    misura della regola 3, `wc -l AGENTS.md`), conteggi e audit prima/dopo vanno nel messaggio del
+    commit e, dove insegnano qualcosa, nella guida: mai nella voce. Un'azione post-merge fatta
+    (una migrazione applicata, con le righe toccate) è stato del progetto e sta nella voce, in una riga.
 12. **Migrazioni** (T-19): le spec con DDL si promuovono a `main` una per volta, nell'ordine;
     ogni migrazione che ricostruisce una tabella ha dump fuori dal repo e conteggi di tutte le
     tabelle prima e dopo.

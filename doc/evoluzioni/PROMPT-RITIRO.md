@@ -2,8 +2,9 @@
 
 > Generato il 2026-10-11 dal prompt `08_CREA_RITIRO_SPEC` di claude-config e rigenerato lo stesso giorno
 > dopo la lettura adversariale (undici spec vive: 01, 02, 03, 04, 05a, 05b, 06, 07a, 07b, 08a, 08b;
-> decisioni D-21…D-57), con i parametri misurati sul repo a quella data. Si rigenera (non si corregge a
-> mano) quando la serie cambia forma: una spec nuova, un ritiro che cambia il metodo, un limite spostato.
+> decisioni D-21…D-57), con i parametri misurati sul repo a quella data. Chi lo usa dopo un ritiro
+> aggiorna i precedenti e le misure e lascia il corpo com'è (la regola di `08` dal 2026-10-14); si
+> rigenera solo se cambia il metodo; il ritiro dell'ultima spec porta via questo file con la cartella.
 > Si usa UNA volta per spec, dopo che è in esercizio.
 
 ---
@@ -48,7 +49,7 @@ dichiarate lì · `git log --format="%h %s" -- <SPEC>` · i precedenti da imitar
 ritiro dell'intera cartella `docs/` precedente, con travaso in CLAUDE.md/AGENTS.md e correzione di ogni
 divergenza trovata dall'audit — l'unico precedente del repo al 2026-10-11, `git log -i --grep=ritir
 --grep=retire` non ne trova altri; non esiste ancora un ritiro spec-per-spec con la serie viva: questo
-sarà il primo e diventerà il precedente da citare qui alla prossima rigenerazione).
+sarà il primo, e chi lo fa lo aggiunge qui come precedente da citare).
 Ogni riferimento nel codice a un documento ritirato si riscrive in loco perché il perché resti in piedi
 da solo, tenendo le date.
 
@@ -96,9 +97,9 @@ ORDINE DI LAVORO
    narrazione di dominio (prompt, contratto JSON, gate, dataset, ricerca, dividendi, pagina
    titolo) → la guida del tema in `doc/guide/` (`valutazione.md`, o il file in cui la serie l'ha
    spezzata oltre le 400 righe, D-57); un'invariante dura o lo stato → `CLAUDE.md` (con il saldo
-   in byte, regola 3); una regola visiva → `DESIGN.md` SOLO tramite la skill impeccable (mai a
-   mano); una regola di sessione → `WORKFLOW.md`; una misura di collaudo → la voce `Last Updated`
-   di `CLAUDE.md`, che SOSTITUISCE la precedente (D-21, ≤ 1.100 caratteri); una cosa lasciata
+   in caratteri, regola 3); una regola visiva → `DESIGN.md` SOLO tramite la skill impeccable (mai a
+   mano); una regola di sessione → `WORKFLOW.md`; una misura di collaudo → il messaggio del commit, e l'esito in una riga della voce `Last Updated`
+   di `CLAUDE.md`, che SOSTITUISCE la precedente (D-21, regola 11, ≤ 1.100 caratteri); una cosa lasciata
    fuori dalla serie → `CLAUDE.md § Not yet present` (una riga, T-21); documentazione utente/setup
    → `README.md`/`SETUP.md`; il perché di una riga → un commento in loco (`COMMENTS.md`).
    Sostituire, mai accumulare.
@@ -136,10 +137,10 @@ CANCELLI: `npm run ci:local` (= `npm run test` → `npm run typecheck` → build
 quest'ordine; il visual (`npm run e2e:visual`) non è un cancello ma va rilanciato prima/dopo se il
 ritiro tocca una pagina. Il build di verifica si fa SEMPRE sull'ambiente isolato (`.env` punta a
 Turso di produzione).
-LIMITI (misurati il 2026-10-11, prima della 01): `CLAUDE.md` 39.070 caratteri su un tetto di 40.000
-(ogni spec dichiara nel § 9 i byte aggiunti e tolti, e la voce Last Updated sostituisce la
-precedente: la catena chiude a ≈ 37.900 solo se ogni spec rispetta il suo saldo — rimisura con `wc
--c` a ogni ritiro); `AGENTS.md` 720 righe / 104 kB (dopo la 02 il tetto è 600 righe, poi saldo zero,
+LIMITI (misurati il 2026-10-19, prima della 01): `CLAUDE.md` 39.621 caratteri su un tetto di 40.000, nella
+misura della regola 3 dell'indice (caratteri Unicode senza CR, mai `wc -c`): ogni spec dichiara nel
+§ 9 i caratteri aggiunti e tolti, e la voce Last Updated sostituisce la precedente — la catena
+regge solo se ogni spec rispetta il suo saldo, quindi si rimisura a ogni ritiro; `AGENTS.md` 723 righe (dopo la 02 il tetto è 600 righe, poi saldo zero,
 D-22); le guide in `doc/guide/` nascono con la 02 con un tetto di 400 righe per file (D-57: oltre, la
 spec che sfora spezza per tema); `DESIGN.md` 312 righe e `PRODUCT.md` 55 righe, rigenerati nella 08b
 (DESIGN.md solo dalla skill). Se sfori, NON tagliare in chiusura: dimmelo e proponi lo scorporo come
