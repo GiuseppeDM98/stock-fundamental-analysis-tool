@@ -5,6 +5,8 @@ argument-hint: TICKER [TICKER...] — es. "TRN.MI UCG.MI" oppure "REC.MI --solo-
 
 Genera una o più analisi Deep Value per: **$ARGUMENTS**
 
+> **Sospeso dal merge della spec 02 di `doc/evoluzioni/` fino al riallineamento dopo la 08b** (D-76, `doc/evoluzioni/00-INDICE.md § 3.5`). Se la 02 è già in `develop` (`grep -n "^| 2 " doc/evoluzioni/00-INDICE.md` ne dà lo stato), fermati e dillo all'utente: le regole qui sotto descrivono il contratto precedente e salverebbero su Turso righe nel formato superato.
+
 Le produci tu (non l'endpoint dell'app), ma sotto il **contratto di prompt vero dell'app**, e le salvi su Turso in modo che siano indistinguibili da una run generata dall'applicazione.
 
 ## Prima di iniziare

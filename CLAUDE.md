@@ -10,7 +10,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: October 19, 2026 — **Agent instructions realigned and the earnings token ceiling fixed** (weekly check-up). The earnings lookup's `max_tokens` is `EARNINGS_MAX_TOKENS` = 16000 (`lib/ai/earnings-prompt.ts`), sized for the stored default (Opus 4.8 `high`) and under the SDK's non-streaming limit. WORKFLOW.md §1-2 follow the portable standard (rules 6-7, the tour at the owner's go, the outcome as one line; rule 6's public-data case in § 3); the 40,000-character limit has one measure. This file and AGENTS.md now say every route runs the stored default and the fallbacks only behind it. Spec series: D-73 (01 adds structured output to the Grounded extraction) and D-74 (08b moves every Claude model to the 5.5 series), `doc/evoluzioni/00-INDICE.md § 3.4`. Open: Tavily stays the live search backend until spec 01 is in service. Next: spec 01.
+**Last Updated**: October 20, 2026 — **Vercel's 300 s function limit declared, `/deep-value` alignment scheduled** (docs only). On Hobby with Fluid Compute `maxDuration` is 300 s, not the 60 s the docs said: long Deep Value runs and lenses run from localhost (app or `/deep-value`), SETUP.md § Vercel Hobby. `/deep-value` gets one realignment pass after spec 08b and is suspended from spec 02's merge until then. Decisions D-75/D-76, `doc/evoluzioni/00-INDICE.md § 3.5`. Open: Tavily stays the live search backend until spec 01 is in service. Next: spec 01.
 
 ---
 
@@ -136,6 +136,7 @@ _Removed: Compare page + lite engine; Quality Scorecard / Valuation Cards / Hist
 - **Yahoo rate limits** — 429 on rapid searches; retry w/ backoff (2 retries).
 - **Missing shares outstanding** — some non-US tickers → 422.
 - **No caching** — every search hits Yahoo.
+- **Vercel Hobby: 300 s per function (declared limit, 2026-10-20)** — a Deep Value run or an analyst lens past 300 s is killed mid-stream on the deployment; run it from localhost (`npm run dev` or `/deep-value`). Pro, a queue or Vercel Workflows: evaluated, not planned. SETUP.md § Vercel Hobby.
 - **Deep Value JSON parse is all-or-nothing** — one malformed nested field in the model's leading JSON block discards the whole bull/base/bear/method via `JSON.parse`; the saved page still renders the report, but without the valuation summary.
 - **Open edges left after the design-vs-code audit (2026-10-11)**: `cross_check_basis` still passes when the declared multiple matches neither median; the kill-price gate on the FINAL Skeptic JSON only shows on a live run (that JSON is not persisted); aborting a lens re-run hides its blind card until reload. The `groundingJson` and `*BlindJson` columns were confirmed present on the production Turso database on 2026-10-11 (read-only check).
 - **Tailwind 4 browser floor** — Safari 16.4+, Chrome/Edge 111+, Firefox 128+ (it relies on `@property`, `color-mix()` and cascade layers); older iOS renders the app incorrectly. Tailwind 3's hex palette is pinned in `app/tailwind-v3-palette.css` to keep the look unchanged on P3 screens; delete that file to adopt v4's OKLCH colours. Details: AGENTS.md gotcha #32.

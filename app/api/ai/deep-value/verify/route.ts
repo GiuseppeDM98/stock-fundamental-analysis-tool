@@ -41,10 +41,10 @@ const DEFAULT_SETTINGS: AiSettings = { model: "claude-opus-4-8", effort: "xhigh"
 // Doubles the wall clock of the app's longest route: the blind-first flow (grounding
 // present) pays for two full turns, the second of which replays the first turn's
 // thinking as input. Vercel's builder rejects any maxDuration above what the *currently
-// deployed* plan allows — Hobby caps the build at 300 even though the plan's actual
-// runtime ceiling is 60s (see SETUP.md's maxDuration table), so 800 (the Pro + Fluid
-// Compute ceiling) fails to build on Hobby. Bump this back to 800 only after upgrading
-// to Pro with Fluid Compute enabled.
+// deployed* plan allows: Hobby with Fluid Compute caps it at 300 (see SETUP.md's
+// maxDuration table), so 800 (the Pro ceiling) fails to build on Hobby. A run past 300s
+// is a declared limit of the project, run from localhost (2026-10-20). Bump this back to
+// 800 only after upgrading to Pro.
 export const maxDuration = 300;
 
 const requestSchema = z.object({

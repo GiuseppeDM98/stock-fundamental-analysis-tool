@@ -496,13 +496,13 @@ turso db shell <your-db-name> < prisma/migrations/<latest>/migration.sql
 
 **Future**: Add UI field for manual shares input
 
-### Vercel Hobby Plan — 60s Function Timeout on AI Routes
+### Vercel Hobby Plan — 300s Function Limit on Long AI Runs (declared limit)
 
-**Issue**: `/api/ai/deep-value`, `/api/ai/deep-value/verify` and `/api/ai/advisor` call Claude with `effort: "xhigh"`/`"high"` plus web search, which regularly takes **1–2 minutes** to finish. Every Vercel API route is a serverless function with a `maxDuration` capped by the plan — **60s on Hobby**, 300s on Pro (800s with Fluid Compute), 900s on Enterprise. Streaming does not help: Vercel counts total function execution time, not whether bytes are still being sent, so the function is killed and the browser gets a **504 Gateway Timeout** well before the report finishes. A Vercel Cron job doesn't bypass this either — it only triggers the route on a schedule, the invoked function is still subject to the same `maxDuration`.
+**Issue**: `/api/ai/deep-value` and `/api/ai/deep-value/verify` call the model at a high reasoning effort plus web search; a run takes several minutes and can go past the plan's ceiling (the Advisor and the earnings lookup usually fit). With Fluid Compute, Vercel's default, `maxDuration` is **300s on Hobby** (default and maximum), 800s on Pro and Enterprise (1800s in beta) — checked against Vercel's docs on 2026-10-20. Streaming does not help: Vercel counts total function execution time, not whether bytes are still being sent, so the function is killed mid-report. A Vercel Cron job doesn't bypass this either — it only triggers the route on a schedule, the invoked function is still subject to the same `maxDuration`.
 
-**Workaround**: run these three AI routes against `npm run dev` (localhost) instead of a Hobby deployment, or set `export const maxDuration = 300` on the three routes after upgrading to Vercel Pro.
+**Declared limit** (owner's decision, 2026-10-20): long analyses run from localhost — the app under `npm run dev`, or the `/deep-value` Claude Code command, which saves its analyses to Turso — and the deployed instance serves everything else. Details in [SETUP.md](SETUP.md).
 
-**Future**: an async queue+polling architecture (job written to the DB immediately, generation done by a worker outside Vercel's function limit, client polls for the result) would remove the ceiling entirely on Hobby, at the cost of losing live token-by-token streaming. Evaluated and not planned: for a personal tool, upgrading to Vercel Pro (one `maxDuration` line per route) costs far less than the new data model, external worker and client refactor, and keeps live streaming.
+**Not planned**: Vercel Pro (800s, one `maxDuration` line per route), a queue+polling architecture or Vercel Workflows (no duration limit, at the cost of a new data model and of live token-by-token streaming). Evaluated and not planned for a personal tool.
 
 ---
 

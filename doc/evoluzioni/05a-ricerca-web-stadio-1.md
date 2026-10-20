@@ -162,7 +162,7 @@ export function preprocessResearchOutput(raw: unknown): unknown;
 - **Currency guard**: `computeMarketImplied` solo se `meta.reportingCurrency === quote.currency`; un bilancio in GBP con quote in GBp (pence) produce il warning `currency_mismatch` (strict) — accettato, dichiarato nella guida.
 - **`e2e/support/test.ts`**: `/api/ai/research` è vietato in e2e.
 - **Costo**: una ricerca Sonnet 5.5 con 30 search + 8 fetch (≤ 3 PDF) con caching: stima 0,3–1 $; si misura nella run reale e si scrive in CLAUDE.md.
-- **`maxDuration`** su Vercel Hobby è 60 s effettivi (SETUP.md): la ricerca gira in locale come oggi le analisi; `SETUP.md:190-203` e `README.md:499-503` elencano «the three AI routes»: diventano quattro con `/api/ai/research`.
+- **`maxDuration`** su Vercel Hobby è 300 s (Fluid Compute), limite dichiarato del progetto (D-75): una ricerca che li supera gira in locale come le analisi; la sezione «Vercel Hobby» di `SETUP.md` e di `README.md` nomina le route AI lunghe: si aggiunge `/api/ai/research`.
 - **COMMENTS.md**: il perché della verifica URL (il modello cita fonti che non ha aperto) e della fusione al server (anchor e `verified` calcolati in un solo posto) con la data.
 - **Test di route**: `// @vitest-environment node`, mock come nella 02 § 5.
 
@@ -206,7 +206,7 @@ Nessun DDL (la tabella è della 04). Deploy; prima ricerca reale (dopo la 05b, c
 - `doc/guide/valutazione.md § Ricerca (stadio 1)`: prompt, schema, verifica fonti, `blocksByCaller`, fusione al server, costi misurati.
 - `CLAUDE.md` (misurare): «Tech Stack»: Sonnet 5.5 anche per la ricerca, «or the user's DeepSeek model via DeepSeek's Search/Fetch APIs» (+80); API: `/api/ai/research` (+30); «Not yet present»: una riga «A model selector of its own for the research stage on /analyze (it follows the global default; override only in the route body), 2026-10-18.» (+150); costo e durata medi della ricerca nel messaggio del commit (regola 11). Nessuna sezione nuova: il flusso su `/analyze` lo descrive la 05b. Saldo ≈ +260: misurare, e se `wc -c` supera 39.800 togliere da «Deep Value Analysis» la frase sullo «Stream suppression» (che la 05b toglie comunque, −250).
 - `AGENTS.md` (saldo zero): nella riga di rimando «Multi-Provider AI Settings» la frase «la ricerca è Sonnet 5.5 high per Anthropic e il modello DeepSeek dell'utente a high per DeepSeek (`researchAiSettings`), con `web_fetch` client-executed sulla Fetch API per DeepSeek»; gotcha di una riga «un URL citato non è un URL aperto: verificare contro la trascrizione» al posto della riga su `max_content_tokens` (che per i PDF non vale).
-- `README.md` e `SETUP.md`: l'elenco delle route AI soggette al limite di 60 s su Hobby include `/api/ai/research`.
+- `README.md` e `SETUP.md`: la sezione sul limite di 300 s su Hobby nomina anche `/api/ai/research`.
 - `Draft Release Temp.md`: «Structured web research stage: primary-source financial data with per-row verified sources, merged with pasted data on the server».
 - Riga `> **Stato**` e indice § 5 aggiornati.
 
