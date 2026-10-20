@@ -189,22 +189,24 @@ A `PortfolioSnapshot` row is written for each user who has at least one position
 
 > **Note:** Do not reuse secrets between local and production environments.
 
-### ⚠️ Vercel Hobby plan: AI routes will 504
+### ⚠️ Vercel Hobby plan: long AI runs stop at 300 seconds
 
-The three AI routes (`/api/ai/deep-value`, `/api/ai/deep-value/verify`, `/api/ai/advisor`) call Claude with a high reasoning effort plus web search — generation regularly takes **1–2 minutes**. On Vercel, every API route is a serverless function with a `maxDuration` capped by the plan:
+The AI routes call the model with a high reasoning effort plus web search. A Deep Value run (`/api/ai/deep-value`) or an analyst lens (`/api/ai/deep-value/verify`, two full turns in the Grounded blind-first flow) takes several minutes and can run past the ceiling; the Advisor and the earnings lookup usually fit. On Vercel every API route is a function whose `maxDuration` is capped by the plan (Fluid Compute, Vercel's default — checked against Vercel's docs on 2026-10-20):
 
-| Plan | Max `maxDuration` |
-|---|---|
-| Hobby | 60s |
-| Pro | 300s (up to 800s with Fluid Compute) |
-| Enterprise | 900s |
+| Plan | Default | Max `maxDuration` |
+|---|---|---|
+| Hobby | 300s | 300s |
+| Pro | 300s | 800s (1800s in beta) |
+| Enterprise | 300s | 800s (1800s in beta) |
 
-**On Hobby, these routes will hit the 60s ceiling and return a 504** before the report finishes — streaming doesn't help, since Vercel counts total execution time, not whether the response is still being written. If you deploy on Hobby, either:
+**A run that goes past 300s on Hobby is killed** and the report stops mid-stream: streaming doesn't help, since Vercel counts total execution time, not whether the response is still being written.
 
-- **Run AI analyses from `npm run dev` on localhost** (no function-duration limit) and use the deployed instance for everything else, or
-- **Upgrade to Pro** and add `export const maxDuration = 300;` to each of the three route files.
+**This is a declared limit of the project** (owner's decision, 2026-10-20): long analyses run from localhost, the deployed instance serves everything else (reading saved analyses, portfolio, watchlist, crons). Two ways to run them:
 
-A queue+polling architecture (job persisted immediately, generation run by a worker outside Vercel's function limit) would remove this ceiling on Hobby entirely, at the cost of losing live streaming — evaluated and not planned: upgrading to Pro is the cheaper fix for a personal tool.
+- **The app on localhost**, which has no function-duration limit. Mind the database: `.env` points at the production Turso database, so a plain `npm run dev` writes there — which is what you want for a real analysis, never for a test (WORKFLOW.md § 3).
+- **The `/deep-value` Claude Code command** (`.claude/commands/deep-value.md`), which produces the analyses and the analyst panel outside the app and saves them to Turso.
+
+Upgrading to Pro lifts the ceiling to 800s with one `maxDuration` line per route. A queue+polling architecture, or Vercel Workflows (no duration limit), would remove it on Hobby too, at the cost of a new data model and of live streaming — evaluated and not planned for a personal tool.
 
 ---
 

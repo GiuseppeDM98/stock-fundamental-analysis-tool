@@ -13,6 +13,9 @@
 > **Aggiornamento del 2026-10-18** (§ 3.3): DeepSeek ha pubblicato le Search/Fetch API; D-70 e
 > T-34 portano la sostituzione di Tavily nella 01; D-71 e T-35 riaprono D-5 e portano DeepSeek
 > nello stadio 1 (05a); D-72 rinomina il modello Flash nella 01; 02 e 05b allineate.
+> **Aggiornamento del 2026-10-20** (§ 3.5): il limite di 300 s delle function su Vercel Hobby è
+> un limite dichiarato (D-75); `/deep-value` si riallinea in una passata unica dopo la 08b ed è
+> sospeso dalla 02 a quella passata (D-76).
 
 ## 1. I punti, con le parole dell'owner (2026-10-11)
 
@@ -178,6 +181,13 @@ spec). Esiti che hanno orientato le decisioni:
 | D-73 | (owner, 2026-10-19): l'estrazione Grounded passa all'output strutturato (`output_config.format`), con lo schema per tipo su `zod/v4`; deroga dichiarata a «nessun prompt toccato» per la sola riga OUTPUT del prompt di estrazione. | 01 (la 04 lo eredita) |
 | D-74 | (owner, 2026-10-19): a serie implementata ogni modello Claude dell'app è della serie 5.5 (Opus 5.5, Sonnet 5.5, Haiku 5.5), con alias in lettura per gli id vecchi; la migrazione sta nella 08b, non in una spec nuova. | 08b |
 
+### 3.5 Limite di durata su Vercel e comando `/deep-value` (2026-10-20)
+
+| # | Decisione | Spec |
+|---|---|---|
+| D-75 | (owner, 2026-10-20): **il limite di 300 s delle function su Vercel Hobby è un limite dichiarato del progetto**, nessuna spec lo rimuove. Con Fluid Compute (default di Vercel) Hobby ha 300 s di default e di massimo, Pro ed Enterprise 800 s (1800 s in beta), verificato sulla documentazione di Vercel il 2026-10-20; la vecchia cifra di 60 s in SETUP, README e 05a era di prima di Fluid Compute. Una run Deep Value o una lente che li supera gira in locale: l'app con `npm run dev`, o il comando `/deep-value`. Valutati e scartati: Vercel Pro, coda con polling, Vercel Workflows. | 05a (route research) |
+| D-76 | (owner, 2026-10-20): **`.claude/commands/deep-value.md` si riallinea in una passata unica dopo la 08b**, non spec per spec. Le spec non cambiano: la 01 (`normalizeTicker`) e la 05b (stadio 1, D-41) fanno la loro parte come scritto. **Dal merge della 02 alla passata il comando è sospeso**: le sue regole scritte a mano descrivono il contratto di oggi (JSON in testa, nessun `resultJson`, gate a mano, `*BlindJson` sempre null) e salverebbero su Turso righe nel formato superato; le analisi lunghe si fanno con l'app in locale. La run reale di `/deep-value` prevista dall'A7 della 05b si fa nella passata. La passata rilegge il comando contro il codice della serie: marker `<!--report-->` e JSON in coda (02), `resultJson` (02), gate dell'app al posto di quelli a mano (03), dataset e blind-first su ogni lente (04, 05b), modelli e costi della serie 5.5 (08b). | 02, 05b, 08b |
+
 ## 4. Scelte adottate dal pianificatore («adottata, ribaltabile» — rovesciabili prima dell'implementazione)
 
 | # | Scelta | Spec |
@@ -233,6 +243,7 @@ spec). Esiti che hanno orientato le decisioni:
 | 9 | [07b-pagina-titolo.md](07b-pagina-titolo.md) | 01, 02, 03, 04, 05a, 06, 07a | riletta il 2026-10-11: 22 rilievi, 6 decisioni; pronta |
 | 10 | [08a-redesign-direzione.md](08a-redesign-direzione.md) | 07b (tutte le superfici esistono) | riletta il 2026-10-11: 12 rilievi, 5 decisioni; pronta |
 | 11 | [08b-redesign-build.md](08b-redesign-build.md) | 08a, 07a, 06, 07b | riletta il 2026-10-11: 25 rilievi, 8 decisioni; pronta |
+| 12 | Riallineamento di `/deep-value` (D-76): sessione senza spec propria finché non la si scrive | 08b (e tutte le precedenti) | da scrivere; il comando è sospeso dal merge della 02 |
 
 La **lettura adversariale** (prompt `07_LETTURA_ADVERSARIALE_SPEC` di claude-config) è stata
 fatta il 2026-10-11, prima di implementare la 01. La riga usata:
