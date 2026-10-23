@@ -197,6 +197,7 @@
 - Registration can be disabled via the `DISABLE_REGISTRATION=true` environment variable — useful to lock down the app after initial setup.
 - AI fair value targets are always computed server-side and cannot be manipulated by the client.
 - Updated the app's dependencies so no known vulnerabilities remain. It now needs Safari 16.4+, Chrome/Edge 111+ or Firefox 128+; older iPhones on iOS 16.3 or earlier will render it incorrectly.
+- Updated Next.js to 15.5.28, which fixes a critical remote code execution advisory in image optimization (GHSA-2464-fhr4-w9xw) and a denial of service in Server Actions (GHSA-p3m5-59mp-jv5r). Self-hosted deployments should update.
 
 ## 📚 Documentation
 

@@ -127,7 +127,8 @@ ORDINE DI LAVORO
    con lei), la tabella § 5 di `doc/evoluzioni/00-INDICE.md` (la riga passa a «ritirata il
    <data>, commit <hash>»), le spec sorelle che la citano come prerequisito («Dipende da: NN» →
    «NN ritirata il <data>»), `CLAUDE.md § Last Updated` (la voce di questa sessione, che SOSTITUISCE
-   la precedente — D-21 — e dice «spec NN ritirata il <data>, commit <hash>» insieme alle misure).
+   la precedente — D-21 — e dice «spec NN ritirata il <data>, commit <hash>»; le misure vanno nel
+   messaggio del commit, regola 11).
    Se era l'ultima spec (la 08b), dillo esplicitamente e chiudi la serie come bde889a.
    `grep -n "Stato" doc/evoluzioni/*.md` e `grep -n "evoluzioni" CLAUDE.md` devono dire la stessa
    cosa ovunque.

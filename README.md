@@ -6,7 +6,7 @@ A Next.js web app for value investors: an AI-assisted pipeline from idea **Disco
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-green)
-![Next.js](https://img.shields.io/badge/Next.js-15.5.12-black)
+![Next.js](https://img.shields.io/badge/Next.js-15.5.28-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7.3-blue)
 ![Vitest](https://img.shields.io/badge/Vitest-4.1.11-yellow)
 
