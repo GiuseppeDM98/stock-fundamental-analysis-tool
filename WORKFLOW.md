@@ -128,9 +128,10 @@ and **record the outcome somewhere that survives the session** (`CLAUDE.md` or e
 **The outcome is one line, the signals are not** (2026-10-19). In `CLAUDE.md` the session's status
 entry says what was done, where it is documented, what is still open and what comes next; it
 replaces the previous one. The session's signals — type-check, test counts, E2E runs, flakes,
-skipped phases — go in the commit message and, where they teach something, in the area's guide,
-never in `CLAUDE.md`: that file is injected into every turn, and a status entry that collects them
-grows back into a diary after every trim.
+skipped phases, the guided tour's walk and its findings (2026-10-23) — go in the commit message
+and, where they teach something, in the area's guide, never in `CLAUDE.md`: that file is injected
+into every turn, and a status entry that collects them grows back into a diary after every trim.
+Of the tour, the status entry keeps only its outcome: done and closed, or what it left open.
 
 ---
 
@@ -163,6 +164,8 @@ The gates before a session's commit, in this order, with no lint stage (`next li
 4. `npm run e2e` against that production build (`E2E_SERVER=start`, i.e. `next start -p 3200`)
 
 `npm audit` is deliberately not a stage. Visual screenshots are not a stage either.
+
+After `npm ci` (or on a fresh checkout) run `npx prisma generate` once: stage 2 comes before the build that generates `generated/prisma`, and without it the type-check fails on `lib/db.ts` and on every implicit `any` that follows (2026-10-23).
 
 **On Windows** (2026-10-19, first run of the gate there): the e2e tooling starts `npx`/`npm` through a shell (`e2e/prepare-db.ts`, `e2e/run-isolated.ts` — Node refuses a `.cmd` without one, `spawnSync EINVAL`), and a fresh checkout needs `npx playwright install chromium` once before stage 4.
 
@@ -232,6 +235,6 @@ The owner's browser cannot reuse the script's `storageState`: run `npm run seed:
   - **Dove va a fine sessione** — `AGENTS.md` if it holds for the whole repo (including any error that cost more than 30 minutes to debug) · `WORKFLOW.md` if it is a session rule · `CLAUDE.md` if it is project state · `Draft Release Temp.md` if it is a user-facing change (GitHub Release format, append only) · `README.md` / `SETUP.md` if it is user or setup documentation · a comment on the right line if it is the *why* of one line (see `COMMENTS.md`).
 
   Pre-merge ritual, on the session branch and after the owner's OK: write every entry into its destination, delete `SESSION_NOTES.md`, then make the single commit that carries code and docs together. In `CLAUDE.md` the session's "Last Updated" entry replaces the previous one (in English), and any project-state section the session changed is updated in place; the file has a hard limit of 40,000 characters, measured as Unicode characters with CR excluded (`node -e "console.log([...require('fs').readFileSync('CLAUDE.md','utf8').replace(/\r/g,'')].length)"`). `wc -c` counts bytes — about 350 more on an LF checkout, about 600 more on a Windows one, where it counts the CRs too — so it is never the measure against the limit (2026-10-19).
-- **Outcome of a collaudo**: one line in `CLAUDE.md`'s "Last Updated" entry for that session (which phases ran, how, what was left to the owner's tour). Every finding that can be asserted by a test is promoted into `__tests__/` before the session ends.
+- **Outcome of a collaudo**: one line in `CLAUDE.md`'s "Last Updated" entry for that session (that it ran, and what was left to the owner's tour); which phases ran and how go in the commit message (§ 2, *Closing a verification*). Every finding that can be asserted by a test is promoted into `__tests__/` before the session ends.
 - **Conventions that already live elsewhere — not duplicated here**: `CLAUDE.md` (project state and hard invariants such as the position-blind Deep Value rule), `AGENTS.md` (implementation patterns and numbered gotchas: read the section of the domain you touch), `COMMENTS.md` and `DEVELOPMENT_GUIDELINES.md` (read both before writing code, every session). Touching a prompt builder in `lib/ai/deep-value-prompts.ts` requires the Quick-mode golden test (`__tests__/deep-value-prompts-quick-identical.test.ts`) to stay green.
 - **Rule 6 here** (the owner's decision, 2026-10-19): the regression fixtures built on a listed company's published accounts — the Iren case in `__tests__/grounding-basis.test.ts`, Iren and Webuild in the `grounding-postcheck`, `-anchors`, `-reconcile` and `-prompt-format` tests — are public data that is not the owner's, so they stay; a figure of the owner's own portfolio, positions or analyses never enters a test.

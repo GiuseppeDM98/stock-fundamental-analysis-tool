@@ -22,7 +22,7 @@ lib/               # Business logic and utilities (Yahoo quote adapter, AI promp
   ai/
     deep-value-prompts.ts   # Prompt builders for streaming deep value analysis + Analyst Review (verify) — always position-blind
     advisor-prompts.ts      # buildAdvisorSystemPrompt() — injects portfolio + analyses + live prices + GROUNDING_RULES_BLOCK
-    earnings-prompt.ts      # buildEarnings{System,User}Prompt() — next-earnings lookup (Sonnet 5.5 + web search), cadence-neutral
+    earnings-prompt.ts      # buildEarnings{System,User}Prompt() — next-earnings lookup (default model + web search), cadence-neutral
   earnings.ts      # Pure: isFutureEarnings(), isAnalysisStalePreEarnings(), formatEarningsDate() — shared client (no server-only)
   earnings-client.ts # Client fetch helpers: fetchEarnings() / refreshEarnings()
   yahoo-client.ts  # Yahoo Finance API adapter
@@ -457,6 +457,7 @@ export type CloseResult =
 
 - **Full close** (no `sharesToSell`, or it covers the whole lot within `EPS = 1e-9` float tolerance): a single `update` sets `closedAt`/`sellPrice`.
 - **Partial close**: splits the lot in one `$transaction` — the open row shrinks by the sold shares, a new row is `create`d for the sold shares carrying `closedAt`/`sellPrice`. This preserves realized P&L on the sold slice while the remainder keeps being valued as an open holding (WAC recomputes automatically since aggregation is a pure re-derivation over open positions).
+- **Where it shows**: closed positions render in an archived "Closed positions" section, apart from the open list; their realized P&L (`realizedPnlNative()`, `holdingDays()`, `estimateCapitalGainsTax()` in `lib/portfolio-math.ts`, pure and shared client+server) rolls into the SummaryBar's "Realized" figure, gross with a net-of-tax `hint` when the rate is set.
 - **Record realized P&L exactly once, not via a time window**: `sellDate`/`closedAt` can be backdated (the user closing a position today for a sale that happened last week). `lib/portfolio-snapshots.ts` uses a `realizedRecorded` boolean flag set in the same transaction as the snapshot write, instead of "closed in the last N days" — a window would silently miss a backdated sale and leave the cost/value drop on the chart unexplained. Prefer this pattern anywhere a snapshot/cron job needs to account for an event exactly once regardless of when its timestamp falls.
 
 ### WAC/DCA Aggregation Pattern

@@ -94,8 +94,8 @@ export async function POST(request: Request) {
     const aiSettings = await resolveAiSettings(session.user.id, undefined, DEFAULT_SETTINGS);
     const client = getAiClient(aiSettings.model);
 
-    // Non-streaming: a single small fact. Sonnet 5.5 rejects temperature and has adaptive
-    // thinking on by default; web-search + thinking tokens count toward max_tokens.
+    // Non-streaming: a single small fact, on the user's stored default model. No temperature
+    // (Sonnet 5.5 rejects it); web-search + thinking tokens count toward max_tokens.
     // maxIterations: DeepSeek's web search is client-executed one query at a time (unlike
     // Claude's server-side search, which never surfaces a client tool_use here), so the
     // default 10-round cap could exhaust itself mid-research on a DeepSeek run, returning

@@ -24,7 +24,7 @@
     "@vitest/coverage-v8": "^4.1.11",
     "bcryptjs": "^3.0.3",
     "framer-motion": "^11.18.2",
-    "next": "^15.1.6",
+    "next": "^15.5.28",
     "next-auth": "^5.0.0-beta.30",
     "node-html-parser": "^7.1.0",
     "prisma": "^7.4.2",
