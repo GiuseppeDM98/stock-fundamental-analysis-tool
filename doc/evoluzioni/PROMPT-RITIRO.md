@@ -138,10 +138,10 @@ CANCELLI: `npm run ci:local` (= `npm run test` → `npm run typecheck` → build
 quest'ordine; il visual (`npm run e2e:visual`) non è un cancello ma va rilanciato prima/dopo se il
 ritiro tocca una pagina. Il build di verifica si fa SEMPRE sull'ambiente isolato (`.env` punta a
 Turso di produzione).
-LIMITI (misurati il 2026-10-19, prima della 01): `CLAUDE.md` 39.621 caratteri su un tetto di 40.000, nella
+LIMITI (misurati il 2026-10-23, prima della 01): `CLAUDE.md` 38.156 caratteri su un tetto di 40.000, nella
 misura della regola 3 dell'indice (caratteri Unicode senza CR, mai `wc -c`): ogni spec dichiara nel
 § 9 i caratteri aggiunti e tolti, e la voce Last Updated sostituisce la precedente — la catena
-regge solo se ogni spec rispetta il suo saldo, quindi si rimisura a ogni ritiro; `AGENTS.md` 723 righe (dopo la 02 il tetto è 600 righe, poi saldo zero,
+regge solo se ogni spec rispetta il suo saldo, quindi si rimisura a ogni ritiro; `AGENTS.md` 724 righe (dopo la 02 il tetto è 600 righe, poi saldo zero,
 D-22); le guide in `doc/guide/` nascono con la 02 con un tetto di 400 righe per file (D-57: oltre, la
 spec che sfora spezza per tema); `DESIGN.md` 312 righe e `PRODUCT.md` 55 righe, rigenerati nella 08b
 (DESIGN.md solo dalla skill). Se sfori, NON tagliare in chiusura: dimmelo e proponi lo scorporo come

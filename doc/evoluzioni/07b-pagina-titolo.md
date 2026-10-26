@@ -10,7 +10,7 @@
 2. **Nessun grafico dei fondamentali**; l'unico Recharts è il P&L (`components/portfolio-history-chart.tsx`). `computeMarketImplied` (`lib/grounding/anchors.ts:252-257`) vuole 4 argomenti (compresa la `BasisReconciliation`), restituisce `impliedOnStatement` e `impliedOnProvider` e calcola SOLO l'EV/EBITDA.
 3. **Il dataset non ha «dividendi totali»** (solo `dividendsPerShare`, `types/grounding.ts:53-70`); il capex ha il segno della fonte (`grounding-extract-prompt.ts:61`); `postcheck.ts:310` calcola già `dividendsPerShare × sharesDiluted`.
 4. **Le analisi Grounded salvate prima della 04** hanno l'extract solo in `groundingJson` (nessun backfill): `latestFinancialDataset` non le vede.
-5. **`EarningsBadge`** con `onRefresh` chiama `POST /api/earnings` (Sonnet 5.5 + web search, `components/earnings-badge.tsx:26-53`); senza `onRefresh` un ticker mai cercato non mostra il badge.
+5. **`EarningsBadge`** con `onRefresh` chiama `POST /api/earnings` (modello di default + web search, `components/earnings-badge.tsx:26-53`); senza `onRefresh` un ticker mai cercato non mostra il badge.
 
 ## 2. Obiettivo e criteri di accettazione
 
