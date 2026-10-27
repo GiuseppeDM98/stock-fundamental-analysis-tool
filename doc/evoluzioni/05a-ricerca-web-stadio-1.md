@@ -162,7 +162,7 @@ export function preprocessResearchOutput(raw: unknown): unknown;
 - **Currency guard**: `computeMarketImplied` solo se `meta.reportingCurrency === quote.currency`; un bilancio in GBP con quote in GBp (pence) produce il warning `currency_mismatch` (strict) — accettato, dichiarato nella guida.
 - **`e2e/support/test.ts`**: `/api/ai/research` è vietato in e2e.
 - **Costo**: una ricerca Sonnet 5.5 con 30 search + 8 fetch (≤ 3 PDF) con caching: stima 0,3–1 $; si misura nella run reale e si scrive in CLAUDE.md.
-- **`maxDuration`** su Vercel Hobby è 300 s (Fluid Compute), limite dichiarato del progetto (D-75): una ricerca che li supera gira in locale come le analisi; la sezione «Vercel Hobby» di `SETUP.md` e di `README.md` nomina le route AI lunghe: si aggiunge `/api/ai/research`.
+- **`maxDuration`** su Vercel Hobby è 300 s (Fluid Compute), limite dichiarato del progetto (D-75): una ricerca che li supera gira in locale come le analisi; la sezione «Vercel Hobby» di `SETUP.md` e di `README.md` nomina le route AI lunghe: si aggiunge `/api/ai/research`. Dal 2026-10-27 (D-77, 05c) la corsa è a fasi: la ricerca resta UNA richiesta ≤ 300 s; la run reale (A6) ne misura la durata e, oltre 240 s, lo annota nell'indice (05d).
 - **COMMENTS.md**: il perché della verifica URL (il modello cita fonti che non ha aperto) e della fusione al server (anchor e `verified` calcolati in un solo posto) con la data.
 - **Test di route**: `// @vitest-environment node`, mock come nella 02 § 5.
 

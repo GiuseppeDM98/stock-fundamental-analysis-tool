@@ -350,6 +350,7 @@ the guide for everything else. Gotchas #25-#29 become one line each pointing at 
 
 ## 10. Fuori ambito, dichiarato
 
+- La scrittura della riga `Analysis` dal server, gli eventi SSE tipizzati e il «Riprova» per fase → **05c** (D-77, D-79, D-81, 2026-10-27): la 02 tiene il salvataggio dal client (`SaveAnalysisRequest.resultJson`) e l'header `X-AI-Settings`; la 05c li ritira.
 - Gate su `sensitivity`, `dividends`, `units`, `scenario_order`, `method_distinct`; `ValuationChecksCard` ovunque; prezzo unico → **03**.
 - Rimozione del ramo Quick e dei riferimenti condizionali agli anchor nel rigor block → **05b**.
 - Il modulo di proiezione dei dividendi e il grafico → **06**.

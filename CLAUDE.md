@@ -10,7 +10,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: October 23, 2026 — **Next.js 15.5.28, instructions realigned** (no feature change). Next.js 15.5.20 → 15.5.28 for a critical advisory. Spec 01 and the series documents realigned with WORKFLOW.md and the code; `/deep-value` stays suspended from spec 02's merge until its pass after 08b (D-76, `doc/evoluzioni/00-INDICE.md § 3.5`). Open: Tavily stays the live search backend until spec 01 is in service. Next: spec 01.
+**Last Updated**: October 27, 2026 — **Staged AI runs planned (spec 05c), dependency guide created** (no code change). The Consulente pattern of net-worth-tracker (one request per model call, server-side persistence, retry per phase) analysed and written as `doc/evoluzioni/05c-corsa-a-fasi.md` (D-77 revises D-75; D-79…D-81, `00-INDICE.md § 3.6`); `doc/guide/dipendenze.md` records the 5 open advisories with their decisions (zod 4 goes into spec 01, D-78). `/deep-value` stays suspended from spec 02's merge until its pass after 08b (D-76). Open: Tavily stays the live search backend until spec 01 is in service; 05c needs its adversarial reading before implementation. Next: spec 01.
 
 ---
 
@@ -136,7 +136,7 @@ _Removed: Compare page + lite engine; Quality Scorecard / Valuation Cards / Hist
 - **Yahoo rate limits** — 429 on rapid searches; retry w/ backoff (2 retries).
 - **Missing shares outstanding** — some non-US tickers → 422.
 - **No caching** — every search hits Yahoo.
-- **Vercel Hobby: 300 s per function (declared limit, 2026-10-20)** — a Deep Value run or an analyst lens past 300 s is killed mid-stream on the deployment; run it from localhost (`npm run dev`; `/deep-value` until spec 02, D-76). Pro, a queue or Vercel Workflows: evaluated, not planned. SETUP.md § Vercel Hobby.
+- **Vercel Hobby: 300 s per function (declared limit, 2026-10-20)** — a Deep Value run or an analyst lens past 300 s is killed mid-stream on the deployment; run it from localhost (`npm run dev`; `/deep-value` until spec 02, D-76). Pro, a queue or Vercel Workflows: evaluated, not planned. Spec 05c (D-77, 2026-10-27) splits every AI call into its own request, persisted by the server and retried per phase; the limit then holds only for a single model turn. SETUP.md § Vercel Hobby.
 - **Deep Value JSON parse is all-or-nothing** — one malformed nested field in the model's leading JSON block discards the whole bull/base/bear/method via `JSON.parse`; the saved page still renders the report, but without the valuation summary.
 - **Open edges left after the design-vs-code audit (2026-10-11)**: `cross_check_basis` still passes when the declared multiple matches neither median; the kill-price gate on the FINAL Skeptic JSON only shows on a live run (that JSON is not persisted); aborting a lens re-run hides its blind card until reload. The `groundingJson` and `*BlindJson` columns were confirmed present on the production Turso database on 2026-10-11 (read-only check).
 - **Tailwind 4 browser floor** — Safari 16.4+, Chrome/Edge 111+, Firefox 128+ (it relies on `@property`, `color-mix()` and cascade layers); older iOS renders the app incorrectly. Tailwind 3's hex palette is pinned in `app/tailwind-v3-palette.css` to keep the look unchanged on P3 screens; delete that file to adopt v4's OKLCH colours. Details: AGENTS.md gotcha #32.
@@ -239,7 +239,7 @@ See `.env.example` for the full template.
 ---
 
 ## Next Priorities
-The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (eleven specs, 01…08b, one session each, in order); its index `00-INDICE.md` holds the series' state and the owner's decisions; after 08b, one `/deep-value` realignment pass (D-76).
+The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (twelve specs, 01…08b with 05c added 2026-10-27, one session each, in order); its index `00-INDICE.md` holds the series' state and the owner's decisions; after 08b, one `/deep-value` realignment pass (D-76).
 1. Caching layer for `/api/quote`.
 2. Per-ticker yield-on-cost in the exit signal (needs per-position dividend exposure via snapshots).
 

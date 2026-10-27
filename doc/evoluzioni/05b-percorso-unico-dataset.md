@@ -112,6 +112,7 @@ Nessun DDL. Deploy; prima ricerca reale in produzione → `SELECT origin, length
 
 ## 10. Fuori ambito, dichiarato
 
+- Persistenza dal server, SSE tipizzato, «Riprova» per fase, lenti in due richieste → **05c** (D-77, 2026-10-27): la 05b lascia la route verify a due turni in una richiesta e il Salva dal client; la 05c li riscrive sopra.
 - Grafici e pagina titolo → **07b**; dividendi → **06**.
 - Prompt caching dello stadio 2 (il dataset è un prefisso stabile fra base e 3 lenti) → `CLAUDE.md § Not yet present` (scritto da questa spec).
 - `priceAnchoringFlag` senza dataset: con il percorso unico ogni analisi nuova ha un dataset, quindi il flag è disponibile senza codice nuovo (verificato dal golden).
