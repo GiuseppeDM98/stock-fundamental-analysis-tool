@@ -10,7 +10,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: October 27, 2026 — **Staged AI runs planned (spec 05c), dependency guide created** (no code change). The Consulente pattern of net-worth-tracker (one request per model call, server-side persistence, retry per phase) analysed and written as `doc/evoluzioni/05c-corsa-a-fasi.md` (D-77 revises D-75; D-79…D-81, `00-INDICE.md § 3.6`); `doc/guide/dipendenze.md` records the 5 open advisories with their decisions (zod 4 goes into spec 01, D-78). `/deep-value` stays suspended from spec 02's merge until its pass after 08b (D-76). Open: Tavily stays the live search backend until spec 01 is in service; 05c needs its adversarial reading before implementation. Next: spec 01.
+**Last Updated**: October 27, 2026 — **Spec 05c (staged AI runs) adversarially read** (no code change). Three read-only Opus readers (spec, net-worth-tracker reference, cross-spec) produced 68 findings, all re-verified on the code and fixed in loco in `doc/evoluzioni/05c-corsa-a-fasi.md`; 15 owner decisions (D-82…D-96: `analysisId` in the first SSE event, three-message Phase 2 with a synthetic assistant turn, the server finishes the phase when the client disconnects, 330 s retry threshold with conditional writes, `X-AI-Settings` retired, `runStatus: done` filters inherited by 07a/07b; D-77 reworded to «single phase») and 8 planner choices (T-39…T-46) in `00-INDICE.md § 3.6/§ 4`; one line each fixed in 05a, 07a, 07b, 08a, 08b and `PROMPT-RITIRO.md`. `/deep-value` stays suspended until its pass after 08b (D-76). Open: Tavily stays the live search backend until spec 01 is in service. Next: spec 01.
 
 ---
 
