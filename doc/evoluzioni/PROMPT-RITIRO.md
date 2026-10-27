@@ -1,7 +1,7 @@
 # Prompt di ritiro di una spec in esercizio — serie `doc/evoluzioni/`
 
 > Generato il 2026-10-11 dal prompt `08_CREA_RITIRO_SPEC` di claude-config e rigenerato lo stesso giorno
-> dopo la lettura adversariale (undici spec vive: 01, 02, 03, 04, 05a, 05b, 06, 07a, 07b, 08a, 08b;
+> dopo la lettura adversariale (dodici spec vive dal 2026-10-27: 01, 02, 03, 04, 05a, 05b, 05c, 06, 07a, 07b, 08a, 08b;
 > decisioni D-21…D-57), con i parametri misurati sul repo a quella data. Chi lo usa dopo un ritiro
 > aggiorna i precedenti e le misure e lascia il corpo com'è (la regola di `08` dal 2026-10-14); si
 > rigenera solo se cambia il metodo; il ritiro dell'ultima spec porta via questo file con la cartella.
@@ -13,8 +13,8 @@ SPEC DA RITIRARE: doc/evoluzioni/NN-nome.md      <- l'unico punto da compilare
 Ritira la spec scritta qui sopra. Nel resto di questo prompt <SPEC> è quel percorso, <NN>
 il suo numero (anche con la lettera: `05a`, `07b`, `08a`) e <SLUG> il resto del nome senza
 «.md»: ricavali tu, non chiedermeli. Se il file non esiste, FERMATI e dimmelo prima di fare
-qualsiasi cosa. Le spec vive della serie sono undici, nell'ordine: 01, 02, 03, 04, 05a, 05b,
-06, 07a, 07b, 08a, 08b (`00-INDICE.md § 5`); si ritirano in quest'ordine.
+qualsiasi cosa. Le spec vive della serie sono dodici, nell'ordine: 01, 02, 03, 04, 05a, 05b,
+05c, 06, 07a, 07b, 08a, 08b (`00-INDICE.md § 5`); si ritirano in quest'ordine.
 
 PREREQUISITO, da misurare e non da assumere: la spec è IN ESERCIZIO, cioè la PR della spec è
 mergiata in `develop` (`git log --merges --oneline develop | grep <SLUG>` o il numero di PR scritto
@@ -25,14 +25,16 @@ caso reale NON è un prerequisito: dove è a portata di giorni lo si cerca e lo 
 ma non lo si aspetta mai — ciò che l'uso vero insegnerà diventa feedback e poi una spec
 nuova, e quando il caso arriva si annota nella riga di stato della spec ritirata, come
 storia. Il collaudo della sessione di implementazione vale come prova della spec, non
-come segnale. DDL della serie (T-19, D-37, regola 12 dell'indice): tre spec portano una migrazione e
+come segnale. DDL della serie (T-19, D-37, regola 12 dell'indice): quattro spec portano una migrazione e
 ciascuna va promossa a `main` da sola, nell'ordine. La 01 porta una migrazione DISTRUTTIVA
 (`drop_watchlist_run_and_freq`, ricostruisce `User`) che va applicata DOPO il deploy del codice che non
 legge più le colonne, con un dump FUORI dal repo prima (`~/backups/stock-analysis/backup-<data>.sql`) e
 la query degli otto conteggi della sua § 8 prima e dopo; la 02 (`add_analysis_result_json`, 10
 `ADD COLUMN`, non ripetibile) va applicata PRIMA del deploy e solo dopo che la 01 è stata applicata a
 Turso; la 04 (`add_financial_dataset`, che ricostruisce `Analysis`) PRIMA del deploy con dump e
-conteggi; 03, 05a, 05b, 06, 07a, 07b, 08a, 08b non hanno DDL. La prova che il DDL è stato speso è la
+conteggi; la 05c (`add_analysis_run_status`, 3 `ADD COLUMN` su `Analysis`, default `done`) PRIMA del deploy,
+con il controllo `SELECT runStatus, count(*) FROM Analysis GROUP BY runStatus` della sua § 8; 03, 05a,
+05b, 06, 07a, 07b, 08a, 08b non hanno DDL. La prova che il DDL è stato speso è la
 query di lettura della § 8 della spec (PRAGMA/SELECT) con l'esito atteso, eseguita da te in sola
 lettura (`turso auth login` prima, se la sessione CLI è scaduta). Se un
 criterio non regge, un segnale manca o uno script non è stato speso, FERMATI e dillo: una spec si

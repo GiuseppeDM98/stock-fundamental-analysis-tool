@@ -41,7 +41,7 @@ Un'app coerente con la direzione approvata nella 08a su TUTTE le pagine (hub, an
 
 1. **Fase A**: `npm run e2e:visual:update` come PRIMO comando, poi `ci:local`.
 2. **Token** (A1, A2): `globals.css` + `@theme inline` + `tailwind-v3-palette.css` (resta) + `tailwind.config.ts` (`prose-report`: `bold`/`links` su `var(--ai-accent…)`) + `.impeccable/config.json`; `print.css` riscritto (D-54); migrazione dei consumer di `--chart-1..4` (06, 07b) e del grafico P&L (`portfolio-history-chart.tsx`) ai token evento; `lib/report/verdict.ts` su token; `valuation-ruler.tsx` tick lenti e consenso su `--lens-*`/`--consensus`.
-3. **Build** pagina per pagina (hub, analyze, stocks, analyses, dettaglio, portfolio, watchlist, advisor, auth, email), ognuna chiusa da: screenshot desktop+phone, finish-reviewer impeccable sulla pagina, fix dei rilievi «material».
+3. **Build** pagina per pagina (hub, analyze con lo stato `cut`, stocks, analyses e dettaglio con le righe di stato della corsa (05c, C-23), portfolio, watchlist, advisor, auth, email), ognuna chiusa da: screenshot desktop+phone, finish-reviewer impeccable sulla pagina, fix dei rilievi «material».
 4. **a11y** (A3): righello, grafici, focus ring, `MotionConfig`, cookie lingua, emoji → SVG.
 5. **Email** (A5): `lib/email-theme.ts` + `lib/email.ts` + test.
 6. **Audit finale + documenter** (A4, A6): `impeccable audit` sulle stesse route; `DESIGN.md` + `.impeccable/design.json` rigenerati; `PRODUCT.md` a mano.
