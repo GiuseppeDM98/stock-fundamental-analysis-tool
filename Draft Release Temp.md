@@ -60,7 +60,7 @@
 
 - Added a **kill price to the Skeptic review**. Instead of only critiquing the report, the Skeptic now states the specific price below which it believes the investment thesis is dead — or explicitly says it couldn't construct one, which is itself a meaningful signal.
 
-- Added **DeepSeek V4.1 Flash** as a selectable AI model — a faster, lower-cost alternative to DeepSeek V4 Pro, available anywhere you can already choose DeepSeek. A preference saved under the earlier V4 Flash name carries over automatically.
+- Added **DeepSeek V4.1 Flash** as a selectable AI model — a faster, lower-cost alternative to DeepSeek V4 Pro, available anywhere you can already choose DeepSeek.
 
 - Added a **"Low" reasoning-effort option** for DeepSeek models — previously only High and Max were available, so simpler runs can now trade some depth for speed and cost.
 
@@ -121,6 +121,8 @@
 - Fixed the **home page's Portfolio P&L looking out of sync** with the live figure on `/portfolio` — the home value is a daily snapshot, so it's now labeled "as of &lt;date&gt;" to make that clear.
 
 - Fixed the **estimated tax figure showing even when your overall unrealized P&L was a net loss** — a single profitable position no longer triggers a tax estimate that made no sense against a portfolio down overall.
+
+- Fixed the **Portfolio page showing only an error when the value history could not load** — your positions and summary now appear regardless; only the history chart is affected.
 
 - Fixed **sold lots being counted as holdings**, which inflated share counts and skewed the average cost. The open-position banner on a saved analysis, the position badge on Saved Analyses and the Advisor (its portfolio context and its position count) now count open lots only.
 
@@ -201,6 +203,9 @@
 - **Claude Sonnet 5.5 now falls back to Claude Sonnet 5 when it declines** certain requests (cybersecurity-adjacent or AI-research topics) instead of giving up, within the same answer. When that happens, a note at the end names the model that actually wrote the answer, since your model selector still shows Sonnet 5.5.
 
 - **DeepSeek web search now runs on DeepSeek's own Search API** — one key and one bill instead of a separate Tavily account, about 20× cheaper per search, and every result now carries its publication date so the Advisor can cite it. The `TAVILY_API_KEY` variable is no longer used.
+
+- **DeepSeek V4 Flash is now DeepSeek V4.1 Flash** (`deepseek-flash`): the provider retired the old model and routes it to the new one.
+
 ## 🔒 Security
 
 - Registration can be disabled via the `DISABLE_REGISTRATION=true` environment variable — useful to lock down the app after initial setup.

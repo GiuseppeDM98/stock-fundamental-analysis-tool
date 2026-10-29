@@ -212,7 +212,7 @@ Chiavi nuove EN/IT: `valuationChecksTitle` («Deterministic checks» / «Verific
 - **Gotcha #24**: `AnalystFinalCard` non contiene bottoni.
 - **`checkReportStructure`** riceve il Markdown CON o SENZA fence: la regex per riga non è disturbata dal JSON; i chiamanti passano quello strippato.
 - **Golden Quick**: NON si rigenera (T-26).
-- **Test con `vi.mock`**: i file nuovi usano `createElement`; i file esistenti seguono il proprio stile (01 § 5).
+- **Test con `vi.mock`**: i file nuovi usano `createElement`; i file esistenti seguono il proprio stile, e JSX dentro `vi.mock` funziona con Vitest 4 (AGENTS.md gotcha #31b).
 - **DEVELOPMENT_GUIDELINES › funzioni ≤ 30 righe**: `checkValuationBridges` cresce — estrarre `buildGates(...)` che compone l'array.
 - **Ticker nelle URL**: `fetch(\`/api/quote/${encodeURIComponent(ticker)}\`)`, come oggi `saved-valuation-summary.tsx:38`.
 

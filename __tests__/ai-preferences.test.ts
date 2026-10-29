@@ -5,7 +5,7 @@ vi.mock("@/lib/db", () => ({
   db: { user: { findUnique: (...args: unknown[]) => findUniqueMock(...args) } },
 }));
 
-import { resolveAiSettings } from "@/lib/ai/ai-preferences";
+import { aiModelIdSchema, resolveAiSettings } from "@/lib/ai/ai-preferences";
 import type { AiSettings } from "@/types/ai-settings";
 
 const FALLBACK: AiSettings = { model: "claude-opus-4-8", effort: "xhigh", thinking: true };
@@ -57,24 +57,40 @@ describe("resolveAiSettings", () => {
     expect(result.effort).toBe("high");
   });
 
-  it("resolves a stored default saved under the retired Flash id to its successor", async () => {
+  it("falls back to the route default for a stored id that is no catalog model (the Flash alias was removed 2026-10-29)", async () => {
     findUniqueMock.mockResolvedValueOnce({
       aiModel: "deepseek-v4-flash",
       aiEffort: "low",
       aiThinkingEnabled: true,
     });
     const result = await resolveAiSettings("user6", undefined, FALLBACK);
-    expect(result.model).toBe("deepseek-flash");
+    expect(result.model).toBe(FALLBACK.model);
     expect(result.effort).toBe("low");
   });
 
-  it("maps a per-run override naming the retired Flash id to its successor", async () => {
+  it("ignores a per-run override naming an id that is no catalog model", async () => {
     findUniqueMock.mockResolvedValueOnce({
-      aiModel: "claude-opus-4-8",
+      aiModel: "deepseek-v4-pro",
       aiEffort: "high",
       aiThinkingEnabled: true,
     });
     const result = await resolveAiSettings("user7", { model: "deepseek-v4-flash" }, FALLBACK);
-    expect(result.model).toBe("deepseek-flash");
+    expect(result.model).toBe("deepseek-v4-pro");
+  });
+});
+
+describe("aiModelIdSchema", () => {
+  // The one model-id check of every AI route's per-run override and of PATCH /api/settings/ai.
+  it("should accept a catalog id unchanged", () => {
+    expect(aiModelIdSchema.optional().parse("deepseek-flash")).toBe("deepseek-flash");
+    expect(aiModelIdSchema.optional().parse(undefined)).toBeUndefined();
+  });
+
+  it("should reject the retired Flash id and an unknown id with the Zod message", () => {
+    for (const id of ["deepseek-v4-flash", "gpt-9"]) {
+      const parsed = aiModelIdSchema.safeParse(id);
+      expect(parsed.success).toBe(false);
+      expect(parsed.error?.issues[0].message).toBe("Unknown AI model");
+    }
   });
 });

@@ -399,7 +399,8 @@ async function seedWatchlist(db: PrismaClient): Promise<void> {
   });
 }
 
-/** Five snapshots inside the API's 90-day window: one dividend day, one sale day. */
+/** Six snapshots: five inside the snapshot route's 90-day window and one 120 days back; two
+ *  dividend days (the old one only the dividends route counts), one sale day. */
 async function seedSnapshots(db: PrismaClient, today: Date): Promise<void> {
   // The dividends route sums entries[].dividendPaidEur (attributable to a ticker), never the
   // day aggregate, so each dividend day carries the entry that paid it. The first point sits
