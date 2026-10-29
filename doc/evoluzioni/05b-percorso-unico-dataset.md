@@ -2,7 +2,7 @@
 
 > **Stato**: scritta 2026-10-11 (nata dalla divisione della 05, D-23); riletta in modo adversariale il 2026-10-11: 17 rilievi (la metà «percorso unico» dei 41 della 05), 8 decisioni (D-21, D-22, D-23, D-26, D-27, D-40, D-41, D-44). Pronta per l'implementazione dopo la 05a.
 > **Branch**: `feature/single-dataset-path` da `develop`. **Dipende da**: 02 ritirata il 2026-10-29 (contratto v3, marker, `deep-value-route.test.ts`, `verify-route.test.ts`), 03 ritirata il 2026-10-29 (gate con `extract | null`, `ValuationChecksCard`, `AnalysisDetailBody`), 04 (`DatasetSection`, `DatasetTables`, store), 05a (`researchDataset`, `POST /api/datasets merged`, `ResearchResponse`, seed ORNT).
-> **Indice**: [00-INDICE.md](00-INDICE.md) — decisioni D-6, D-14 (riscritta da D-26), D-15, D-21, D-22, D-23, D-26, D-27, D-40, D-41, D-44; scelte T-10, T-14, T-26, T-21; contratti C-10, C-16.
+> **Indice**: [00-INDICE.md](00-INDICE.md) — decisioni D-6, D-14 (riscritta da D-26), D-15, D-21, D-22, D-23, D-26, D-27, D-40, D-41, D-44, D-99; scelte T-10, T-14, T-26, T-21; contratti C-10, C-16.
 
 ## 1. Il problema oggi (prove, commit `17e54b6`, 2026-10-11)
 
@@ -23,7 +23,7 @@
 | A5 | La route Deep Value richiede `datasetId` (400 senza) e usa `GROUNDED_MAX_TOOL_ITERATIONS` (12); `DEFAULT_SETTINGS` invariati. | test di route. |
 | A6 | `formatRowSources` rende le fonti per ogni riga di `financials`, `multiples`, `estimates` e `peers[].multiples`, con `UNVERIFIED` dove serve, e una riga in testa agli ANCHORS quando un multiplo usato da `computeMultipleStats` è non verificato. | test di `formatGroundingForPrompt`; golden. |
 | A7 | `/deep-value` esegue prima lo stadio 1 con la logica di `/api/ai/research` (modello da `researchAiSettings`; il comando accetta lo stesso override opzionale `aiSettings` della route — D-71/T-35), salva il dataset e costruisce i prompt con `buildGroundingPromptContext`, salvando `datasetId` (D-41). | lettura del comando aggiornato; una run reale del comando. |
-| A8 | `ci:local` verde; run reale (D-24): flusso completo su `/analyze` su un ticker a scelta (stadio 1 → anteprima → stadio 2 Opus xhigh → Scettico cieco con fase 1 visibile nella card); secondo giro: paste dell'owner sullo stesso ticker → merged → analisi. | SESSION_NOTES. |
+| A8 | `ci:local` verde; run reale (D-24): flusso completo su `/analyze` su un ticker a scelta (stadio 1 → anteprima → stadio 2 Opus xhigh → Scettico cieco con fase 1 visibile nella card). Il giro paste → merged → analisi si salta (D-99: l'owner non ha dati da incollare): il merged lo provano i test a mock (`dataset-section.test.tsx`, § 6). | SESSION_NOTES. |
 
 ## 3. Decisioni
 
@@ -93,7 +93,7 @@ Stati: `idle` → (ticker) `checking` → `reuse { stored }` | `empty` | `error 
 | C | script: `/analyze?ticker=OKPI` → «Search the web for the data»; `POST /api/ai/deep-value` senza `datasetId` → 400 | come dichiarato |
 | D | `POST /api/ai/deep-value/verify` su `e2e_an_panel` → 400 (nessun dataset) | come dichiarato |
 | E | `/analyses/e2e_an_panel` → Run disabilitati; `/analyses/e2e_an_panel_older` → Run attivi | come dichiarato |
-| Run reale (D-24) | `/analyze` sull'isolato: ticker a scelta → ricerca → anteprima → stadio 2 Opus xhigh con `datasetId` → Scettico cieco (fase 1 visibile nella card). Secondo giro: paste dell'owner sullo stesso ticker → merged → analisi. Terzo: `/deep-value` su un ticker (stadio 1 + 2 + 3 lenti). Costo stimato ≈ 1 $ (ricerche) + 2 × 0,5 $ (Opus) + 4 × 0,4 $ (lenti) | come dichiarato |
+| Run reale (D-24, D-99) | `/analyze` sull'isolato: ticker a scelta → ricerca → anteprima → stadio 2 Opus xhigh con `datasetId` → Scettico cieco (fase 1 visibile nella card). Il giro paste → merged → analisi si salta (D-99). Secondo: `/deep-value` su un ticker (stadio 1 + 2 + 3 lenti). Costo stimato ≈ 1 $ (ricerche) + 2 × 0,5 $ (Opus) + 4 × 0,4 $ (lenti) | come dichiarato |
 | F | giro owner: `/analyze` flusso completo su un ticker nuovo (ricerca → anteprima → analisi), chip 🌐 e «unverified», riuso, errore della ricerca (simulato con la chiave Anthropic rimossa) | non copre: DeepSeek nello stadio 1 dal browser (provato dalla run reale della 05a) |
 | G | ripristino | — |
 

@@ -234,6 +234,14 @@ La verifica del ritiro ha trovato confronti prezzo↔valore senza controllo di v
 | D-97 | (owner, 2026-10-29): `priceAtAnalysis` non porta la valuta della quotazione e si legge in quella del report (una quotazione LSE in `GBp` su un report in `GBP` diventa un numero sbagliato di cento volte); la colonna `Analysis.priceCurrency` entra nella 05c, nella stessa migrazione (quattro `ADD COLUMN`). | 05c |
 | D-98 | (owner, 2026-10-29): la produzione è stata svuotata il 2026-10-29 e si ripopola a serie finita: nessun fallback per le righe senza `Analysis.currency` (senza colonna niente verdetto, exit signal né stato del digest), nessun backfill. | 05c, 07a, 07b |
 
+### 3.8 Run reali senza paste (2026-10-29)
+
+L'owner non ha un abbonamento TIKR: le run reali scritte su «un paste dell'owner» non hanno input (la run Grounded della 03 era già stata saltata per questo).
+
+| # | Decisione | Spec |
+|---|---|---|
+| D-99 | (owner, 2026-10-29): ogni run reale o passo di collaudo che chiede un paste dell'owner si salta, scritto nella spec. Il percorso del paste resta provato dai test a mock (estrazione, retry D-38, verify, merged), dall'e2e e dal giro owner sul seed; le run reali che chiedono solo un ticker restano (D-24). | 04, 05a, 05b |
+
 ## 4. Scelte adottate dal pianificatore («adottata, ribaltabile» — rovesciabili prima dell'implementazione)
 
 | # | Scelta | Spec |
@@ -379,7 +387,8 @@ Dopo la divisione (D-23) le spec vive sono `01 02 03 04 05a 05b 06 07a 07b 08a 0
    nel seed, fasi A–G, esito atteso dichiarato prima, ogni esito promosso a test.
    `e2e/support/test.ts` rifiuta `/api/ai/**`: ogni percorso AI toccato si collauda con test
    unitari a mock + una run reale documentata in `SESSION_NOTES.md` (ticker, costo, esito),
-   mai in e2e; ogni spec rifà la propria run (D-24) e dichiara il costo nel § 7.
+   mai in e2e; ogni spec rifà la propria run (D-24) e dichiara il costo nel § 7; una run che
+   chiede un paste dell'owner si salta (D-99).
 8. **Golden**: fino alla 05b `__tests__/deep-value-prompts-quick-identical.test.ts`, rigenerato
    SOLO dalla 02 con `-u` e un diff letto a mano riportato in `SESSION_NOTES.md`; la 05b lo
    cancella (test e `.snap`) e crea `__tests__/deep-value-prompts-golden.test.ts`; da lì

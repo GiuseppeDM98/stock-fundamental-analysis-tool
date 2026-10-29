@@ -2,7 +2,7 @@
 
 > **Stato**: scritta 2026-10-11; riletta in modo adversariale il 2026-10-11: 41 rilievi, 8 decisioni (D-21, D-26, D-27, D-36, D-37, D-38, D-39; T-32). Pronta per l'implementazione dopo la 03.
 > **Branch**: `feature/financial-dataset` da `develop`. **Dipende da**: 01 ritirata il 2026-10-29 (`tickerSchema`, `normalizeTicker`), 02 ritirata il 2026-10-29 (`ANALYSIS_LIST_SELECT`/`ANALYSIS_SUMMARY_SELECT`, `__tests__/deep-value-route.test.ts`, `doc/guide/valutazione.md`), 03 ritirata il 2026-10-29 (`checkValuationBridges` con `extract | null`, `ValuationChecksCard`, `AnalysisDetailBody`, `parseStoredExtract`).
-> **Indice**: [00-INDICE.md](00-INDICE.md) — decisioni D-2 (schema unico), D-7, D-13, D-14 (riscritta da D-26), D-20 (riscritta da D-27), D-21, D-26, D-27, D-36, D-37, D-38, D-39; scelte T-8, T-9, T-10, T-19, T-24, T-32; contratti C-9, C-16, C-21.
+> **Indice**: [00-INDICE.md](00-INDICE.md) — decisioni D-2 (schema unico), D-7, D-13, D-14 (riscritta da D-26), D-20 (riscritta da D-27), D-21, D-26, D-27, D-36, D-37, D-38, D-39, D-99; scelte T-8, T-9, T-10, T-19, T-24, T-32; contratti C-9, C-16, C-21.
 
 ## 1. Il problema oggi (prove, commit `17e54b6`, 2026-10-11)
 
@@ -26,7 +26,7 @@
 | A6 | `DatasetTables` (una tabella per prospetto: anni in colonna, voci in riga, una riga «Fonte» con un chip per anno) compare nell'anteprima, nella vista reuse e sul dettaglio salvato sotto `ValuationChecksCard` (D-36). | `__tests__/dataset-tables.test.tsx`; e2e: sul dettaglio `e2e_an_grounded` la tabella Income mostra «1,000» (ricavi FY2025 seminati) e il chip «paste», la tabella Balance il chip «—». |
 | A7 | Su `/analyze`, caricato un ticker, se esiste un dataset ≤ 7 giorni la nuova `DatasetSection` si espande da sola in stato reuse: riga «Dataset del <data> (paste)», `DatasetTables compact`, warning persistiti, bottoni «Usa» / «Aggiorna dati»; «Usa» conferma quel `datasetId` senza chiamate AI; il riuso vive SOLO qui (D-26). | test componente con `fetch` mockato; e2e con dataset seminato datato −2 giorni: click su «Usa» → badge «✓ Ready», `forbiddenCalls` vuoto. |
 | A8 | I warning dell'estrazione sono persistiti in `FinancialDataset.warningsJson` (solo i codici di estrazione, validati) e iniettati nel prompt (sezione RECONCILIATION WARNINGS); `formatExtract` NON serializza `sources`/`source`/`datasetMeta`. | test di `buildGroundingPromptContext` con `storedWarnings`; test di `formatGroundingForPrompt`: il testo non contiene «sources» né «blockId». |
-| A9 | `ci:local` verde; run reale (D-24): un paste vero (Iren/Webuild) → Prepara → tabelle con chip → Analizza → analisi con `datasetId`; dettaglio e lente leggono il dataset. Il retry si prova con il test di route a mock (D-38): il fallimento di un blocco non è riproducibile a comando e la run lo annota. | SESSION_NOTES. |
+| A9 | `ci:local` verde; nessuna run reale (D-99: l'owner non ha dati da incollare). Prepara → tabelle con chip → Analizza → analisi con `datasetId`, e il dettaglio e la lente che leggono il dataset, li provano i test di route a mock del § 6 e l'e2e sul seed; il retry il test di route a mock (D-38). | SESSION_NOTES. |
 
 ## 3. Decisioni
 
@@ -185,7 +185,8 @@ Route: `POST /api/datasets` body `{ ticker: tickerSchema, origin: z.literal("pas
 | component | `dataset-tables.test.tsx`, `source-chip.test.tsx` | chip paste/web/unverified/mixed/null; tabella income con 5 anni e riga «Fonte» come prima riga del tbody | — |
 | component | `grounding-input.test.tsx` | retry manda solo il blocco (testo corrente) + prior + `blockOrder`; `removeBlock` cancella il risultato; `confirmStatus` error mostrato | — |
 | component | `dataset-section.test.tsx` | vista reuse con dataset ≤ 7 gg (tabelle, bottoni); «Usa» → `onChange({ id, extract })`; cambio ticker durante la fetch → nessuna vista reuse; bozza diversa + «Aggiorna» → `datasetDraftKept` | — |
-| component | `grounding-preview.test.tsx` (+1) | `failedBlocks` → bottone «Riprova» chiama `onRetry(id)` | — |
+| unit (route) | `verify-route.test.ts` (+1) | analisi con `datasetId` → il contesto della lente legge l'extract dal dataset (`readAnalysisExtract`), con `blocks: []` (al posto del log della run reale, D-99) | leggere ancora `groundingJson` |
+| component | `grounding-preview.test.tsx` (+2) | `failedBlocks` → bottone «Riprova» chiama `onRetry(id)`; un extract → `DatasetTables` con la riga «Fonte» (l'anteprima di A6, senza run reale: D-99) | togliere `DatasetTables` dall'anteprima |
 | e2e | `pages.spec.ts`, `authorization.spec.ts` | dettaglio da dataset (tabelle + chip), legacy, `/analyze` reuse con «Usa», coppia dataset A/B | — |
 
 ## 7. Collaudo guidato
@@ -197,8 +198,8 @@ Route: `POST /api/datasets` body `{ ticker: tickerSchema, origin: z.literal("pas
 | C | script: `POST /api/datasets` (payload del seed) → 201, riga con `origin=paste`, `ticker` uppercase; `GET /api/datasets/latest?ticker=fnct.mi&maxAgeDays=7` → 200 con l'id appena creato; poi, cancellata quella riga, la riga seminata a −2 giorni con `maxAgeDays=1` → 204 e con `maxAgeDays=7` → 200 | come dichiarato |
 | D | `POST /api/analyses` con `datasetId` altrui → 400; proprio ma ticker diverso → 400; proprio e stesso ticker → 201 con `datasetId` | come dichiarato |
 | E | `GET /api/datasets/e2e_ds_user_b` con A → 404 e `/api/datasets/e2e_ds_fnct` con A → 200 (coppia) | come dichiarato |
-| Run reale (D-24, D-38) | paste Iren/Webuild dell'owner: Prepara → tabelle con chip → Analizza → analisi con `datasetId`; dettaglio con card completa e tabelle; lente Scettico legge il dataset (log della route). Costo ≈ 0,1 $ (estrazione) + 0,5 $ (Opus) + 0,4 $ (lente); OK prima | come dichiarato; il retry resta provato dal test a mock (annotato) |
-| F | giro owner: anteprima con tabelle e chip (desktop e 390 px: la riga «Fonte» come prima card), riuso dataset su `/analyze` (riaprire il ticker: sezione espansa con tabelle), dettaglio con tabelle, stampa del dettaglio | non copre: web (05a/05b) |
+| Run reale (D-24, D-38, D-99) | saltata (owner, 2026-10-29): l'owner non ha dati da incollare. Il percorso felice lo provano i test di route a mock del § 6 (estrazione, deep-value, analyses, verify) e l'e2e sul seed; il retry il test di route a mock (D-38) | nessuna spesa AI |
+| F | giro owner sul seed: riuso dataset su `/analyze?ticker=FNCT.MI` (dataset seminato a −2 giorni: sezione espansa con tabelle e chip; desktop e 390 px: la riga «Fonte» come prima card), dettaglio con tabelle, stampa del dettaglio | non copre: web (05a/05b); l'anteprima dopo «Prepara», che chiede un paste (D-99): la prova `grounding-preview.test.tsx` |
 | G | ripristino | — |
 
 ## 8. Messa in esercizio
@@ -241,8 +242,8 @@ sources, mixed) + test; (3) schema/migrazione locale + parse.ts + store (readAna
 route datasets + test; (4) route extract con blockOrder/priorResults/failedBlockIds; (5)
 deep-value/verify/analyses su datasetId con readAnalysisExtract; (6) UI (DatasetSection,
 GroundingInput editor puro, preview con tabelle e retry, chip, DatasetTables sul dettaglio);
-(7) seed/e2e/authorization/visual; (8) collaudo § 7 con la run reale (chiedimi il paste e
-l'OK); (9) guida/CLAUDE.md/AGENTS.md misurati; (10) SESSION_NOTES → destinazioni; OK per il
+(7) seed/e2e/authorization/visual; (8) collaudo § 7 senza run reale
+(D-99: nessun paste da chiedere); (9) guida/CLAUDE.md/AGENTS.md misurati; (10) SESSION_NOTES → destinazioni; OK per il
 commit "feat: per-ticker financial dataset with provenance, block retry, reuse" (≤ 72
 caratteri; dettaglio nel body).
 Migrazione a Turso PRIMA del deploy con dump e conteggi (§ 8), non in sessione.

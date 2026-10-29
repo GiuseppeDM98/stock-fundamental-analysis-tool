@@ -2,7 +2,7 @@
 
 > **Stato**: scritta 2026-10-11 (nata dalla divisione della 05, D-23); riletta in modo adversariale il 2026-10-11: 24 rilievi (la metà «stadio 1» dei 41 della 05), 6 decisioni (D-21, D-23, D-27, D-39, D-42, D-43); integrata il 2026-10-18 con DeepSeek nello stadio 1 via Search/Fetch API (D-70, D-71, T-34, T-35). Pronta per l'implementazione dopo la 04.
 > **Branch**: `feature/research-stage` da `develop`. **Dipende da**: 01 ritirata il 2026-10-29 (`tickerSchema`, `executeWebSearch` sulla Search API con l'helper `callDeepSeekTool`), 02 ritirata il 2026-10-29 (contratto v3, `parseDeepValueJson` sull'ultima fence, `doc/guide/valutazione.md`), 04 (tabella dataset, provenienza con `mixed`, `saveFinancialDataset`, `POST /api/datasets`).
-> **Indice**: [00-INDICE.md](00-INDICE.md) — decisioni D-2, D-5 (riscritta da D-71), D-11, D-21, D-23, D-27, D-39, D-42, D-43, D-70, D-71; scelte T-8, T-9, T-11, T-34, T-35; contratti C-5 (`lastJsonFence`), C-9, C-10, C-19.
+> **Indice**: [00-INDICE.md](00-INDICE.md) — decisioni D-2, D-5 (riscritta da D-71), D-11, D-21, D-23, D-27, D-39, D-42, D-43, D-70, D-71, D-99; scelte T-8, T-9, T-11, T-34, T-35; contratti C-5 (`lastJsonFence`), C-9, C-10, C-19.
 
 ## 1. Il problema oggi (prove, commit `17e54b6`, 2026-10-11)
 
@@ -193,7 +193,7 @@ export function preprocessResearchOutput(raw: unknown): unknown;
 | C | script: `POST /api/datasets { origin: "merged", pasteDatasetId: "e2e_ds_fnct", webDatasetId: "e2e_ds_ornt" }` → 400 (ticker diversi); `POST /api/datasets { origin: "web" }` → 400 (web nasce solo dalla research) | come dichiarato |
 | D | `POST /api/ai/research` senza sessione → 401 | come dichiarato |
 | E | `GET /api/datasets/e2e_ds_ornt` con B → 404; con A → 200 | come dichiarato |
-| Run reale (D-24) | script che chiama `POST /api/ai/research` con la sessione di A sull'isolato: un `.MI` e un US (owner sceglie) con Sonnet 5.5, poi lo stesso `.MI` con `aiSettings: { model: "deepseek-v4-pro" }` (A7): ogni risposta con ≥ 3 FY, ≥ 2 fonti verificate, basis line; nel log `searches`, `fetches`, `blocksByCaller` (Claude) / round client (DeepSeek), durata; costo dall'usage. Poi `POST /api/datasets merged` con un paste dell'owner sullo stesso `.MI` (dataset paste creato con la 04) → bundle con origin merged. Costo stimato 2 × (0,3–1 $) + 0,1-0,3 $ (DeepSeek) | come dichiarato; soglie di A6; confronto Sonnet vs DeepSeek sullo stesso ticker annotato (FY trovati, fonti verificate, durata, costo) |
+| Run reale (D-24, D-99) | script che chiama `POST /api/ai/research` con la sessione di A sull'isolato: un `.MI` e un US (owner sceglie) con Sonnet 5.5, poi lo stesso `.MI` con `aiSettings: { model: "deepseek-v4-pro" }` (A7): ogni risposta con ≥ 3 FY, ≥ 2 fonti verificate, basis line; nel log `searches`, `fetches`, `blocksByCaller` (Claude) / round client (DeepSeek), durata; costo dall'usage. Il `POST /api/datasets merged` con un paste dell'owner si salta (D-99: l'owner non ha dati da incollare): lo provano `merge-datasets.test.ts` e `datasets-route.test.ts` (§ 6). Costo stimato 2 × (0,3–1 $) + 0,1-0,3 $ (DeepSeek) | come dichiarato; soglie di A6; confronto Sonnet vs DeepSeek sullo stesso ticker annotato (FY trovati, fonti verificate, durata, costo) |
 | F | giro owner: nessuna UI nuova in questa spec; l'owner legge il JSON di risposta della run reale (fonti, anni, chip nel dettaglio di `e2e_an_panel_older`) | non copre: il flusso su /analyze (05b) |
 | G | ripristino | — |
 
