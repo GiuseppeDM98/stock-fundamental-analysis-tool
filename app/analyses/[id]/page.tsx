@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import AnalysisDetailBody from "@/components/analysis-detail-body";
 import { DetailBreadcrumb, DetailFooterActions } from "@/components/analysis-detail-chrome";
-import type { GroundingPayload } from "@/types/grounding";
+import { parseStoredExtract } from "@/lib/grounding/schema";
 import type { Triple } from "@/lib/report/valuation";
 import {
   hasFullTriple,
@@ -12,20 +12,6 @@ import {
   stripJsonBlock,
   type ParsedAnalystResult,
 } from "@/lib/report/parse-deep-value-json";
-
-/**
- * Parses the persisted GroundingPayload (Analysis.groundingJson) — malformed/legacy rows
- * (or Quick-mode analyses, where the column is simply null) degrade to null rather than
- * crash the page render.
- */
-function parseGroundingPayload(raw: string | null): GroundingPayload | null {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as GroundingPayload;
-  } catch {
-    return null;
-  }
-}
 
 /** null unless all three legs are present — a partial triple isn't a usable FINAL
  *  triple for the blind-vs-final drift card (components/report/analyst-blind-card.tsx). */
@@ -82,8 +68,9 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
     result = null;
   }
   const valuationMeta = hasFullTriple(result) ? result : null;
-  // Grounded Deep Value mode — null for Quick-mode analyses (column never set).
-  const groundingPayload = parseGroundingPayload(analysis.groundingJson);
+  // Grounded Deep Value mode — null for Quick-mode analyses (column never set) and for a
+  // stored extract that no longer validates.
+  const groundingExtract = parseStoredExtract(analysis.groundingJson);
 
   // Strip every JSON block (at the end of a current report, at the top of an older one)
   // and the start markers before rendering.
@@ -105,7 +92,7 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
         result={valuationMeta}
         mosPercent={analysis.mosPercent}
         priceAtAnalysis={analysis.priceAtAnalysis ?? null}
-        groundingExtract={groundingPayload?.extract ?? null}
+        groundingExtract={groundingExtract}
         position={position}
         initialCritiques={{
           skeptic: analysis.reviewMd,

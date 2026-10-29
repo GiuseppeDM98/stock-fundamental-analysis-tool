@@ -1,4 +1,5 @@
 import type { DeepValueResult } from "./types";
+import { sameCurrency } from "@/lib/grounding/currency";
 import MethodBadges from "./method-badges";
 import FairValueCards from "./fair-value-cards";
 import RecapTable from "./recap-table";
@@ -16,6 +17,7 @@ type Labels = {
   buyTargetHeader: string;
   fairValueHeader: string;
   fvShort: string;
+  recapCurrencyMismatch: string;
 };
 
 type Props = {
@@ -26,6 +28,10 @@ type Props = {
   markdown: string;
   result: DeepValueResult;
   currentPrice?: number | null;
+  // The price's currency. The cards and the recap weigh the price against the report's
+  // values only when the two match (sameCurrency); otherwise they omit the distance and
+  // say so. Required, so no caller can forget it.
+  priceCurrency: string | null | undefined;
   mosPercent?: number;
   labels: Labels;
 };
@@ -45,9 +51,12 @@ export default function ReportShell({
   markdown,
   result,
   currentPrice,
+  priceCurrency,
   mosPercent = 0,
   labels,
 }: Props) {
+  const comparablePrice = currentPrice != null && sameCurrency(priceCurrency, result.currency) ? currentPrice : null;
+  const isCurrencyMismatch = currentPrice != null && comparablePrice == null;
   return (
     <div className="print-report space-y-4">
       {/* Masthead — letterhead-style report header */}
@@ -68,7 +77,7 @@ export default function ReportShell({
 
       <FairValueCards
         result={result}
-        currentPrice={currentPrice}
+        currentPrice={comparablePrice}
         mosPercent={mosPercent}
         scenarioLabels={{ bull: labels.bullLabel, base: labels.baseLabel, bear: labels.bearLabel }}
         fvShort={labels.fvShort}
@@ -80,7 +89,7 @@ export default function ReportShell({
 
       <RecapTable
         result={result}
-        currentPrice={currentPrice}
+        currentPrice={comparablePrice}
         mosPercent={mosPercent}
         title={labels.recapTableTitle}
         currentPriceLabel={labels.recapCurrentPrice}
@@ -93,6 +102,11 @@ export default function ReportShell({
         fairValueHeader={labels.fairValueHeader}
         fvShort={labels.fvShort}
       />
+      {isCurrencyMismatch && (
+        <p className="text-xs text-muted">
+          {labels.recapCurrencyMismatch} ({priceCurrency || "?"} · {result.currency || "?"})
+        </p>
+      )}
 
       <p className="border-t border-slate-800/60 pt-3 text-xs text-slate-500 print:border-slate-300 print:text-slate-600">
         {labels.disclaimer}

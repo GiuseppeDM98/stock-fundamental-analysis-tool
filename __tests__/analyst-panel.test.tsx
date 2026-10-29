@@ -47,7 +47,7 @@ function controllableStream() {
   };
 }
 
-function renderPanel(overrides: { initialResult?: string | null; currentPrice?: number | null } = {}) {
+function renderPanel(overrides: { initialResult?: string | null; currentPrice?: number | null; initialBlind?: string | null } = {}) {
   return render(
     <AnalystPanel
       analysisId="a1"
@@ -55,7 +55,7 @@ function renderPanel(overrides: { initialResult?: string | null; currentPrice?: 
       reportMd="# Report"
       mosPercent={0}
       initialCritiques={{ skeptic: "old critique" }}
-      initialBlind={{ skeptic: OLD_BLIND }}
+      initialBlind={{ skeptic: overrides.initialBlind === undefined ? OLD_BLIND : overrides.initialBlind }}
       initialFinal={{ skeptic: { bull: 98, base: 87, bear: 76 } }}
       initialResult={{ skeptic: overrides.initialResult ?? null }}
       groundingExtract={null}
@@ -272,6 +272,17 @@ describe("AnalystPanel after a reload reads the FINAL JSON from *ResultJson", ()
     expect(screen.getByText("7.90")).toBeInTheDocument(); // the final kill price
     expect(screen.getByText(/a pangolin-sized regulatory cut/)).toBeInTheDocument();
     expect(screen.getByText(/Final · Kill price declared — 7\.90/)).toBeInTheDocument();
+    // Lenses declare no sensitivity grid nor dividend path: the blind gates leave both out.
+    expect(screen.queryByText(translations.en.groundingGateSensitivityCenter, { exact: false })).not.toBeInTheDocument();
+    expect(screen.queryByText(translations.en.groundingGateDividendCoverage, { exact: false })).not.toBeInTheDocument();
+  });
+
+  it("treats a stored blind commitment without a full triple as absent: no blind card, no crash", () => {
+    const partial = JSON.stringify({ method: "EV/EBITDA", sector: "Utilities", currency: "EUR", base: { fairValue: 88.22 } });
+    renderPanel({ initialBlind: partial, currentPrice: 80 });
+
+    expect(screen.queryByText("88.22")).not.toBeInTheDocument();
+    expect(screen.getByTestId("critique").textContent).toBe("old critique");
   });
 
   it("with no blind commitment (Quick), mounts AnalystFinalCard with the final JSON's gates", () => {
@@ -298,8 +309,10 @@ describe("AnalystPanel after a reload reads the FINAL JSON from *ResultJson", ()
     expect(screen.queryByText(/kill_price|scenario_order|horizon_consistent/)).not.toBeInTheDocument();
     expect(screen.getByText(/Consistent scenario horizon/)).toBeInTheDocument();
     expect(screen.getByText(/a pangolin-sized regulatory cut/)).toBeInTheDocument();
-    // Lenses declare no sensitivity grid nor dividend path: those gates are not listed.
-    expect(screen.queryByText(/sensitivity_center/)).not.toBeInTheDocument();
+    // Lenses declare no sensitivity grid nor dividend path: those gates are not listed (by
+    // name: the card never prints a code, so a code would be absent anyway).
+    expect(screen.queryByText(translations.en.groundingGateSensitivityCenter, { exact: false })).not.toBeInTheDocument();
+    expect(screen.queryByText(translations.en.groundingGateDividendCoverage, { exact: false })).not.toBeInTheDocument();
     expect(screen.getByText(translations.en.valuationChecksPriceAtAnalysis)).toBeInTheDocument();
   });
 

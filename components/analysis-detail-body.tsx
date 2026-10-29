@@ -130,6 +130,7 @@ function ValuationBody({
         markdown={markdown}
         result={result}
         currentPrice={ready?.value ?? null}
+        priceCurrency={ready?.currency}
         mosPercent={mosPercent}
         labels={{
           recapTableTitle: t("recapTableTitle"),
@@ -143,6 +144,7 @@ function ValuationBody({
           buyTargetHeader: t("recapBuyTarget"),
           fairValueHeader: t("recapFairValue"),
           fvShort: t("fvShort"),
+          recapCurrencyMismatch: t("recapCurrencyMismatch"),
         }}
       />
 

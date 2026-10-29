@@ -1,7 +1,7 @@
 # 07b — Pagina titolo `/stocks/[ticker]`: loader, grafici dei fondamentali, storia delle stime, storico prezzo, dataset e dividendi
 
 > **Stato**: scritta 2026-10-11 (nata dalla divisione della 07, D-23); riletta in modo adversariale il 2026-10-11: 22 rilievi (la metà «pagina» dei 42 della 07), 6 decisioni (D-21, D-23, D-24, D-25, D-48, D-49; T-29). Pronta per l'implementazione dopo la 07a.
-> **Branch**: `feature/stock-page` da `develop`. **Dipende da**: 01 ritirata il 2026-10-29 (C-3 `loadDividendTotals`/`sumDividendsByTicker`), 02 ritirata il 2026-10-29 (`resultJson`, `ANALYSIS_SUMMARY_SELECT`), 03 (`sameCurrency`), 04 (`latestFinancialDataset`, `readAnalysisExtract`, `DatasetTables`, `SourceChip`), 05a (dataset web nel seed), 06 (C-11, `DividendOutlook`, `DividendChart`, `SourceLegend`, token `--chart-*`), 07a (C-12, C-13, link, stub history).
+> **Branch**: `feature/stock-page` da `develop`. **Dipende da**: 01 ritirata il 2026-10-29 (C-3 `loadDividendTotals`/`sumDividendsByTicker`), 02 ritirata il 2026-10-29 (`resultJson`, `ANALYSIS_SUMMARY_SELECT`), 03 ritirata il 2026-10-29 (`sameCurrency`, C-24), 04 (`latestFinancialDataset`, `readAnalysisExtract`, `DatasetTables`, `SourceChip`), 05a (dataset web nel seed), 06 (C-11, `DividendOutlook`, `DividendChart`, `SourceLegend`, token `--chart-*`), 07a (C-12, C-13, link, stub history).
 > **Indice**: [00-INDICE.md](00-INDICE.md) — decisioni D-3, D-17, D-18, D-21, D-23, D-24, D-25, D-48, D-49; scelte T-17, T-20, T-29; contratti C-12 (`StockPageData`, `loadStockPageData`), C-13, C-16, C-17.
 
 ## 1. Il problema oggi (prove, commit `17e54b6`, 2026-10-11)

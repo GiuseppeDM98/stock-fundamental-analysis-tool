@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import type { Position } from "@/types/portfolio";
 
 const fetchSnapshotsMock = vi.fn();
+const fetchAnalysesMock = vi.fn(async (): Promise<unknown[]> => []);
 
 vi.mock("@/lib/portfolio", () => ({
   fetchPositions: vi.fn(async (): Promise<Position[]> => [
@@ -24,7 +25,7 @@ vi.mock("@/lib/portfolio", () => ({
   deletePosition: vi.fn(),
   closePosition: vi.fn(),
 }));
-vi.mock("@/lib/analyses", () => ({ fetchAnalyses: vi.fn(async () => []) }));
+vi.mock("@/lib/analyses", () => ({ fetchAnalyses: () => fetchAnalysesMock() }));
 vi.mock("@/lib/earnings-client", () => ({
   fetchEarnings: vi.fn(async () => []),
   refreshEarnings: vi.fn(),
@@ -51,5 +52,53 @@ describe("PortfolioList — initial load", () => {
     render(<PortfolioList />);
     expect((await screen.findAllByText("ORNT")).length).toBeGreaterThan(0);
     expect(screen.queryByText("Failed to load portfolio history")).not.toBeInTheDocument();
+  });
+});
+
+describe("PortfolioList — the exit signal weighs only a quote in the analysis's currency", () => {
+  // MoS 0: the intrinsic base is the stored base, 100; the quote is 110, past it.
+  const analysis = {
+    id: "an1",
+    ticker: "ORNT",
+    companyName: "Orient Co",
+    reportMd: "",
+    mosPercent: 0,
+    priceAtAnalysis: 90,
+    fairValueBull: 130,
+    fairValueBase: 100,
+    fairValueBear: 70,
+    valuationMethod: "DCF",
+    currency: "EUR",
+    createdAt: "2026-10-01T00:00:00.000Z",
+  };
+  const quote = (currency: string) =>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ regularMarketPrice: 110, regularMarketChange: 1, regularMarketChangePercent: 0.9, currency }),
+      }))
+    );
+  beforeEach(() => {
+    fetchSnapshotsMock.mockRejectedValue(new Error("Failed to load portfolio history"));
+    fetchAnalysesMock.mockResolvedValue([analysis]);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    fetchAnalysesMock.mockResolvedValue([]);
+  });
+
+  it("a quote in another currency: no At Fair Value pill, and a note", async () => {
+    quote("USD");
+    render(<PortfolioList />);
+    expect(await screen.findByText("No verdict: quote and analysis in different currencies")).toBeInTheDocument();
+    expect(screen.queryByText(/At Fair Value/)).not.toBeInTheDocument();
+  });
+
+  it("the same quote in the analysis's currency fires the pill (positive control)", async () => {
+    quote("EUR");
+    render(<PortfolioList />);
+    expect(await screen.findByText(/At Fair Value/)).toBeInTheDocument();
+    expect(screen.queryByText(/No verdict/)).not.toBeInTheDocument();
   });
 });

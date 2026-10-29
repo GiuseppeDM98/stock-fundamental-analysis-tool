@@ -22,8 +22,8 @@ vi.mock("@/lib/earnings-client", () => ({
 }));
 // The ruler's zone edges are what the verdict is measured against: expose them.
 vi.mock("@/components/report/valuation-ruler", () => ({
-  ValuationRuler: ({ buyTargetEdge, fvEdge }: { buyTargetEdge: number; fvEdge: number }) => (
-    <div data-testid="ruler" data-buy-target={buyTargetEdge} data-fv={fvEdge} />
+  ValuationRuler: ({ buyTargetEdge, fvEdge, price }: { buyTargetEdge: number; fvEdge: number; price?: number }) => (
+    <div data-testid="ruler" data-buy-target={buyTargetEdge} data-fv={fvEdge} data-price={price ?? ""} />
   ),
   ComparisonTable: () => null,
 }));
@@ -102,5 +102,41 @@ describe("AnalysesList — open lots and verdict basis", () => {
     const ruler = await screen.findByTestId("ruler");
     await waitFor(() => expect(Number(ruler.dataset.buyTarget)).toBeCloseTo(112.5, 10));
     expect(Number(ruler.dataset.fv)).toBeCloseTo(150, 10);
+  });
+});
+
+describe("AnalysesList — the verdict weighs only a quote in the analysis's currency", () => {
+  const quote = (body: Record<string, unknown>) =>
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => body })));
+  beforeEach(() => {
+    fetchPositionsMock.mockResolvedValue([lot({ id: "open", shares: 20, currency: "GBP" })]);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("a quote in GBp against an analysis in GBP: no verdict, no price dot, no P&L, a note for each", async () => {
+    fetchAnalysesMock.mockResolvedValue([{ ...ORNT, currency: "GBP" }]);
+    quote({ regularMarketPrice: 15000, currency: "GBp" });
+    render(<AnalysesList />);
+
+    expect(await screen.findByText("No verdict: quote and analysis in different currencies")).toBeInTheDocument();
+    expect(screen.queryByText(/OVER FV|BUY|WATCH/)).not.toBeInTheDocument();
+    expect((await screen.findByTestId("ruler")).dataset.price).toBe("");
+
+    fireEvent.click(screen.getByText("ORNT"));
+    expect(await screen.findByText("No verdict: quote and analysis in different currencies (GBp · GBP)")).toBeInTheDocument();
+    expect(screen.getByText("P&L not shown: no live price in the position's currency")).toBeInTheDocument();
+  });
+
+  it("the same quote in the analysis's currency gets its verdict and its dot (positive control)", async () => {
+    fetchAnalysesMock.mockResolvedValue([{ ...ORNT, currency: "GBP" }]);
+    quote({ regularMarketPrice: 150, currency: "GBP" });
+    render(<AnalysesList />);
+
+    // 150 against the consensus basis (buy target 112.5, intrinsic 150): a verdict is drawn.
+    expect(await screen.findByText(/^(OVER FV|WATCH|BUY) [+-]?\d+%$/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("ruler").dataset.price).toBe("150"));
+    expect(screen.queryByText(/No verdict/)).not.toBeInTheDocument();
   });
 });

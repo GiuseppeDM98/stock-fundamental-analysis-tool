@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { render, screen } from "@testing-library/react";
 
 import { ValuationChecksCard } from "@/components/report/valuation-checks-card";
+import { translations } from "@/lib/i18n/translations";
 import type { DeepValueResult, Scenario } from "@/components/report/types";
 import type { GroundedFinancials } from "@/types/grounding";
 import { makeExtract, makeFinancialsRow, makeMeta, makeMultiplesRow } from "./grounding-test-helpers";
@@ -121,7 +122,10 @@ describe("ValuationChecksCard", () => {
     renderCard();
 
     expect(screen.getByRole("heading", { name: "Deterministic checks" })).toBeInTheDocument();
-    expect(screen.getByText(/Deterministic checks unavailable/)).toBeInTheDocument();
+    // The line under the title does not repeat it.
+    expect(screen.getByText(translations.en.groundingCardGatesUnavailable)).toBeInTheDocument();
+    expect(translations.en.groundingCardGatesUnavailable).not.toContain(translations.en.valuationChecksTitle);
+    expect(translations.it.groundingCardGatesUnavailable).not.toMatch(/controlli deterministici|verifiche deterministiche/i);
     warn.mockRestore();
   });
 
@@ -167,7 +171,7 @@ describe("ValuationChecksCard", () => {
     expect(screen.getAllByText(/— no dataset$/).length).toBeGreaterThanOrEqual(6);
   });
 
-  it("a cross-check bridge with no multiple (a DDM on a per-share DPS) draws no row without a dataset", () => {
+  it("a cross-check bridge with no multiple (a DDM on a per-share DPS) draws no row, with or without a dataset", () => {
     // driverValue is a DPS per share while shares are a total: (equity + net debt) / driver
     // mixes the two scales, as on the first real Quick run.
     const ddm: DeepValueResult = {
@@ -183,10 +187,11 @@ describe("ValuationChecksCard", () => {
     expect(screen.queryByText("Cross-check bridge")).not.toBeInTheDocument();
     unmount();
 
-    // With a dataset both rows are drawn as before, implied multiples included.
+    // With a dataset the base multiple is drawn; the DDM has no implied EV/EBITDA and no
+    // arithmetic check, so its row would be a bare label.
     renderCard({ result: ddm });
     expect(screen.getByText(/Your base multiple/)).toBeInTheDocument();
-    expect(screen.getByText("Cross-check bridge").closest("p")!.textContent).toMatch(/\d\.\d{2}x/);
+    expect(screen.queryByText("Cross-check bridge")).not.toBeInTheDocument();
   });
 
   it("an extract with no financial rows reads exactly like no dataset", () => {

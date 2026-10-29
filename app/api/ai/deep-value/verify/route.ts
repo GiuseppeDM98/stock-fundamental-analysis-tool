@@ -13,7 +13,8 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getQuote } from "@/lib/yahoo-client";
 import { ANALYST_ANGLES } from "@/types/analysis";
-import type { GroundedFinancials, GroundingPayload } from "@/types/grounding";
+import type { GroundedFinancials } from "@/types/grounding";
+import { parseStoredExtract } from "@/lib/grounding/schema";
 import {
   buildAnalystSystemPrompt,
   buildAnalystUserPrompt,
@@ -105,7 +106,10 @@ function buildBaseGatesText(
     baseResult = null;
   }
   const gatePrice = livePrice ?? analysis.priceAtAnalysis ?? null;
-  const gateCurrency = liveCurrency || baseResult?.currency || "";
+  // A live price keeps its own currency, even an empty one (then the price gates read
+  // "currency mismatch"): borrowing the report's would compare pence with pounds. The
+  // price at analysis is labelled with the report's currency, the only one saved with it.
+  const gateCurrency = livePrice != null ? liveCurrency : baseResult?.currency ?? "";
   if (gatePrice == null || !hasFullTriple(baseResult)) return undefined;
   const postCheck = checkValuationBridges(baseResult, mosPercent, gatePrice, gateCurrency, extract);
   if (!postCheck) return undefined;
@@ -170,14 +174,15 @@ export async function POST(request: Request) {
       });
       if (analysis) {
         effectiveMosPercent = analysis.mosPercent;
-        if (analysis.groundingJson) {
+        // A malformed or partial stored extract reads as none: the review proceeds ungrounded.
+        const extract = parseStoredExtract(analysis.groundingJson);
+        if (extract) {
           try {
-            const payload = JSON.parse(analysis.groundingJson) as GroundingPayload;
-            // Lenses get extract + anchors + warnings, never the raw paste — see the
-            // doc comment on buildAnalystUserPrompt's `grounding` param for why.
-            groundingContext = buildGroundingPromptContext([], payload.extract, currentPrice ?? null, currency);
+            // Lenses get extract + anchors + warnings, never the raw paste — see the doc
+            // comment on buildAnalystUserPrompt's `grounding` param for why.
+            groundingContext = buildGroundingPromptContext([], extract, currentPrice ?? null, currency);
           } catch {
-            // Malformed/legacy groundingJson — proceed ungrounded rather than fail the review.
+            // Anchors that cannot be built on this extract: proceed ungrounded, as above.
           }
         }
         baseGatesText = buildBaseGatesText(analysis, groundingContext?.extract ?? null, effectiveMosPercent, currentPrice, currency);

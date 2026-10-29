@@ -297,10 +297,12 @@ export function formatGroundingForPrompt(ctx: GroundingPromptContext): string {
 
 /**
  * Renders the deterministic gates already run against the BASE report's own declared
- * bridge, for injection into a blind-first analyst lens's RECONCILE-phase user message,
- * so the lens must address every failed gate. Lives here, not in GroundingPromptContext,
- * because it needs the base report's own JSON — which doesn't exist yet when
- * buildGroundingPromptContext runs (pre-generation preview / the base run itself).
+ * bridge, for injection into every analyst-lens call that sees the report (the
+ * single-phase prompt, its degraded fallback, the reconcile turn of blind-first; with or
+ * without a dataset since 2026-10-29), so the lens must address every failed gate. Lives
+ * here, not in GroundingPromptContext, because it needs the base report's own JSON — which
+ * doesn't exist yet when buildGroundingPromptContext runs (pre-generation preview / the
+ * base run itself).
  */
 export function formatGatesForPrompt(gates: Gate[]): string {
   const lines = gates.map((g) => `${g.status === "pass" ? "✓" : g.status === "fail" ? "✗" : "—"} ${g.code}: ${g.detail}`);

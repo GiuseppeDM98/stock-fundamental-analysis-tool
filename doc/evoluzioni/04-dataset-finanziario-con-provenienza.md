@@ -1,7 +1,7 @@
 # 04 — Dataset finanziario con provenienza (tabella, chip di fonte, retry per blocco, riuso)
 
 > **Stato**: scritta 2026-10-11; riletta in modo adversariale il 2026-10-11: 41 rilievi, 8 decisioni (D-21, D-26, D-27, D-36, D-37, D-38, D-39; T-32). Pronta per l'implementazione dopo la 03.
-> **Branch**: `feature/financial-dataset` da `develop`. **Dipende da**: 01 ritirata il 2026-10-29 (`tickerSchema`, `normalizeTicker`), 02 ritirata il 2026-10-29 (`ANALYSIS_LIST_SELECT`/`ANALYSIS_SUMMARY_SELECT`, `__tests__/deep-value-route.test.ts`, `doc/guide/valutazione.md`), 03 (`checkValuationBridges` con `extract | null`, `ValuationChecksCard`, `AnalysisDetailBody`).
+> **Branch**: `feature/financial-dataset` da `develop`. **Dipende da**: 01 ritirata il 2026-10-29 (`tickerSchema`, `normalizeTicker`), 02 ritirata il 2026-10-29 (`ANALYSIS_LIST_SELECT`/`ANALYSIS_SUMMARY_SELECT`, `__tests__/deep-value-route.test.ts`, `doc/guide/valutazione.md`), 03 ritirata il 2026-10-29 (`checkValuationBridges` con `extract | null`, `ValuationChecksCard`, `AnalysisDetailBody`, `parseStoredExtract`).
 > **Indice**: [00-INDICE.md](00-INDICE.md) — decisioni D-2 (schema unico), D-7, D-13, D-14 (riscritta da D-26), D-20 (riscritta da D-27), D-21, D-26, D-27, D-36, D-37, D-38, D-39; scelte T-8, T-9, T-10, T-19, T-24, T-32; contratti C-9, C-16, C-21.
 
 ## 1. Il problema oggi (prove, commit `17e54b6`, 2026-10-11)
@@ -123,8 +123,9 @@ export async function latestFinancialDataset(userId: string, ticker: string, max
 // ticker via normalizeTicker; maxAgeDays undefined = no age limit, else createdAt >= now − maxAgeDays × 86400 s; findFirst on the (userId, ticker, createdAt) index
 export async function getFinancialDataset(userId: string, id: string): Promise<StoredDataset | null>; // null if foreign
 /** One reader for "the extract of this analysis": the dataset by datasetId, else the legacy
- *  groundingJson validated with groundingPayloadSchema.safeParse (so the sources defaults
- *  apply), else null. Used by the detail page, the verify route and the stock page (07b). */
+ *  groundingJson through parseStoredExtract (lib/grounding/schema.ts: the extract validated
+ *  with groundedFinancialsSchema, so the sources defaults apply), else null. Used by the
+ *  detail page, the verify route and the stock page (07b). */
 export async function readAnalysisExtract(userId: string, analysis: { datasetId: string | null; groundingJson: string | null }): Promise<GroundedFinancials | null>; // C-21
 ```
 
@@ -136,8 +137,8 @@ Route: `POST /api/datasets` body `{ ticker: tickerSchema, origin: z.literal("pas
 
 - `app/api/ai/deep-value/route.ts`: body `datasetId: z.string().optional()` SOSTITUISCE `grounding`; se presente → `getFinancialDataset(userId, id)` (null → 400 «dataset not found»); `normalizeTicker(body.ticker) !== stored.dataset.datasetMeta.ticker` → 400 «dataset ticker mismatch»; `groundingContext = buildGroundingPromptContext(stored.blocks, stored.dataset, currentPrice, currency, stored.warnings)` (quinto parametro nuovo, opzionale: i warning persistiti vengono UNITI a quelli ricalcolati, dedup per `code+fiscalYear+detail`; nel prompt `block_extract_failed` è reso come «<kind> block could not be transcribed», non con la posizione); `formatGroundingForPrompt` resta, ma `formatExtract` serializza l'extract SENZA `sources`, `source` e `datasetMeta` (un replacer di `JSON.stringify` che li salta: la provenienza è per la UI; la 05a aggiunge una resa compatta delle fonti).
 - `lib/report/deep-value-run.ts`: `DeepValueRunInputs.grounding: GroundingPayload | null` → `dataset: { id: string; extract: GroundedFinancials } | null`; `SaveAnalysisRequest.datasetId?: string` (al posto di `groundingJson`); `POST /api/analyses`: `datasetId: z.string().optional()`, verifica che il dataset sia dell'utente e dello stesso ticker (altrimenti 400), salva; `groundingJson` resta nello schema Zod per compatibilità ma il client non lo manda più.
-- `app/analyses/[id]/page.tsx`: `const extract = await readAnalysisExtract(userId, analysis);` → `AnalysisDetailBody groundingExtract={extract}`; sotto `ValuationChecksCard` monta `<DatasetTables extract={extract} />` quando `extract != null` (D-36).
-- `verify/route.ts`: `readAnalysisExtract` al posto del `JSON.parse` di `:127`; warnings persistiti nel contesto (dal dataset; per `groundingJson` legacy nessun warning).
+- `app/analyses/[id]/page.tsx`: `const extract = await readAnalysisExtract(userId, analysis);` al posto di `parseStoredExtract(analysis.groundingJson)` → `AnalysisDetailBody groundingExtract={extract}`; `<DatasetTables extract={groundingExtract} />` si monta in `components/analysis-detail-body.tsx`, dentro `ValuationBody`, dopo lo slot della card (la `ValuationChecksCard` o la riga «no price»), quando `groundingExtract != null` (D-36); il ramo senza terna completa (solo banner e Markdown) resta senza tabelle.
+- `verify/route.ts`: `readAnalysisExtract` al posto di `parseStoredExtract(analysis.groundingJson)`; warnings persistiti nel contesto (dal dataset; per `groundingJson` legacy nessun warning).
 - `GET /api/analyses` select: `datasetId` entra in `ANALYSIS_LIST_SELECT` e `ANALYSIS_SUMMARY_SELECT` (02); `SavedAnalysis.datasetId?: string | null`.
 - File toccati dal cambio di tipo (`GroundingPayload → { id; extract }`): `components/analyze-client.tsx` (`useState<{ id: string; extract: GroundedFinancials } | null>`); `components/deep-value-panel.tsx` (prop rinominata `dataset`, tipo `{ id; extract } | null`; il body POST manda `datasetId: inputs.dataset.id`; `ValuationChecksCard` riceve `runInputs.dataset?.extract ?? null`); `lib/grounding-client.ts` (`extractGrounding(ticker, blocks, blockOrder, opts?: { priorResults?: BlockExtractResult[] })`, `GroundingExtractResponse.blockResults/failedBlockIds`); `__tests__/deep-value-run.test.ts` (asserisce `datasetId` al posto di `groundingJson`); `__tests__/grounding-test-helpers.ts` (`sources: emptyRowSources()` e `source: null` nei builder); `e2e/pages.spec.ts:75` (`groundingJson` → `datasetId`).
 

@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { latestAnalysisWithValues, verdictBasis, watchlistBuyTarget } from "@/lib/report/latest-analysis";
+import {
+  latestAnalysisWithValues,
+  verdictBasis,
+  watchlistBuyTarget,
+  comparablePrice,
+  currencyMismatch,
+  getExitSignal,
+  digestPriceRead,
+} from "@/lib/report/latest-analysis";
 import type { SavedAnalysis } from "@/types/analysis";
 
 function makeAnalysis(overrides: Partial<SavedAnalysis>): SavedAnalysis {
@@ -105,5 +113,57 @@ describe("watchlistBuyTarget", () => {
 
   it("should be null without a base fair value", () => {
     expect(watchlistBuyTarget(makeAnalysis({}), 0.2)).toBeNull();
+  });
+});
+
+// An LSE quote in pence against values in pounds is the case every one of these guards:
+// 350 (GBp) is 3.50 (GBP), and a comparison without the currency is off by 100.
+describe("comparablePrice / currencyMismatch", () => {
+  it("passes a price only in the analysis's own currency", () => {
+    const a = makeAnalysis({ ...VALUED, currency: "GBP" });
+    expect(comparablePrice(350, "GBp", a)).toBeNull();
+    expect(currencyMismatch(350, "GBp", a)).toBe(true);
+    expect(comparablePrice(3.5, "GBP", a)).toBe(3.5);
+    expect(currencyMismatch(3.5, "GBP", a)).toBe(false);
+  });
+
+  it("an unknown currency on either side is no comparison; no price is no mismatch", () => {
+    expect(comparablePrice(10, "EUR", makeAnalysis({ ...VALUED }))).toBeNull();
+    expect(comparablePrice(10, null, makeAnalysis({ ...VALUED, currency: "EUR" }))).toBeNull();
+    expect(currencyMismatch(null, "EUR", makeAnalysis({ ...VALUED, currency: "USD" }))).toBe(false);
+  });
+});
+
+describe("getExitSignal", () => {
+  // MoS 0: the intrinsic base is the stored base, 80.
+  it("fires at the intrinsic base on a quote in the analysis's currency", () => {
+    const analyses = [makeAnalysis({ ...VALUED, currency: "EUR" })];
+    expect(getExitSignal(80, "EUR", analyses)).toEqual({ triggered: true, fairValueBase: 80, currencyMismatch: false });
+    expect(getExitSignal(79, "EUR", analyses).triggered).toBe(false);
+  });
+
+  it("never fires on a quote in another currency, and says why", () => {
+    expect(getExitSignal(8000, "GBp", [makeAnalysis({ ...VALUED, currency: "GBP" })])).toEqual({
+      triggered: false,
+      fairValueBase: null,
+      currencyMismatch: true,
+    });
+  });
+});
+
+describe("digestPriceRead", () => {
+  // MoS 0 and an item MoS of 0.25: buy target 80 × 0.75 = 60.
+  it("reads under or over the item's buy target on a comparable quote", () => {
+    const a = makeAnalysis({ ...VALUED, currency: "EUR" });
+    expect(digestPriceRead(50, "EUR", a, 0.25)).toEqual({ upside: 0.2, status: "under", currencyMismatch: false });
+    expect(digestPriceRead(75, "EUR", a, 0.25)).toMatchObject({ status: "over", currencyMismatch: false });
+  });
+
+  it("reads unknown on a quote in another currency, and flags it", () => {
+    expect(digestPriceRead(5000, "GBp", makeAnalysis({ ...VALUED, currency: "GBP" }), 0.25)).toEqual({
+      upside: null,
+      status: "unknown",
+      currencyMismatch: true,
+    });
   });
 });
