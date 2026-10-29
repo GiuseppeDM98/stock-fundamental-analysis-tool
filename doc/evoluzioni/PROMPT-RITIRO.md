@@ -59,7 +59,14 @@ branch `chore/retire-spec-02`, `git log --diff-filter=D -- doc/evoluzioni/02-con
 workflow di 5 lettori + 4 verificatori Opus su 171 voci, 23 rilievi confermati e 21 parziali su 52;
 quattro correzioni di codice scelte dall'owner, ognuna con un test provato portante per mutazione; il
 pattern dei mock dei test di route in AGENTS.md, la regola 14 dell'indice resa autonoma; il controllo
-sulla prima analisi reale, impossibile con `Analysis` vuota, scritto con la sua query nella riga di stato).
+sulla prima analisi reale, impossibile con `Analysis` vuota, scritto con la sua query nella riga di stato)
+e quello della 03 (2026-10-29, branch `chore/retire-spec-03`, `git log --diff-filter=D --
+doc/evoluzioni/03-gate-universali-e-scheda-verifiche.md`: workflow Opus in sola lettura su 129 voci, 55
+segnalate; la CLASSE di un difetto cercata con un grep su tutto il repo prima del fix — un controllo di
+valuta mancante sul riepilogo ha portato `sameCurrency` su ogni confronto prezzo↔valore, un multiplo
+implicito senza senso su un DDM ha ristretto i gate EV/EBITDA ai bridge EV su EBITDA; ventisette mutanti
+uccisi; una decisione dell'owner che tocca una spec viva registrata nell'indice come D-N, § 3.7, e scritta
+in quella spec; il seed e2e allineato quando una regola nuova lo rende muto).
 Ogni riferimento nel codice a un documento ritirato si riscrive in loco perché il perché resti in piedi
 da solo, tenendo le date.
 
@@ -148,11 +155,11 @@ CANCELLI: `npm run ci:local` (= `npm run test` → `npm run typecheck` → build
 quest'ordine; il visual (`npm run e2e:visual`) non è un cancello ma va rilanciato prima/dopo se il
 ritiro tocca una pagina. Il build di verifica si fa SEMPRE sull'ambiente isolato (`.env` punta a
 Turso di produzione).
-LIMITI (misurati il 2026-10-29, al ritiro della 02): `CLAUDE.md` 36.879 caratteri su un tetto di 40.000, nella
+LIMITI (misurati il 2026-10-29, al ritiro della 03): `CLAUDE.md` 36.329 caratteri su un tetto di 40.000, nella
 misura della regola 3 dell'indice (caratteri Unicode senza CR, mai `wc -c`): ogni spec dichiara nel
 § 9 i caratteri aggiunti e tolti, e la voce Last Updated sostituisce la precedente — la catena
 regge solo se ogni spec rispetta il suo saldo, quindi si rimisura a ogni ritiro; `AGENTS.md` 599 righe (dalla 02 il tetto è 600 righe, poi saldo zero,
-D-22); le guide in `doc/guide/` hanno un tetto di 400 righe per file (`valutazione.md` 216, D-57: oltre, la
+D-22); le guide in `doc/guide/` hanno un tetto di 400 righe per file (`valutazione.md` 246, D-57: oltre, la
 spec che sfora spezza per tema); `DESIGN.md` 312 righe e `PRODUCT.md` 55 righe, rigenerati nella 08b
 (DESIGN.md solo dalla skill). Se sfori, NON tagliare in chiusura: dimmelo e proponi lo scorporo come
 sessione a parte.

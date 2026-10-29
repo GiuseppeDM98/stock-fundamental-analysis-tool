@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { groundingPayloadSchema, GROUNDING_MAX_BLOCKS, GROUNDING_MAX_BLOCK_CHARS, GROUNDING_MAX_TOTAL_CHARS } from "@/lib/grounding/schema";
+import { groundingPayloadSchema, parseStoredExtract, GROUNDING_MAX_BLOCKS, GROUNDING_MAX_BLOCK_CHARS, GROUNDING_MAX_TOTAL_CHARS } from "@/lib/grounding/schema";
 import type { GroundingBlock } from "@/types/grounding";
-import { makeExtract } from "./grounding-test-helpers";
+import { makeExtract, makeFinancialsRow, makeMultiplesRow } from "./grounding-test-helpers";
 
 function payload(blocks: GroundingBlock[]) {
   return { blocks, extract: makeExtract() };
@@ -39,5 +39,33 @@ describe("groundingPayloadSchema — boundary caps", () => {
     expect(groundingPayloadSchema.safeParse(payload([block(1, { kind: "peer_valuation" })])).success).toBe(false);
     expect(groundingPayloadSchema.safeParse(payload([block(1, { kind: "peer_valuation", peerTicker: "   " })])).success).toBe(false);
     expect(groundingPayloadSchema.safeParse(payload([block(1, { kind: "balance_sheet" })])).success).toBe(true);
+  });
+});
+
+describe("parseStoredExtract — Analysis.groundingJson read back", () => {
+  const extract = makeExtract({
+    financials: [makeFinancialsRow({ fiscalYear: 2025, ebitda: 100 })],
+    multiples: [makeMultiplesRow({ fiscalYear: 2025, evEbitda: 6 })],
+  });
+
+  it("returns the extract of a stored payload", () => {
+    expect(parseStoredExtract(JSON.stringify({ blocks: [block(1)], extract }))).toEqual(extract);
+  });
+
+  it("reads an extract saved before marketCap/enterpriseValue existed, with both null", () => {
+    const { marketCap: _m, enterpriseValue: _e, ...oldRow } = extract.multiples[0];
+    const parsed = parseStoredExtract(JSON.stringify({ blocks: [], extract: { ...extract, multiples: [oldRow] } }));
+    expect(parsed?.multiples[0]).toMatchObject({ evEbitda: 6, marketCap: null, enterpriseValue: null });
+  });
+
+  it("reads a partial extract (no financials) as no dataset, not as a shape the gates would crash on", () => {
+    const { financials: _f, ...partial } = extract;
+    expect(parseStoredExtract(JSON.stringify({ blocks: [], extract: partial }))).toBeNull();
+  });
+
+  it("reads malformed JSON, a payload without an extract and an empty column as null", () => {
+    expect(parseStoredExtract("{not json")).toBeNull();
+    expect(parseStoredExtract(JSON.stringify({ blocks: [] }))).toBeNull();
+    expect(parseStoredExtract(null)).toBeNull();
   });
 });

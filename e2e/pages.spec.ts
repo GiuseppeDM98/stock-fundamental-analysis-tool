@@ -74,10 +74,13 @@ test("analyses list groups by ticker, counts match the DB, and a group expands",
 });
 
 test("grounded analysis detail renders the report from its stored result and the deterministic checks card", async ({ page }) => {
-  const row = await queryOne<{ groundingJson: string | null; reportMd: string; resultJson: string | null; reviewResultJson: string | null }>(
-    "SELECT groundingJson, reportMd, resultJson, reviewResultJson FROM Analysis WHERE id = ?",
-    [IDS.analysisGrounded]
-  );
+  const row = await queryOne<{
+    groundingJson: string | null;
+    reportMd: string;
+    resultJson: string | null;
+    reviewResultJson: string | null;
+    reviewBlindJson: string | null;
+  }>("SELECT groundingJson, reportMd, resultJson, reviewResultJson, reviewBlindJson FROM Analysis WHERE id = ?", [IDS.analysisGrounded]);
   expect(row?.groundingJson, "seeded grounded row carries groundingJson").toBeTruthy();
   // Current format: a stored result, and a report whose JSON block is the very last thing.
   expect(JSON.parse(row!.resultJson!).sector).toBe("Regulated Utilities");
@@ -110,6 +113,10 @@ test("grounded analysis detail renders the report from its stored result and the
   expect(final.revisions[0].reason).toContain(DECOY.groundedRevisionReason);
   await expect(page.getByText(DECOY.groundedSkepticCritique)).toBeVisible();
   await expect(page.getByText(/^✓ Final · Kill price declared — 7\.90$/)).toBeVisible();
+  // The blind commitment is read back from reviewBlindJson too, its own kill price apart
+  // from the final one.
+  expect((JSON.parse(row!.reviewBlindJson!) as { killPrice: number }).killPrice).toBe(8.1);
+  await expect(page.getByText(/^✓ Kill price declared — 8\.10$/)).toBeVisible();
   await expect(page.getByText(new RegExp(DECOY.groundedRevisionReason))).toBeVisible();
 });
 
@@ -243,7 +250,8 @@ test("portfolio shows open positions, the closed-positions archive and the histo
   await expect(page.getByText("+€47.50")).toBeVisible();
 
   // The exit signal is measured on the same basis as the /analyses verdict: the panel
-  // ticker's consensus base 112.5 at MoS 25% → intrinsic 150 = the stub price, so it fires.
+  // ticker's consensus base 112.5 at MoS 25% → intrinsic 150 = the stub price, in the
+  // analysis's own currency (USD), so it fires.
   // It is the only held ticker at or above its intrinsic base, so exactly one pill shows.
   await page.getByRole("button", { name: "Aggregated" }).click();
   await expect(page.getByText("⚠ At Fair Value")).toHaveCount(1);

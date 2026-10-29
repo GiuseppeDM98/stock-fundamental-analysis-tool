@@ -10,7 +10,10 @@
 // Every analysis gets these gates, with or without a pasted dataset (2026-10): the gates
 // that read only the model's own JSON and the price (scenario order, method family, the
 // sensitivity centre, Check A/B, …) run everywhere; the ones that need the dataset read
-// "unavailable — no dataset" without one.
+// "unavailable — no dataset" without one. The pasted history is a history of EV/EBITDA, so
+// the gates that read its medians or the market-implied multiple, and the implied
+// multiples themselves, apply only to an EV bridge on EBITDA (isEvOnEbitda); on any other
+// bridge they read unavailable (2026-10-29).
 //
 // Design invariant: "the model declares, the code verifies."
 // A gate that cannot verify its condition returns "unavailable", never "pass" — an
@@ -36,9 +39,9 @@ export type BridgeScenario = Scenario;
  *  an object key (not its value) is what gates whether the kill_price entry appears in
  *  PostCheck.gates at all.
  *
- *  Callers pass only results already narrowed by hasFullTriple; checkValuationBridges
- *  still re-sanitizes on entry, so a value that slipped past the type is checked as
- *  "not declared", never computed on. */
+ *  Every caller narrows its result with hasFullTriple first (a stored blob is sanitized on
+ *  read); checkValuationBridges still re-sanitizes on entry, so a value that slipped past
+ *  the type is checked as "not declared", never computed on. */
 export type BridgeCheckInput = AnalystResult;
 
 export type BridgeCheck = {
@@ -47,7 +50,7 @@ export type BridgeCheck = {
   recomputedIntrinsic: number | null; // recomputed from the bridge's OWN multiple; null for DCF/DDM
   arithmeticOk: boolean | null; // Check A: recomputedIntrinsic ≈ intrinsicPerShare, within ±1%
   mosOk: boolean | null; // Check B: statedIntrinsic ≈ intrinsicPerShare, within ±1%
-  impliedMultiple: number | null; // method-agnostic, STATEMENT basis: derived from intrinsicPerShare, not `multiple`
+  impliedMultiple: number | null; // EV/EBITDA on the STATEMENT basis, derived from intrinsicPerShare, not `multiple`; null unless the bridge is an EV bridge on EBITDA
   /** The same bridge re-expressed in PROVIDER basis via bridgeToProviderMultiple (bridge
    *  × kB, EBITDA × kE) — the ONLY figure from this type that may be passed to
    *  percentileOf. null when kE is unverifiable. */
@@ -110,8 +113,8 @@ export type PostCheck = {
    *  missing expected value without changing the per-scenario buy targets the app reads. */
   expectedValue: { intrinsic: number; buyTarget: number; upsidePct: number } | null;
   /** The cross-check's OWN bridge, recomputed the same way scenario bridges are (Check A +
-   *  implied multiple/percentile) — null when the model declared no crossCheck.bridge
-   *  (Quick mode, or a Grounded cross-check with no multiple, e.g. DDM). Added after a live
+   *  implied multiple/percentile) — null when the model declared no crossCheck.bridge.
+   *  Added after a live
    *  run (Webuild) showed the primary method can have no `multiple` for basis_same to check
    *  at all (DCF), while the cross-check is exactly where an unverified basis mismatch
    *  surfaced instead — see the cross_check_basis gate below. */
@@ -136,11 +139,14 @@ export const EMPTY_BASIS: BasisReconciliation = {
 // Gate-detail keywords: English, never translated (same contract as Gate.detail).
 const NO_DATASET = "no dataset";
 const CURRENCY_MISMATCH = "currency mismatch";
+const NOT_EV_EBITDA = "not an EV/EBITDA bridge";
+const EQUITY_BRIDGE = "equity bridge · net debt 0";
+const UNKNOWN_METHOD = "unknown method family";
 
 export type CrossCheckBridgeCheck = {
   recomputedIntrinsic: number | null; // from the cross-check's own multiple × driverValue − netDebt − minorities / shares
   arithmeticOk: boolean | null; // recomputedIntrinsic ≈ crossCheck.intrinsicPerShare, within ±1% — Check A, never run on the cross-check before this
-  impliedMultiple: number | null; // method-agnostic, statement basis, derived from crossCheck.intrinsicPerShare
+  impliedMultiple: number | null; // EV/EBITDA, statement basis, derived from crossCheck.intrinsicPerShare; null unless the cross-check is an EV bridge on EBITDA
   impliedMultipleProvider: number | null; // same-basis (provider) via bridgeToProviderMultiple — the only figure percentile-able
   impliedPercentile: number | null; // percentileOf(impliedMultipleProvider, raw historical series)
 };
@@ -210,11 +216,60 @@ function unavailableNoDataset(code: GateCode): Gate {
   return { code, status: "unavailable", detail: NO_DATASET };
 }
 
+// The method families of METHOD_LIST (deep-value-prompts.ts), each anchored at the start of
+// the declared method and closed by a word boundary: "EV/EBITDA (peers)" and "P/E fwd"
+// belong to their family, "Peer EV/EBITDA" to none. A prefix match on the squashed string
+// once read "Peer EV/EBITDA" as P/E, and method_distinct passed it against an EV/EBITDA
+// primary (2026-10-29).
+const METHOD_FAMILIES = [
+  ["evebitda", /^ev\s*[/\-_.]?\s*ebitda\b/],
+  ["evrab", /^ev\s*[/\-_.]?\s*rab\b/],
+  ["residualincome", /^residual[\s\-_]*income\b/],
+  ["dcf", /^dcf\b/],
+  ["ddm", /^ddm\b/],
+  ["sotp", /^sotp\b/],
+  ["nav", /^nav\b/],
+  ["pe", /^p\s*[/\-_.]?\s*e\b/],
+  ["pb", /^p\s*[/\-_.]?\s*b\b/],
+] as const;
+
+type MethodFamily = (typeof METHOD_FAMILIES)[number][0];
+
+/** The family a declared method belongs to, or null when it names none of METHOD_FAMILIES. */
+function methodFamily(method: string): MethodFamily | null {
+  const normalized = method.trim().toLowerCase();
+  return METHOD_FAMILIES.find(([, pattern]) => pattern.test(normalized))?.[0] ?? null;
+}
+
+/** true when the bridge subtracts net debt from an enterprise value; false for the
+ *  equity-value methods (P/E, P/B, Residual Income, DDM, DCF on FCFE), whose driver is
+ *  already equity and whose net debt is 0 by the bridge rule (deep-value-prompts.ts,
+ *  BRIDGE_RULE); null when the method names no known family. */
+function isEvBridge(method: string): boolean | null {
+  const family = methodFamily(method);
+  if (family == null) return null;
+  if (family === "pe" || family === "pb" || family === "residualincome" || family === "ddm") return false;
+  return !(family === "dcf" && /\bfcfe\b/i.test(method));
+}
+
+/** An EV bridge on EBITDA: the one bridge whose (equity + net debt + minorities) / driver
+ *  is an EV/EBITDA, the multiple the pasted history, the basis reconciliation and the
+ *  market-implied read are all built on. An EV/EBITDA method by definition, or a DCF on
+ *  FCFF whose driver label names EBITDA. Never an equity-value method (equity / EBITDA is no
+ *  EV multiple, and a DPS per share turned it into a meaningless number on a DDM), nor
+ *  SOTP, NAV or EV/RAB (their driver is a value already summed). */
+function isEvOnEbitda(method: string, bridge: { driver: string } | undefined): boolean {
+  if (!bridge || isEvBridge(method) !== true) return false;
+  const family = methodFamily(method);
+  return family === "evebitda" || (family === "dcf" && /\bebitda\b/i.test(bridge.driver));
+}
+
 function checkOneScenario(
   scenario: BridgeCheck["scenario"],
   input: BridgeScenario | undefined,
   mosPercent: number,
-  { basis, latestFy, series }: DatasetContext
+  { basis, latestFy, series }: DatasetContext,
+  onEbitda: boolean
 ): BridgeCheck {
   // MoS trap: fairValue is a MoS-adjusted buy target, never compare it directly
   // against intrinsicPerShare. Gross it up first via the SHARED helper (not reimplemented).
@@ -256,10 +311,12 @@ function checkOneScenario(
   // application even when the bridge's internal arithmetic (Check A) is fine.
   const mosOk = relDiff(statedIntrinsic, bridge.intrinsicPerShare) < MOS_TOLERANCE;
 
-  // Method-agnostic implied multiple: derived from the model's OWN intrinsicPerShare, not
-  // its (possibly absent) declared `multiple` — works identically for DCF/DDM/P-B, since a
-  // per-share intrinsic always implies SOME EV/EBITDA once bridged back through the same
-  // driver/netDebt/minorities/shares. STATEMENT basis — never percentiled directly.
+  // The implied EV/EBITDA, derived from the model's OWN intrinsicPerShare rather than its
+  // (possibly absent) declared `multiple`, so a DCF on EBITDA gets one too. Only an EV
+  // bridge on EBITDA has one (isEvOnEbitda); until 2026-10-29 it was computed on every
+  // bridge, and a P/E or a DDM got a number that was no EV/EBITDA at all. STATEMENT basis —
+  // never percentiled directly.
+  if (!onEbitda) return { ...empty, recomputedIntrinsic, arithmeticOk, mosOk };
   let impliedMultiple: number | null = null;
   let impliedMultipleProvider: number | null = null;
   let impliedPercentile: number | null = null;
@@ -302,8 +359,9 @@ function checkOneScenario(
   };
 }
 
-function checkBasisSame({ dataset, basis }: DatasetContext, base: Scenario | undefined): Gate {
+function checkBasisSame({ dataset, basis }: DatasetContext, base: Scenario | undefined, baseOffEbitda: boolean): Gate {
   if (!dataset) return unavailableNoDataset("basis_same");
+  if (baseOffEbitda) return { code: "basis_same", status: "unavailable", detail: NOT_EV_EBITDA };
   if (basis.kE == null || basis.adjustedEvEbitda == null) {
     return { code: "basis_same", status: "unavailable", detail: "kE unavailable" };
   }
@@ -346,8 +404,10 @@ function checkBearBreaksPrice(bearStatedIntrinsic: number | null, price: number,
   return { code: "bear_breaks_price", status, detail: `bear ${bearStatedIntrinsic.toFixed(2)} · price ${price.toFixed(2)}` };
 }
 
-function checkTrailingForward(baseCheck: BridgeCheck, base: Scenario | undefined, { dataset, latestFy }: DatasetContext): Gate {
+function checkTrailingForward(baseCheck: BridgeCheck, base: Scenario | undefined, { dataset, latestFy }: DatasetContext, baseOffEbitda: boolean): Gate {
   if (!dataset) return unavailableNoDataset("trailing_forward");
+  // The wedge and the LTM-equivalent are measured against the dataset's EBITDA.
+  if (baseOffEbitda) return { code: "trailing_forward", status: "unavailable", detail: NOT_EV_EBITDA };
   const driverYear = base?.bridge?.driverYear;
   if (driverYear == null || !latestFy) {
     return { code: "trailing_forward", status: "unavailable", detail: "driverYear or latest FY unavailable" };
@@ -365,12 +425,18 @@ function checkTrailingForward(baseCheck: BridgeCheck, base: Scenario | undefined
   return { code: "trailing_forward", status, detail: `driver ${driverYear}${isTrailing ? "" : "e"} · wedge ${wedge} · implied ${fwd}${ltm}` };
 }
 
-function checkNetDebtTrajectory(scenarios: ScenarioSet, { dataset, latestFy }: DatasetContext): Gate {
+function checkNetDebtTrajectory(scenarios: ScenarioSet, { dataset, latestFy }: DatasetContext, method: string): Gate {
   if (!dataset) return unavailableNoDataset("netdebt_trajectory");
   const { bull, base, bear } = scenarios;
   // No bridge anywhere ⇒ there is no declared net debt to test; that is "can't verify".
   if (!bull?.bridge && !base?.bridge && !bear?.bridge) {
     return { code: "netdebt_trajectory", status: "unavailable", detail: "no scenario declared a bridge" };
+  }
+  // An equity bridge declares net debt 0 by rule: tested against the FCF trajectory, it
+  // read as an unfunded deleveraging on every P/E and DDM until 2026-10-29.
+  const evBridge = isEvBridge(method);
+  if (evBridge !== true) {
+    return { code: "netdebt_trajectory", status: "unavailable", detail: evBridge === false ? EQUITY_BRIDGE : UNKNOWN_METHOD };
   }
   if (!latestFy || latestFy.freeCashFlow == null || latestFy.dividendsPerShare == null || latestFy.netDebt == null || latestFy.sharesDiluted == null) {
     return { code: "netdebt_trajectory", status: "unavailable", detail: "freeCashFlow, dividendsPerShare, netDebt or sharesDiluted missing" };
@@ -400,8 +466,11 @@ function checkNetDebtTrajectory(scenarios: ScenarioSet, { dataset, latestFy }: D
   return { code: "netdebt_trajectory", status: failing ? "fail" : "pass", detail };
 }
 
-function checkRoicVsWacc(result: ParsedAnalystResult, base: Scenario | undefined, { dataset, basis }: DatasetContext): Gate {
+function checkRoicVsWacc(result: ParsedAnalystResult, base: Scenario | undefined, { dataset, basis }: DatasetContext, baseOffEbitda: boolean): Gate {
   if (!dataset) return unavailableNoDataset("roic_vs_wacc");
+  // The base multiple is weighed against the EV/EBITDA median: a P/E against it read as a
+  // premium valuation on any company earning below its cost of capital.
+  if (baseOffEbitda) return { code: "roic_vs_wacc", status: "unavailable", detail: NOT_EV_EBITDA };
   const roic = result.assumptions?.roic;
   const wacc = result.assumptions?.wacc;
   if (!isFiniteNumber(roic) || !isFiniteNumber(wacc)) {
@@ -466,7 +535,7 @@ function checkCrossCheckBridge(
   let impliedMultiple: number | null = null;
   let impliedMultipleProvider: number | null = null;
   let impliedPercentile: number | null = null;
-  if (bridge.shares !== 0 && bridge.driverValue !== 0) {
+  if (isEvOnEbitda(crossCheck.method, bridge) && bridge.shares !== 0 && bridge.driverValue !== 0) {
     const equityValue = intrinsicPerShare * bridge.shares;
     const evBridge = bridge.netDebt + bridge.minorities;
     impliedMultiple = (equityValue + evBridge) / bridge.driverValue;
@@ -489,6 +558,9 @@ function checkCrossCheckBasis(result: ParsedAnalystResult, { dataset, basis }: D
   if (!dataset) return unavailableNoDataset("cross_check_basis");
   if (!result.crossCheck) {
     return { code: "cross_check_basis", status: "unavailable", detail: "no cross-check declared" };
+  }
+  if (result.crossCheck.bridge && !isEvOnEbitda(result.crossCheck.method, result.crossCheck.bridge)) {
+    return { code: "cross_check_basis", status: "unavailable", detail: NOT_EV_EBITDA };
   }
   if (basis.kE == null || basis.adjustedEvEbitda == null) {
     return { code: "cross_check_basis", status: "unavailable", detail: "kE unavailable" };
@@ -551,24 +623,13 @@ function checkScenarioOrder(scenarios: BridgeCheck[]): Gate {
   };
 }
 
-// The method families of METHOD_LIST, as normalized prefixes. Longest tokens first, so
-// "evebitda"/"evrab" are tried before a shorter token could claim them.
-const METHOD_FAMILIES = ["evebitda", "evrab", "residualincome", "dcf", "ddm", "sotp", "nav", "pe", "pb"] as const;
-
-/** The family a declared method belongs to — "EV/EBITDA (peers)" and "EV/EBITDA" are the
- *  same family — or null when it matches none of METHOD_FAMILIES. */
-function methodFamily(method: string): string | null {
-  const normalized = method.toLowerCase().replace(/[\s/\-_.]/g, "");
-  return METHOD_FAMILIES.find((family) => normalized.startsWith(family)) ?? null;
-}
-
 /** The mandatory second method must be structurally different: same family → fail. */
 function checkMethodDistinct(result: ParsedAnalystResult): Gate {
   if (!result.crossCheck) return { code: "method_distinct", status: "unavailable", detail: "no cross-check declared" };
   const primary = methodFamily(result.method);
   const second = methodFamily(result.crossCheck.method);
   const detail = `${result.method} vs ${result.crossCheck.method}`;
-  if (!primary || !second) return { code: "method_distinct", status: "unavailable", detail: `${detail} · unknown method family` };
+  if (!primary || !second) return { code: "method_distinct", status: "unavailable", detail: `${detail} · ${UNKNOWN_METHOD}` };
   return { code: "method_distinct", status: primary === second ? "fail" : "pass", detail };
 }
 
@@ -681,14 +742,16 @@ function computeExpectedValue(
  * needs no kE at all. (Converting both to provider basis would only rescale them by the
  * same kE, plus a kB term that blurs rather than sharpens a "did the model copy the
  * price?" comparison.) No market-implied read (no dataset, currency mismatch, missing
- * bridge inputs) → can't confirm anchoring; false/unavailable.
+ * bridge inputs, a base bridge not on EBITDA) → can't confirm anchoring; false/unavailable.
  */
 function checkMultipleVsMarket(
   baseCheck: BridgeCheck,
   marketImplied: MarketImplied,
-  hasDataset: boolean
+  hasDataset: boolean,
+  baseOffEbitda: boolean
 ): { gate: Gate; priceAnchoringFlag: boolean } {
   if (!hasDataset) return { gate: unavailableNoDataset("multiple_vs_market"), priceAnchoringFlag: false };
+  if (baseOffEbitda) return { gate: { code: "multiple_vs_market", status: "unavailable", detail: NOT_EV_EBITDA }, priceAnchoringFlag: false };
   if (baseCheck.impliedMultiple == null || marketImplied == null) {
     const missing = baseCheck.impliedMultiple == null ? "base implied multiple" : "market-implied multiple";
     return { gate: { code: "multiple_vs_market", status: "unavailable", detail: `${missing} unavailable` }, priceAnchoringFlag: false };
@@ -708,22 +771,24 @@ type GateInputs = {
   /** sameCurrency(result.currency, quoteCurrency): false ⇒ every price gate is unavailable. */
   isPriceComparable: boolean;
   multipleVsMarket: Gate;
+  /** A base bridge was declared and it is not an EV bridge on EBITDA (isEvOnEbitda). */
+  baseOffEbitda: boolean;
 };
 
 /** The gate array, in its fixed display order: the original ten, the contract-only ones,
  *  then kill_price when the caller is checking a lens. sections_present is never here (it
  *  needs the Markdown): ValuationChecksCard appends it from checkReportStructure. */
-function buildGates({ result, scenarioSet, scenarios, ctx, price, isPriceComparable, multipleVsMarket }: GateInputs): Gate[] {
+function buildGates({ result, scenarioSet, scenarios, ctx, price, isPriceComparable, multipleVsMarket, baseOffEbitda }: GateInputs): Gate[] {
   const baseCheck = scenarios.find((s) => s.scenario === "base")!;
   const bearCheck = scenarios.find((s) => s.scenario === "bear")!;
   const gates: Gate[] = [
-    checkBasisSame(ctx, scenarioSet.base),
+    checkBasisSame(ctx, scenarioSet.base, baseOffEbitda),
     checkHorizonConsistent(scenarioSet),
     checkBearBreaksPrice(bearCheck.statedIntrinsic, price, isPriceComparable),
     multipleVsMarket,
-    checkTrailingForward(baseCheck, scenarioSet.base, ctx),
-    checkNetDebtTrajectory(scenarioSet, ctx),
-    checkRoicVsWacc(result, scenarioSet.base, ctx),
+    checkTrailingForward(baseCheck, scenarioSet.base, ctx, baseOffEbitda),
+    checkNetDebtTrajectory(scenarioSet, ctx, result.method),
+    checkRoicVsWacc(result, scenarioSet.base, ctx, baseOffEbitda),
     checkProbabilities(scenarioSet),
     checkCrossCheck(result, baseCheck.statedIntrinsic),
     checkCrossCheckBasis(result, ctx),
@@ -769,18 +834,24 @@ export function checkValuationBridges(
   const ctx = buildDatasetContext(extract);
   // After sanitization each scenario may be missing (ParsedAnalystResult says so).
   const scenarioSet: ScenarioSet = { bull: result.bull, base: result.base, bear: result.bear };
-  const scenarios: BridgeCheck[] = (["bear", "base", "bull"] as const).map((s) => checkOneScenario(s, scenarioSet[s], mosPercent, ctx));
+  const scenarios: BridgeCheck[] = (["bear", "base", "bull"] as const).map((s) =>
+    checkOneScenario(s, scenarioSet[s], mosPercent, ctx, isEvOnEbitda(result.method, scenarioSet[s]?.bridge))
+  );
+  // A base bridge that is not on EBITDA: the gates built on the EV/EBITDA medians and on
+  // the market-implied multiple have nothing to compare it with. No base bridge at all is
+  // left to each gate's own "missing" reading.
+  const baseOffEbitda = scenarioSet.base?.bridge != null && !isEvOnEbitda(result.method, scenarioSet.base.bridge);
 
   const hasMarketRead = ctx.dataset != null && isFiniteNumber(price) && price > 0 && sameCurrency(ctx.dataset.meta.reportingCurrency, quoteCurrency);
   const marketImplied = hasMarketRead ? computeMarketImplied(price, quoteCurrency, ctx.dataset!, ctx.basis) : null;
-  const anchoring = checkMultipleVsMarket(scenarios.find((s) => s.scenario === "base")!, marketImplied, ctx.dataset != null);
+  const anchoring = checkMultipleVsMarket(scenarios.find((s) => s.scenario === "base")!, marketImplied, ctx.dataset != null, baseOffEbitda);
   const isPriceComparable = sameCurrency(result.currency, quoteCurrency);
 
   return {
     scenarios,
     marketImplied,
     priceAnchoringFlag: anchoring.priceAnchoringFlag,
-    gates: buildGates({ result, scenarioSet, scenarios, ctx, price, isPriceComparable, multipleVsMarket: anchoring.gate }),
+    gates: buildGates({ result, scenarioSet, scenarios, ctx, price, isPriceComparable, multipleVsMarket: anchoring.gate, baseOffEbitda }),
     basis: ctx.basis,
     expectedValue: isPriceComparable ? computeExpectedValue(scenarios, scenarioSet, mosPercent, price) : null,
     crossCheckBridge: checkCrossCheckBridge(result, ctx.series, ctx.basis),

@@ -18,6 +18,10 @@ export type Translations = {
   dcfWarningAfterSector: string;
   openPosition: string;
   loadingPnL: string;
+  // A price↔value comparison dropped because the currencies differ (sameCurrency).
+  pnlUnavailable: string;
+  verdictCurrencyMismatch: string;
+  recapCurrencyMismatch: string;
   chartEmptyState: string;
   portfolioValueOverTime: string;
   valueLabel: string;
@@ -627,6 +631,9 @@ const en: Translations = {
   dcfWarningAfterSector: " sector, DCF may not be the most appropriate valuation method. Recommended method: ",
   openPosition: "Open position:",
   loadingPnL: "Loading P&L…",
+  pnlUnavailable: "P&L not shown: no live price in the position's currency",
+  verdictCurrencyMismatch: "No verdict: quote and analysis in different currencies",
+  recapCurrencyMismatch: "Distance from the price not shown: the price is in another currency than the report",
   chartEmptyState: "The chart will appear after a few days of use",
   portfolioValueOverTime: "Portfolio value over time",
   valueLabel: "Value",
@@ -1196,7 +1203,7 @@ const en: Translations = {
   groundingKbAssumed: "kB assumed = 1 (EV bridge not estimable from the paste)",
   groundingKbObserved: "observed",
   groundingKbInferred: "inferred",
-  groundingCardGatesUnavailable: "Deterministic checks unavailable — the model's valuation block could not be verified.",
+  groundingCardGatesUnavailable: "Unavailable — the model's valuation block could not be verified.",
   groundingWarnMetaCurrencyConflict: "Pasted blocks declare different reporting currencies — the first one is used for all of them",
   groundingWarnMetaUnitsConflict: "Pasted blocks declare different unit scales — the first one is used for all of them",
   backToSavedAnalyses: "← Back to Saved Analyses",
@@ -1229,6 +1236,9 @@ const it: Translations = {
   dcfWarningAfterSector: ", il DCF potrebbe non essere il metodo di valutazione più appropriato. Metodo consigliato: ",
   openPosition: "Posizione aperta:",
   loadingPnL: "Caricamento P&L…",
+  pnlUnavailable: "P&L non mostrato: nessun prezzo live nella valuta della posizione",
+  verdictCurrencyMismatch: "Nessun verdetto: quotazione e analisi in valute diverse",
+  recapCurrencyMismatch: "Distanza dal prezzo non mostrata: il prezzo è in una valuta diversa dal report",
   chartEmptyState: "Il grafico apparirà dopo qualche giorno di utilizzo",
   portfolioValueOverTime: "Valore portafoglio nel tempo",
   valueLabel: "Valore",
@@ -1799,7 +1809,7 @@ const it: Translations = {
   groundingKbAssumed: "kB assunto = 1 (ponte EV non stimabile dai dati incollati)",
   groundingKbObserved: "osservato",
   groundingKbInferred: "dedotto",
-  groundingCardGatesUnavailable: "Controlli deterministici non disponibili — il blocco di valutazione del modello non è verificabile.",
+  groundingCardGatesUnavailable: "Non disponibili — il blocco di valutazione del modello non è verificabile.",
   groundingWarnMetaCurrencyConflict: "I blocchi incollati dichiarano valute di reporting diverse — viene usata la prima per tutti",
   groundingWarnMetaUnitsConflict: "I blocchi incollati dichiarano scale di unità diverse — viene usata la prima per tutti",
   backToSavedAnalyses: "← Torna alle analisi salvate",

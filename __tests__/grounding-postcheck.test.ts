@@ -722,7 +722,7 @@ describe("PostCheck.crossCheckBridge — Check A on the cross-check's own bridge
     expect(postCheck!.crossCheckBridge!.arithmeticOk).toBe(false);
   });
 
-  it("arithmeticOk is null (not computable) when the bridge has no multiple (a DDM-style cross-check), but the method-agnostic implied multiple still computes", () => {
+  it("a DDM cross-check gets neither Check A (no multiple) nor an implied EV/EBITDA (a dividend stream is no EBITDA)", () => {
     const postCheck = checkValuationBridges(
       makeInput({
         crossCheck: {
@@ -738,7 +738,102 @@ describe("PostCheck.crossCheckBridge — Check A on the cross-check's own bridge
       EXTRACT
     );
     expect(postCheck!.crossCheckBridge!.arithmeticOk).toBeNull();
-    expect(postCheck!.crossCheckBridge!.impliedMultiple).not.toBeNull();
+    expect(postCheck!.crossCheckBridge!.impliedMultiple).toBeNull();
+    expect(postCheck!.crossCheckBridge!.impliedPercentile).toBeNull();
+  });
+});
+
+describe("the EV/EBITDA gates read only an EV bridge on EBITDA", () => {
+  // Every gate below would compute on this dataset: kE = 1 (an Enterprise Value on the
+  // latest year), FCF and dividends for the net-debt trajectory, a 10y EV/EBITDA history.
+  const extract = makeExtract({
+    meta: makeMeta({ reportingCurrency: "EUR" }),
+    financials: [
+      makeFinancialsRow({
+        fiscalYear: LATEST_FY,
+        ebitda: DRIVER_VALUE,
+        netDebt: NET_DEBT,
+        minorityInterest: MINORITIES,
+        sharesDiluted: SHARES,
+        freeCashFlow: 2000,
+        dividendsPerShare: 0.5,
+      }),
+    ],
+    multiples: EXTRACT.multiples,
+  });
+  const NET_INCOME = 5000;
+  // A P/E bridge as the bridge rule wants it: an equity driver, net debt and minorities 0,
+  // underwritten to FY+1 so the net-debt trajectory has a scenario to test.
+  const peScenario = (multiple: number): BridgeScenario => {
+    const intrinsicPerShare = (multiple * NET_INCOME) / SHARES;
+    return {
+      fairValue: intrinsicPerShare,
+      bridge: { driver: "Net income 2026e", driverValue: NET_INCOME, driverYear: LATEST_FY + 1, multiple, netDebt: 0, minorities: 0, shares: SHARES, intrinsicPerShare },
+    };
+  };
+  const peInput = makeInput({
+    method: "P/E",
+    bear: peScenario(8),
+    base: peScenario(10),
+    bull: peScenario(12),
+    assumptions: { roic: 4.5, wacc: 6.5, terminalGrowth: null },
+  });
+
+  it("a P/E primary: the five gates read 'not an EV/EBITDA bridge' or 'equity bridge', never a spurious fail", () => {
+    const postCheck = checkValuationBridges(peInput, 0, 14.18, "EUR", extract)!;
+    for (const code of ["basis_same", "multiple_vs_market", "trailing_forward", "roic_vs_wacc"] as const) {
+      expect(gateOf(postCheck, code), code).toEqual({ code, status: "unavailable", detail: "not an EV/EBITDA bridge" });
+    }
+    expect(gateOf(postCheck, "netdebt_trajectory")).toEqual({ code: "netdebt_trajectory", status: "unavailable", detail: "equity bridge · net debt 0" });
+    expect(postCheck.priceAnchoringFlag).toBe(false);
+    // The arithmetic is still checked; only the EV/EBITDA reads are gone.
+    const base = postCheck.scenarios.find((s) => s.scenario === "base")!;
+    expect(base.arithmeticOk).toBe(true);
+    expect(base.impliedMultiple).toBeNull();
+    expect(base.growthWedgePct).toBeNull();
+  });
+
+  it("a DCF whose driver is EBITDA keeps its implied EV/EBITDA; one on unlevered FCF does not, but keeps the net-debt trajectory", () => {
+    const withoutMultiple = (driver: string): BridgeScenario => {
+      const { multiple: _multiple, ...bridge } = scenarioAt(4.2).bridge!;
+      return { fairValue: scenarioAt(4.2).fairValue, bridge: { ...bridge, driver } };
+    };
+    const onEbitda = checkValuationBridges(makeInput({ method: "DCF (FCFF)", base: withoutMultiple("Normalized EBITDA") }), 0, 14.18, "EUR", extract)!;
+    expect(onEbitda.scenarios.find((s) => s.scenario === "base")!.impliedMultiple).toBeCloseTo(4.2, 6);
+    expect(gateOf(onEbitda, "multiple_vs_market").detail).not.toBe("not an EV/EBITDA bridge");
+
+    const onFcf = checkValuationBridges(makeInput({ method: "DCF (FCFF)", base: withoutMultiple("Unlevered FCF") }), 0, 14.18, "EUR", extract)!;
+    expect(onFcf.scenarios.find((s) => s.scenario === "base")!.impliedMultiple).toBeNull();
+    expect(gateOf(onFcf, "basis_same").detail).toBe("not an EV/EBITDA bridge");
+    expect(gateOf(onFcf, "netdebt_trajectory").detail).toBe("no scenario targets FY2026");
+  });
+
+  it("a DCF on FCFE is an equity bridge; a method of no known family cannot be read as either", () => {
+    const fcfe = checkValuationBridges(makeInput({ method: "DCF on FCFE" }), 0, 14.18, "EUR", extract)!;
+    expect(gateOf(fcfe, "netdebt_trajectory").detail).toBe("equity bridge · net debt 0");
+    const unknown = checkValuationBridges(makeInput({ method: "Monte Carlo" }), 0, 14.18, "EUR", extract)!;
+    expect(gateOf(unknown, "netdebt_trajectory").detail).toBe("unknown method family");
+    expect(gateOf(unknown, "basis_same").detail).toBe("not an EV/EBITDA bridge");
+  });
+
+  it("cross_check_basis and the cross-check's implied multiple skip a P/E cross-check", () => {
+    const postCheck = checkValuationBridges(
+      makeInput({
+        crossCheck: {
+          method: "P/E",
+          intrinsicPerShare: (10 * NET_INCOME) / SHARES,
+          reconciliation: "n/a",
+          bridge: { driver: "Net income 2025", driverValue: NET_INCOME, driverYear: LATEST_FY, multiple: 10, netDebt: 0, minorities: 0, shares: SHARES },
+        },
+      }),
+      0,
+      14.18,
+      "EUR",
+      extract
+    )!;
+    expect(gateOf(postCheck, "cross_check_basis")).toEqual({ code: "cross_check_basis", status: "unavailable", detail: "not an EV/EBITDA bridge" });
+    expect(postCheck.crossCheckBridge!.arithmeticOk).toBe(true);
+    expect(postCheck.crossCheckBridge!.impliedMultiple).toBeNull();
   });
 });
 
@@ -966,8 +1061,9 @@ describe("without a dataset", () => {
     }
     expect(postCheck!.expectedValue).not.toBeNull();
 
-    // Check A/B and the statement-basis implied multiple run on the model's own bridges,
-    // the cross-check's included; only the reads that need a history stay null.
+    // Check A/B run on the model's own bridges, the cross-check's included; the
+    // statement-basis implied multiple only on the EV/EBITDA base (the EV/RAB cross-check's
+    // driver is the RAB, no EBITDA). Only the reads that need a history stay null.
     const base = postCheck!.scenarios.find((s) => s.scenario === "base")!;
     expect(base.arithmeticOk).toBe(true);
     expect(base.mosOk).toBe(true);
@@ -977,7 +1073,7 @@ describe("without a dataset", () => {
     expect(postCheck!.crossCheckBridge).toEqual({
       recomputedIntrinsic: expect.closeTo(crossCheckIntrinsic, 6),
       arithmeticOk: true,
-      impliedMultiple: expect.closeTo(4.0, 6),
+      impliedMultiple: null,
       impliedMultipleProvider: null,
       impliedPercentile: null,
     });
@@ -1058,6 +1154,16 @@ describe("gate: method_distinct", () => {
     });
   });
 
+  it("a method that only starts with a family's letters belongs to none: 'Peer EV/EBITDA' is not P/E", () => {
+    const gate = gateOf(checkValuationBridges(withCrossCheck("EV/EBITDA", "Peer EV/EBITDA"), 0, 14.18, "EUR", null), "method_distinct");
+    expect(gate).toEqual({ code: "method_distinct", status: "unavailable", detail: "EV/EBITDA vs Peer EV/EBITDA · unknown method family" });
+  });
+
+  it("a family followed by a qualifier still belongs to it: 'P/E (forward)' is P/E, 'DCF on FCFE' is DCF", () => {
+    expect(gateOf(checkValuationBridges(withCrossCheck("P/E (forward)", "P/E"), 0, 14.18, "EUR", null), "method_distinct").status).toBe("fail");
+    expect(gateOf(checkValuationBridges(withCrossCheck("DCF on FCFE", "DCF (FCFF)"), 0, 14.18, "EUR", null), "method_distinct").status).toBe("fail");
+  });
+
   it("unavailable when a method belongs to no known family", () => {
     const gate = gateOf(checkValuationBridges(withCrossCheck("EV/EBITDA", "Monte Carlo"), 0, 14.18, "EUR", null), "method_distinct");
     expect(gate.status).toBe("unavailable");
@@ -1101,8 +1207,24 @@ describe("gate: sensitivity_center", () => {
     expect(gate.detail).toContain("non-monotonic");
   });
 
+  it("fails when the central column is not monotonic, even with a monotonic central row", () => {
+    const grid = gridCentredOn(baseIntrinsic);
+    grid.intrinsicPerShare[2][1] = baseIntrinsic - 0.5; // column: c−1, c, c−0.5
+    const gate = check(grid);
+    expect(gate.status).toBe("fail");
+    expect(gate.detail).toContain("non-monotonic");
+  });
+
   it("unavailable when no sensitivity is declared", () => {
     expect(check()).toEqual({ code: "sensitivity_center", status: "unavailable", detail: "sensitivity or base bridge missing" });
+  });
+
+  it("unavailable when the grid is declared but the base scenario has no bridge to centre it on", () => {
+    const gate = gateOf(
+      checkValuationBridges(makeInput({ sensitivity: gridCentredOn(baseIntrinsic), base: { fairValue: scenarioAt(4.2).fairValue } }), 0, 14.18, "EUR", null),
+      "sensitivity_center"
+    );
+    expect(gate).toEqual({ code: "sensitivity_center", status: "unavailable", detail: "sensitivity or base bridge missing" });
   });
 });
 

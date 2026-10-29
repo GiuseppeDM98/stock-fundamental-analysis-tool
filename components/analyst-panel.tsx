@@ -56,9 +56,11 @@ const FINAL_CARD_GATES: GateCode[] = [
   "bear_breaks_price",
 ];
 
-/** A persisted *ResultJson back into a full result, or null — a malformed or partial blob
- *  is treated as absent, never as numbers to show. */
-function parseStoredFinal(raw: string | null): AnalystResult | null {
+/** A persisted *BlindJson or *ResultJson back into a full result, or null — a malformed or
+ *  partial blob is treated as absent, never as numbers to show. The blind one was cast
+ *  unchecked until 2026-10-29, and a stored commitment missing a scenario crashed the
+ *  blind card on reload. */
+function parseStoredResult(raw: string | null): AnalystResult | null {
   if (!raw) return null;
   try {
     const parsed = sanitizeDeepValueResult(JSON.parse(raw));
@@ -82,9 +84,9 @@ type PanelProps = {
   // until a Grounded blind-first run completes Phase 1. Undefined entries (Quick-mode
   // analyses) render no blind card for that lens.
   initialBlind: Partial<Record<AnalystAngle, string | null>>;
-  // Each lens's FINAL (post-reconciliation) buy-target triple, reconstructed from the
-  // existing *FairValue* columns via analystTriple() — lets the blind card show
-  // blind-vs-final drift even after a page reload (a fresh run recomputes this live).
+  // Each lens's FINAL (post-reconciliation) buy-target triple from its *FairValue*
+  // columns: the drift column's fallback for a row saved before *ResultJson existed (a
+  // fresh run, or a row with *ResultJson, reads the final JSON instead).
   initialFinal: Partial<Record<AnalystAngle, Triple | null>>;
   // Each lens's FINAL JSON as persisted (*ResultJson, JSON.stringify'd) — kill price,
   // revisions[] and the gates after a reload. null on rows saved before the column existed.
@@ -229,19 +231,14 @@ function AnalystSlot({
 
   const blindResult: AnalystResult | null = useMemo(() => {
     if (hasLiveRun) return liveBlind;
-    if (!initialBlindJson) return null;
-    try {
-      return JSON.parse(initialBlindJson) as AnalystResult;
-    } catch {
-      return null;
-    }
+    return parseStoredResult(initialBlindJson);
   }, [hasLiveRun, liveBlind, initialBlindJson]);
 
   // The lens's FINAL JSON — from the live run or, after a reload, from *ResultJson. Only a
   // full triple counts: a partial one is "incomplete", never numbers to check or show.
   const finalResult: AnalystResult | null = useMemo(() => {
     if (hasLiveRun) return hasFullTriple(liveFinal) ? liveFinal : null;
-    return parseStoredFinal(initialResultJson);
+    return parseStoredResult(initialResultJson);
   }, [hasLiveRun, liveFinal, initialResultJson]);
 
   // A row saved before *ResultJson existed still has its *FairValue* columns: the drift

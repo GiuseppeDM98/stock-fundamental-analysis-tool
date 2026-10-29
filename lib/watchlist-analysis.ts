@@ -5,7 +5,7 @@ import { ANALYSIS_SUMMARY_SELECT } from "@/lib/analyses-select";
 import { sendWatchlistDigest, type DigestItem } from "@/lib/email";
 import { grossUpToIntrinsic, type Triple } from "@/lib/report/valuation";
 import { presentAnalysts, meanTriple } from "@/lib/report/consensus";
-import { latestAnalysisWithValues, watchlistBuyTarget } from "@/lib/report/latest-analysis";
+import { latestAnalysisWithValues, watchlistBuyTarget, digestPriceRead } from "@/lib/report/latest-analysis";
 import type { SavedAnalysis } from "@/types/analysis";
 import type { EarningsConfidence } from "@/types/earnings";
 import { aggregateOpenLots } from "@/lib/portfolio-math";
@@ -49,11 +49,11 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
   // instead of unconditionally framing an under-target price as a fresh buy.
   const openPositions = await db.position.findMany({
     where: { userId: user.id, closedAt: null },
-    select: { ticker: true, shares: true, purchasePrice: true },
+    select: { ticker: true, shares: true, purchasePrice: true, currency: true },
   });
-  const lotsByTicker = new Map<string, { shares: number; purchasePrice: number }[]>();
+  const lotsByTicker = new Map<string, { shares: number; purchasePrice: number; currency: string }[]>();
   for (const p of openPositions) {
-    lotsByTicker.set(p.ticker, [...(lotsByTicker.get(p.ticker) ?? []), { shares: p.shares, purchasePrice: p.purchasePrice }]);
+    lotsByTicker.set(p.ticker, [...(lotsByTicker.get(p.ticker) ?? []), { shares: p.shares, purchasePrice: p.purchasePrice, currency: p.currency }]);
   }
 
   // Next-earnings dates, batched once per user (same N+1-avoidance shape as positions above).
@@ -129,23 +129,22 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
     // watchlistBuyTarget re-discounts the verdict basis (consensus?.base ?? intrinsicBase
     // above) with the item's MoS: the same rule the watchlist page uses.
     const adjustedBase = watchlistBuyTarget(valued, item.mosPercent)!;
-    const upside =
-      currentPrice !== null ? (adjustedBase - currentPrice) / currentPrice : null;
-    const status: DigestItem["status"] =
-      currentPrice === null
-        ? "unknown"
-        : adjustedBase >= currentPrice
-        ? "under"
-        : "over";
+    // Only a quote in the analysis's own currency is weighed against the buy target.
+    const { upside, status, currencyMismatch } = digestPriceRead(currentPrice, currency, valued, item.mosPercent);
 
-    const holding = aggregateOpenLots(lotsByTicker.get(item.ticker) ?? []);
+    const lots = lotsByTicker.get(item.ticker) ?? [];
+    const holding = aggregateOpenLots(lots);
+    // One currency for the holding, or none when the lots mix currencies (no P&L then).
+    const holdingCurrency = lots.length > 0 && lots.every((l) => l.currency === lots[0].currency) ? lots[0].currency : null;
     const earnings = earningsByTicker.get(item.ticker);
 
     digestItems.push({
       ticker: item.ticker,
       companyName: item.companyName,
       method: analysis.valuationMethod ?? "Deep Value",
-      currency: currency ?? "EUR",
+      currency: analysis.currency || currency || "EUR",
+      priceCurrency: currency,
+      currencyMismatch,
       fairValueBear: intrinsicBear,
       fairValueBase: intrinsicBase,
       fairValueBull: intrinsicBull,
@@ -161,6 +160,7 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
       analysisDate: analysis.createdAt.toISOString(),
       holdingShares: holding?.totalShares ?? null,
       holdingWeightedAvgCost: holding?.weightedAvgCost ?? null,
+      holdingCurrency,
       nextEarningsDate: earnings?.nextEarningsDate ? earnings.nextEarningsDate.toISOString() : null,
       earningsConfidence: (earnings?.confidence as EarningsConfidence | undefined) ?? null,
     });

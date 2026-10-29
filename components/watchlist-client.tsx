@@ -21,7 +21,7 @@ import { getVerdict, VERDICT_BADGE, VERDICT_TEXT, type Verdict } from "@/lib/rep
 import { getSignalStrength } from "@/lib/report/signal";
 import { grossUpToIntrinsic } from "@/lib/report/valuation";
 import { presentAnalysts, meanTriple } from "@/lib/report/consensus";
-import { latestAnalysisWithValues, verdictBasis, watchlistBuyTarget } from "@/lib/report/latest-analysis";
+import { latestAnalysisWithValues, verdictBasis, watchlistBuyTarget, comparablePrice, currencyMismatch } from "@/lib/report/latest-analysis";
 import { EarningsBadge } from "@/components/earnings-badge";
 import { isAnalysisStalePreEarnings, isFutureEarnings } from "@/lib/earnings";
 import { fetchEarnings, refreshEarnings } from "@/lib/earnings-client";
@@ -153,8 +153,9 @@ function AddTickerForm({ onAdd, t }: AddFormProps) {
 interface CardProps {
   item: WatchlistItem;
   currentPrice: number | null;
-  // Currency of the live quote — formats every value; falls back to EUR (never USD, since
-  // most watched tickers here are EUR-denominated). The Analysis row has no currency column.
+  // Currency of the live quote — formats the price, and the verdict weighs the price only
+  // against an analysis in the same currency (comparablePrice). The values are formatted in
+  // the analysis's own currency (Analysis.currency, since 2026-10-29), EUR as last resort.
   priceCurrency: string | null;
   // Latest saved Deep Value analysis for this ticker, or null if not analyzed yet.
   analysis: SavedAnalysis | null;
@@ -184,7 +185,11 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
   // Ruler/table level: intrinsic fair value vs the (item-MoS-adjusted) buy target.
   const [level, setLevel] = useState<"intrinsic" | "buyTarget">("intrinsic");
 
-  const currency = priceCurrency ?? "EUR";
+  const currency = analysis?.currency || priceCurrency || "EUR";
+  // The price the verdict, the ruler dot and the weak-signal flag weigh against the values:
+  // null when the quote is in another currency than the analysis, and then a note says so.
+  const verdictPrice = analysis ? comparablePrice(currentPrice, priceCurrency, analysis) : null;
+  const isCurrencyMismatch = analysis != null && currencyMismatch(currentPrice, priceCurrency, analysis);
   const itemMos = item.mosPercent; // fraction 0–0.8, the user's per-ticker knob
   // Display name for each analyst lens (closes over the passed-in t).
   const analystLabel = (angle: AnalystAngle) =>
@@ -230,20 +235,20 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
   const verdictBaseIntrinsic = analysis ? verdictBasis(analysis)?.intrinsicBase ?? null : null;
   const buyTargetBase = analysis ? watchlistBuyTarget(analysis, itemMos) : null;
   const verdict: Verdict | null =
-    verdictBaseIntrinsic != null && buyTargetBase != null && currentPrice != null
-      ? getVerdict(currentPrice, buyTargetBase, verdictBaseIntrinsic)
+    verdictBaseIntrinsic != null && buyTargetBase != null && verdictPrice != null
+      ? getVerdict(verdictPrice, buyTargetBase, verdictBaseIntrinsic)
       : null;
   // Distance of the price from the buy target (the actionable reference).
   const buyTargetPct =
-    buyTargetBase != null && currentPrice != null
-      ? ((currentPrice - buyTargetBase) / buyTargetBase) * 100
+    buyTargetBase != null && verdictPrice != null
+      ? ((verdictPrice - buyTargetBase) / buyTargetBase) * 100
       : null;
 
   // "low" when the bull↔bear cone dwarfs the price-vs-fair-value edge: the verdict is
   // inside the model's own uncertainty. Deterministic, no AI. Same flag as /analyses.
   const weakSignal =
-    intrinsic && verdictBaseIntrinsic != null && currentPrice != null
-      ? getSignalStrength(currentPrice, {
+    intrinsic && verdictBaseIntrinsic != null && verdictPrice != null
+      ? getSignalStrength(verdictPrice, {
           bear: intrinsic.bear,
           base: verdictBaseIntrinsic,
           bull: intrinsic.bull,
@@ -324,10 +329,11 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
           {!expanded && (
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
               {currentPrice != null ? (
-                <span className="tabular-nums text-slate-300">{formatPrice(currentPrice, currency)}</span>
+                <span className="tabular-nums text-slate-300">{formatPrice(currentPrice, priceCurrency || currency)}</span>
               ) : (
                 <span className="text-slate-600">{t("priceNa")}</span>
               )}
+              {isCurrencyMismatch && <span className="text-[10px] text-slate-500">{t("verdictCurrencyMismatch")}</span>}
               {verdict && buyTargetPct != null ? (
                 <span className={`rounded-sm px-1.5 py-0.5 text-[10px] font-semibold ${VERDICT_BADGE[verdict]}`}>
                   {verdictLabel(verdict)} {buyTargetPct > 0 ? "+" : ""}
@@ -386,7 +392,7 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
             compact
             min={intrinsic.bear}
             max={intrinsic.bull}
-            price={currentPrice ?? undefined}
+            price={verdictPrice ?? undefined}
             buyTargetEdge={buyTargetBase}
             fvEdge={verdictBaseIntrinsic ?? intrinsic.base}
             priceLabel={t("priceShort")}
@@ -417,10 +423,16 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
                 </p>
               )}
 
+              {isCurrencyMismatch && (
+                <p className="mb-3 text-xs text-slate-500">
+                  {t("verdictCurrencyMismatch")} ({priceCurrency || "?"} · {analysis?.currency || "?"})
+                </p>
+              )}
+
               <ValuationRuler
                 min={intrinsic.bear}
                 max={intrinsic.bull}
-                price={currentPrice ?? undefined}
+                price={verdictPrice ?? undefined}
                 buyTargetEdge={buyTargetBase}
                 fvEdge={verdictBaseIntrinsic ?? intrinsic.base}
                 markers={markers ?? undefined}

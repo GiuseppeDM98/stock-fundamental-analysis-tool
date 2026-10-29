@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import type { AnalystAngle } from "@/types/analysis";
 import type { EarningsConfidence } from "@/types/earnings";
+import { sameCurrency } from "@/lib/grounding/currency";
 
 // Lazily initialized — avoids throwing during build when the env var is absent.
 let _resend: Resend | null = null;
@@ -25,7 +26,11 @@ export interface DigestItem {
   ticker: string;
   companyName: string;
   method: string;
+  // The analysis's currency: formats every value. The price has its own (priceCurrency),
+  // and is weighed against the values only when the two match (currencyMismatch false).
   currency: string;
+  priceCurrency: string | null;
+  currencyMismatch: boolean;
   // Analysis intrinsic fair values
   fairValueBear: number;
   fairValueBase: number;
@@ -41,16 +46,18 @@ export interface DigestItem {
   // Watchlist item MoS (fraction) and the resulting base buy target
   mosPercent: number;
   adjustedBase: number;
-  // (adjustedBase - currentPrice) / currentPrice — null when price unknown
+  // (adjustedBase - currentPrice) / currentPrice — null when the price is unknown or in
+  // another currency than the analysis
   upside: number | null;
   status: "under" | "over" | "unknown";
   // ISO timestamp of the analysis the values come from
   analysisDate: string;
   // User's open-position holding for this ticker, aggregated across all open lots —
-  // null when the user holds no open position. WAC is assumed to share `currency`
-  // (same ticker, same instrument).
+  // null when the user holds no open position. The WAC is in holdingCurrency (the lots'
+  // own, null when they mix currencies); the P&L needs the price in that same currency.
   holdingShares: number | null;
   holdingWeightedAvgCost: number | null;
+  holdingCurrency: string | null;
   // Next-earnings date from the user's stored EarningsEstimate (AI-sourced, on-demand —
   // the cron never runs the lookup itself). Null when the user never fetched it for this
   // ticker. The AI only ever persists a *future* date or null, so a stored date that has
@@ -136,7 +143,10 @@ function statusBadge(status: DigestItem["status"]): string {
 // "(analisi)"/"(consenso)" suffix says which, so it never reads as ambiguous next to the
 // Analisi/Consenso rows in the valuation table below.
 function priceVsTargetCell(item: DigestItem): string {
-  if (item.currentPrice === null) return `<span style="color:${C.muted};">—</span>`;
+  if (item.currencyMismatch) {
+    return `<span style="color:${C.muted};">quotazione in ${item.priceCurrency ?? "?"}, analisi in ${item.currency}: nessun confronto</span>`;
+  }
+  if (item.currentPrice === null || item.upside === null) return `<span style="color:${C.muted};">—</span>`;
   const dist = ((item.currentPrice - item.adjustedBase) / item.adjustedBase) * 100;
   const below = dist <= 0;
   const color = below ? C.emerald : C.amber;
@@ -166,11 +176,12 @@ function buildCard(item: DigestItem): string {
   const hasConsensus =
     item.consensusBear !== null && item.consensusBase !== null && item.consensusBull !== null;
 
-  const priceStr = item.currentPrice !== null ? formatPrice(item.currentPrice, item.currency) : "—";
+  const priceStr = item.currentPrice !== null ? formatPrice(item.currentPrice, item.priceCurrency ?? item.currency) : "—";
 
   const hasPosition = item.holdingShares !== null && item.holdingWeightedAvgCost !== null;
+  // A P&L only on a price in the lots' own currency.
   const pnlPercent =
-    hasPosition && item.currentPrice !== null
+    hasPosition && item.currentPrice !== null && sameCurrency(item.priceCurrency, item.holdingCurrency)
       ? ((item.currentPrice - item.holdingWeightedAvgCost!) / item.holdingWeightedAvgCost!) * 100
       : null;
 
@@ -178,7 +189,7 @@ function buildCard(item: DigestItem): string {
   // live P&L context is useful even when the price is currently above the buy target.
   const positionLine = hasPosition
     ? `<div style="margin-top:6px;font-size:12px;color:${C.muted};">
-         In portafoglio: <span style="color:${C.text};">${item.holdingShares}</span> az. · PMC ${formatPrice(item.holdingWeightedAvgCost!, item.currency)}
+         In portafoglio: <span style="color:${C.text};">${item.holdingShares}</span> az. · PMC ${formatPrice(item.holdingWeightedAvgCost!, item.holdingCurrency ?? item.currency)}
          ${pnlPercent !== null ? `· <span style="color:${pnlPercent >= 0 ? C.emerald : C.rose};font-weight:600;">${pnlPercent >= 0 ? "+" : ""}${pnlPercent.toFixed(1)}%</span>` : ""}
        </div>`
     : "";

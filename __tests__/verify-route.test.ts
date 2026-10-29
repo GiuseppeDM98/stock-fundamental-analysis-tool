@@ -131,6 +131,17 @@ describe("POST /api/ai/deep-value/verify — single-phase review", () => {
     );
     expect(prompt).toContain("--- DETERMINISTIC GATES ON THE BASE REPORT");
   });
+
+  it("a live quote without a currency is compared with nothing: the price gates read currency mismatch", async () => {
+    vi.mocked(getQuote).mockResolvedValueOnce({ regularMarketPrice: 10 } as Awaited<ReturnType<typeof getQuote>>);
+    analysisFindFirst.mockResolvedValue({ groundingJson: null, mosPercent: 20, reportMd: "## 1. X", priceAtAnalysis: 9, resultJson: BASE_RESULT_JSON, createdAt: new Date("2026-10-01T09:00:00Z") });
+    streams(["<!--critique-->Critique"]);
+    await (await POST(post({ ticker: "AAA", reportMd: "## 1. X", analysisId: "an1" }))).text();
+
+    const prompt = userPromptOf(0);
+    expect(prompt).toContain("— bear_breaks_price: currency mismatch");
+    expect(prompt).not.toContain("NOT the current price");
+  });
 });
 
 // Pasted data on the saved row makes the lens run blind-first: turn 1 commits from the data

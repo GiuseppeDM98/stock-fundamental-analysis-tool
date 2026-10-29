@@ -79,6 +79,7 @@ describe("AnalysisDetailBody — one price for the whole page", () => {
     expect(screen.getByText(/20 shares/)).toBeInTheDocument();
     expect(screen.queryByText(/\(\+?-?\d+\.\d%\)/)).not.toBeInTheDocument();
     expect(screen.queryByText("Loading P&L…")).not.toBeInTheDocument();
+    expect(screen.getByText("P&L not shown: no live price in the position's currency")).toBeInTheDocument();
     // One quote request for the page, not one per card.
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith("/api/quote/ORNT");
@@ -93,6 +94,19 @@ describe("AnalysisDetailBody — one price for the whole page", () => {
     expect(lastPanelProps()).toMatchObject({ currentPrice: 150, currency: "USD", priceSource: "live" });
     // (150 − 140) × 20 = +200.00 (+7.1%) — the separator follows the runner's locale.
     expect(screen.getByText(/\+200[.,]00 \(\+7\.1%\)/)).toBeInTheDocument();
+  });
+
+  it("a live quote in another currency than the report: no distance from the price, no P&L, and a note for each", async () => {
+    // An LSE quote in pence against a report and lots in pounds: 350 is not 3.50.
+    stubQuote({ ok: true, status: 200, body: { regularMarketPrice: 350, currency: "GBp" } });
+    renderBody({ result: { ...RESULT, currency: "GBP" }, position: { totalShares: 20, weightedAvgCost: 3, currency: "GBP" } });
+
+    expect(
+      await screen.findByText("Distance from the price not shown: the price is in another currency than the report (GBp · GBP)")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Current Price")).not.toBeInTheDocument();
+    expect(screen.getByText("P&L not shown: no live price in the position's currency")).toBeInTheDocument();
+    expect(screen.queryByText(/\(\+?-?\d+\.\d%\)/)).not.toBeInTheDocument();
   });
 
   it("without a complete valuation block: the Markdown fallback, no quote fetch, no card, no panel", () => {

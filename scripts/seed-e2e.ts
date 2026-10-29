@@ -363,6 +363,10 @@ async function seedAnalyses(db: PrismaClient): Promise<void> {
       fairValueBase: PANEL_OLDER_RESULT.base.fairValue,
       fairValueBear: PANEL_OLDER_RESULT.bear.fairValue,
       valuationMethod: PANEL_OLDER_RESULT.method,
+      // The column every list verdict reads its currency from: a row without it gets no
+      // verdict, no exit signal and no digest status (a quote is weighed only against values
+      // in its own currency, lib/report/latest-analysis.ts).
+      currency: PANEL_OLDER_RESULT.currency,
       reportMd: deepValueReport(PANEL_OLDER_RESULT, `## 1. Overview\n\nOlder ${DECOY.panelReport} save.`),
       createdAt: new Date("2026-06-10T08:00:00Z"),
     },
@@ -380,6 +384,8 @@ async function seedAnalyses(db: PrismaClient): Promise<void> {
       fairValueBase: PANEL_RESULT.base.fairValue,
       fairValueBear: PANEL_RESULT.bear.fairValue,
       valuationMethod: PANEL_RESULT.method,
+      // Old format in the report (JSON on top, no resultJson), the column as any new save.
+      currency: PANEL_RESULT.currency,
       reportMd: deepValueReport(PANEL_RESULT, `## 1. Overview\n\nQuick-mode report ${DECOY.panelReport}.\n\n## 8. Summary\n\nDCF with a 9% WACC.`),
       // All three analyst lenses filled — the same MoS-adjusted unit as fairValue*.
       reviewMd: `## Skeptic\n\n${DECOY.skepticCritique}: margins are peak-cycle.`,
@@ -426,6 +432,7 @@ async function seedAnalyses(db: PrismaClient): Promise<void> {
       fairValueBase: AUTHZ_RESULT.base.fairValue,
       fairValueBear: AUTHZ_RESULT.bear.fairValue,
       valuationMethod: AUTHZ_RESULT.method,
+      currency: AUTHZ_RESULT.currency,
       reportMd: deepValueReport(AUTHZ_RESULT, "## 1. Overview\n\nSacrificial record for the authorization spec."),
       createdAt: new Date("2026-08-01T10:00:00Z"),
     },
@@ -442,6 +449,7 @@ async function seedAnalyses(db: PrismaClient): Promise<void> {
       fairValueBase: USER_B_RESULT.base.fairValue,
       fairValueBear: USER_B_RESULT.bear.fairValue,
       valuationMethod: USER_B_RESULT.method,
+      currency: USER_B_RESULT.currency,
       reportMd: deepValueReport(USER_B_RESULT, "## 1. Overview\n\nUser B's only analysis (quokka)."),
       createdAt: new Date("2026-09-01T10:00:00Z"),
     },

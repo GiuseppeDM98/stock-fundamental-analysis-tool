@@ -2,7 +2,7 @@
 
 > **Stato**: scritta 2026-10-11 (nata dalla divisione della 07, D-23); riletta in modo adversariale il 2026-10-11: 20 rilievi (la metà «riepilogo/Advisor/route/link» dei 42 della 07), 5 decisioni (D-21, D-23, D-24, D-47, D-50; T-29). Pronta per l'implementazione dopo la 06.
 > **Branch**: `feature/ticker-summary` da `develop`. **Dipende da**: 01 ritirata il 2026-10-29 (C-2 `latestAnalysisWithValues`/`verdictBasis`/`watchlistBuyTarget`, C-14 `normalizeTicker`/`tickerSchema`/`toWatchlistMosFraction`, `DetailBreadcrumb`), 02 ritirata il 2026-10-29 (C-15 `ANALYSIS_SUMMARY_SELECT`, `resultJson`), 06 (nessun contratto: solo l'ordine della serie).
-> **Indice**: [00-INDICE.md](00-INDICE.md) — decisioni D-3, D-18, D-19, D-21, D-23, D-24, D-47, D-50; scelte T-17, T-20, T-29; contratti C-12, C-13.
+> **Indice**: [00-INDICE.md](00-INDICE.md) — decisioni D-3, D-18, D-19, D-21, D-23, D-24, D-47, D-50; scelte T-17, T-20, T-29; contratti C-12, C-13, C-24 (nato al ritiro della 03, 2026-10-29).
 
 ## 1. Il problema oggi (prove, commit `17e54b6`, 2026-10-11)
 
@@ -52,9 +52,12 @@ export type TickerSummary = {
   intrinsic: Triple | null;                  // latest, grossed up
   consensus: Triple | null;                  // consensusTriple, grossed up
   analysts: { angle: AnalystAngle; triple: Triple }[];   // grossed up
-  verdict: Verdict | null;                   // getVerdict(price, basis.buyTargetBase, basis.intrinsicBase); null without price/basis
-  distanceToBuyTargetPct: number | null;     // (price − basis.buyTargetBase) / basis.buyTargetBase × 100
-  signal: SignalStrength | null;             // getSignalStrength(price, { bear: intrinsic.bear, base: basis.intrinsicBase, bull: intrinsic.bull })
+  // verdict, distance and signal read cmp = comparablePrice(price, currency, latest) (C-24), never the
+  // raw price: a quote in another currency than the analysis gives null, and the page and the
+  // Advisor line say why via currencyMismatch(price, currency, latest) (D-25, D-98)
+  verdict: Verdict | null;                   // getVerdict(cmp, basis.buyTargetBase, basis.intrinsicBase); null without cmp/basis
+  distanceToBuyTargetPct: number | null;     // (cmp − basis.buyTargetBase) / basis.buyTargetBase × 100
+  signal: SignalStrength | null;             // getSignalStrength(cmp, { bear: intrinsic.bear, base: basis.intrinsicBase, bull: intrinsic.bull })
   evolution: Evolution[];                    // computeEvolutionChain(analyses)
   holding: { totalShares: number; weightedAvgCost: number; pnlPct: number | null } | null;   // aggregateOpenLots; pnlPct only when sameCurrency(currency, positionCurrency)
   watchlistBuyTarget: number | null;         // watchlistBuyTarget(latest, watchlistItem.mosPercent)
