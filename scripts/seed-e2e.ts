@@ -6,9 +6,11 @@
  * collaudo without restarting anything.
  *
  * Plants two throwaway users and their data:
- *   - A (e2e-a@example.test) owns everything the page specs look at: a Grounded analysis
- *     (groundingJson + a leading ```json block with bridges, so the deterministic post-check
- *     card renders), an analysis with all three analyst lenses filled plus an older save of
+ *   - A (e2e-a@example.test) owns everything the page specs look at: a Grounded analysis in
+ *     the current format (groundingJson + a report that ends with its ```json block, bridges
+ *     included, so the deterministic post-check card renders, plus a resultJson column that
+ *     deliberately differs from that block), an analysis with all three analyst lenses filled
+ *     in the older format (JSON block at the top, no resultJson) plus an older save of
  *     the same ticker (grouping, evolution diff), an old-format analysis with no JSON block
  *     and no grounding (must still open), a sacrificial analysis and position for the
  *     authorization spec, open and closed positions (some with a capital-gains tax rate),
@@ -41,6 +43,7 @@ import {
   referenceDay,
 } from "../e2e/support/fixtures";
 import type { DeepValueResult } from "../components/report/types";
+import { REPORT_START_MARKER, sanitizeDeepValueResult } from "../lib/report/parse-deep-value-json";
 import type { GroundingPayload } from "../types/grounding";
 import type { SnapshotData, SnapshotEntry } from "../types/portfolio";
 
@@ -48,18 +51,26 @@ export * from "../e2e/support/fixtures";
 
 // ─── Report builders ───────────────────────────────────────────────────────────
 
-/** A saved Deep Value report: the leading ```json block the detail page parses, then the body. */
+/** A Deep Value report saved before 2026-10: the leading ```json block, then the body. */
 function deepValueReport(result: DeepValueResult, body: string): string {
   return "```json\n" + JSON.stringify(result, null, 2) + "\n```\n\n" + body;
 }
 
+/** A current Deep Value report: the start marker, the body, then the closing ```json block. */
+function deepValueReportJsonLast(result: DeepValueResult, body: string): string {
+  return REPORT_START_MARKER + "\n" + body + "\n\n```json\n" + JSON.stringify(result, null, 2) + "\n```";
+}
+
 // Grounded analysis (FNCT.MI, EUR millions, MoS 20%). Bridge arithmetic is exact:
 // intrinsic = (EBITDA 200 × multiple − net debt 300 − minorities 10) / 100 shares, and the
-// stored fair values are the MoS-adjusted buy targets (intrinsic × 0.8).
+// stored fair values are the MoS-adjusted buy targets (intrinsic × 0.8). The sensitivity
+// grid is the same formula with the multiple (rows) and the EBITDA (columns) moved, so its
+// centre is the base intrinsic 12.9.
 const GROUNDED_RESULT: DeepValueResult = {
   method: "EV/EBITDA",
   sector: "Utilities",
   currency: "EUR",
+  units: "millions",
   bull: {
     fairValue: 12.72,
     probability: 0.25,
@@ -77,7 +88,29 @@ const GROUNDED_RESULT: DeepValueResult = {
   },
   assumptions: { wacc: 8, roic: 11.5, terminalGrowth: 1.5 },
   crossCheck: { method: "DDM", intrinsicPerShare: 12.2, reconciliation: "The DDM sits slightly below the multiple because the payout ratio is conservative." },
+  sensitivity: {
+    leverA: { name: "EV/EBITDA multiple", values: [7, 8, 9] },
+    leverB: { name: "EBITDA 2025", values: [190, 200, 210] },
+    intrinsicPerShare: [
+      [10.2, 10.9, 11.6],
+      [12.1, 12.9, 13.7],
+      [14, 14.9, 15.8],
+    ],
+  },
+  dividends: {
+    policy: "Pays out about 60% of net income.",
+    lastDps: 0.4,
+    path: [
+      { year: 2026, bull: 0.44, base: 0.42, bear: 0.4 },
+      { year: 2027, bull: 0.48, base: 0.44, bear: 0.38 },
+      { year: 2028, bull: 0.52, base: 0.46, bear: 0.36 },
+    ],
+  },
 };
+
+// What the save route stores in resultJson: the same block, re-sanitized — but with a
+// sector the fence does not carry, so the detail spec can tell which one the page read.
+const GROUNDED_RESULT_COLUMN = { ...GROUNDED_RESULT, sector: "Regulated Utilities" };
 
 const GROUNDED_YEARS = [2021, 2022, 2023, 2024, 2025];
 const GROUNDED_EV_EBITDA = [7.5, 8.0, 7.0, 7.8, 8.2];
@@ -264,10 +297,17 @@ async function seedAnalyses(db: PrismaClient): Promise<void> {
       fairValueBear: GROUNDED_RESULT.bear.fairValue,
       valuationMethod: GROUNDED_RESULT.method,
       groundingJson: JSON.stringify(groundedPayload()),
-      reportMd: deepValueReport(
+      reportMd: deepValueReportJsonLast(
         GROUNDED_RESULT,
         `## 1. Overview\n\nGrounded report ${DECOY.groundedReport}: regulated networks with a stable EBITDA path.\n\n## 2. Moat\n\nConcession-based moat.\n\n## 8. Summary\n\nBase case EV/EBITDA 8.0x on FY2025 EBITDA.`
       ),
+      resultJson: JSON.stringify(sanitizeDeepValueResult(GROUNDED_RESULT_COLUMN)),
+      currency: "EUR",
+      sector: GROUNDED_RESULT_COLUMN.sector,
+      reportLanguage: "English",
+      aiModel: "claude-opus-4-8",
+      aiEffort: "xhigh",
+      aiThinking: true,
       createdAt: new Date("2026-09-15T09:30:00Z"),
     },
   });

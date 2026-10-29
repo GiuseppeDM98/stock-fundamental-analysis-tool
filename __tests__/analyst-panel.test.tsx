@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { translations } from "@/lib/i18n/translations";
-import { ANALYST_PHASE_MARKERS } from "@/lib/report/parse-deep-value-json";
+import { ANALYST_PHASE_MARKERS, CRITIQUE_START_MARKER, sanitizeDeepValueResult } from "@/lib/report/parse-deep-value-json";
 
 vi.mock("@/lib/ai-settings-client", () => ({
   fetchAiSettings: vi.fn(() => new Promise(() => {})),
@@ -160,9 +160,52 @@ describe("AnalystPanel blind card during a run", () => {
       fairValueBase: null,
       fairValueBear: null,
       valuationMethod: null,
+      resultJson: null,
     });
     expect(screen.getByText(translations.en.deepValueIncompleteJson)).toBeInTheDocument();
     // The blind card no longer waits on a final column that will never come.
     expect(screen.queryAllByText("…")).toHaveLength(0);
+  });
+
+  it("saves the critique without its marker or JSON, and the final JSON as resultJson", async () => {
+    vi.mocked(updateAnalystOpinion).mockClear();
+    renderPanel();
+    fireEvent.click(screen.getByText(translations.en.analystReviewRerun));
+
+    const finalJson = { ...NEW_BLIND, units: "millions", assumptions: { wacc: 8, roic: 10, terminalGrowth: 2 } };
+    await act(async () => {
+      // A single-phase review: critique first, opened by the marker, JSON last. The route
+      // drops the marker; a repeat that slipped through must still not be saved.
+      stream.push(`${CRITIQUE_START_MARKER}Critique body.\n\n`);
+      stream.push("```json\n" + JSON.stringify(finalJson) + "\n```");
+      stream.close();
+    });
+
+    await waitFor(() => expect(updateAnalystOpinion).toHaveBeenCalledTimes(1));
+    const sent = vi.mocked(updateAnalystOpinion).mock.calls[0][1];
+    expect(sent.resultJson).toBe(JSON.stringify(sanitizeDeepValueResult(finalJson)));
+    expect(sent.critiqueMd).toBe("Critique body.\n\n");
+    expect(sent.critiqueMd).not.toContain(CRITIQUE_START_MARKER);
+    expect(sent.fairValueBase).toBe(2.6);
+  });
+});
+
+describe("AnalystPanel effort before the global default loads", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("sends xhigh when fetchAiSettings has not answered", async () => {
+    const stream = controllableStream();
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, body: stream.body }));
+    vi.stubGlobal("fetch", fetchMock);
+    renderPanel();
+    fireEvent.click(screen.getByText(translations.en.analystReviewRerun));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/ai/deep-value/verify");
+    expect(JSON.parse(init.body as string).effort).toBe("xhigh");
+    await act(async () => stream.close());
   });
 });

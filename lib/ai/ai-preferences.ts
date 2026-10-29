@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import {
-  AI_MODEL_CATALOG,
+  callSiteDefaultEffort,
   isAiEffort,
   normalizeAiModelId,
   type AiModelId,
@@ -59,9 +59,7 @@ export async function resolveAiSettings(
 
 /** A model may be picked with an effort level it doesn't actually support
  * (e.g. a stale stored default from before DeepSeek's catalog restricted it
- * to high/max) — clamp down to the model's nearest supported level. */
+ * to low/high/max) — clamp DOWN to the nearest supported level, never up. */
 function clampEffort(settings: AiSettings): AiSettings {
-  const allowed = AI_MODEL_CATALOG[settings.model].efforts;
-  if (allowed.includes(settings.effort)) return settings;
-  return { ...settings, effort: allowed[allowed.length - 1] };
+  return { ...settings, effort: callSiteDefaultEffort(settings.model, settings.effort) };
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AI_MODEL_CATALOG, AI_MODEL_IDS, type AiSettings } from "@/types/ai-settings";
+import { AI_MODEL_CATALOG, AI_MODEL_IDS, callSiteDefaultEffort, type AiSettings } from "@/types/ai-settings";
 import { isDeepSeekPeakHour, formatDeepSeekPeakWindows } from "@/lib/ai/deepseek-pricing";
 
 interface AiSettingsControlProps {
@@ -28,9 +28,9 @@ export function AiSettingsControl({ value, onChange, className }: AiSettingsCont
   }, [catalog.provider]);
 
   function handleModelChange(model: AiSettings["model"]) {
-    const efforts = AI_MODEL_CATALOG[model].efforts;
-    const effort = efforts.includes(value.effort) ? value.effort : efforts[efforts.length - 1];
-    onChange({ ...value, model, effort });
+    // Keep the current effort when the new model supports it, else step down to the
+    // nearest level it does support — never up to a pricier one.
+    onChange({ ...value, model, effort: callSiteDefaultEffort(model, value.effort) });
   }
 
   return (

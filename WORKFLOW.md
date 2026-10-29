@@ -199,7 +199,7 @@ After `npm ci` (or on a fresh checkout) run `npx prisma generate` once: stage 2 
 - **Never production.** Every child process gets `TURSO_DATABASE_URL`/`DATABASE_URL=file:<repo>/.e2e/e2e.db`, `TURSO_AUTH_TOKEN=""`, `NEXTAUTH_URL=http://localhost:3200`, a throwaway auth secret and empty AI/Resend keys (`e2e/support/env.ts`). Any non-`file:` URL aborts the run before a process starts (verified 2026-10-11 with `E2E_DB_URL=libsql://…`).
 - **Never paid or remote calls.** `/api/quote/*` and Frankfurter are stubbed with fixed values, every request leaving localhost is blocked, and any call to `/api/ai/*`, `POST /api/earnings` or `POST /api/watchlist/run` fails the test (`e2e/support/test.ts`).
 - **Assertions pair visible decoy text with DB rows** (`e2e/support/db.ts`), never the look of the page alone. `authorization.spec.ts` is the own-vs-someone-else's pair on analyses and positions: a foreign id answers 404 and the row is checked unchanged in the DB. Both a wrong-identity run and an injected DB write were shown to turn it red (2026-10-11).
-- **Do not run the suite while another `next dev` / `next build` runs from the same checkout** (they share `.next`). Port 3200 must be free; an existing server is never reused.
+- **Do not run the suite while another `next dev` / `next build` runs from the same checkout** (they share `.next`). Port 3200 must be free; an existing server is never reused. Do not edit source files while the suite or a manual dev server runs either: `next dev` recompiles mid-test and the test it lands on reads as flaky (2026-10-29).
 - **Artifacts** (`.e2e/`, `playwright-report/`, `test-results/`) are gitignored. Open a failure's trace with `npx playwright show-trace test-results/<test>/trace.zip`.
 - **Visual baselines are per session and never committed** (`e2e/**/*-snapshots/` is gitignored). They hold for the UTC day they were generated on, because snapshot and earnings dates are relative to today. Run `npm run e2e:visual:update` before a change and `npm run e2e:visual` after it. The browser clock is frozen, animations are off, and fonts are the fallback (Google Fonts is blocked).
 
@@ -207,7 +207,7 @@ Sessions are JWT (Auth.js v5 credentials provider, `session: { strategy: "jwt" }
 
 ### Running the app by hand — NEVER against production data
 
-**`.env` points `TURSO_DATABASE_URL` at the hosted Turso database (`libsql://…`).** A plain `npm run dev` therefore reads and writes production data. Anything run by hand must override the variables in the shell (variables already present in the environment win over `.env`, for Next.js and for Prisma's `dotenv`). The e2e tooling above already does this; for a manual tour:
+**`.env` points `TURSO_DATABASE_URL` at the hosted Turso database (`libsql://…`).** A checkout that keeps its variables in `.env.local` instead (the Windows one, 2026-10-29) is in the same position: Next.js reads both. A plain `npm run dev` therefore reads and writes production data. Anything run by hand must override the variables in the shell (variables already present in the environment win over `.env`, for Next.js and for Prisma's `dotenv`). The e2e tooling above already does this; for a manual tour:
 
 ```bash
 npm run seed:e2e   # recreates .e2e/e2e.db with the fixtures below

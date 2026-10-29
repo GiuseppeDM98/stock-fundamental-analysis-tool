@@ -3,6 +3,14 @@
 // so these snapshots MUST NOT change when the shared prompt builders are touched. If a
 // snapshot in this file needs updating, that is a signal the change leaked into Quick
 // mode — stop and verify it was intentional before re-running with `-u`.
+//
+// Last regenerated on purpose on 2026-10-29, with the diff read section by section, when the
+// output contract changed for every mode: research first, the report after the
+// `<!--report-->` line (the lenses' critique after `<!--critique-->`), the JSON block last;
+// units, a bridge in every scenario, sensitivity and dividends in the JSON; the extended
+// method list; a date clause derived from the current year. The next allowed change is
+// deleting this file, when the Quick path goes away and a golden on the single dataset path
+// (`deep-value-prompts-golden.test.ts`) replaces it — until then any diff is a regression.
 import { describe, it, expect } from "vitest";
 import {
   buildDeepValueSystemPrompt,

@@ -10,6 +10,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { ANALYST_ANGLES } from "@/types/analysis";
 import { ANALYST_COLUMNS } from "@/lib/report/consensus";
+import { sanitizeResultJson } from "@/lib/report/parse-deep-value-json";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -25,10 +26,13 @@ const patchSchema = z.object({
   fairValueBull: z.number().positive().nullable().optional(),
   fairValueBase: z.number().positive().nullable().optional(),
   fairValueBear: z.number().positive().nullable().optional(),
-  valuationMethod: z.string().nullable().optional(),
+  valuationMethod: z.string().max(40).nullable().optional(),
   // Blind-first commitment (the lens's pre-report Phase 1) — a JSON.stringify'd
   // DeepValueResult, present only for a Grounded blind-first run whose Phase 1 parsed.
   blindJson: z.string().max(20000).optional(),
+  // The lens's FINAL JSON block, re-sanitized below like the POST's. null clears it with
+  // the fair values; absent leaves it untouched.
+  resultJson: z.string().max(30000).nullable().optional(),
 });
 
 export async function GET(_request: Request, context: RouteContext) {
@@ -62,6 +66,14 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
+  // A blob without a full triple is answered like the POST's: the panel sends null in
+  // that case, so an incomplete one is a client bug.
+  let resultJson: string | null | undefined = body.resultJson === null ? null : undefined;
+  if (typeof body.resultJson === "string") {
+    resultJson = sanitizeResultJson(body.resultJson);
+    if (!resultJson) return NextResponse.json({ error: "resultJson must carry bull/base/bear" }, { status: 400 });
+  }
+
   // Verify ownership before updating — 404 for missing OR foreign rows.
   const analysis = await db.analysis.findUnique({ where: { id } });
   if (!analysis || analysis.userId !== session.user.id) {
@@ -79,6 +91,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     [cols.bear]: body.fairValueBear,
     [cols.method]: body.valuationMethod,
     [cols.blind]: body.blindJson,
+    [cols.result]: resultJson,
   };
 
   const updated = await db.analysis.update({ where: { id }, data });

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildDeepValueSystemPrompt, buildDeepValueUserPrompt, buildAnalystSystemPrompt, buildAnalystUserPrompt } from "@/lib/ai/deep-value-prompts";
+import { buildDeepValueSystemPrompt, buildDeepValueUserPrompt, buildAnalystSystemPrompt, buildAnalystUserPrompt, buildAnalystReconcileUserPrompt } from "@/lib/ai/deep-value-prompts";
+import { CRITIQUE_START_MARKER } from "@/lib/report/parse-deep-value-json";
 import { buildGroundingPromptContext } from "@/lib/grounding/prompt-format";
 import { makeFinancialsRow, makeMultiplesRow, makeExtract, makeMeta } from "./grounding-test-helpers";
 import type { GroundingBlock } from "@/types/grounding";
@@ -190,5 +191,20 @@ describe("Analyst lenses do not tell the model to re-search pasted history", () 
     const usr = buildAnalystUserPrompt({ angle: "skeptic", ticker: "ENI.MI", reportMd: "# R", language: "English" });
     expect(sys).toContain("against primary sources");
     expect(usr).toContain("spot-check key figures via web search");
+  });
+});
+
+describe("Phase 2 reconcile prompt asks for the critique before the final JSON", () => {
+  it("opens the critique with the marker and closes with the FINAL JSON", () => {
+    const usr = buildAnalystReconcileUserPrompt({
+      ticker: "ENI.MI",
+      reportMd: "# R",
+      language: "English",
+      mosPercent: 20,
+      blind: { bull: 12, base: 10, bear: 8 },
+    });
+    expect(usr).toContain(`Write your critique first, opening with the line \`${CRITIQUE_START_MARKER}\`, then the FINAL JSON`);
+    expect(usr).toContain("as the very last thing, in English.");
+    expect(usr).not.toContain("and then your critique");
   });
 });
