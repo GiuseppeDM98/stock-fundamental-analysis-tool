@@ -19,6 +19,7 @@ import {
   parseDeepValueJson,
   parseBlindJson,
   stripJsonBlock,
+  stripTrailingOpenJsonFence,
   stripAnalystStreamArtifacts,
   currentAnalystPhase,
   hasFullTriple,
@@ -28,7 +29,7 @@ import ReportBody from "@/components/report/report-body";
 import AnalystBlindCard from "@/components/report/analyst-blind-card";
 import { AiSettingsControl } from "@/components/ai-settings-control";
 import { fetchAiSettings } from "@/lib/ai-settings-client";
-import { DEFAULT_AI_SETTINGS, type AiSettings } from "@/types/ai-settings";
+import { DEFAULT_AI_SETTINGS, deepValueDefaultEffort, type AiSettings } from "@/types/ai-settings";
 import type { AnalystAngle } from "@/types/analysis";
 import { ANALYST_ANGLES } from "@/types/analysis";
 import type { AnalystResult } from "@/components/report/types";
@@ -75,15 +76,20 @@ export default function AnalystPanel({
   currency,
 }: PanelProps) {
   const { t } = useLanguage();
-  const [aiSettings, setAiSettings] = useState<AiSettings>(DEFAULT_AI_SETTINGS);
+  // A lens starts at the same floor as the report it reviews — the higher of the global
+  // default and xhigh — already before fetchAiSettings answers, and if it fails.
+  const [aiSettings, setAiSettings] = useState<AiSettings>({
+    ...DEFAULT_AI_SETTINGS,
+    effort: deepValueDefaultEffort(DEFAULT_AI_SETTINGS.model, DEFAULT_AI_SETTINGS.effort),
+  });
 
   // Shared across all three lenses (not per-lens) — loaded once from the user's global
   // default, overridable here before running whichever lens the user clicks next.
   useEffect(() => {
     fetchAiSettings()
-      .then(setAiSettings)
+      .then((s) => setAiSettings({ ...s, effort: deepValueDefaultEffort(s.model, s.effort) }))
       .catch(() => {
-        // Keep DEFAULT_AI_SETTINGS — non-fatal, review still works.
+        // Keep the initial settings — non-fatal, review still works.
       });
   }, []);
 
@@ -296,8 +302,9 @@ function AnalystSlot({
       // the critique is still shown; re-run to retry.
       const parsed = parseDeepValueJson(accumulated);
       setLiveFinal(parsed);
-      // Without a full triple the lens's numbers are sent as null, not omitted: the previous
-      // run's fair values must not survive next to this run's critique (2026-10-28).
+      // Without a full triple the lens's numbers — and its result blob — are sent as null,
+      // not omitted: the previous run's must not survive next to this run's critique
+      // (2026-10-28).
       const full = hasFullTriple(parsed);
       try {
         await updateAnalystOpinion(analysisId, {
@@ -306,8 +313,10 @@ function AnalystSlot({
           fairValueBull: full ? parsed.bull.fairValue : null,
           fairValueBase: full ? parsed.base.fairValue : null,
           fairValueBear: full ? parsed.bear.fairValue : null,
-          valuationMethod: full ? parsed.method : null,
+          // Trimmed to the route's limit: a verbose model string must not fail the save.
+          valuationMethod: full ? parsed.method.slice(0, 40) : null,
           blindJson: blindParsed ? JSON.stringify(blindParsed) : undefined,
+          resultJson: full ? JSON.stringify(parsed) : null,
         });
       } catch (saveErr) {
         console.error(`Failed to persist ${angle} opinion:`, saveErr);
@@ -392,7 +401,12 @@ function AnalystSlot({
           {status === "streaming" && (
             <span className="mb-2 inline-block h-3 w-1.5 animate-pulse bg-violet-400 print:hidden" />
           )}
-          <ReportBody markdown={stripJsonBlock(stripAnalystStreamArtifacts(critique))} />
+          {/* The final JSON closes the critique: while streaming its fence is still open. */}
+          <ReportBody
+            markdown={stripJsonBlock(
+              stripAnalystStreamArtifacts(status === "streaming" ? stripTrailingOpenJsonFence(critique) : critique)
+            )}
+          />
         </div>
       )}
     </div>

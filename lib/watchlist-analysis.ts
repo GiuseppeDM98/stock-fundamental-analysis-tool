@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
+import { ANALYSIS_SUMMARY_SELECT } from "@/lib/analyses-select";
 import { sendWatchlistDigest, type DigestItem } from "@/lib/email";
 import { grossUpToIntrinsic, type Triple } from "@/lib/report/valuation";
 import { presentAnalysts, meanTriple } from "@/lib/report/consensus";
@@ -67,37 +68,12 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
 
   // Saved analyses for every watched ticker, batched once per user (it was one query per
   // item) and picked with the same "newest with a full triple" rule as every UI surface.
-  // reportMd is left out: the digest never reads it.
+  // The text blobs (report, critiques, the lenses' JSON) are left out: the digest reads
+  // only the numbers.
   const analysisRows = await db.analysis.findMany({
     where: { userId: user.id, ticker: { in: items.map((i) => i.ticker) } },
     orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      ticker: true,
-      companyName: true,
-      mosPercent: true,
-      createdAt: true,
-      priceAtAnalysis: true,
-      fairValueBull: true,
-      fairValueBase: true,
-      fairValueBear: true,
-      valuationMethod: true,
-      reviewMd: true,
-      reviewFairValueBull: true,
-      reviewFairValueBase: true,
-      reviewFairValueBear: true,
-      reviewValuationMethod: true,
-      optimistCritiqueMd: true,
-      optimistFairValueBull: true,
-      optimistFairValueBase: true,
-      optimistFairValueBear: true,
-      optimistValuationMethod: true,
-      qualityCritiqueMd: true,
-      qualityFairValueBull: true,
-      qualityFairValueBase: true,
-      qualityFairValueBear: true,
-      qualityValuationMethod: true,
-    },
+    select: ANALYSIS_SUMMARY_SELECT,
   });
   type AnalysisRow = (typeof analysisRows)[number];
   const analysesByTicker = new Map<string, AnalysisRow[]>();

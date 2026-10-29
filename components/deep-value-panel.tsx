@@ -11,14 +11,20 @@ import { useLanguage } from "@/context/language-context";
 import { APP_TO_AI_LANGUAGE } from "@/lib/i18n/translations";
 import ReportBody from "@/components/report/report-body";
 import ReportShell from "@/components/report/report-shell";
-import { parseDeepValueJson, stripJsonBlock, hasFullTriple, type ParsedAnalystResult } from "@/lib/report/parse-deep-value-json";
+import {
+  parseDeepValueJson,
+  stripJsonBlock,
+  stripTrailingOpenJsonFence,
+  hasFullTriple,
+  type ParsedAnalystResult,
+} from "@/lib/report/parse-deep-value-json";
 import { toWatchlistMosFraction } from "@/lib/watchlist-mos";
 import { AiSettingsControl } from "@/components/ai-settings-control";
 import { fetchAiSettings } from "@/lib/ai-settings-client";
-import { DEFAULT_AI_SETTINGS, type AiSettings } from "@/types/ai-settings";
+import { DEFAULT_AI_SETTINGS, deepValueDefaultEffort, type AiSettings } from "@/types/ai-settings";
 import type { GroundingPayload } from "@/types/grounding";
 import { GroundingCard } from "@/components/report/grounding-card";
-import { buildSaveAnalysisRequest, type DeepValueRunInputs } from "@/lib/report/deep-value-run";
+import { buildSaveAnalysisRequest, parseResolvedAiSettings, type DeepValueRunInputs } from "@/lib/report/deep-value-run";
 
 type Props = {
   ticker: string | null;
@@ -74,7 +80,12 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [result, setResult] = useState<ParsedAnalystResult | null>(null);
   const [watchlistStatus, setWatchlistStatus] = useState<WatchlistStatus>("idle");
-  const [aiSettings, setAiSettings] = useState<AiSettings>(DEFAULT_AI_SETTINGS);
+  // A valuation starts at the higher of the global default and xhigh — already before
+  // fetchAiSettings answers, and if it fails, so a quick Generate is not a cheaper run.
+  const [aiSettings, setAiSettings] = useState<AiSettings>({
+    ...DEFAULT_AI_SETTINGS,
+    effort: deepValueDefaultEffort(DEFAULT_AI_SETTINGS.model, DEFAULT_AI_SETTINGS.effort),
+  });
   // Inputs frozen when Generate is pressed — what Save and the post-check card describe,
   // so editing the paste, the MoS slider or the quote after a run can't mislabel it.
   const [runInputs, setRunInputs] = useState<DeepValueRunInputs | null>(null);
@@ -84,9 +95,9 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
   useEffect(() => {
     if (!session) return;
     fetchAiSettings()
-      .then(setAiSettings)
+      .then((s) => setAiSettings({ ...s, effort: deepValueDefaultEffort(s.model, s.effort) }))
       .catch(() => {
-        // Keep DEFAULT_AI_SETTINGS — non-fatal, generation still works.
+        // Keep the initial settings — non-fatal, generation still works.
       });
   }, [session]);
 
@@ -114,6 +125,8 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
       currentPrice: currentPrice ?? null,
       currency: currency ?? null,
       grounding,
+      language,
+      aiSettingsResolved: null,
     };
     setRunInputs(inputs);
 
@@ -130,7 +143,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ticker: inputs.ticker,
-          language,
+          language: inputs.language,
           mosPercent: inputs.mosPercent,
           model: aiSettings.model,
           effort: aiSettings.effort,
@@ -152,6 +165,9 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
 
       if (!res.body) throw new Error("No response stream");
 
+      // What the route actually ran (stored default, xhigh floor, model clamp applied) —
+      // saved with the analysis instead of what this panel asked for.
+      setRunInputs({ ...inputs, aiSettingsResolved: parseResolvedAiSettings(res.headers.get("X-AI-Settings")) });
       setStatus("streaming");
 
       const reader = res.body.getReader();
@@ -236,7 +252,10 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
   }
 
   const isStreaming = status === "loading" || status === "streaming";
-  const markdownContent = status === "done" && report ? stripJsonBlock(report) : report;
+  // The JSON block now closes the report, so while streaming its fence is still open: hide
+  // it until it closes. The strip runs in streaming too — a repeated start marker would
+  // otherwise show as text.
+  const markdownContent = status === "done" ? stripJsonBlock(report) : stripJsonBlock(stripTrailingOpenJsonFence(report));
   const reportDate = new Date().toLocaleDateString(undefined, {
     year: "numeric",
     month: "long",

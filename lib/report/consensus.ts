@@ -24,6 +24,8 @@ export type AnalystColumns = {
   // Blind-first (Phase-1) commitment — JSON blob, not a
   // scalar like the four fields above.
   blind: keyof SavedAnalysis;
+  // The lens's FINAL sanitized JSON block — also a blob.
+  result: keyof SavedAnalysis;
 };
 
 // skeptic keeps the legacy `review*` prefix (it shipped as the sole reviewer, before the
@@ -36,6 +38,7 @@ export const ANALYST_COLUMNS: Record<AnalystAngle, AnalystColumns> = {
     method: "reviewValuationMethod",
     critique: "reviewMd",
     blind: "reviewBlindJson",
+    result: "reviewResultJson",
   },
   optimist: {
     bull: "optimistFairValueBull",
@@ -44,6 +47,7 @@ export const ANALYST_COLUMNS: Record<AnalystAngle, AnalystColumns> = {
     method: "optimistValuationMethod",
     critique: "optimistCritiqueMd",
     blind: "optimistBlindJson",
+    result: "optimistResultJson",
   },
   quality: {
     bull: "qualityFairValueBull",
@@ -52,6 +56,7 @@ export const ANALYST_COLUMNS: Record<AnalystAngle, AnalystColumns> = {
     method: "qualityValuationMethod",
     critique: "qualityCritiqueMd",
     blind: "qualityBlindJson",
+    result: "qualityResultJson",
   },
 };
 

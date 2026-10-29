@@ -1,14 +1,18 @@
-// Shared valuation result shape — parsed from the AI's leading ```json block,
-// either live (deep-value-panel) or reconstructed from a saved Analysis.reportMd.
+// Shared valuation result shape — parsed from the AI's final ```json block (older saved
+// reports carry it at the top instead), either live (deep-value-panel), from the sanitized
+// Analysis.resultJson column, or reconstructed from a saved Analysis.reportMd.
 
 /**
- * A scenario's declared EV→equity bridge — Grounded mode only. `fairValue` on `Scenario`
- * is a MoS-adjusted buy target; `intrinsicPerShare` here is the PRE-MoS value the bridge
- * arithmetic produces — never the same number as `fairValue` unless MoS is 0 (comparing
- * them directly would fail every check: lib/grounding/postcheck.ts grosses `fairValue` up
- * via `grossUpToIntrinsic` before comparing it against this field, precisely because they
- * are NOT interchangeable).
- * `multiple` is absent for DCF/DDM, where no single multiple exists.
+ * A scenario's declared value bridge. The prompt asks for it in every mode and for every
+ * method (2026-10: equity-value methods declare netDebt = minorities = 0, SOTP/NAV/EV-RAB
+ * omit the multiple); it stays optional here because reports saved before then have none.
+ * `fairValue` on `Scenario` is a MoS-adjusted buy target; `intrinsicPerShare` here is the
+ * PRE-MoS value the bridge arithmetic produces — never the same number as `fairValue`
+ * unless MoS is 0 (comparing them directly would fail every check:
+ * lib/grounding/postcheck.ts grosses `fairValue` up via `grossUpToIntrinsic` before
+ * comparing it against this field, precisely because they are NOT interchangeable).
+ * `multiple` is absent for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income, where no single
+ * multiple applies to the driver.
  */
 export type ValuationBridge = {
   driver: string;
@@ -35,11 +39,13 @@ export type Scenario = {
 
 /** The model's own valuation-lever inputs — feeds the roic_vs_wacc gate. Optional/nullable
  *  throughout: unvalidated LLM output, absent on Quick-mode reports that predate this
- *  field. */
+ *  field. Every lever is in PERCENTAGE POINTS (8.5 = 8.5%), as the prompt states: the
+ *  sanitizer nulls a value outside [-50, 100], which is how a fraction (0.085) or a
+ *  basis-point figure (850) shows up. */
 export type ValuationAssumptions = {
-  wacc: number | null; // %
-  roic: number | null; // %, on invested capital — not ROE
-  terminalGrowth: number | null; // %
+  wacc: number | null; // percentage points
+  roic: number | null; // percentage points, on invested capital — not ROE
+  terminalGrowth: number | null; // percentage points
 };
 
 /** A second, structurally different valuation method the model is required to produce and
@@ -49,8 +55,9 @@ export type CrossCheck = {
   method: string; // e.g. "DDM" | "EV/RAB" | "SOTP" — different from the primary `method`
   intrinsicPerShare: number; // BASE scenario, pre-MoS
   reconciliation: string; // 1-2 sentences: why the two methods diverge
-  /** The cross-check's OWN EV→equity bridge — Grounded mode only, omitted when the
-   *  cross-check method has no multiple (e.g. DDM). Lets lib/grounding/postcheck.ts verify
+  /** The cross-check's OWN value bridge — requested in every mode since 2026-10 (only
+   *  Grounded before), with `multiple` omitted when the cross-check method has none (e.g.
+   *  DDM). Lets lib/grounding/postcheck.ts verify
    *  the cross-check's own arithmetic and same-basis-ness, the same way it does for
    *  bull/base/bear. `intrinsicPerShare` is deliberately NOT
    *  repeated here — it's the field above, shared with the recomputed value. Added after a
@@ -61,15 +68,45 @@ export type CrossCheck = {
   bridge?: Omit<ValuationBridge, "intrinsicPerShare">;
 };
 
+export type SensitivityLever = { name: string; values: [number, number, number] };
+
+/** 3×3 grid declared by the model: rows follow leverA.values, columns leverB.values; the
+ *  centre cell [1][1] must equal the BASE intrinsic value — the prompt demands it, but as of
+ *  2026-10-29 no code checks it yet, so a mismatched centre reaches the page unflagged.
+ *  The model's own grid, with levers of its choosing — distinct from the Grounded anchors'
+ *  grid, which the code computes on historical multiples as a control. */
+export type Sensitivity = {
+  leverA: SensitivityLever;
+  leverB: SensitivityLever;
+  intrinsicPerShare: [[number, number, number], [number, number, number], [number, number, number]];
+};
+
+export type DividendPathYear = { year: number; bull: number; base: number; bear: number };
+
+/** The model's dividend outlook. null when the company pays no dividend. */
+export type DividendPath = {
+  policy: string; // one sentence: stated payout policy, or "none stated"
+  lastDps: number; // total ORDINARY DPS of the latest COMPLETE fiscal year (interim + final, specials excluded)
+  path: [DividendPathYear, DividendPathYear, DividendPathYear]; // next 3 fiscal years, annual totals on the same basis; year = the fiscal year's END year
+};
+
+/** The scale of every monetary figure inside the bridges (shares on the same scale). */
+export type ValuationUnits = "billions" | "millions" | "thousands" | "units";
+
 export type DeepValueResult = {
   method: string;
   sector: string;
   currency: string;
+  units?: ValuationUnits;
   bull: Scenario;
   base: Scenario;
   bear: Scenario;
-  assumptions?: ValuationAssumptions;
+  assumptions?: ValuationAssumptions; // percentage points (8.5 = 8.5%)
   crossCheck?: CrossCheck;
+  sensitivity?: Sensitivity;
+  /** null = the model declared a non-payer; undefined = not declared (older reports, the
+   *  analyst lenses, or a malformed block). */
+  dividends?: DividendPath | null;
 };
 
 /** Analyst-lens-only fields, layered on top of DeepValueResult — the shape one lens's JSON

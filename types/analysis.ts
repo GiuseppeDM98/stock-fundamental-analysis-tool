@@ -1,3 +1,5 @@
+import type { AiEffort, AiModelId } from "@/types/ai-settings";
+
 /**
  * The lenses of the analyst panel. After a Deep Value analysis is saved the user can
  * run up to three independent second-opinion passes, each reading the report through a
@@ -56,15 +58,35 @@ export type SavedAnalysis = {
   reviewBlindJson?: string | null;
   optimistBlindJson?: string | null;
   qualityBlindJson?: string | null;
+  // The base report's final JSON block, re-sanitized by the save route
+  // (JSON.stringify'd ParsedAnalystResult). Null for reports saved before 2026-10 or
+  // whose block lacked a full bull/base/bear triple: those parse reportMd instead.
+  resultJson?: string | null;
+  // The run's metadata. currency/sector come from the model's block (validated and
+  // trimmed by the client); aiModel/aiEffort/aiThinking are the settings the SERVER
+  // resolved (X-AI-Settings header), not the ones the client asked for.
+  currency?: string | null;
+  sector?: string | null;
+  reportLanguage?: string | null;
+  aiModel?: string | null;
+  aiEffort?: string | null;
+  aiThinking?: boolean | null;
+  // Each lens's FINAL sanitized JSON block (killPrice, revisions, assumptions,
+  // crossCheck…). Null until the lens runs, and cleared with its fairValue* columns when
+  // a re-run ends without a full triple.
+  reviewResultJson?: string | null;
+  optimistResultJson?: string | null;
+  qualityResultJson?: string | null;
   createdAt: string; // ISO 8601 string (JSON serialized from Date)
   // groundingJson is DELIBERATELY NOT a field here. This type mirrors the GET
-  // /api/analyses list's `select` (app/api/analyses/route.ts), which omits
-  // groundingJson on purpose — it's a JSON blob the list never renders, and adding it
-  // to this type without adding it to that select would silently promise a value that's
-  // always undefined at runtime (AGENTS.md gotcha #20). The detail page reads it via a
-  // separate `findUnique` with no `select` (Prisma returns every column, already typed).
-  // If a future /analyses list feature needs it, add BOTH the select field and this one
-  // together — never one without the other.
+  // /api/analyses list's select (ANALYSIS_LIST_SELECT in lib/analyses-select.ts, which
+  // `satisfies Record<keyof SavedAnalysis, true>`), which omits groundingJson on purpose —
+  // it's a JSON blob the list never renders, and adding it to this type without adding it
+  // to that select would silently promise a value that's always undefined at runtime
+  // (AGENTS.md gotcha #20). The detail page reads it via a separate `findUnique` with no
+  // `select` (Prisma returns every column, already typed). If a future /analyses list
+  // feature needs it, add BOTH the select field and this one together — never one without
+  // the other.
 };
 
 /**
@@ -85,6 +107,10 @@ export type AnalystOpinionUpdate = {
   // for a Grounded blind-first run whose Phase 1 parsed successfully. Omitted (not null)
   // leaves any prior commitment untouched, same convention as the fairValue* fields above.
   blindJson?: string;
+  // The lens's FINAL JSON (JSON.stringify'd ParsedAnalystResult), re-sanitized by the
+  // route. null clears the column together with fairValue*: a re-run without a full
+  // triple must not leave the previous run's result behind.
+  resultJson?: string | null;
 };
 
 /** Payload required to save a new analysis. */
@@ -101,4 +127,14 @@ export type SaveAnalysisRequest = {
   // Grounded Deep Value mode — the confirmed GroundingPayload (blocks + extract),
   // JSON.stringify'd. Present only when the analysis was generated with pasted data.
   groundingJson?: string;
+  // The final JSON block (JSON.stringify'd ParsedAnalystResult), only when it carries a
+  // full triple — the route answers 400 otherwise, so the client omits it instead.
+  resultJson?: string;
+  currency?: string;
+  sector?: string;
+  reportLanguage?: string;
+  // The settings the server resolved for this run (X-AI-Settings response header).
+  aiModel?: AiModelId;
+  aiEffort?: AiEffort;
+  aiThinking?: boolean;
 };

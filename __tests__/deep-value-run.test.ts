@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildSaveAnalysisRequest, type DeepValueRunInputs } from "@/lib/report/deep-value-run";
+import { buildSaveAnalysisRequest, parseResolvedAiSettings, type DeepValueRunInputs } from "@/lib/report/deep-value-run";
 import type { DeepValueResult } from "@/components/report/types";
 import type { GroundingPayload } from "@/types/grounding";
 import { makeExtract } from "./grounding-test-helpers";
@@ -13,6 +13,8 @@ const RUN: DeepValueRunInputs = {
   currentPrice: 14.18,
   currency: "EUR",
   grounding: GROUNDING,
+  language: "English",
+  aiSettingsResolved: { model: "claude-opus-4-8", effort: "xhigh", thinking: true },
 };
 
 const RESULT = {
@@ -67,5 +69,37 @@ describe("buildSaveAnalysisRequest", () => {
     expect(req.fairValueBase).toBeUndefined();
     expect(req.fairValueBear).toBeUndefined();
     expect(req.valuationMethod).toBeUndefined();
+  });
+
+  it("sends the sanitized result and the run metadata the route resolved", () => {
+    const req = buildSaveAnalysisRequest(RUN, "# r", RESULT);
+    expect(JSON.parse(req.resultJson!)).toEqual(RESULT);
+    expect(req).toMatchObject({ currency: "EUR", sector: "Energy", reportLanguage: "English", aiModel: "claude-opus-4-8", aiEffort: "xhigh", aiThinking: true });
+    const noHeader = buildSaveAnalysisRequest({ ...RUN, aiSettingsResolved: null }, "# r", RESULT);
+    expect(noHeader.aiModel).toBeUndefined();
+    expect(noHeader.aiEffort).toBeUndefined();
+    expect(noHeader.aiThinking).toBeUndefined();
+    expect(buildSaveAnalysisRequest(RUN, "# r", null).resultJson).toBeUndefined();
+  });
+
+  it("trims the sector to 80 and the method to 40, and drops a currency that is not a bare ISO code", () => {
+    const req = buildSaveAnalysisRequest(RUN, "# r", { ...RESULT, sector: "S".repeat(120), method: "M".repeat(50), currency: "EUR (euro)" });
+    expect(req.sector).toHaveLength(80);
+    expect(req.valuationMethod).toHaveLength(40);
+    expect(req.currency).toBeUndefined();
+  });
+});
+
+describe("parseResolvedAiSettings", () => {
+  it("reads the header the route writes", () => {
+    expect(parseResolvedAiSettings('{"model":"claude-opus-4-8","effort":"xhigh","thinking":true}')).toEqual({ model: "claude-opus-4-8", effort: "xhigh", thinking: true });
+  });
+
+  it("returns null for a missing, malformed or unknown header", () => {
+    expect(parseResolvedAiSettings(null)).toBeNull();
+    expect(parseResolvedAiSettings("not json")).toBeNull();
+    expect(parseResolvedAiSettings('{"model":"gpt-9","effort":"xhigh","thinking":true}')).toBeNull();
+    expect(parseResolvedAiSettings('{"model":"claude-opus-4-8","effort":"ultra","thinking":true}')).toBeNull();
+    expect(parseResolvedAiSettings('{"model":"claude-opus-4-8","effort":"high"}')).toBeNull();
   });
 });

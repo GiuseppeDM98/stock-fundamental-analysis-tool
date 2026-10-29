@@ -16,7 +16,8 @@ A Next.js web app for value investors: an AI-assisted pipeline from idea **Disco
 
 This tool helps investors and analysts perform fundamental stock valuation through:
 
-- **AI Deep Value analysis** — Claude autonomously picks the method (DCF/DDM/EV-EBITDA/P-B) and sources financials via web search, for any global ticker
+- **AI Deep Value analysis** — Claude autonomously picks the method (DCF/DDM/EV-EBITDA/P-E/P-B/SOTP/NAV/EV-RAB/Residual Income) and sources financials via web search, for any global ticker
+- **Streamed report, structured valuation** — the report streams as it is written and closes with the valuation block (bull/base/bear with their bridges, a sensitivity grid, the dividend outlook), saved with the analysis as structured data
 - **Real-time market data** from Yahoo Finance (quotes, up to 10-year financials, ratios)
 - **Interactive visualizations** comparing fair value vs. current price
 - **Margin of safety** adjustment (0-80%) for conservative valuations
@@ -500,11 +501,11 @@ turso db shell <your-db-name> < prisma/migrations/<latest>/migration.sql
 
 > Planned (2026-10-27): spec `doc/evoluzioni/05c-corsa-a-fasi.md` splits every AI run into one request per model call, persisted by the server and retried per phase; the limit then holds only for a single model turn.
 
-**Issue**: `/api/ai/deep-value` and `/api/ai/deep-value/verify` call the model at a high reasoning effort plus web search; a run takes several minutes and can go past the plan's ceiling (the Advisor and the earnings lookup usually fit). With Fluid Compute, Vercel's default, `maxDuration` is **300s on Hobby** (default and maximum), 800s on Pro and Enterprise (1800s in beta) — checked against Vercel's docs on 2026-10-20. Streaming does not help: Vercel counts total function execution time, not whether bytes are still being sent, so the function is killed mid-report. A Vercel Cron job doesn't bypass this either — it only triggers the route on a schedule, the invoked function is still subject to the same `maxDuration`.
+**Issue**: `/api/ai/deep-value` and `/api/ai/deep-value/verify` call the model at a high reasoning effort plus web search; a run takes several minutes and can go past the plan's ceiling (the Advisor and the earnings lookup usually fit). With Fluid Compute, Vercel's default, `maxDuration` is **300s on Hobby** (default and maximum), 800s on Pro and Enterprise (1800s in beta) — checked against Vercel's docs on 2026-10-20. Streaming does not help: Vercel counts total function execution time, not whether bytes are still being sent, so the function is killed mid-report. A Vercel Cron job doesn't bypass this either — it only triggers the route on a schedule, the invoked function is still subject to the same `maxDuration`. Both routes export `maxDuration = 300`, the Hobby ceiling, so the limit is declared in the code.
 
-**Declared limit** (owner's decision, 2026-10-20): long analyses run from localhost — the app under `npm run dev`, or the `/deep-value` Claude Code command, which saves its analyses to Turso — and the deployed instance serves everything else. Details in [SETUP.md](SETUP.md).
+**Declared limit** (owner's decision, 2026-10-20): long analyses run from localhost — the app under `npm run dev`, or the `/deep-value` Claude Code command, which saves its analyses to Turso (suspended until its realignment (D-76): it would save analyses in the old format) — and the deployed instance serves everything else. Details in [SETUP.md](SETUP.md).
 
-**Not planned**: Vercel Pro (800s, one `maxDuration` line per route), a queue+polling architecture or Vercel Workflows (no duration limit, at the cost of a new data model and of live token-by-token streaming). Evaluated and not planned for a personal tool.
+**Not planned**: Vercel Pro (800s, raising `maxDuration` in both routes), a queue+polling architecture or Vercel Workflows (no duration limit, at the cost of a new data model and of live token-by-token streaming). Evaluated and not planned for a personal tool.
 
 ---
 

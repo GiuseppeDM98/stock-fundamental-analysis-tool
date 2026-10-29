@@ -73,19 +73,28 @@ test("analyses list groups by ticker, counts match the DB, and a group expands",
   await expect(page.getByText(DECOY.panelReport)).toBeVisible();
 });
 
-test("grounded analysis detail renders the report and the deterministic post-check card", async ({ page }) => {
-  const row = await queryOne<{ groundingJson: string | null; reportMd: string }>(
-    "SELECT groundingJson, reportMd FROM Analysis WHERE id = ?",
+test("grounded analysis detail renders the report from its stored result and the deterministic post-check card", async ({ page }) => {
+  const row = await queryOne<{ groundingJson: string | null; reportMd: string; resultJson: string | null }>(
+    "SELECT groundingJson, reportMd, resultJson FROM Analysis WHERE id = ?",
     [IDS.analysisGrounded]
   );
   expect(row?.groundingJson, "seeded grounded row carries groundingJson").toBeTruthy();
-  expect(row?.reportMd.startsWith("```json\n")).toBe(true);
+  // Current format: a stored result, and a report whose JSON block is the very last thing.
+  expect(JSON.parse(row!.resultJson!).sector).toBe("Regulated Utilities");
+  expect(row!.reportMd.trimEnd().endsWith("```")).toBe(true);
+  expect(row!.reportMd.lastIndexOf("```json\n")).toBeGreaterThan(row!.reportMd.indexOf("## 1. Overview"));
+  expect(row!.reportMd).toContain('"sector": "Utilities"');
 
   await page.goto(`/analyses/${IDS.analysisGrounded}`);
   await expect(page.getByRole("heading", { name: DECOY.groundedCompany })).toBeVisible();
   await expect(page.getByText(DECOY.groundedReport)).toBeVisible();
-  // The leading JSON block is parsed into the summary, never printed as text.
+  // The summary comes from the resultJson column, not from the fence: the sector badge is
+  // the column's, which the fence does not carry.
+  await expect(page.getByText("Regulated Utilities", { exact: true })).toBeVisible();
+  await expect(page.getByText("Utilities", { exact: true })).toHaveCount(0);
+  // Neither the closing JSON block nor the start marker is printed as text.
   await expect(page.getByText('"intrinsicPerShare"')).toHaveCount(0);
+  await expect(page.getByText("<!--report-->")).toHaveCount(0);
 
   // The card needs the stubbed live price + currency; it appears once the quote resolves.
   await expect(page.getByText("Deterministic post-check")).toBeVisible();
@@ -105,6 +114,8 @@ test("analysis with all three lenses shows every stored critique", async ({ page
     await expect(page.getByText(decoy)).toBeVisible();
   }
   await expect(page.getByText(DECOY.panelReport)).toBeVisible();
+  // An older save (JSON block at the top, no resultJson) still gets its summary, from the fence.
+  await expect(page.getByText("Industrials", { exact: true })).toBeVisible();
 
   // A holds this ticker, so the open-position banner is shown.
   await expect(page.getByText("Open position:")).toBeVisible();

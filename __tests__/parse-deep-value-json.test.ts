@@ -7,11 +7,17 @@ import { describe, it, expect } from "vitest";
 import {
   parseDeepValueJson,
   stripJsonBlock,
+  stripTrailingOpenJsonFence,
   parseBlindJson,
   hasFullTriple,
   currentAnalystPhase,
   stripAnalystStreamArtifacts,
+  sanitizeSensitivity,
+  sanitizeDividends,
+  sanitizeUnits,
   ANALYST_PHASE_MARKERS,
+  REPORT_START_MARKER,
+  CRITIQUE_START_MARKER,
 } from "@/lib/report/parse-deep-value-json";
 
 const BLIND_BLOCK = '```json-blind\n{"method":"DCF","sector":"Utilities","currency":"EUR","bull":{"fairValue":10},"base":{"fairValue":8},"bear":{"fairValue":5}}\n```';
@@ -29,6 +35,64 @@ describe("parseDeepValueJson / stripJsonBlock — unchanged behavior", () => {
   it("strips the block, leaving surrounding prose", () => {
     const text = `${FINAL_BLOCK}\nSome critique text.`;
     expect(stripJsonBlock(text)).toBe("Some critique text.");
+  });
+});
+
+describe("report first, JSON last — the parser reads the LAST fence", () => {
+  const OLDER_FENCE = '```json\n{"method":"DCF","sector":"S","currency":"EUR","bull":{"fairValue":30},"base":{"fairValue":20},"bear":{"fairValue":10}}\n```';
+
+  it("resolves to the second of two fences", () => {
+    const text = `${OLDER_FENCE}\nprose\n${FINAL_BLOCK}`;
+    expect(parseDeepValueJson(text)?.base?.fairValue).toBe(9);
+  });
+
+  it("parses a report saved with its only block at the top exactly as before", () => {
+    const leading = `${FINAL_BLOCK}\n\n## 1. Overview\n\nBody.`;
+    expect(parseDeepValueJson(leading)?.base?.fairValue).toBe(9);
+    expect(stripJsonBlock(leading)).toBe("\n## 1. Overview\n\nBody.");
+  });
+
+  it("parses a report whose block closes it", () => {
+    const trailing = `${REPORT_START_MARKER}\n## 1. Overview\n\nBody.\n\n${FINAL_BLOCK}`;
+    expect(parseDeepValueJson(trailing)?.bull?.fairValue).toBe(11);
+  });
+
+  it("strips every fence and every repeated marker", () => {
+    const text = `${REPORT_START_MARKER}\n## 1. A\n${OLDER_FENCE}\nmiddle ${REPORT_START_MARKER}\n${CRITIQUE_START_MARKER}tail\n${FINAL_BLOCK}`;
+    const stripped = stripJsonBlock(text);
+    expect(stripped).not.toContain("```json");
+    expect(stripped).not.toContain(REPORT_START_MARKER);
+    expect(stripped).not.toContain(CRITIQUE_START_MARKER);
+    expect(stripped).toContain("## 1. A");
+    expect(stripped).toContain("middle");
+    expect(stripped).toContain("tail");
+  });
+
+  it("parses the final block even when a blind block precedes it", () => {
+    const stream = `${BLIND_BLOCK}\nRationale.\n${CRITIQUE_START_MARKER}Critique.\n${FINAL_BLOCK}`;
+    expect(parseDeepValueJson(stream)?.base?.fairValue).toBe(9);
+    expect(parseBlindJson(stream)?.base?.fairValue).toBe(8);
+  });
+});
+
+describe("stripTrailingOpenJsonFence", () => {
+  it("hides an unclosed json fence still streaming at the end", () => {
+    expect(stripTrailingOpenJsonFence('## 10. Summary\nDone.\n\n```json\n{"method":"DC')).toBe("## 10. Summary\nDone.\n\n");
+  });
+
+  it("hides a fence whose closing backticks have not fully arrived", () => {
+    expect(stripTrailingOpenJsonFence('Body\n```json\n{"a":1}\n``')).toBe("Body\n");
+  });
+
+  it("returns the text unchanged when the last fence is closed or there is none", () => {
+    const closed = `Body\n${FINAL_BLOCK}`;
+    expect(stripTrailingOpenJsonFence(closed)).toBe(closed);
+    expect(stripTrailingOpenJsonFence("plain prose")).toBe("plain prose");
+  });
+
+  it("treats a closed blind fence as closed", () => {
+    const stream = `${BLIND_BLOCK}\n${CRITIQUE_START_MARKER}Critique so far`;
+    expect(stripTrailingOpenJsonFence(stream)).toBe(stream);
   });
 });
 
@@ -129,6 +193,21 @@ describe("parseDeepValueJson — shape sanitization (untrusted model JSON)", () 
     expect(parsed.assumptions).toEqual({ wacc: 6.5, roic: null, terminalGrowth: null });
   });
 
+  it("nulls an assumption outside [-50, 100] percentage points, keeping the boundaries", () => {
+    const parsed = parseDeepValueJson(fence({ method: "DCF", sector: "", currency: "EUR", base: { fairValue: 1 }, assumptions: { wacc: 850, roic: -50, terminalGrowth: 100 } }))!;
+    expect(parsed.assumptions).toEqual({ wacc: null, roic: -50, terminalGrowth: 100 });
+    const below = parseDeepValueJson(fence({ method: "DCF", sector: "", currency: "EUR", base: { fairValue: 1 }, assumptions: { wacc: 8, roic: -51, terminalGrowth: 2 } }))!;
+    expect(below.assumptions?.roic).toBeNull();
+  });
+
+  it("keeps a declared unit only when it is on the list", () => {
+    expect(sanitizeUnits("millions")).toBe("millions");
+    expect(sanitizeUnits("EUR m")).toBeUndefined();
+    expect(sanitizeUnits(1e6)).toBeUndefined();
+    const parsed = parseDeepValueJson(fence({ method: "DCF", sector: "", currency: "EUR", units: "billions", base: { fairValue: 1 } }))!;
+    expect(parsed.units).toBe("billions");
+  });
+
   it("drops a scenario with no numeric fairValue rather than passing a wrong-typed one along", () => {
     const parsed = parseDeepValueJson(fence({ method: "DCF", sector: "", currency: "EUR", bull: { fairValue: "12" }, base: { fairValue: 10 }, bear: null }))!;
     expect(parsed.bull).toBeUndefined();
@@ -195,5 +274,47 @@ describe("hasFullTriple — the only door to consumers that need bull/base/bear"
     const parsed = parseDeepValueJson(fence({ method: "DCF", sector: "", currency: "EUR", bull: { fairValue: 3 }, base: { fairValue: 2 }, bear: { fairValue: 1 } }));
     expect(hasFullTriple(parsed)).toBe(true);
     if (hasFullTriple(parsed)) expect(parsed.bear.fairValue).toBe(1);
+  });
+});
+
+describe("sensitivity and dividends — drop, never repair", () => {
+  const LEVER_A = { name: "EV/EBITDA exit multiple", values: [7, 8, 9] };
+  const LEVER_B = { name: "EBITDA 2026e", values: [190, 200, 210] };
+  const GRID = [[10.2, 10.9, 11.6], [12.1, 12.9, 13.7], [14, 14.9, 15.8]];
+  const PATH = [
+    { year: 2026, bull: 0.44, base: 0.42, bear: 0.4 },
+    { year: 2027, bull: 0.48, base: 0.44, bear: 0.38 },
+    { year: 2028, bull: 0.52, base: 0.46, bear: 0.36 },
+  ];
+
+  it("keeps a well-formed 3×3 grid", () => {
+    expect(sanitizeSensitivity({ leverA: LEVER_A, leverB: LEVER_B, intrinsicPerShare: GRID })).toEqual({ leverA: LEVER_A, leverB: LEVER_B, intrinsicPerShare: GRID });
+  });
+
+  it("drops a 2×3 grid, a row of two, a non-finite cell or an unnamed lever", () => {
+    expect(sanitizeSensitivity({ leverA: LEVER_A, leverB: LEVER_B, intrinsicPerShare: GRID.slice(0, 2) })).toBeUndefined();
+    expect(sanitizeSensitivity({ leverA: LEVER_A, leverB: LEVER_B, intrinsicPerShare: [GRID[0], [12.1, 12.9], GRID[2]] })).toBeUndefined();
+    expect(sanitizeSensitivity({ leverA: LEVER_A, leverB: LEVER_B, intrinsicPerShare: [GRID[0], [12.1, "12.9", 13.7], GRID[2]] })).toBeUndefined();
+    expect(sanitizeSensitivity({ leverA: { ...LEVER_A, name: " " }, leverB: LEVER_B, intrinsicPerShare: GRID })).toBeUndefined();
+    expect(sanitizeSensitivity({ leverA: { ...LEVER_A, values: [7, 8] }, leverB: LEVER_B, intrinsicPerShare: GRID })).toBeUndefined();
+  });
+
+  it("keeps a declared non-payer (null) apart from a missing outlook", () => {
+    expect(sanitizeDividends(null)).toBeNull();
+    expect(sanitizeDividends(undefined)).toBeUndefined();
+    const fence = (obj: unknown) => "```json\n" + JSON.stringify(obj) + "\n```";
+    const base = { method: "DDM", sector: "", currency: "EUR", base: { fairValue: 1 } };
+    expect(parseDeepValueJson(fence({ ...base, dividends: null }))!.dividends).toBeNull();
+    expect("dividends" in parseDeepValueJson(fence(base))!).toBe(false);
+  });
+
+  it("keeps a three-year path and drops a path of two, a negative DPS or a fractional year", () => {
+    const valid = { policy: "Pays out about 60% of net income.", lastDps: 0.4, path: PATH };
+    expect(sanitizeDividends(valid)).toEqual(valid);
+    expect(sanitizeDividends({ ...valid, path: PATH.slice(0, 2) })).toBeUndefined();
+    expect(sanitizeDividends({ ...valid, lastDps: -0.1 })).toBeUndefined();
+    expect(sanitizeDividends({ ...valid, path: [{ ...PATH[0], bear: -1 }, PATH[1], PATH[2]] })).toBeUndefined();
+    expect(sanitizeDividends({ ...valid, path: [{ ...PATH[0], year: 2026.5 }, PATH[1], PATH[2]] })).toBeUndefined();
+    expect(sanitizeDividends({ ...valid, policy: 3 })).toBeUndefined();
   });
 });

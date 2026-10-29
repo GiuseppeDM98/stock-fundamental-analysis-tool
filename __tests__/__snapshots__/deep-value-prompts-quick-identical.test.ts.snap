@@ -28,22 +28,81 @@ These are the defects prior reviews have repeatedly missed. Check each explicitl
 ## Your own independent valuation (MANDATORY)
 Commit to your OWN independent bull/base/bear fair value reflecting the upside you consider defensible after your review. Ground every optimistic input in a verifiable fact or a clearly-labeled assumption — an upside case is still a disciplined case, not a pitch. Where you disagree with the report, your numbers should reflect it.
 
-Emit it as a JSON block that MUST be the very FIRST thing you output, before any critique text:
+Write the critique first, opening with the exact line \`<!--critique-->\`, and emit the JSON block as the very LAST thing. Nothing before the marker, nothing after the fence.
 
 \`\`\`json
 {
-  "method": "<DCF|DDM|EV/EBITDA|P/B>",
+  "method": "<DCF|DDM|EV/EBITDA|P/E|P/B|SOTP|EV/RAB|NAV|Residual Income>",
   "sector": "<sector name>",
   "currency": "<ISO currency code, e.g. USD, EUR>",
-  "bull": { "fairValue": <buy target after 0% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "base": { "fairValue": <buy target after 0% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "bear": { "fairValue": <buy target after 0% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "assumptions": { "wacc": <% or null>, "roic": <% or null, on invested capital — not ROE>, "terminalGrowth": <% or null> },
-  "crossCheck": { "method": "<a SECOND, structurally different method than the primary one — e.g. DDM, EV/RAB, SOTP>", "intrinsicPerShare": <BASE scenario, pre-MoS, from the second method>, "reconciliation": "<1-2 sentences: why the two methods diverge>" }
+  "units": "<billions|millions|thousands|units — the scale of EVERY monetary figure in the bridges below (shares on the same scale)>",
+  "bull": {
+    "fairValue": <buy target after 0% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 0% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "base": {
+    "fairValue": <buy target after 0% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 0% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "bear": {
+    "fairValue": <buy target after 0% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 0% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "assumptions": { "wacc": <percentage points, e.g. 8.5 — or null>, "roic": <percentage points, on invested capital, not ROE — or null>, "terminalGrowth": <percentage points — or null> },
+  "crossCheck": {
+    "method": "<a SECOND method, structurally different from the primary one, from the same list as \\"method\\" — e.g. DDM, EV/RAB, SOTP>",
+    "intrinsicPerShare": <BASE scenario, pre-MoS, from the second method>,
+    "reconciliation": "<1-2 sentences: why the two methods diverge>",
+    "bridge": {
+      "driver": "<short label for the cross-check's own value driver, e.g. \\"Peer EV/EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied — OMIT this whole key if the cross-check method has no multiple, e.g. DDM>,
+      "netDebt": <net debt used in THIS bridge, in the unit you declare in "units">,
+      "minorities": <minority interests used in THIS bridge, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">
+    }
+  }
 }
 \`\`\`
 
-Each \`fairValue\` is your intrinsic estimate AFTER applying a margin of safety of 0% (buy target = intrinsic × (1 − 0/100)) — same convention as the report under review, so the two are directly comparable. After the JSON block, write the critique.
+**Bridge rule.** The bridge always reads (multiple × driverValue − netDebt − minorities) / shares, or intrinsicPerShare directly when "multiple" is omitted.
+- EV methods (EV/EBITDA, DCF on FCFF): driverValue = EBITDA or the enterprise value you derived; netDebt and minorities as reported for THAT scenario.
+- Equity-value methods (P/E, P/B, Residual Income, DDM, DCF on FCFE): driverValue = the EQUITY driver (net income, book value, DPS, FCFE), "netDebt": 0 and "minorities": 0 (the driver is already an equity figure), "multiple" = the equity multiple (P/E, P/B) or omitted (RI, DDM, FCFE).
+- SOTP, NAV, EV/RAB: driverValue = the summed enterprise value (or NAV / RAB × premium) already computed, "multiple" omitted, netDebt and minorities as for EV methods.
+Never subtract net debt from a value that is already equity.
+
+Each \`fairValue\` is your intrinsic estimate AFTER applying a margin of safety of 0% (buy target = intrinsic × (1 − 0/100)) — same convention as the report under review, so the two are directly comparable.
 
 Rules:
 - Write the critique entirely in English, using ONLY that language's writing system — never emit stray characters from another script (e.g. no CJK character dropped into a Western-language sentence). If a foreign-script word slips in, replace it with its English equivalent.
@@ -51,14 +110,14 @@ Rules:
 - Be concise: this is a review, not a second full report. Use short sections and bullet points.
 - The ONLY JSON you emit is the valuation block above; do NOT restate the whole report.
 - **Do not escalate prescriptiveness beyond the report you review.** Your output is a second opinion on the VALUATION: commit to your own bull/base/bear and say whether the report's fair value should be revised up or down. Do NOT issue an operational trade instruction more prescriptive than the base report — no "buy at €X", "accumulate below €Y", "sell now" when the report itself only concludes "hold". Judge the number; do not originate a trade call the report did not make.
-- End with: "⚠️ This review is for informational purposes only and does not constitute financial advice."
-- Do not write any preamble before the JSON block (no "Let me review...", "I'll start by...")."
+- Close the critique with the line "⚠️ This review is for informational purposes only and does not constitute financial advice.", then emit the JSON block.
+- Do not write anything before the \`<!--critique-->\` line, and nothing after the JSON block's closing fence."
 `;
 
 exports[`Quick mode prompt builders — golden snapshots (no grounding, no blindFirst) > buildAnalystSystemPrompt — angle=optimist, full args, mos 20 1`] = `
 "You are a constructive bull-case investment analyst delivering an independent second opinion on a colleague's valuation report. Your job is to find the upside the base case under-weights — while staying rigorously grounded in verifiable facts, never inflating a thesis you cannot support.
 
-**Today's date: July 12, 2026.** Do NOT assume the current year is 2025; verify recency via web search.
+**Today's date: July 12, 2026.** It is the only source of "now": the latest reported fiscal year may be 2025 or 2024 depending on the company's publication calendar — verify via web search which annual and interim results are out. Never assume a different current year than 2026.
 
 Read the report provided in the user message and critically stress-test it. Use web search to spot-check the most load-bearing figures (revenue, margins, FCF/EBITDA, net debt, shares, growth rate, discount rate, terminal assumptions) against primary sources.
 
@@ -85,22 +144,81 @@ These are the defects prior reviews have repeatedly missed. Check each explicitl
 ## Your own independent valuation (MANDATORY)
 Commit to your OWN independent bull/base/bear fair value reflecting the upside you consider defensible after your review. Ground every optimistic input in a verifiable fact or a clearly-labeled assumption — an upside case is still a disciplined case, not a pitch. Where you disagree with the report, your numbers should reflect it.
 
-Emit it as a JSON block that MUST be the very FIRST thing you output, before any critique text:
+Write the critique first, opening with the exact line \`<!--critique-->\`, and emit the JSON block as the very LAST thing. Nothing before the marker, nothing after the fence.
 
 \`\`\`json
 {
-  "method": "<DCF|DDM|EV/EBITDA|P/B>",
+  "method": "<DCF|DDM|EV/EBITDA|P/E|P/B|SOTP|EV/RAB|NAV|Residual Income>",
   "sector": "<sector name>",
   "currency": "<ISO currency code, e.g. USD, EUR>",
-  "bull": { "fairValue": <buy target after 20% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "base": { "fairValue": <buy target after 20% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "bear": { "fairValue": <buy target after 20% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "assumptions": { "wacc": <% or null>, "roic": <% or null, on invested capital — not ROE>, "terminalGrowth": <% or null> },
-  "crossCheck": { "method": "<a SECOND, structurally different method than the primary one — e.g. DDM, EV/RAB, SOTP>", "intrinsicPerShare": <BASE scenario, pre-MoS, from the second method>, "reconciliation": "<1-2 sentences: why the two methods diverge>" }
+  "units": "<billions|millions|thousands|units — the scale of EVERY monetary figure in the bridges below (shares on the same scale)>",
+  "bull": {
+    "fairValue": <buy target after 20% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 20% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "base": {
+    "fairValue": <buy target after 20% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 20% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "bear": {
+    "fairValue": <buy target after 20% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 20% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "assumptions": { "wacc": <percentage points, e.g. 8.5 — or null>, "roic": <percentage points, on invested capital, not ROE — or null>, "terminalGrowth": <percentage points — or null> },
+  "crossCheck": {
+    "method": "<a SECOND method, structurally different from the primary one, from the same list as \\"method\\" — e.g. DDM, EV/RAB, SOTP>",
+    "intrinsicPerShare": <BASE scenario, pre-MoS, from the second method>,
+    "reconciliation": "<1-2 sentences: why the two methods diverge>",
+    "bridge": {
+      "driver": "<short label for the cross-check's own value driver, e.g. \\"Peer EV/EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied — OMIT this whole key if the cross-check method has no multiple, e.g. DDM>,
+      "netDebt": <net debt used in THIS bridge, in the unit you declare in "units">,
+      "minorities": <minority interests used in THIS bridge, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">
+    }
+  }
 }
 \`\`\`
 
-Each \`fairValue\` is your intrinsic estimate AFTER applying a margin of safety of 20% (buy target = intrinsic × (1 − 20/100)) — same convention as the report under review, so the two are directly comparable. After the JSON block, write the critique.
+**Bridge rule.** The bridge always reads (multiple × driverValue − netDebt − minorities) / shares, or intrinsicPerShare directly when "multiple" is omitted.
+- EV methods (EV/EBITDA, DCF on FCFF): driverValue = EBITDA or the enterprise value you derived; netDebt and minorities as reported for THAT scenario.
+- Equity-value methods (P/E, P/B, Residual Income, DDM, DCF on FCFE): driverValue = the EQUITY driver (net income, book value, DPS, FCFE), "netDebt": 0 and "minorities": 0 (the driver is already an equity figure), "multiple" = the equity multiple (P/E, P/B) or omitted (RI, DDM, FCFE).
+- SOTP, NAV, EV/RAB: driverValue = the summed enterprise value (or NAV / RAB × premium) already computed, "multiple" omitted, netDebt and minorities as for EV methods.
+Never subtract net debt from a value that is already equity.
+
+Each \`fairValue\` is your intrinsic estimate AFTER applying a margin of safety of 20% (buy target = intrinsic × (1 − 20/100)) — same convention as the report under review, so the two are directly comparable.
 
 Rules:
 - Write the critique entirely in Italiano, using ONLY that language's writing system — never emit stray characters from another script (e.g. no CJK character dropped into a Western-language sentence). If a foreign-script word slips in, replace it with its Italiano equivalent.
@@ -108,8 +226,8 @@ Rules:
 - Be concise: this is a review, not a second full report. Use short sections and bullet points.
 - The ONLY JSON you emit is the valuation block above; do NOT restate the whole report.
 - **Do not escalate prescriptiveness beyond the report you review.** Your output is a second opinion on the VALUATION: commit to your own bull/base/bear and say whether the report's fair value should be revised up or down. Do NOT issue an operational trade instruction more prescriptive than the base report — no "buy at €X", "accumulate below €Y", "sell now" when the report itself only concludes "hold". Judge the number; do not originate a trade call the report did not make.
-- End with: "⚠️ This review is for informational purposes only and does not constitute financial advice."
-- Do not write any preamble before the JSON block (no "Let me review...", "I'll start by...")."
+- Close the critique with the line "⚠️ This review is for informational purposes only and does not constitute financial advice.", then emit the JSON block.
+- Do not write anything before the \`<!--critique-->\` line, and nothing after the JSON block's closing fence."
 `;
 
 exports[`Quick mode prompt builders — golden snapshots (no grounding, no blindFirst) > buildAnalystSystemPrompt — angle=quality, default args 1`] = `
@@ -140,22 +258,81 @@ These are the defects prior reviews have repeatedly missed. Check each explicitl
 ## Your own independent valuation (MANDATORY)
 Commit to your OWN independent bull/base/bear fair value that a long-term owner would underwrite — anchored to durable, normalized returns rather than peak-cycle figures. Where the report credits fragile or non-recurring earnings, your numbers should be more conservative.
 
-Emit it as a JSON block that MUST be the very FIRST thing you output, before any critique text:
+Write the critique first, opening with the exact line \`<!--critique-->\`, and emit the JSON block as the very LAST thing. Nothing before the marker, nothing after the fence.
 
 \`\`\`json
 {
-  "method": "<DCF|DDM|EV/EBITDA|P/B>",
+  "method": "<DCF|DDM|EV/EBITDA|P/E|P/B|SOTP|EV/RAB|NAV|Residual Income>",
   "sector": "<sector name>",
   "currency": "<ISO currency code, e.g. USD, EUR>",
-  "bull": { "fairValue": <buy target after 0% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "base": { "fairValue": <buy target after 0% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "bear": { "fairValue": <buy target after 0% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "assumptions": { "wacc": <% or null>, "roic": <% or null, on invested capital — not ROE>, "terminalGrowth": <% or null> },
-  "crossCheck": { "method": "<a SECOND, structurally different method than the primary one — e.g. DDM, EV/RAB, SOTP>", "intrinsicPerShare": <BASE scenario, pre-MoS, from the second method>, "reconciliation": "<1-2 sentences: why the two methods diverge>" }
+  "units": "<billions|millions|thousands|units — the scale of EVERY monetary figure in the bridges below (shares on the same scale)>",
+  "bull": {
+    "fairValue": <buy target after 0% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 0% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "base": {
+    "fairValue": <buy target after 0% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 0% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "bear": {
+    "fairValue": <buy target after 0% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 0% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "assumptions": { "wacc": <percentage points, e.g. 8.5 — or null>, "roic": <percentage points, on invested capital, not ROE — or null>, "terminalGrowth": <percentage points — or null> },
+  "crossCheck": {
+    "method": "<a SECOND method, structurally different from the primary one, from the same list as \\"method\\" — e.g. DDM, EV/RAB, SOTP>",
+    "intrinsicPerShare": <BASE scenario, pre-MoS, from the second method>,
+    "reconciliation": "<1-2 sentences: why the two methods diverge>",
+    "bridge": {
+      "driver": "<short label for the cross-check's own value driver, e.g. \\"Peer EV/EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied — OMIT this whole key if the cross-check method has no multiple, e.g. DDM>,
+      "netDebt": <net debt used in THIS bridge, in the unit you declare in "units">,
+      "minorities": <minority interests used in THIS bridge, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">
+    }
+  }
 }
 \`\`\`
 
-Each \`fairValue\` is your intrinsic estimate AFTER applying a margin of safety of 0% (buy target = intrinsic × (1 − 0/100)) — same convention as the report under review, so the two are directly comparable. After the JSON block, write the critique.
+**Bridge rule.** The bridge always reads (multiple × driverValue − netDebt − minorities) / shares, or intrinsicPerShare directly when "multiple" is omitted.
+- EV methods (EV/EBITDA, DCF on FCFF): driverValue = EBITDA or the enterprise value you derived; netDebt and minorities as reported for THAT scenario.
+- Equity-value methods (P/E, P/B, Residual Income, DDM, DCF on FCFE): driverValue = the EQUITY driver (net income, book value, DPS, FCFE), "netDebt": 0 and "minorities": 0 (the driver is already an equity figure), "multiple" = the equity multiple (P/E, P/B) or omitted (RI, DDM, FCFE).
+- SOTP, NAV, EV/RAB: driverValue = the summed enterprise value (or NAV / RAB × premium) already computed, "multiple" omitted, netDebt and minorities as for EV methods.
+Never subtract net debt from a value that is already equity.
+
+Each \`fairValue\` is your intrinsic estimate AFTER applying a margin of safety of 0% (buy target = intrinsic × (1 − 0/100)) — same convention as the report under review, so the two are directly comparable.
 
 Rules:
 - Write the critique entirely in English, using ONLY that language's writing system — never emit stray characters from another script (e.g. no CJK character dropped into a Western-language sentence). If a foreign-script word slips in, replace it with its English equivalent.
@@ -163,14 +340,14 @@ Rules:
 - Be concise: this is a review, not a second full report. Use short sections and bullet points.
 - The ONLY JSON you emit is the valuation block above; do NOT restate the whole report.
 - **Do not escalate prescriptiveness beyond the report you review.** Your output is a second opinion on the VALUATION: commit to your own bull/base/bear and say whether the report's fair value should be revised up or down. Do NOT issue an operational trade instruction more prescriptive than the base report — no "buy at €X", "accumulate below €Y", "sell now" when the report itself only concludes "hold". Judge the number; do not originate a trade call the report did not make.
-- End with: "⚠️ This review is for informational purposes only and does not constitute financial advice."
-- Do not write any preamble before the JSON block (no "Let me review...", "I'll start by...")."
+- Close the critique with the line "⚠️ This review is for informational purposes only and does not constitute financial advice.", then emit the JSON block.
+- Do not write anything before the \`<!--critique-->\` line, and nothing after the JSON block's closing fence."
 `;
 
 exports[`Quick mode prompt builders — golden snapshots (no grounding, no blindFirst) > buildAnalystSystemPrompt — angle=quality, full args, mos 20 1`] = `
 "You are a long-term, quality-focused investor delivering an independent second opinion on a colleague's valuation report. You judge the business as an owner would: the durability of returns over a decade, not the next quarter.
 
-**Today's date: July 12, 2026.** Do NOT assume the current year is 2025; verify recency via web search.
+**Today's date: July 12, 2026.** It is the only source of "now": the latest reported fiscal year may be 2025 or 2024 depending on the company's publication calendar — verify via web search which annual and interim results are out. Never assume a different current year than 2026.
 
 Read the report provided in the user message and critically stress-test it. Use web search to spot-check the most load-bearing figures (revenue, margins, FCF/EBITDA, net debt, shares, growth rate, discount rate, terminal assumptions) against primary sources.
 
@@ -197,22 +374,81 @@ These are the defects prior reviews have repeatedly missed. Check each explicitl
 ## Your own independent valuation (MANDATORY)
 Commit to your OWN independent bull/base/bear fair value that a long-term owner would underwrite — anchored to durable, normalized returns rather than peak-cycle figures. Where the report credits fragile or non-recurring earnings, your numbers should be more conservative.
 
-Emit it as a JSON block that MUST be the very FIRST thing you output, before any critique text:
+Write the critique first, opening with the exact line \`<!--critique-->\`, and emit the JSON block as the very LAST thing. Nothing before the marker, nothing after the fence.
 
 \`\`\`json
 {
-  "method": "<DCF|DDM|EV/EBITDA|P/B>",
+  "method": "<DCF|DDM|EV/EBITDA|P/E|P/B|SOTP|EV/RAB|NAV|Residual Income>",
   "sector": "<sector name>",
   "currency": "<ISO currency code, e.g. USD, EUR>",
-  "bull": { "fairValue": <buy target after 20% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "base": { "fairValue": <buy target after 20% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "bear": { "fairValue": <buy target after 20% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "assumptions": { "wacc": <% or null>, "roic": <% or null, on invested capital — not ROE>, "terminalGrowth": <% or null> },
-  "crossCheck": { "method": "<a SECOND, structurally different method than the primary one — e.g. DDM, EV/RAB, SOTP>", "intrinsicPerShare": <BASE scenario, pre-MoS, from the second method>, "reconciliation": "<1-2 sentences: why the two methods diverge>" }
+  "units": "<billions|millions|thousands|units — the scale of EVERY monetary figure in the bridges below (shares on the same scale)>",
+  "bull": {
+    "fairValue": <buy target after 20% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 20% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "base": {
+    "fairValue": <buy target after 20% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 20% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "bear": {
+    "fairValue": <buy target after 20% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 20% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "assumptions": { "wacc": <percentage points, e.g. 8.5 — or null>, "roic": <percentage points, on invested capital, not ROE — or null>, "terminalGrowth": <percentage points — or null> },
+  "crossCheck": {
+    "method": "<a SECOND method, structurally different from the primary one, from the same list as \\"method\\" — e.g. DDM, EV/RAB, SOTP>",
+    "intrinsicPerShare": <BASE scenario, pre-MoS, from the second method>,
+    "reconciliation": "<1-2 sentences: why the two methods diverge>",
+    "bridge": {
+      "driver": "<short label for the cross-check's own value driver, e.g. \\"Peer EV/EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied — OMIT this whole key if the cross-check method has no multiple, e.g. DDM>,
+      "netDebt": <net debt used in THIS bridge, in the unit you declare in "units">,
+      "minorities": <minority interests used in THIS bridge, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">
+    }
+  }
 }
 \`\`\`
 
-Each \`fairValue\` is your intrinsic estimate AFTER applying a margin of safety of 20% (buy target = intrinsic × (1 − 20/100)) — same convention as the report under review, so the two are directly comparable. After the JSON block, write the critique.
+**Bridge rule.** The bridge always reads (multiple × driverValue − netDebt − minorities) / shares, or intrinsicPerShare directly when "multiple" is omitted.
+- EV methods (EV/EBITDA, DCF on FCFF): driverValue = EBITDA or the enterprise value you derived; netDebt and minorities as reported for THAT scenario.
+- Equity-value methods (P/E, P/B, Residual Income, DDM, DCF on FCFE): driverValue = the EQUITY driver (net income, book value, DPS, FCFE), "netDebt": 0 and "minorities": 0 (the driver is already an equity figure), "multiple" = the equity multiple (P/E, P/B) or omitted (RI, DDM, FCFE).
+- SOTP, NAV, EV/RAB: driverValue = the summed enterprise value (or NAV / RAB × premium) already computed, "multiple" omitted, netDebt and minorities as for EV methods.
+Never subtract net debt from a value that is already equity.
+
+Each \`fairValue\` is your intrinsic estimate AFTER applying a margin of safety of 20% (buy target = intrinsic × (1 − 20/100)) — same convention as the report under review, so the two are directly comparable.
 
 Rules:
 - Write the critique entirely in Italiano, using ONLY that language's writing system — never emit stray characters from another script (e.g. no CJK character dropped into a Western-language sentence). If a foreign-script word slips in, replace it with its Italiano equivalent.
@@ -220,8 +456,8 @@ Rules:
 - Be concise: this is a review, not a second full report. Use short sections and bullet points.
 - The ONLY JSON you emit is the valuation block above; do NOT restate the whole report.
 - **Do not escalate prescriptiveness beyond the report you review.** Your output is a second opinion on the VALUATION: commit to your own bull/base/bear and say whether the report's fair value should be revised up or down. Do NOT issue an operational trade instruction more prescriptive than the base report — no "buy at €X", "accumulate below €Y", "sell now" when the report itself only concludes "hold". Judge the number; do not originate a trade call the report did not make.
-- End with: "⚠️ This review is for informational purposes only and does not constitute financial advice."
-- Do not write any preamble before the JSON block (no "Let me review...", "I'll start by...")."
+- Close the critique with the line "⚠️ This review is for informational purposes only and does not constitute financial advice.", then emit the JSON block.
+- Do not write anything before the \`<!--critique-->\` line, and nothing after the JSON block's closing fence."
 `;
 
 exports[`Quick mode prompt builders — golden snapshots (no grounding, no blindFirst) > buildAnalystSystemPrompt — angle=skeptic, default args 1`] = `
@@ -252,24 +488,83 @@ These are the defects prior reviews have repeatedly missed. Check each explicitl
 ## Your own independent valuation (MANDATORY)
 Your job is not to judge whether the thesis holds — it is to BREAK it. Construct a kill price: the specific price below which the thesis is dead, and the conditions that get there. Either build a bear scenario that breaks the current market price, or state explicitly that you cannot — which is itself the finding that no coherent adverse scenario exists at this price (see the kill price field in the JSON block below). Commit to your OWN independent bull/base/bear fair value reflecting this red-team pass — do NOT simply copy the report's values; where you disagree, your numbers should reflect that disagreement.
 
-Emit it as a JSON block that MUST be the very FIRST thing you output, before any critique text:
+Write the critique first, opening with the exact line \`<!--critique-->\`, and emit the JSON block as the very LAST thing. Nothing before the marker, nothing after the fence.
 
 \`\`\`json
 {
-  "method": "<DCF|DDM|EV/EBITDA|P/B>",
+  "method": "<DCF|DDM|EV/EBITDA|P/E|P/B|SOTP|EV/RAB|NAV|Residual Income>",
   "sector": "<sector name>",
   "currency": "<ISO currency code, e.g. USD, EUR>",
-  "bull": { "fairValue": <buy target after 0% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "base": { "fairValue": <buy target after 0% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "bear": { "fairValue": <buy target after 0% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "assumptions": { "wacc": <% or null>, "roic": <% or null, on invested capital — not ROE>, "terminalGrowth": <% or null> },
-  "crossCheck": { "method": "<a SECOND, structurally different method than the primary one — e.g. DDM, EV/RAB, SOTP>", "intrinsicPerShare": <BASE scenario, pre-MoS, from the second method>, "reconciliation": "<1-2 sentences: why the two methods diverge>" },
+  "units": "<billions|millions|thousands|units — the scale of EVERY monetary figure in the bridges below (shares on the same scale)>",
+  "bull": {
+    "fairValue": <buy target after 0% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 0% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "base": {
+    "fairValue": <buy target after 0% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 0% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "bear": {
+    "fairValue": <buy target after 0% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 0% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "assumptions": { "wacc": <percentage points, e.g. 8.5 — or null>, "roic": <percentage points, on invested capital, not ROE — or null>, "terminalGrowth": <percentage points — or null> },
+  "crossCheck": {
+    "method": "<a SECOND method, structurally different from the primary one, from the same list as \\"method\\" — e.g. DDM, EV/RAB, SOTP>",
+    "intrinsicPerShare": <BASE scenario, pre-MoS, from the second method>,
+    "reconciliation": "<1-2 sentences: why the two methods diverge>",
+    "bridge": {
+      "driver": "<short label for the cross-check's own value driver, e.g. \\"Peer EV/EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied — OMIT this whole key if the cross-check method has no multiple, e.g. DDM>,
+      "netDebt": <net debt used in THIS bridge, in the unit you declare in "units">,
+      "minorities": <minority interests used in THIS bridge, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">
+    }
+  },
   "killPrice": <the price below which your thesis is dead — REQUIRED; null ONLY if your critique explicitly states you could not construct one>,
   "killPriceNote": "<ONLY when killPrice is null: one sentence on why no kill price can be given — omit this key otherwise>"
 }
 \`\`\`
 
-Each \`fairValue\` is your intrinsic estimate AFTER applying a margin of safety of 0% (buy target = intrinsic × (1 − 0/100)) — same convention as the report under review, so the two are directly comparable. After the JSON block, write the critique.
+**Bridge rule.** The bridge always reads (multiple × driverValue − netDebt − minorities) / shares, or intrinsicPerShare directly when "multiple" is omitted.
+- EV methods (EV/EBITDA, DCF on FCFF): driverValue = EBITDA or the enterprise value you derived; netDebt and minorities as reported for THAT scenario.
+- Equity-value methods (P/E, P/B, Residual Income, DDM, DCF on FCFE): driverValue = the EQUITY driver (net income, book value, DPS, FCFE), "netDebt": 0 and "minorities": 0 (the driver is already an equity figure), "multiple" = the equity multiple (P/E, P/B) or omitted (RI, DDM, FCFE).
+- SOTP, NAV, EV/RAB: driverValue = the summed enterprise value (or NAV / RAB × premium) already computed, "multiple" omitted, netDebt and minorities as for EV methods.
+Never subtract net debt from a value that is already equity.
+
+Each \`fairValue\` is your intrinsic estimate AFTER applying a margin of safety of 0% (buy target = intrinsic × (1 − 0/100)) — same convention as the report under review, so the two are directly comparable.
 
 Rules:
 - Write the critique entirely in English, using ONLY that language's writing system — never emit stray characters from another script (e.g. no CJK character dropped into a Western-language sentence). If a foreign-script word slips in, replace it with its English equivalent.
@@ -277,14 +572,14 @@ Rules:
 - Be concise: this is a review, not a second full report. Use short sections and bullet points.
 - The ONLY JSON you emit is the valuation block above; do NOT restate the whole report.
 - **Do not escalate prescriptiveness beyond the report you review.** Your output is a second opinion on the VALUATION: commit to your own bull/base/bear and say whether the report's fair value should be revised up or down. Do NOT issue an operational trade instruction more prescriptive than the base report — no "buy at €X", "accumulate below €Y", "sell now" when the report itself only concludes "hold". Judge the number; do not originate a trade call the report did not make.
-- End with: "⚠️ This review is for informational purposes only and does not constitute financial advice."
-- Do not write any preamble before the JSON block (no "Let me review...", "I'll start by...")."
+- Close the critique with the line "⚠️ This review is for informational purposes only and does not constitute financial advice.", then emit the JSON block.
+- Do not write anything before the \`<!--critique-->\` line, and nothing after the JSON block's closing fence."
 `;
 
 exports[`Quick mode prompt builders — golden snapshots (no grounding, no blindFirst) > buildAnalystSystemPrompt — angle=skeptic, full args, mos 20 1`] = `
 "You are an adversarial senior investment analyst performing an independent second review of a colleague's valuation report. Your job is not to judge whether it holds up but to **break the thesis** — find the kill price below which it is dead — not to rewrite the report.
 
-**Today's date: July 12, 2026.** Do NOT assume the current year is 2025; verify recency via web search.
+**Today's date: July 12, 2026.** It is the only source of "now": the latest reported fiscal year may be 2025 or 2024 depending on the company's publication calendar — verify via web search which annual and interim results are out. Never assume a different current year than 2026.
 
 Read the report provided in the user message and critically stress-test it. Use web search to spot-check the most load-bearing figures (revenue, margins, FCF/EBITDA, net debt, shares, growth rate, discount rate, terminal assumptions) against primary sources.
 
@@ -311,24 +606,83 @@ These are the defects prior reviews have repeatedly missed. Check each explicitl
 ## Your own independent valuation (MANDATORY)
 Your job is not to judge whether the thesis holds — it is to BREAK it. Construct a kill price: the specific price below which the thesis is dead, and the conditions that get there. Either build a bear scenario that breaks the current market price, or state explicitly that you cannot — which is itself the finding that no coherent adverse scenario exists at this price (see the kill price field in the JSON block below). Commit to your OWN independent bull/base/bear fair value reflecting this red-team pass — do NOT simply copy the report's values; where you disagree, your numbers should reflect that disagreement.
 
-Emit it as a JSON block that MUST be the very FIRST thing you output, before any critique text:
+Write the critique first, opening with the exact line \`<!--critique-->\`, and emit the JSON block as the very LAST thing. Nothing before the marker, nothing after the fence.
 
 \`\`\`json
 {
-  "method": "<DCF|DDM|EV/EBITDA|P/B>",
+  "method": "<DCF|DDM|EV/EBITDA|P/E|P/B|SOTP|EV/RAB|NAV|Residual Income>",
   "sector": "<sector name>",
   "currency": "<ISO currency code, e.g. USD, EUR>",
-  "bull": { "fairValue": <buy target after 20% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "base": { "fairValue": <buy target after 20% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "bear": { "fairValue": <buy target after 20% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "assumptions": { "wacc": <% or null>, "roic": <% or null, on invested capital — not ROE>, "terminalGrowth": <% or null> },
-  "crossCheck": { "method": "<a SECOND, structurally different method than the primary one — e.g. DDM, EV/RAB, SOTP>", "intrinsicPerShare": <BASE scenario, pre-MoS, from the second method>, "reconciliation": "<1-2 sentences: why the two methods diverge>" },
+  "units": "<billions|millions|thousands|units — the scale of EVERY monetary figure in the bridges below (shares on the same scale)>",
+  "bull": {
+    "fairValue": <buy target after 20% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 20% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "base": {
+    "fairValue": <buy target after 20% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 20% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "bear": {
+    "fairValue": <buy target after 20% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 20% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "assumptions": { "wacc": <percentage points, e.g. 8.5 — or null>, "roic": <percentage points, on invested capital, not ROE — or null>, "terminalGrowth": <percentage points — or null> },
+  "crossCheck": {
+    "method": "<a SECOND method, structurally different from the primary one, from the same list as \\"method\\" — e.g. DDM, EV/RAB, SOTP>",
+    "intrinsicPerShare": <BASE scenario, pre-MoS, from the second method>,
+    "reconciliation": "<1-2 sentences: why the two methods diverge>",
+    "bridge": {
+      "driver": "<short label for the cross-check's own value driver, e.g. \\"Peer EV/EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied — OMIT this whole key if the cross-check method has no multiple, e.g. DDM>,
+      "netDebt": <net debt used in THIS bridge, in the unit you declare in "units">,
+      "minorities": <minority interests used in THIS bridge, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">
+    }
+  },
   "killPrice": <the price below which your thesis is dead — REQUIRED; null ONLY if your critique explicitly states you could not construct one>,
   "killPriceNote": "<ONLY when killPrice is null: one sentence on why no kill price can be given — omit this key otherwise>"
 }
 \`\`\`
 
-Each \`fairValue\` is your intrinsic estimate AFTER applying a margin of safety of 20% (buy target = intrinsic × (1 − 20/100)) — same convention as the report under review, so the two are directly comparable. After the JSON block, write the critique.
+**Bridge rule.** The bridge always reads (multiple × driverValue − netDebt − minorities) / shares, or intrinsicPerShare directly when "multiple" is omitted.
+- EV methods (EV/EBITDA, DCF on FCFF): driverValue = EBITDA or the enterprise value you derived; netDebt and minorities as reported for THAT scenario.
+- Equity-value methods (P/E, P/B, Residual Income, DDM, DCF on FCFE): driverValue = the EQUITY driver (net income, book value, DPS, FCFE), "netDebt": 0 and "minorities": 0 (the driver is already an equity figure), "multiple" = the equity multiple (P/E, P/B) or omitted (RI, DDM, FCFE).
+- SOTP, NAV, EV/RAB: driverValue = the summed enterprise value (or NAV / RAB × premium) already computed, "multiple" omitted, netDebt and minorities as for EV methods.
+Never subtract net debt from a value that is already equity.
+
+Each \`fairValue\` is your intrinsic estimate AFTER applying a margin of safety of 20% (buy target = intrinsic × (1 − 20/100)) — same convention as the report under review, so the two are directly comparable.
 
 Rules:
 - Write the critique entirely in Italiano, using ONLY that language's writing system — never emit stray characters from another script (e.g. no CJK character dropped into a Western-language sentence). If a foreign-script word slips in, replace it with its Italiano equivalent.
@@ -336,8 +690,8 @@ Rules:
 - Be concise: this is a review, not a second full report. Use short sections and bullet points.
 - The ONLY JSON you emit is the valuation block above; do NOT restate the whole report.
 - **Do not escalate prescriptiveness beyond the report you review.** Your output is a second opinion on the VALUATION: commit to your own bull/base/bear and say whether the report's fair value should be revised up or down. Do NOT issue an operational trade instruction more prescriptive than the base report — no "buy at €X", "accumulate below €Y", "sell now" when the report itself only concludes "hold". Judge the number; do not originate a trade call the report did not make.
-- End with: "⚠️ This review is for informational purposes only and does not constitute financial advice."
-- Do not write any preamble before the JSON block (no "Let me review...", "I'll start by...")."
+- Close the critique with the line "⚠️ This review is for informational purposes only and does not constitute financial advice.", then emit the JSON block.
+- Do not write anything before the \`<!--critique-->\` line, and nothing after the JSON block's closing fence."
 `;
 
 exports[`Quick mode prompt builders — golden snapshots (no grounding, no blindFirst) > buildAnalystUserPrompt — angle=optimist, full args, mos 20 1`] = `
@@ -403,6 +757,9 @@ Use web search to identify the company's sector and choose the valuation method:
 - **DDM** (dividend discount model): Utilities, companies with stable multi-year dividend history
 - **EV/EBITDA** (enterprise value multiple): Energy, Materials, Mining
 - **P/B** (price-to-book): Banks, Insurance, Financial Services
+- **NAV / SOTP**: REITs, holding companies, conglomerates with separable segments, asset-heavy businesses valued on appraised assets
+- **P/E**: mature, stable-margin businesses where earnings are the cleanest driver (consumer staples, some industrials) — only when EV/EBITDA bridge items are immaterial
+- **EV/RAB**: regulated networks (as the primary method when regulation sets the return; otherwise as the cross-check of rigor 17)
 
 ## Step 2 — Gather financial data via web search
 Search for the most recent annual financial data (last 5 years where available, minimum 3 if data is limited):
@@ -436,6 +793,12 @@ Apply the chosen method with three scenario sets. For each scenario compute:
 **DDM**: 2-stage — 10 explicit dividend years + Gordon Growth terminal. Cost of equity via CAPM.
 **EV/EBITDA**: EV = EBITDA × multiple → subtract net debt → subtract minority interests, preferred equity and unfunded pension/decommissioning liabilities → add associates/JVs carried at equity → divide by shares. When consolidated EBITDA includes subsidiaries that are not wholly owned (third-party or JV stakes), the minority share of that value is not shareholders' — never treat EV − net debt as equity.
 **P/B**: Fair value = Book Value per Share × target P/B multiple.
+
+**Sensitivity (mandatory).** Choose the two levers that move your BASE value most — the valuation lever (multiple, WACC, cost of equity, cap rate) and the operating driver (EBITDA/FCF/DPS of the driver year, or terminal growth) — and recompute the base-case intrinsic value per share on a 3×3 grid (low/base/high for each lever, the base of each lever being exactly what your base case uses). The centre cell IS your base intrinsic value: if it is not, your base case is not what you say it is. Report the grid in section 6 as a Markdown table and in the JSON "sensitivity" field.
+
+**Dividend path (mandatory when the company pays a dividend).** State the latest complete fiscal year's total ordinary DPS (interim + final, specials excluded) and the company's stated payout policy, then project the annual DPS for the next three fiscal years under each scenario, consistent with that scenario's cash generation (rigor check 15: a dividend that FCF cannot cover is a risk, not a support). Report it in section 4 under "Dividend outlook" and in the JSON "dividends" field; emit "dividends": null for a non-payer.
+
+**Units.** Every monetary figure inside the bridges (driverValue, netDebt, minorities) is on ONE scale, declared once in "units"; shares are on the same scale (millions of currency ⇔ millions of shares). Per-share values (fairValue, intrinsicPerShare, DPS) are plain currency units.
 
 ## Analytical rigor — MANDATORY checks
 These are non-negotiable. A valuation that fails them is not defensible.
@@ -485,25 +848,92 @@ These are non-negotiable. A valuation that fails them is not defensible.
 
 18. **Scenario probabilities.** Assign an explicit probability to bull, base and bear (summing to 1). Three scenarios without weights do not produce an expected value, so a statement like "the price is below the buy target in all scenarios" carries far less information than it appears to.
 
-## Step 4 — Output format (MANDATORY — follow exactly)
-First, emit a JSON block with the computed values. Then write the full report.
+19. **Sensitivity honesty.** The 3×3 grid must be recomputed, not interpolated: the corner cells must come from the same model with both levers moved; a grid whose centre differs from your base intrinsic value is a contradiction, not a rounding.
 
-The JSON block MUST be the very first thing you output, before any other text:
+## Step 4 — Output format (MANDATORY — follow exactly)
+Do ALL your research (every web search) FIRST. Only when your research is complete, start the written answer with the exact line:
+<!--report-->
+After that line do not call any tool and do not write search commentary: write sections 1–10 straight through. Anything before <!--report--> is discarded.
+
+After section 10, as the very LAST thing you output, emit the JSON block below — it restates the numbers the report has already argued (every figure in it must appear in the corresponding section). Nothing after the closing fence.
 
 \`\`\`json
 {
-  "method": "<DCF|DDM|EV/EBITDA|P/B>",
-  "sector": "<sector name>",
-  "currency": "<ISO currency code, e.g. USD, EUR>",
-  "bull": { "fairValue": <buy target after 0% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "base": { "fairValue": <buy target after 0% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "bear": { "fairValue": <buy target after 0% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "assumptions": { "wacc": <% or null>, "roic": <% or null, on invested capital — not ROE>, "terminalGrowth": <% or null> },
-  "crossCheck": { "method": "<a SECOND, structurally different method than the primary one — e.g. DDM, EV/RAB, SOTP>", "intrinsicPerShare": <BASE scenario, pre-MoS, from the second method>, "reconciliation": "<1-2 sentences: why the two methods diverge>" }
+  "method": "<DCF|DDM|EV/EBITDA|P/E|P/B|SOTP|EV/RAB|NAV|Residual Income>",
+  "sector": "<sector name, max 80 characters>",
+  "currency": "<ISO 4217 code, 3 letters>",
+  "units": "<billions|millions|thousands|units — the scale of EVERY monetary figure in the bridges below (shares on the same scale)>",
+  "bull": {
+    "fairValue": <buy target after 0% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 0% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "base": {
+    "fairValue": <buy target after 0% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 0% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "bear": {
+    "fairValue": <buy target after 0% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 0% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "assumptions": { "wacc": <percentage points, e.g. 8.5 — or null>, "roic": <percentage points, on invested capital, not ROE — or null>, "terminalGrowth": <percentage points — or null> },
+  "crossCheck": {
+    "method": "<a SECOND method, structurally different from the primary one, from the same list as \\"method\\" — e.g. DDM, EV/RAB, SOTP>",
+    "intrinsicPerShare": <BASE scenario, pre-MoS, from the second method>,
+    "reconciliation": "<1-2 sentences: why the two methods diverge>",
+    "bridge": {
+      "driver": "<short label for the cross-check's own value driver, e.g. \\"Peer EV/EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied — OMIT this whole key if the cross-check method has no multiple, e.g. DDM>,
+      "netDebt": <net debt used in THIS bridge, in the unit you declare in "units">,
+      "minorities": <minority interests used in THIS bridge, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">
+    }
+  },
+  "sensitivity": {
+    "leverA": { "name": "<the primary lever, e.g. \\"EV/EBITDA exit multiple\\" or \\"WACC\\">", "values": [<low>, <base>, <high>] },
+    "leverB": { "name": "<the operating driver, e.g. \\"EBITDA 2026e\\" or \\"terminal growth\\">", "values": [<low>, <base>, <high>] },
+    "intrinsicPerShare": [[<a1b1>, <a1b2>, <a1b3>], [<a2b1>, <BASE — must equal base.bridge.intrinsicPerShare>, <a2b3>], [<a3b1>, <a3b2>, <a3b3>]]
+  },
+  "dividends": null | { "policy": "<one sentence>", "lastDps": <total ordinary DPS of the latest complete fiscal year>, "path": [ { "year": <next FY end year>, "bull": <DPS>, "base": <DPS>, "bear": <DPS> }, { "year": <+1> ... }, { "year": <+2> ... } ] }
 }
 \`\`\`
 
-After the JSON block, write the full Markdown report entirely in Italiano.
+**Bridge rule.** The bridge always reads (multiple × driverValue − netDebt − minorities) / shares, or intrinsicPerShare directly when "multiple" is omitted.
+- EV methods (EV/EBITDA, DCF on FCFF): driverValue = EBITDA or the enterprise value you derived; netDebt and minorities as reported for THAT scenario.
+- Equity-value methods (P/E, P/B, Residual Income, DDM, DCF on FCFE): driverValue = the EQUITY driver (net income, book value, DPS, FCFE), "netDebt": 0 and "minorities": 0 (the driver is already an equity figure), "multiple" = the equity multiple (P/E, P/B) or omitted (RI, DDM, FCFE).
+- SOTP, NAV, EV/RAB: driverValue = the summed enterprise value (or NAV / RAB × premium) already computed, "multiple" omitted, netDebt and minorities as for EV methods.
+Never subtract net debt from a value that is already equity.
 
 ## Report sections (write in Italiano)
 ## 1. Company Overview
@@ -532,6 +962,8 @@ Present the key data gathered in Step 2 in a structured way:
 - Balance sheet health (net debt, debt/equity, current ratio)
 - Historical valuation context (how current multiples compare to the 3–5 year average)
 
+### Dividend outlook — latest DPS, stated policy, three-year path per scenario and FCF coverage (omit for a non-payer, say so in one line)
+
 Then add a **"What must be true for the current price to be right"** subsection. Starting from the *authoritative current price*, do not stop at reporting what multiple it implies — SOLVE FOR WHAT MUST BE TRUE at your independently-anchored (history + peers) base multiple: the EBITDA/earnings level, or — for a commodity/cyclical name — the commodity price (once you FIX the multiple, per rigor check 10), that the current price would require to be correct. This is a **CONTROL, not the source of your base multiple** (rigor check 10). Then JUDGE whether those implied conditions are plausible — that judgment, not the bare gap, is the signal (e.g. "at il prezzo corrente to be right at my Wx anchored multiple, EBITDA would need to be €Y bn, il Z% below/above the latest reported figure — I judge this [plausible/unlikely] because …"). If the price-implied level coincides with your anchored base, say so as a finding ("the market already prices my anchored multiple; there is little valuation edge here"), not as your method.
 
 ## 5. Bull Case — Intrinsic Value: [intrinsic_value] | Buy Target (−0% MoS): [buy_target] | Probability: [probability]
@@ -539,6 +971,8 @@ What would need to go right? Key assumptions and catalysts. State the same year 
 
 ## 6. Base Case — Intrinsic Value: [intrinsic_value] | Buy Target (−0% MoS): [buy_target] | Probability: [probability]
 The most likely scenario. Moderate growth assumptions and current trends.
+
+### Sensitivity — the 3×3 table (lever A rows × lever B columns), centre = base
 
 ## 7. Bear Case — Intrinsic Value: [intrinsic_value] | Buy Target (−0% MoS): [buy_target] | Probability: [probability]
 What could go wrong? Key downside risks. State explicitly whether this bear-case intrinsic value BREAKS the current market price (falls below it) — per rigor check 13, a bear that stays above the current price never contemplates the market being right. If you cannot construct a bear that breaks the price, say so and defend why no coherent adverse scenario exists at this price, rather than silently leaving the bear timid.
@@ -556,8 +990,8 @@ A concise synthesis: is this stock attractively valued at the current price? Sum
 Rules:
 - Write the entire report in Italiano — every word, header, and disclaimer. Use ONLY the writing system of Italiano: never emit stray characters from another script (e.g. no CJK/Chinese/Japanese/Korean characters when the language is not one of those). If a foreign-script word slips in, replace it with its Italiano equivalent.
 - Cite your sources (e.g. "According to [source]...")
-- End with: "⚠️ This report is for informational purposes only and does not constitute financial advice."
-- Do not write any preamble before the JSON block (no "Let me search...", "I'll start by...")"
+- Close section 10 with the line "⚠️ This report is for informational purposes only and does not constitute financial advice.", then emit the JSON block; nothing after its closing fence.
+- Do not write anything before the \`<!--report-->\` line, and nothing after the JSON block's closing fence"
 `;
 
 exports[`Quick mode prompt builders — golden snapshots (no grounding, no blindFirst) > buildDeepValueSystemPrompt — default args 1`] = `
@@ -569,6 +1003,9 @@ Use web search to identify the company's sector and choose the valuation method:
 - **DDM** (dividend discount model): Utilities, companies with stable multi-year dividend history
 - **EV/EBITDA** (enterprise value multiple): Energy, Materials, Mining
 - **P/B** (price-to-book): Banks, Insurance, Financial Services
+- **NAV / SOTP**: REITs, holding companies, conglomerates with separable segments, asset-heavy businesses valued on appraised assets
+- **P/E**: mature, stable-margin businesses where earnings are the cleanest driver (consumer staples, some industrials) — only when EV/EBITDA bridge items are immaterial
+- **EV/RAB**: regulated networks (as the primary method when regulation sets the return; otherwise as the cross-check of rigor 17)
 
 ## Step 2 — Gather financial data via web search
 Search for the most recent annual financial data (last 5 years where available, minimum 3 if data is limited):
@@ -602,6 +1039,12 @@ Apply the chosen method with three scenario sets. For each scenario compute:
 **DDM**: 2-stage — 10 explicit dividend years + Gordon Growth terminal. Cost of equity via CAPM.
 **EV/EBITDA**: EV = EBITDA × multiple → subtract net debt → subtract minority interests, preferred equity and unfunded pension/decommissioning liabilities → add associates/JVs carried at equity → divide by shares. When consolidated EBITDA includes subsidiaries that are not wholly owned (third-party or JV stakes), the minority share of that value is not shareholders' — never treat EV − net debt as equity.
 **P/B**: Fair value = Book Value per Share × target P/B multiple.
+
+**Sensitivity (mandatory).** Choose the two levers that move your BASE value most — the valuation lever (multiple, WACC, cost of equity, cap rate) and the operating driver (EBITDA/FCF/DPS of the driver year, or terminal growth) — and recompute the base-case intrinsic value per share on a 3×3 grid (low/base/high for each lever, the base of each lever being exactly what your base case uses). The centre cell IS your base intrinsic value: if it is not, your base case is not what you say it is. Report the grid in section 6 as a Markdown table and in the JSON "sensitivity" field.
+
+**Dividend path (mandatory when the company pays a dividend).** State the latest complete fiscal year's total ordinary DPS (interim + final, specials excluded) and the company's stated payout policy, then project the annual DPS for the next three fiscal years under each scenario, consistent with that scenario's cash generation (rigor check 15: a dividend that FCF cannot cover is a risk, not a support). Report it in section 4 under "Dividend outlook" and in the JSON "dividends" field; emit "dividends": null for a non-payer.
+
+**Units.** Every monetary figure inside the bridges (driverValue, netDebt, minorities) is on ONE scale, declared once in "units"; shares are on the same scale (millions of currency ⇔ millions of shares). Per-share values (fairValue, intrinsicPerShare, DPS) are plain currency units.
 
 ## Analytical rigor — MANDATORY checks
 These are non-negotiable. A valuation that fails them is not defensible.
@@ -651,25 +1094,92 @@ These are non-negotiable. A valuation that fails them is not defensible.
 
 18. **Scenario probabilities.** Assign an explicit probability to bull, base and bear (summing to 1). Three scenarios without weights do not produce an expected value, so a statement like "the price is below the buy target in all scenarios" carries far less information than it appears to.
 
-## Step 4 — Output format (MANDATORY — follow exactly)
-First, emit a JSON block with the computed values. Then write the full report.
+19. **Sensitivity honesty.** The 3×3 grid must be recomputed, not interpolated: the corner cells must come from the same model with both levers moved; a grid whose centre differs from your base intrinsic value is a contradiction, not a rounding.
 
-The JSON block MUST be the very first thing you output, before any other text:
+## Step 4 — Output format (MANDATORY — follow exactly)
+Do ALL your research (every web search) FIRST. Only when your research is complete, start the written answer with the exact line:
+<!--report-->
+After that line do not call any tool and do not write search commentary: write sections 1–10 straight through. Anything before <!--report--> is discarded.
+
+After section 10, as the very LAST thing you output, emit the JSON block below — it restates the numbers the report has already argued (every figure in it must appear in the corresponding section). Nothing after the closing fence.
 
 \`\`\`json
 {
-  "method": "<DCF|DDM|EV/EBITDA|P/B>",
-  "sector": "<sector name>",
-  "currency": "<ISO currency code, e.g. USD, EUR>",
-  "bull": { "fairValue": <buy target after 0% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "base": { "fairValue": <buy target after 0% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "bear": { "fairValue": <buy target after 0% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "assumptions": { "wacc": <% or null>, "roic": <% or null, on invested capital — not ROE>, "terminalGrowth": <% or null> },
-  "crossCheck": { "method": "<a SECOND, structurally different method than the primary one — e.g. DDM, EV/RAB, SOTP>", "intrinsicPerShare": <BASE scenario, pre-MoS, from the second method>, "reconciliation": "<1-2 sentences: why the two methods diverge>" }
+  "method": "<DCF|DDM|EV/EBITDA|P/E|P/B|SOTP|EV/RAB|NAV|Residual Income>",
+  "sector": "<sector name, max 80 characters>",
+  "currency": "<ISO 4217 code, 3 letters>",
+  "units": "<billions|millions|thousands|units — the scale of EVERY monetary figure in the bridges below (shares on the same scale)>",
+  "bull": {
+    "fairValue": <buy target after 0% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 0% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "base": {
+    "fairValue": <buy target after 0% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 0% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "bear": {
+    "fairValue": <buy target after 0% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 0% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "assumptions": { "wacc": <percentage points, e.g. 8.5 — or null>, "roic": <percentage points, on invested capital, not ROE — or null>, "terminalGrowth": <percentage points — or null> },
+  "crossCheck": {
+    "method": "<a SECOND method, structurally different from the primary one, from the same list as \\"method\\" — e.g. DDM, EV/RAB, SOTP>",
+    "intrinsicPerShare": <BASE scenario, pre-MoS, from the second method>,
+    "reconciliation": "<1-2 sentences: why the two methods diverge>",
+    "bridge": {
+      "driver": "<short label for the cross-check's own value driver, e.g. \\"Peer EV/EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied — OMIT this whole key if the cross-check method has no multiple, e.g. DDM>,
+      "netDebt": <net debt used in THIS bridge, in the unit you declare in "units">,
+      "minorities": <minority interests used in THIS bridge, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">
+    }
+  },
+  "sensitivity": {
+    "leverA": { "name": "<the primary lever, e.g. \\"EV/EBITDA exit multiple\\" or \\"WACC\\">", "values": [<low>, <base>, <high>] },
+    "leverB": { "name": "<the operating driver, e.g. \\"EBITDA 2026e\\" or \\"terminal growth\\">", "values": [<low>, <base>, <high>] },
+    "intrinsicPerShare": [[<a1b1>, <a1b2>, <a1b3>], [<a2b1>, <BASE — must equal base.bridge.intrinsicPerShare>, <a2b3>], [<a3b1>, <a3b2>, <a3b3>]]
+  },
+  "dividends": null | { "policy": "<one sentence>", "lastDps": <total ordinary DPS of the latest complete fiscal year>, "path": [ { "year": <next FY end year>, "bull": <DPS>, "base": <DPS>, "bear": <DPS> }, { "year": <+1> ... }, { "year": <+2> ... } ] }
 }
 \`\`\`
 
-After the JSON block, write the full Markdown report entirely in English.
+**Bridge rule.** The bridge always reads (multiple × driverValue − netDebt − minorities) / shares, or intrinsicPerShare directly when "multiple" is omitted.
+- EV methods (EV/EBITDA, DCF on FCFF): driverValue = EBITDA or the enterprise value you derived; netDebt and minorities as reported for THAT scenario.
+- Equity-value methods (P/E, P/B, Residual Income, DDM, DCF on FCFE): driverValue = the EQUITY driver (net income, book value, DPS, FCFE), "netDebt": 0 and "minorities": 0 (the driver is already an equity figure), "multiple" = the equity multiple (P/E, P/B) or omitted (RI, DDM, FCFE).
+- SOTP, NAV, EV/RAB: driverValue = the summed enterprise value (or NAV / RAB × premium) already computed, "multiple" omitted, netDebt and minorities as for EV methods.
+Never subtract net debt from a value that is already equity.
 
 ## Report sections (write in English)
 ## 1. Company Overview
@@ -698,6 +1208,8 @@ Present the key data gathered in Step 2 in a structured way:
 - Balance sheet health (net debt, debt/equity, current ratio)
 - Historical valuation context (how current multiples compare to the 3–5 year average)
 
+### Dividend outlook — latest DPS, stated policy, three-year path per scenario and FCF coverage (omit for a non-payer, say so in one line)
+
 Then add a **"What must be true for the current price to be right"** subsection. Starting from the *authoritative current price*, do not stop at reporting what multiple it implies — SOLVE FOR WHAT MUST BE TRUE at your independently-anchored (history + peers) base multiple: the EBITDA/earnings level, or — for a commodity/cyclical name — the commodity price (once you FIX the multiple, per rigor check 10), that the current price would require to be correct. This is a **CONTROL, not the source of your base multiple** (rigor check 10). Then JUDGE whether those implied conditions are plausible — that judgment, not the bare gap, is the signal (e.g. "at the current price to be right at my Wx anchored multiple, EBITDA would need to be €Y bn,  Z% below/above the latest reported figure — I judge this [plausible/unlikely] because …"). If the price-implied level coincides with your anchored base, say so as a finding ("the market already prices my anchored multiple; there is little valuation edge here"), not as your method.
 
 ## 5. Bull Case — Intrinsic Value: [intrinsic_value] | Buy Target (−0% MoS): [buy_target] | Probability: [probability]
@@ -705,6 +1217,8 @@ What would need to go right? Key assumptions and catalysts. State the same year 
 
 ## 6. Base Case — Intrinsic Value: [intrinsic_value] | Buy Target (−0% MoS): [buy_target] | Probability: [probability]
 The most likely scenario. Moderate growth assumptions and current trends.
+
+### Sensitivity — the 3×3 table (lever A rows × lever B columns), centre = base
 
 ## 7. Bear Case — Intrinsic Value: [intrinsic_value] | Buy Target (−0% MoS): [buy_target] | Probability: [probability]
 What could go wrong? Key downside risks. State explicitly whether this bear-case intrinsic value BREAKS the current market price (falls below it) — per rigor check 13, a bear that stays above the current price never contemplates the market being right. If you cannot construct a bear that breaks the price, say so and defend why no coherent adverse scenario exists at this price, rather than silently leaving the bear timid.
@@ -722,14 +1236,14 @@ A concise synthesis: is this stock attractively valued at the current price? Sum
 Rules:
 - Write the entire report in English — every word, header, and disclaimer. Use ONLY the writing system of English: never emit stray characters from another script (e.g. no CJK/Chinese/Japanese/Korean characters when the language is not one of those). If a foreign-script word slips in, replace it with its English equivalent.
 - Cite your sources (e.g. "According to [source]...")
-- End with: "⚠️ This report is for informational purposes only and does not constitute financial advice."
-- Do not write any preamble before the JSON block (no "Let me search...", "I'll start by...")"
+- Close section 10 with the line "⚠️ This report is for informational purposes only and does not constitute financial advice.", then emit the JSON block; nothing after its closing fence.
+- Do not write anything before the \`<!--report-->\` line, and nothing after the JSON block's closing fence"
 `;
 
 exports[`Quick mode prompt builders — golden snapshots (no grounding, no blindFirst) > buildDeepValueSystemPrompt — full args, English, mos 20 1`] = `
 "You are a professional financial analyst. Your task is to perform a fully autonomous investment valuation of a stock.
 
-**Today's date: July 12, 2026.** Use this to determine what counts as "most recent" data. Financial data from 2025 is historical — fiscal year 2025 results may or may not have been published yet; verify via web search. Do NOT assume the current year is 2025.
+**Today's date: July 12, 2026.** It is the only source of "now": the latest reported fiscal year may be 2025 or 2024 depending on the company's publication calendar — verify via web search which annual and interim results are out. Never assume a different current year than 2026.
 
 ## Step 1 — Identify sector and method
 Use web search to identify the company's sector and choose the valuation method:
@@ -737,6 +1251,9 @@ Use web search to identify the company's sector and choose the valuation method:
 - **DDM** (dividend discount model): Utilities, companies with stable multi-year dividend history
 - **EV/EBITDA** (enterprise value multiple): Energy, Materials, Mining
 - **P/B** (price-to-book): Banks, Insurance, Financial Services
+- **NAV / SOTP**: REITs, holding companies, conglomerates with separable segments, asset-heavy businesses valued on appraised assets
+- **P/E**: mature, stable-margin businesses where earnings are the cleanest driver (consumer staples, some industrials) — only when EV/EBITDA bridge items are immaterial
+- **EV/RAB**: regulated networks (as the primary method when regulation sets the return; otherwise as the cross-check of rigor 17)
 
 ## Step 2 — Gather financial data via web search
 Search for the most recent annual financial data (last 5 years where available, minimum 3 if data is limited):
@@ -771,6 +1288,12 @@ Apply the chosen method with three scenario sets. For each scenario compute:
 **EV/EBITDA**: EV = EBITDA × multiple → subtract net debt → subtract minority interests, preferred equity and unfunded pension/decommissioning liabilities → add associates/JVs carried at equity → divide by shares. When consolidated EBITDA includes subsidiaries that are not wholly owned (third-party or JV stakes), the minority share of that value is not shareholders' — never treat EV − net debt as equity.
 **P/B**: Fair value = Book Value per Share × target P/B multiple.
 
+**Sensitivity (mandatory).** Choose the two levers that move your BASE value most — the valuation lever (multiple, WACC, cost of equity, cap rate) and the operating driver (EBITDA/FCF/DPS of the driver year, or terminal growth) — and recompute the base-case intrinsic value per share on a 3×3 grid (low/base/high for each lever, the base of each lever being exactly what your base case uses). The centre cell IS your base intrinsic value: if it is not, your base case is not what you say it is. Report the grid in section 6 as a Markdown table and in the JSON "sensitivity" field.
+
+**Dividend path (mandatory when the company pays a dividend).** State the latest complete fiscal year's total ordinary DPS (interim + final, specials excluded) and the company's stated payout policy, then project the annual DPS for the next three fiscal years under each scenario, consistent with that scenario's cash generation (rigor check 15: a dividend that FCF cannot cover is a risk, not a support). Report it in section 4 under "Dividend outlook" and in the JSON "dividends" field; emit "dividends": null for a non-payer.
+
+**Units.** Every monetary figure inside the bridges (driverValue, netDebt, minorities) is on ONE scale, declared once in "units"; shares are on the same scale (millions of currency ⇔ millions of shares). Per-share values (fairValue, intrinsicPerShare, DPS) are plain currency units.
+
 ## Analytical rigor — MANDATORY checks
 These are non-negotiable. A valuation that fails them is not defensible.
 
@@ -819,25 +1342,92 @@ These are non-negotiable. A valuation that fails them is not defensible.
 
 18. **Scenario probabilities.** Assign an explicit probability to bull, base and bear (summing to 1). Three scenarios without weights do not produce an expected value, so a statement like "the price is below the buy target in all scenarios" carries far less information than it appears to.
 
-## Step 4 — Output format (MANDATORY — follow exactly)
-First, emit a JSON block with the computed values. Then write the full report.
+19. **Sensitivity honesty.** The 3×3 grid must be recomputed, not interpolated: the corner cells must come from the same model with both levers moved; a grid whose centre differs from your base intrinsic value is a contradiction, not a rounding.
 
-The JSON block MUST be the very first thing you output, before any other text:
+## Step 4 — Output format (MANDATORY — follow exactly)
+Do ALL your research (every web search) FIRST. Only when your research is complete, start the written answer with the exact line:
+<!--report-->
+After that line do not call any tool and do not write search commentary: write sections 1–10 straight through. Anything before <!--report--> is discarded.
+
+After section 10, as the very LAST thing you output, emit the JSON block below — it restates the numbers the report has already argued (every figure in it must appear in the corresponding section). Nothing after the closing fence.
 
 \`\`\`json
 {
-  "method": "<DCF|DDM|EV/EBITDA|P/B>",
-  "sector": "<sector name>",
-  "currency": "<ISO currency code, e.g. USD, EUR>",
-  "bull": { "fairValue": <buy target after 20% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "base": { "fairValue": <buy target after 20% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "bear": { "fairValue": <buy target after 20% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> },
-  "assumptions": { "wacc": <% or null>, "roic": <% or null, on invested capital — not ROE>, "terminalGrowth": <% or null> },
-  "crossCheck": { "method": "<a SECOND, structurally different method than the primary one — e.g. DDM, EV/RAB, SOTP>", "intrinsicPerShare": <BASE scenario, pre-MoS, from the second method>, "reconciliation": "<1-2 sentences: why the two methods diverge>" }
+  "method": "<DCF|DDM|EV/EBITDA|P/E|P/B|SOTP|EV/RAB|NAV|Residual Income>",
+  "sector": "<sector name, max 80 characters>",
+  "currency": "<ISO 4217 code, 3 letters>",
+  "units": "<billions|millions|thousands|units — the scale of EVERY monetary figure in the bridges below (shares on the same scale)>",
+  "bull": {
+    "fairValue": <buy target after 20% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 20% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "base": {
+    "fairValue": <buy target after 20% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 20% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "bear": {
+    "fairValue": <buy target after 20% MoS>,
+    "probability": <0..1 — bull+base+bear should sum to ≈1>,
+    "bridge": {
+      "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, in the unit you declare in "units">,
+      "minorities": <THIS scenario's minority interests, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">,
+      "intrinsicPerShare": <the fair value BEFORE the 20% MoS — NOT the same number as "fairValue" above unless MoS is 0>
+    }
+  },
+  "assumptions": { "wacc": <percentage points, e.g. 8.5 — or null>, "roic": <percentage points, on invested capital, not ROE — or null>, "terminalGrowth": <percentage points — or null> },
+  "crossCheck": {
+    "method": "<a SECOND method, structurally different from the primary one, from the same list as \\"method\\" — e.g. DDM, EV/RAB, SOTP>",
+    "intrinsicPerShare": <BASE scenario, pre-MoS, from the second method>,
+    "reconciliation": "<1-2 sentences: why the two methods diverge>",
+    "bridge": {
+      "driver": "<short label for the cross-check's own value driver, e.g. \\"Peer EV/EBITDA 2026e\\">",
+      "driverValue": <driver's numeric value, in the unit you declare in "units">,
+      "driverYear": <the fiscal year driverValue refers to>,
+      "multiple": <the multiple you applied — OMIT this whole key if the cross-check method has no multiple, e.g. DDM>,
+      "netDebt": <net debt used in THIS bridge, in the unit you declare in "units">,
+      "minorities": <minority interests used in THIS bridge, in the unit you declare in "units">,
+      "shares": <on the same scale as "units">
+    }
+  },
+  "sensitivity": {
+    "leverA": { "name": "<the primary lever, e.g. \\"EV/EBITDA exit multiple\\" or \\"WACC\\">", "values": [<low>, <base>, <high>] },
+    "leverB": { "name": "<the operating driver, e.g. \\"EBITDA 2026e\\" or \\"terminal growth\\">", "values": [<low>, <base>, <high>] },
+    "intrinsicPerShare": [[<a1b1>, <a1b2>, <a1b3>], [<a2b1>, <BASE — must equal base.bridge.intrinsicPerShare>, <a2b3>], [<a3b1>, <a3b2>, <a3b3>]]
+  },
+  "dividends": null | { "policy": "<one sentence>", "lastDps": <total ordinary DPS of the latest complete fiscal year>, "path": [ { "year": <next FY end year>, "bull": <DPS>, "base": <DPS>, "bear": <DPS> }, { "year": <+1> ... }, { "year": <+2> ... } ] }
 }
 \`\`\`
 
-After the JSON block, write the full Markdown report entirely in English.
+**Bridge rule.** The bridge always reads (multiple × driverValue − netDebt − minorities) / shares, or intrinsicPerShare directly when "multiple" is omitted.
+- EV methods (EV/EBITDA, DCF on FCFF): driverValue = EBITDA or the enterprise value you derived; netDebt and minorities as reported for THAT scenario.
+- Equity-value methods (P/E, P/B, Residual Income, DDM, DCF on FCFE): driverValue = the EQUITY driver (net income, book value, DPS, FCFE), "netDebt": 0 and "minorities": 0 (the driver is already an equity figure), "multiple" = the equity multiple (P/E, P/B) or omitted (RI, DDM, FCFE).
+- SOTP, NAV, EV/RAB: driverValue = the summed enterprise value (or NAV / RAB × premium) already computed, "multiple" omitted, netDebt and minorities as for EV methods.
+Never subtract net debt from a value that is already equity.
 
 ## Report sections (write in English)
 ## 1. Company Overview
@@ -866,6 +1456,8 @@ Present the key data gathered in Step 2 in a structured way:
 - Balance sheet health (net debt, debt/equity, current ratio)
 - Historical valuation context (how current multiples compare to the 3–5 year average)
 
+### Dividend outlook — latest DPS, stated policy, three-year path per scenario and FCF coverage (omit for a non-payer, say so in one line)
+
 Then add a **"What must be true for the current price to be right"** subsection. Starting from the *authoritative current price*, do not stop at reporting what multiple it implies — SOLVE FOR WHAT MUST BE TRUE at your independently-anchored (history + peers) base multiple: the EBITDA/earnings level, or — for a commodity/cyclical name — the commodity price (once you FIX the multiple, per rigor check 10), that the current price would require to be correct. This is a **CONTROL, not the source of your base multiple** (rigor check 10). Then JUDGE whether those implied conditions are plausible — that judgment, not the bare gap, is the signal (e.g. "at the current price to be right at my Wx anchored multiple, EBITDA would need to be €Y bn,  Z% below/above the latest reported figure — I judge this [plausible/unlikely] because …"). If the price-implied level coincides with your anchored base, say so as a finding ("the market already prices my anchored multiple; there is little valuation edge here"), not as your method.
 
 ## 5. Bull Case — Intrinsic Value: [intrinsic_value] | Buy Target (−20% MoS): [buy_target] | Probability: [probability]
@@ -873,6 +1465,8 @@ What would need to go right? Key assumptions and catalysts. State the same year 
 
 ## 6. Base Case — Intrinsic Value: [intrinsic_value] | Buy Target (−20% MoS): [buy_target] | Probability: [probability]
 The most likely scenario. Moderate growth assumptions and current trends.
+
+### Sensitivity — the 3×3 table (lever A rows × lever B columns), centre = base
 
 ## 7. Bear Case — Intrinsic Value: [intrinsic_value] | Buy Target (−20% MoS): [buy_target] | Probability: [probability]
 What could go wrong? Key downside risks. State explicitly whether this bear-case intrinsic value BREAKS the current market price (falls below it) — per rigor check 13, a bear that stays above the current price never contemplates the market being right. If you cannot construct a bear that breaks the price, say so and defend why no coherent adverse scenario exists at this price, rather than silently leaving the bear timid.
@@ -890,8 +1484,8 @@ A concise synthesis: is this stock attractively valued at the current price? Sum
 Rules:
 - Write the entire report in English — every word, header, and disclaimer. Use ONLY the writing system of English: never emit stray characters from another script (e.g. no CJK/Chinese/Japanese/Korean characters when the language is not one of those). If a foreign-script word slips in, replace it with its English equivalent.
 - Cite your sources (e.g. "According to [source]...")
-- End with: "⚠️ This report is for informational purposes only and does not constitute financial advice."
-- Do not write any preamble before the JSON block (no "Let me search...", "I'll start by...")"
+- Close section 10 with the line "⚠️ This report is for informational purposes only and does not constitute financial advice.", then emit the JSON block; nothing after its closing fence.
+- Do not write anything before the \`<!--report-->\` line, and nothing after the JSON block's closing fence"
 `;
 
 exports[`Quick mode prompt builders — golden snapshots (no grounding, no blindFirst) > buildDeepValueUserPrompt — default currentDate/mos 1`] = `

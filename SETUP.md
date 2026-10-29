@@ -199,14 +199,14 @@ The AI routes call the model with a high reasoning effort plus web search. A Dee
 | Pro | 300s | 800s (1800s in beta) |
 | Enterprise | 300s | 800s (1800s in beta) |
 
-**A run that goes past 300s on Hobby is killed** and the report stops mid-stream: streaming doesn't help, since Vercel counts total execution time, not whether the response is still being written.
+**A run that goes past 300s on Hobby is killed** and the report stops mid-stream: streaming doesn't help, since Vercel counts total execution time, not whether the response is still being written. Both `/api/ai/deep-value` and `/api/ai/deep-value/verify` export `maxDuration = 300`, the Hobby ceiling, so the limit is declared in the code rather than left to the platform default.
 
 **This is a declared limit of the project** (owner's decision, 2026-10-20): long analyses run from localhost, the deployed instance serves everything else (reading saved analyses, portfolio, watchlist, crons). Two ways to run them:
 
 - **The app on localhost**, which has no function-duration limit. Mind the database: `.env` points at the production Turso database, so a plain `npm run dev` writes there — which is what you want for a real analysis, never for a test (WORKFLOW.md § 3).
-- **The `/deep-value` Claude Code command** (`.claude/commands/deep-value.md`), which produces the analyses and the analyst panel outside the app and saves them to Turso.
+- **The `/deep-value` Claude Code command** (`.claude/commands/deep-value.md`), which produces the analyses and the analyst panel outside the app and saves them to Turso — suspended until its realignment (D-76): it would save analyses in the old format.
 
-Upgrading to Pro lifts the ceiling to 800s with one `maxDuration` line per route. A queue+polling architecture, or Vercel Workflows (no duration limit), would remove it on Hobby too, at the cost of a new data model and of live streaming — evaluated and not planned for a personal tool.
+Upgrading to Pro lifts the ceiling to 800s by raising `maxDuration` to 800 in both routes. A queue+polling architecture, or Vercel Workflows (no duration limit), would remove it on Hobby too, at the cost of a new data model and of live streaming — evaluated and not planned for a personal tool.
 
 **Planned** (2026-10-27, `doc/evoluzioni/05c-corsa-a-fasi.md`, D-77): every AI call becomes its own request ≤ 300 s, persisted by the server and retried from its phase — the pattern of net-worth-tracker's Consulente. The limit then holds only for a single model turn, measured per phase.
 

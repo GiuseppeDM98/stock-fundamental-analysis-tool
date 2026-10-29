@@ -5,6 +5,7 @@ import {
   analystTriple,
   presentAnalysts,
   consensusTriple,
+  ANALYST_COLUMNS,
 } from "@/lib/report/consensus";
 import type { SavedAnalysis } from "@/types/analysis";
 
@@ -123,5 +124,13 @@ describe("consensusTriple", () => {
     });
     // bear (80+70+120)/3=90, base (100+90+140)/3=110, bull (120+110+160)/3=130
     expect(consensusTriple(a)).toEqual({ bear: 90, base: 110, bull: 130 });
+  });
+});
+
+describe("ANALYST_COLUMNS", () => {
+  it("maps each lens's final JSON to its own result column", () => {
+    expect(ANALYST_COLUMNS.skeptic.result).toBe("reviewResultJson");
+    expect(ANALYST_COLUMNS.optimist.result).toBe("optimistResultJson");
+    expect(ANALYST_COLUMNS.quality.result).toBe("qualityResultJson");
   });
 });

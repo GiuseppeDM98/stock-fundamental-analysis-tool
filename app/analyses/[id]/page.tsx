@@ -3,11 +3,18 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import OpenPositionBanner from "@/components/open-position-banner";
 import ReportBody from "@/components/report/report-body";
-import SavedValuationSummary, { type SavedValuationMeta } from "@/components/saved-valuation-summary";
+import SavedValuationSummary from "@/components/saved-valuation-summary";
 import AnalystPanel from "@/components/analyst-panel";
 import { DetailBreadcrumb, DetailFooterActions } from "@/components/analysis-detail-chrome";
 import type { GroundingPayload } from "@/types/grounding";
 import type { Triple } from "@/lib/report/valuation";
+import {
+  hasFullTriple,
+  parseDeepValueJson,
+  sanitizeDeepValueResult,
+  stripJsonBlock,
+  type ParsedAnalystResult,
+} from "@/lib/report/parse-deep-value-json";
 
 /**
  * Parses the persisted GroundingPayload (Analysis.groundingJson) — malformed/legacy rows
@@ -30,35 +37,6 @@ function tripleOrNull(bull: number | null, base: number | null, bear: number | n
 }
 
 type PageProps = { params: Promise<{ id: string }> };
-
-/**
- * Extract the Deep Value JSON block (method, sector, currency, bull/base/bear) from a
- * saved report so the detail page can re-render the valuation summary. Returns null for
- * reports without a valid block (e.g. older non-Deep-Value analyses).
- */
-function parseValuationMeta(reportMd: string): SavedValuationMeta | null {
-  const match = reportMd.match(/```json\n([\s\S]*?)\n```/);
-  if (!match) return null;
-  try {
-    const parsed = JSON.parse(match[1]);
-    const isScenario = (s: unknown): s is { fairValue: number } =>
-      !!s && typeof (s as { fairValue?: unknown }).fairValue === "number";
-    if (
-      parsed &&
-      typeof parsed.currency === "string" &&
-      typeof parsed.method === "string" &&
-      typeof parsed.sector === "string" &&
-      isScenario(parsed.bull) &&
-      isScenario(parsed.base) &&
-      isScenario(parsed.bear)
-    ) {
-      return parsed as SavedValuationMeta;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Single saved analysis view.
@@ -94,13 +72,22 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
     day: "numeric",
   });
 
-  // Reconstruct the valuation summary (badges + cards + recap) from the saved JSON block.
-  const valuationMeta = parseValuationMeta(analysis.reportMd);
+  // The valuation summary (badges + cards + recap): the sanitized result column when the
+  // save stored one, else the report's own JSON block (its last fence, which is also the
+  // only one of a report saved before the column existed) — one parser for every surface.
+  let result: ParsedAnalystResult | null = null;
+  try {
+    result = analysis.resultJson ? sanitizeDeepValueResult(JSON.parse(analysis.resultJson)) : parseDeepValueJson(analysis.reportMd);
+  } catch {
+    result = null;
+  }
+  const valuationMeta = hasFullTriple(result) ? result : null;
   // Grounded Deep Value mode — null for Quick-mode analyses (column never set).
   const groundingPayload = parseGroundingPayload(analysis.groundingJson);
 
-  // Strip any leading JSON block (from Deep Value analyses) before rendering.
-  const markdown = analysis.reportMd.replace(/^```json\n[\s\S]*?\n```\n?/, "");
+  // Strip every JSON block (at the end of a current report, at the top of an older one)
+  // and the start markers before rendering.
+  const markdown = stripJsonBlock(analysis.reportMd);
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-10">

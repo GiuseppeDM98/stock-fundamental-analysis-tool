@@ -1,19 +1,27 @@
-// Shared parser for the leading JSON block that both the Deep Value analysis and the
-// Analyst Review emit (` ```json … ``` `). Extracted here because the same regex and
-// JSON.parse were duplicated across the live panel, the saved-review component, and
-// (with extra type-guards) the saved-analysis detail page — the reviewer's own JSON
-// pushed the count past the rule-of-three, so it lives in one place now.
+// Shared parser for the JSON block that both the Deep Value analysis and the analyst
+// lenses emit (` ```json … ``` `). Extracted here because the same regex and JSON.parse
+// were duplicated across the live panel, the saved-review component and the saved-analysis
+// detail page; every surface now goes through this one parser.
+//
+// Where the block sits (2026-10): the model researches first, then writes the report (or
+// critique) and emits the JSON block as the very LAST thing, so the numbers restate what
+// the prose already argued and the report can stream from its first heading. Reports saved
+// before then carry ONE block at the top. Reading the LAST fence serves both: an older
+// report's only block is also its last.
 //
 // It never throws: an absent or unparseable block yields null, and a parseable one is
-// shape-sanitized field by field (see sanitizeDeepValueResult) rather than cast. The saved
-// detail page keeps its own stricter parser, which rejects the whole block unless
-// method/sector/currency and all three fair values are present.
+// shape-sanitized field by field (see sanitizeDeepValueResult) rather than cast.
 import type {
   AnalystResult,
   CrossCheck,
+  DividendPath,
+  DividendPathYear,
   Scenario,
+  Sensitivity,
+  SensitivityLever,
   ValuationAssumptions,
   ValuationBridge,
+  ValuationUnits,
 } from "@/components/report/types";
 
 /** What the parser can prove about a JSON block: every scenario may be missing, because
@@ -29,9 +37,18 @@ export function hasFullTriple(result: ParsedAnalystResult | null): result is Ana
   return !!result && !!result.bull && !!result.base && !!result.bear;
 }
 
-// Matches the fenced JSON block anywhere in the text (the stream may carry preamble in
-// degraded cases). Kept in sync with stripJsonBlock below — same fence convention.
-const JSON_BLOCK_RE = /```json\n([\s\S]*?)\n```/;
+// Every fenced JSON block in the text. Kept in sync with stripJsonBlock below — same fence
+// convention.
+const JSON_BLOCK_RE_GLOBAL = /```json\n([\s\S]*?)\n```/g;
+
+// Sentinel lines the prompts ask the model to write right before the report / the critique
+// (lib/ai/deep-value-prompts.ts). Everything before them is research chatter the routes
+// discard (lib/ai/stream-gate.ts). A line rather than the `## 1.` heading because it does
+// not depend on the report language or on the section numbering. The routes drop the
+// marker itself, but stripJsonBlock removes any repeat too: react-markdown renders an HTML
+// comment as visible text (no skipHtml), so a stray marker would show on screen.
+export const REPORT_START_MARKER = "<!--report-->";
+export const CRITIQUE_START_MARKER = "<!--critique-->";
 
 // ─── Shape sanitization ────────────────────────────────────────────────────────────
 // The JSON block is untrusted model output: a field can be null, a string, an array or
@@ -103,14 +120,82 @@ export function sanitizeScenario(raw: unknown): Scenario | undefined {
   return scenario;
 }
 
+/** A lever in percentage points: the prompt asks for 8.5, not 0.085. Anything outside
+ *  [-50, 100] is a unit error (a WACC of 850 is basis points), not a judgment to keep. */
+function percentagePoints(value: unknown): number | null {
+  const n = finiteNumber(value);
+  return n !== undefined && n >= -50 && n <= 100 ? n : null;
+}
+
 /** Each lever is independently nullable; a non-object `assumptions` is dropped whole. */
 export function sanitizeAssumptions(raw: unknown): ValuationAssumptions | undefined {
   if (!isObject(raw)) return undefined;
   return {
-    wacc: finiteNumber(raw.wacc) ?? null,
-    roic: finiteNumber(raw.roic) ?? null,
-    terminalGrowth: finiteNumber(raw.terminalGrowth) ?? null,
+    wacc: percentagePoints(raw.wacc),
+    roic: percentagePoints(raw.roic),
+    terminalGrowth: percentagePoints(raw.terminalGrowth),
   };
+}
+
+const VALUATION_UNITS = new Set<ValuationUnits>(["billions", "millions", "thousands", "units"]);
+
+/** The declared scale of the bridge figures, or undefined for anything off the list. */
+export function sanitizeUnits(raw: unknown): ValuationUnits | undefined {
+  return typeof raw === "string" && VALUATION_UNITS.has(raw as ValuationUnits) ? (raw as ValuationUnits) : undefined;
+}
+
+/** Exactly three finite numbers, or undefined. */
+function finiteTriple(raw: unknown): [number, number, number] | undefined {
+  if (!Array.isArray(raw) || raw.length !== 3) return undefined;
+  const values = raw.map(finiteNumber);
+  return values.every((v) => v !== undefined) ? (values as [number, number, number]) : undefined;
+}
+
+function sanitizeLever(raw: unknown): SensitivityLever | undefined {
+  if (!isObject(raw) || typeof raw.name !== "string" || !raw.name.trim()) return undefined;
+  const values = finiteTriple(raw.values);
+  return values ? { name: raw.name.trim(), values } : undefined;
+}
+
+/** Two named levers with three finite values each and a 3×3 grid of finite numbers; any
+ *  defect drops the whole grid — a partial grid can't be checked against the base case. */
+export function sanitizeSensitivity(raw: unknown): Sensitivity | undefined {
+  if (!isObject(raw)) return undefined;
+  const leverA = sanitizeLever(raw.leverA);
+  const leverB = sanitizeLever(raw.leverB);
+  const grid = raw.intrinsicPerShare;
+  if (!leverA || !leverB || !Array.isArray(grid) || grid.length !== 3) return undefined;
+  const rows = grid.map(finiteTriple);
+  if (!rows.every((row) => row !== undefined)) return undefined;
+  return { leverA, leverB, intrinsicPerShare: rows as Sensitivity["intrinsicPerShare"] };
+}
+
+function sanitizeDividendYear(raw: unknown): DividendPathYear | undefined {
+  if (!isObject(raw)) return undefined;
+  const year = finiteNumber(raw.year);
+  const bull = finiteNumber(raw.bull);
+  const base = finiteNumber(raw.base);
+  const bear = finiteNumber(raw.bear);
+  if (year === undefined || !Number.isInteger(year)) return undefined;
+  if (bull === undefined || base === undefined || bear === undefined || bull < 0 || base < 0 || bear < 0) return undefined;
+  return { year, bull, base, bear };
+}
+
+/**
+ * The declared dividend outlook. `null` stays null — it is the model's statement that the
+ * company pays nothing, which a gate reads differently from "not declared" (undefined).
+ * An object needs a policy sentence, a finite non-negative lastDps and exactly three valid
+ * years; anything else is undefined.
+ */
+export function sanitizeDividends(raw: unknown): DividendPath | null | undefined {
+  if (raw === null) return null;
+  if (!isObject(raw) || typeof raw.policy !== "string") return undefined;
+  const lastDps = finiteNumber(raw.lastDps);
+  if (lastDps === undefined || lastDps < 0) return undefined;
+  if (!Array.isArray(raw.path) || raw.path.length !== 3) return undefined;
+  const path = raw.path.map(sanitizeDividendYear);
+  if (!path.every((year) => year !== undefined)) return undefined;
+  return { policy: raw.policy, lastDps, path: path as DividendPath["path"] };
 }
 
 /** A cross-check needs a method name and a finite intrinsic to mean anything; its own
@@ -153,7 +238,7 @@ function sanitizeRevisions(raw: unknown): AnalystResult["revisions"] {
  * Rebuilds a parsed JSON block into a well-typed result, keeping only fields whose shape
  * is valid (see the section comment above). Never throws.
  *
- * Two presence rules matter to downstream code and are preserved deliberately:
+ * Presence rules that matter to downstream code and are preserved deliberately:
  * - A bull/base/bear key is set only when that scenario is valid, so the return type
  *   declares all three optional: callers that need the full triple narrow through
  *   hasFullTriple.
@@ -161,6 +246,8 @@ function sanitizeRevisions(raw: unknown): AnalystResult["revisions"] {
  *   makes lib/grounding/postcheck.ts add the kill_price gate (analyst lenses only). A
  *   present but non-numeric value becomes null — a declared-but-unusable kill price must
  *   still be judged by the gate, not vanish from it.
+ * - `dividends` keeps a declared null (a non-payer) apart from an absent or malformed
+ *   outlook (no key).
  *
  * @returns the sanitized result, or null when `raw` isn't a JSON object at all.
  */
@@ -171,6 +258,8 @@ export function sanitizeDeepValueResult(raw: unknown): ParsedAnalystResult | nul
     sector: typeof raw.sector === "string" ? raw.sector : "",
     currency: typeof raw.currency === "string" ? raw.currency : "",
   };
+  const units = sanitizeUnits(raw.units);
+  if (units) result.units = units;
 
   for (const key of ["bull", "base", "bear"] as const) {
     const scenario = sanitizeScenario(raw[key]);
@@ -181,6 +270,10 @@ export function sanitizeDeepValueResult(raw: unknown): ParsedAnalystResult | nul
   if (assumptions) result.assumptions = assumptions;
   const crossCheck = sanitizeCrossCheck(raw.crossCheck);
   if (crossCheck) result.crossCheck = crossCheck;
+  const sensitivity = sanitizeSensitivity(raw.sensitivity);
+  if (sensitivity) result.sensitivity = sensitivity;
+  const dividends = sanitizeDividends(raw.dividends);
+  if (dividends !== undefined) result.dividends = dividends;
 
   if ("killPrice" in raw) result.killPrice = finiteNumber(raw.killPrice) ?? null;
   if (typeof raw.killPriceNote === "string" && raw.killPriceNote.trim()) result.killPriceNote = raw.killPriceNote.trim();
@@ -201,28 +294,70 @@ function parseFencedBlock(text: string, re: RegExp): ParsedAnalystResult | null 
 }
 
 /**
- * Parse the fair-value JSON block out of a streamed report/review.
+ * Parse the fair-value JSON block out of a streamed or saved report/review: the LAST
+ * fenced ```json block (the final one of a current report, the only one of an older one).
  * @returns the sanitized result (analyst-only fields included when the block carries
- *   them), or null if no block is present or it is not a JSON object.
+ *   them), or null if no block is present or the last one is not a JSON object.
  */
 export function parseDeepValueJson(text: string): ParsedAnalystResult | null {
-  return parseFencedBlock(text, JSON_BLOCK_RE);
+  const matches = [...text.matchAll(JSON_BLOCK_RE_GLOBAL)];
+  const last = matches[matches.length - 1];
+  if (!last) return null;
+  try {
+    return sanitizeDeepValueResult(JSON.parse(last[1]));
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Remove the leading JSON block so only the human-readable Markdown is rendered.
- * No-op when the text carries no block.
+ * A client-sent result blob (Analysis.resultJson / *ResultJson), re-read through the same
+ * sanitizer as the stream. Shared by the save routes, which store what this returns and
+ * never the client's own text.
+ * @returns the JSON.stringify'd sanitized result when it carries a full bull/base/bear
+ *   triple; null when the text is not JSON, not an object, or incomplete.
+ */
+export function sanitizeResultJson(text: string): string | null {
+  try {
+    const result = sanitizeDeepValueResult(JSON.parse(text));
+    return hasFullTriple(result) ? JSON.stringify(result) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Remove EVERY fenced ```json block and every occurrence of the start markers, so only the
+ * human-readable Markdown is rendered. The ```json-blind fence of a blind-first stream is
+ * left alone (stripAnalystStreamArtifacts handles it). No-op on plain prose.
  */
 export function stripJsonBlock(text: string): string {
-  return text.replace(/```json\n[\s\S]*?\n```\n?/, "");
+  return text
+    .replace(/```json\n[\s\S]*?\n```\n?/g, "")
+    .replaceAll(REPORT_START_MARKER, "")
+    .replaceAll(CRITIQUE_START_MARKER, "");
+}
+
+/**
+ * While streaming, a current answer ends with a json fence that stays OPEN until its last
+ * chunk: hide everything from the last unclosed "```json" so raw JSON never flashes on
+ * screen. A text whose last fence is closed (or that has none) comes back unchanged — which
+ * is also how a route tells whether a cut-off stream left a fence open.
+ */
+export function stripTrailingOpenJsonFence(text: string): string {
+  const open = text.lastIndexOf("```json");
+  if (open === -1) return text;
+  const close = text.indexOf("\n```", open + 7);
+  return close === -1 ? text.slice(0, open) : text;
 }
 
 // Blind-first analyst lenses fence the Phase-1
 // commitment as ```json-blind, deliberately NOT ```json — that string does not match
-// JSON_BLOCK_RE above (there is no literal "```json\n" substring inside "```json-blind\n"),
-// so parseDeepValueJson/stripJsonBlock keep resolving to the Phase-2 FINAL block with zero
-// code changes. A dedicated test in __tests__/parse-deep-value-json.test.ts asserts this
-// non-collision explicitly — it is the only thing holding this trick together.
+// JSON_BLOCK_RE_GLOBAL above (there is no literal "```json\n" substring inside
+// "```json-blind\n"), so parseDeepValueJson (the last ```json fence) keeps resolving to the
+// Phase-2 FINAL block and stripJsonBlock leaves the blind fence alone. A dedicated test in
+// __tests__/parse-deep-value-json.test.ts asserts this non-collision explicitly — it is the
+// only thing holding this trick together.
 const BLIND_JSON_BLOCK_RE = /```json-blind\n([\s\S]*?)\n```/;
 
 /**

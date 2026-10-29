@@ -104,3 +104,24 @@ export function normalizeAiModelId(value: string): AiModelId | null {
 export function isAiEffort(value: string): value is AiEffort {
   return (AI_EFFORT_LEVELS as readonly string[]).includes(value);
 }
+
+/** The effort a call site wants by default when the user has not chosen one for this run:
+ *  `preferred` if the model supports it, else the highest supported level BELOW it (never
+ *  above: a cheaper fallback, not a pricier one). Until 2026-10 an unsupported level jumped
+ *  to the model's top level, so switching a run at xhigh to DeepSeek silently made it max. */
+export function callSiteDefaultEffort(model: AiModelId, preferred: AiEffort): AiEffort {
+  const supported = AI_MODEL_CATALOG[model].efforts;
+  if (supported.includes(preferred)) return preferred;
+  const rank = AI_EFFORT_LEVELS.indexOf(preferred);
+  for (let i = rank - 1; i >= 0; i--) if (supported.includes(AI_EFFORT_LEVELS[i])) return AI_EFFORT_LEVELS[i];
+  return supported[0];
+}
+
+/** The Deep Value call sites (the report and the analyst lenses) start at the HIGHER of
+ *  the user's global default and xhigh: a valuation is the one task where the deeper pass
+ *  is worth its cost, while the global default also drives the Advisor and the earnings
+ *  lookup. The user can still lower it per run. */
+export function deepValueDefaultEffort(model: AiModelId, globalEffort: AiEffort): AiEffort {
+  const preferred = AI_EFFORT_LEVELS.indexOf(globalEffort) > AI_EFFORT_LEVELS.indexOf("xhigh") ? globalEffort : "xhigh";
+  return callSiteDefaultEffort(model, preferred);
+}
