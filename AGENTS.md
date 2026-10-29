@@ -411,7 +411,7 @@ App supports EN and IT via `context/language-context.tsx` + `lib/i18n/translatio
 - **Framework**: Vitest with jsdom, Testing Library for components
 - **Run**: `npm run test` (once) or `npm run test:watch`
 - **Build check**: `npm run build` for type-checking (don't use `npm run lint` — interactive/deprecated)
-- **Path alias**: `vitest.config.ts` must declare `resolve.alias { "@": path.resolve(__dirname, ".") }` — Next.js aliases are not inherited by Vitest
+- **Route tests** (2026-10-29): open with `// @vitest-environment node`; mock `@/lib/ai/client` with `importOriginal` replacing ONLY `getAiClient` (`buildEffortConfig`/`buildThinkingParam` stay real, so the effort is asserted on `runStreamWithToolLoop`'s second argument) and `@/lib/ai/tool-loop` replacing ONLY `runStreamWithToolLoop` (iteration caps stay real); assert the mocked calls' arguments, not only the response. Example: `__tests__/deep-value-route.test.ts`. The `@/` alias (Next.js aliases are not inherited): § Vitest setup above
 - **Type gotcha**: when you add nullable fields to a shared type (`AnalystEstimates`, `FundamentalsResponse`, etc.), grep `__tests__/` for fixture objects of that type and add `null` for each new field — TS won't infer them and will fail silently on shape mismatches until `npx tsc --noEmit` runs
 
 ---

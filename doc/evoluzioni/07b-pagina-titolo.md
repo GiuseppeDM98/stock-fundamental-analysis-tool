@@ -1,7 +1,7 @@
 # 07b — Pagina titolo `/stocks/[ticker]`: loader, grafici dei fondamentali, storia delle stime, storico prezzo, dataset e dividendi
 
 > **Stato**: scritta 2026-10-11 (nata dalla divisione della 07, D-23); riletta in modo adversariale il 2026-10-11: 22 rilievi (la metà «pagina» dei 42 della 07), 6 decisioni (D-21, D-23, D-24, D-25, D-48, D-49; T-29). Pronta per l'implementazione dopo la 07a.
-> **Branch**: `feature/stock-page` da `develop`. **Dipende da**: 01 ritirata il 2026-10-29 (C-3 `loadDividendTotals`/`sumDividendsByTicker`), 02 (`resultJson`, `ANALYSIS_SUMMARY_SELECT`), 03 (`sameCurrency`), 04 (`latestFinancialDataset`, `readAnalysisExtract`, `DatasetTables`, `SourceChip`), 05a (dataset web nel seed), 06 (C-11, `DividendOutlook`, `DividendChart`, `SourceLegend`, token `--chart-*`), 07a (C-12, C-13, link, stub history).
+> **Branch**: `feature/stock-page` da `develop`. **Dipende da**: 01 ritirata il 2026-10-29 (C-3 `loadDividendTotals`/`sumDividendsByTicker`), 02 ritirata il 2026-10-29 (`resultJson`, `ANALYSIS_SUMMARY_SELECT`), 03 (`sameCurrency`), 04 (`latestFinancialDataset`, `readAnalysisExtract`, `DatasetTables`, `SourceChip`), 05a (dataset web nel seed), 06 (C-11, `DividendOutlook`, `DividendChart`, `SourceLegend`, token `--chart-*`), 07a (C-12, C-13, link, stub history).
 > **Indice**: [00-INDICE.md](00-INDICE.md) — decisioni D-3, D-17, D-18, D-21, D-23, D-24, D-25, D-48, D-49; scelte T-17, T-20, T-29; contratti C-12 (`StockPageData`, `loadStockPageData`), C-13, C-16, C-17.
 
 ## 1. Il problema oggi (prove, commit `17e54b6`, 2026-10-11)
@@ -37,7 +37,7 @@
 export type StockPageData = {
   ticker: string;
   companyName: string;
-  analyses: SavedAnalysis[];                       // newest first, ANALYSIS_SUMMARY_SELECT (reportMd "" / critiques null)
+  analyses: SavedAnalysis[];                       // newest first, ANALYSIS_SUMMARY_SELECT (its ten text blobs come back undefined)
   latestDataset: { id: string; dataset: FinancialDataset; createdAt: string } | null;   // blocks/warnings stripped
   analysisExtract: GroundedFinancials | null;      // readAnalysisExtract(latest analysis with values)
   latestAnalysisResult: DeepValueResult | null;    // resultJson sanitized (try/catch) or parseDeepValueJson(reportMd) of the latest analysis with values, then hasFullTriple
@@ -49,7 +49,7 @@ export type StockPageData = {
 export async function loadStockPageData(userId: string, ticker: string): Promise<StockPageData | null>;
 ```
 
-Query in `Promise.all`: `db.analysis.findMany({ where: { userId, ticker, runStatus: "done" }, orderBy createdAt desc, select: ANALYSIS_SUMMARY_SELECT })` (05c, D-87), una seconda `findMany` delle righe non `done` del ticker (`select: { id, runStatus, runStartedAt, runError, datasetId }`) per la riga di stato della pagina (C-23: stessa riga di /analyses, «Riprova»/«Rilancia»/«Elimina»; non conta per D-49 né per `analysisCount`) più, SOLO per `latestAnalysisWithValues`, una `findUnique` con `resultJson`, `reportMd`, `datasetId`, `groundingJson`; `latestFinancialDataset(userId, ticker)`; `db.position.findMany({ where: { userId, ticker } })` (aperte e chiuse); `db.watchlistItem.findFirst`; `db.earningsEstimate.findFirst`; `loadDividendTotals(userId)` (T-24: con `where: { userId }` e parse tollerante) → `.byTicker[ticker] ?? null`. `latestAnalysisResult` come nella 02 (`sanitizeDeepValueResult(JSON.parse(resultJson))` in try/catch, fallback `parseDeepValueJson(reportMd)`, poi `hasFullTriple`). `companyName` = dall'analisi più recente, altrimenti dalla posizione, altrimenti dal watchlist item, altrimenti il ticker.
+Query in `Promise.all`: `db.analysis.findMany({ where: { userId, ticker, runStatus: "done" }, orderBy createdAt desc, select: ANALYSIS_SUMMARY_SELECT })` (05c, D-87), una seconda `findMany` delle righe non `done` del ticker (`select: { id, runStatus, runStartedAt, runError, datasetId }`) per la riga di stato della pagina (C-23: stessa riga di /analyses, «Riprova»/«Rilancia»/«Elimina»; non conta per D-49 né per `analysisCount`) più, SOLO per `latestAnalysisWithValues`, una `findUnique` con `resultJson`, `reportMd`, `datasetId`, `groundingJson`; `latestFinancialDataset(userId, ticker)`; `db.position.findMany({ where: { userId, ticker } })` (aperte e chiuse); `db.watchlistItem.findFirst`; `db.earningsEstimate.findFirst`; `loadDividendTotals(userId)` (T-24: con `where: { userId }` e parse tollerante) → `.byTicker[ticker] ?? null`. `latestAnalysisResult` come in `app/analyses/[id]/page.tsx` (guida § 2.4): `sanitizeDeepValueResult(JSON.parse(resultJson))` in try/catch, fallback `parseDeepValueJson(reportMd)`, poi `hasFullTriple`, con `resultJson` e `reportMd` letti dalla `findUnique` qui sopra, mai dalle righe di `ANALYSIS_SUMMARY_SELECT`, dove `reportMd` è `undefined` (owner, 2026-10-29, al ritiro della 02): un'analisi salvata prima del 2026-10-29 non ha `resultJson`, e il suo risultato vive solo nel `reportMd`. `companyName` = dall'analisi più recente, altrimenti dalla posizione, altrimenti dal watchlist item, altrimenti il ticker.
 
 ### 4.2 Pagina e componenti (`components/stock/*`, tutti client; `valuation-section.tsx` in `components/report/`)
 
@@ -82,7 +82,7 @@ Query in `Promise.all`: `db.analysis.findMany({ where: { userId, ticker, runStat
 
 | Livello | File | Caso | Mutazione |
 |---|---|---|---|
-| unit (route) | `stock-page-data.test.ts` (db mockato) | null senza niente; solo dataset → non null; solo lotti chiusi → non null; companyName fallback; `dividendsReceivedEur` dal totale per ticker; `latestAnalysisResult` con `resultJson` corrotto → null senza throw | tornare a «null senza posizioni aperte» |
+| unit (route) | `stock-page-data.test.ts` (db mockato) | null senza niente; solo dataset → non null; solo lotti chiusi → non null; companyName fallback; `dividendsReceivedEur` dal totale per ticker; `latestAnalysisResult` con `resultJson` corrotto → null senza throw; riga vecchia (`resultJson` null, fence nel `reportMd` della `findUnique`) → il risultato della fence | tornare a «null senza posizioni aperte»; leggere `reportMd` dalle righe della summary select |
 | component | `fundamentals-charts.test.tsx` | tabella sr-only con una riga per anno; margini e dividendi calcolati; grafico con serie tutte null non montato; marker P/E solo con valute uguali | — |
 | component | `price-history-chart.test.tsx` | una riga sr-only per analisi dentro il dominio; analisi fuori range o senza `priceAtAnalysis` assente | — |
 | component | `stock-header.test.tsx` | badge posizione con P&L; valuta diversa → P&L assente; lotti chiusi → realizzato; `EarningsBadge` senza bottone AI | — |
@@ -109,7 +109,7 @@ Nessun DDL. Deploy insieme alla 07a. Prima visita reale → nessuna misura DB; v
 ## 9. Documentazione
 
 - `doc/guide/valutazione.md § Pagina titolo` (loader, sezioni, formule dei grafici, fonti).
-- `CLAUDE.md` (misurare): nuova sezione «Stock page (`/stocks/[ticker]`)» (≤ 900 caratteri) + Project Structure (`app/stocks/`, `components/stock/`, +80); si compensa togliendo da «Hub» il dettaglio sul `ranRef` e sulla P&L da snapshot (−450, va in AGENTS.md › Component Patterns in una riga) e da «Interactive UI» le due frasi duplicate di AGENTS.md › Responsive (−300). Saldo ≈ +230, dentro il margine. `wc -c` finale riportato.
+- `CLAUDE.md` (misurare): nuova sezione «Stock page (`/stocks/[ticker]`)» (≤ 900 caratteri) + Project Structure (`app/stocks/`, `components/stock/`, +80); si compensa togliendo da «Hub» il dettaglio sul `ranRef` e sulla P&L da snapshot (−450, va in AGENTS.md › Component Patterns in una riga) e da «Interactive UI» le due frasi duplicate di `DESIGN.md` § 8 «Responsive & Touch» (−300; la sezione «Responsive» di AGENTS.md non c'è più dal 2026-10-11). Saldo ≈ +230, dentro il margine. `wc -c` finale riportato.
 - `AGENTS.md` (saldo zero): «Design System › Shared valuation ruler»: `valuation-section.tsx` è il riferimento (sostituisce la frase «/analyses is the reference implementation»); Recharts: i tre pattern (asse tempo + ReferenceDot; bande p25/p75; sr-only sorella) in tre righe al posto delle tre righe di «ReferenceLine label clipping» (ormai riassunte nella prima).
 - `README.md`: la pagina titolo nelle feature.
 - `Draft Release Temp.md`: «New stock page: everything about a ticker in one place — valuation ruler, consensus, estimate history, fundamentals charts with source chips, dividends, price history, dataset tables».

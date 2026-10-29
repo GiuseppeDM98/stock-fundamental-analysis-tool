@@ -134,9 +134,15 @@ export async function POST(request: Request) {
       content: buildAdvisorUserPrompt(m.content),
     }));
 
+    // An effort named without a model applies to the stored model (until 2026-10-29 it was
+    // silently dropped, as in the Deep Value routes).
     const aiSettings = await resolveAiSettings(
       session.user.id,
-      body.model ? { model: body.model, effort: body.effort ?? DEFAULT_SETTINGS.effort, thinking: body.thinking ?? DEFAULT_SETTINGS.thinking } : undefined,
+      body.model
+        ? { model: body.model, effort: body.effort ?? DEFAULT_SETTINGS.effort, thinking: body.thinking ?? DEFAULT_SETTINGS.thinking }
+        : body.effort
+          ? { effort: body.effort, thinking: body.thinking }
+          : undefined,
       DEFAULT_SETTINGS
     );
     const client = getAiClient(aiSettings.model);

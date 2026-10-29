@@ -546,6 +546,16 @@ export function buildAnalystSystemPrompt({
   const jsonBlocksPhrase = blindFirst
     ? "the two valuation blocks above (one in Phase 1, one in Phase 2)"
     : "the valuation block above";
+  // The closing rules describe the critique turn. A blind-first review also has a Phase 1
+  // that opens with its JSON and puts the rationale AFTER the fence, so unscoped rules gave
+  // that turn two opposite orders (2026-10-29). The single-phase text stays as it was.
+  const disclaimer = `"⚠️ This review is for informational purposes only and does not constitute financial advice."`;
+  const critiqueBounds = `Do not write anything before the \`${CRITIQUE_START_MARKER}\` line, and nothing after the JSON block's closing fence.`;
+  const closingRules = blindFirst
+    ? `- Phase 1: the JSON block opens your answer and the rationale follows it; no critique marker, no disclaimer.
+- Phase 2: close the critique with the line ${disclaimer}, then emit the final JSON block. ${critiqueBounds}`
+    : `- Close the critique with the line ${disclaimer}, then emit the JSON block.
+- ${critiqueBounds}`;
   // Skeptic-only, unconditional (a kill price doesn't require pasted data — see the
   // hardened persona above). Feeds the kill_price gate (lib/grounding/postcheck.ts).
   const killPriceLine =
@@ -633,8 +643,7 @@ Rules:
 - Be concise: this is a review, not a second full report. Use short sections and bullet points.
 - The ONLY JSON you emit is ${jsonBlocksPhrase}; do NOT restate the whole report.
 - **Do not escalate prescriptiveness beyond the report you review.** Your output is a second opinion on the VALUATION: commit to your own bull/base/bear and say whether the report's fair value should be revised up or down. Do NOT issue an operational trade instruction more prescriptive than the base report — no "buy at €X", "accumulate below €Y", "sell now" when the report itself only concludes "hold". Judge the number; do not originate a trade call the report did not make.
-- Close the critique with the line "⚠️ This review is for informational purposes only and does not constitute financial advice.", then emit the JSON block.
-- Do not write anything before the \`${CRITIQUE_START_MARKER}\` line, and nothing after the JSON block's closing fence.`;
+${closingRules}`;
 }
 
 /**
@@ -670,7 +679,7 @@ export function buildAnalystUserPrompt({
   // even when the saved analysis has raw paste blocks: the lens's job is to judge the
   // JUDGMENT, and the anchors/extract already give it that; the extra line-item detail
   // would triple the input cost across 3 Opus xhigh passes for no proportional benefit
-  // (deliberate, reversible choice — see AGENTS.md).
+  // (deliberate, reversible choice — see doc/guide/valutazione.md § 5).
   grounding?: GroundingPromptContext;
 }): string {
   void angle; // lens is applied in the system prompt; kept in the signature for symmetry.

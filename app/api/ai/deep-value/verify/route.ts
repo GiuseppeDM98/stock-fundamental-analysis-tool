@@ -174,10 +174,16 @@ export async function POST(request: Request) {
     const isItalian = body.language === "Italiano" || body.language === "Italian";
 
     // An override without an effort is not a complete override: resolveAiSettings then
-    // reads the user's stored default, which the Deep Value floor below starts from.
+    // reads the user's stored default, which the Deep Value floor below starts from. An
+    // effort named without a model applies to the stored model (until 2026-10-29 it was
+    // silently dropped, so the run went at the stored effort).
     let aiSettings = await resolveAiSettings(
       session.user.id,
-      body.model ? { model: body.model, effort: body.effort, thinking: body.thinking ?? DEFAULT_SETTINGS.thinking } : undefined,
+      body.model
+        ? { model: body.model, effort: body.effort, thinking: body.thinking ?? DEFAULT_SETTINGS.thinking }
+        : body.effort
+          ? { effort: body.effort, thinking: body.thinking }
+          : undefined,
       DEFAULT_SETTINGS
     );
     // No effort chosen for this run: a lens starts at the same floor as the report it
@@ -407,6 +413,10 @@ export async function POST(request: Request) {
           const rest = gate.flush();
           forward(rest);
           if (!gate.opened()) console.warn("[verify] critique marker never arrived; flushed", rest.length);
+          // Close a fence cut by max_tokens BEFORE any route note: a note written while the
+          // fence is still open lands inside it, and stripJsonBlock then hides the note with
+          // the broken block (the Phase-1 note below did, until 2026-10-29).
+          if (turn2.stopReason === "max_tokens" && stripTrailingOpenJsonFence(forwarded) !== forwarded) forward("\n```\n");
 
           if (!blindCommitment) {
             const note = isItalian
@@ -417,7 +427,6 @@ export async function POST(request: Request) {
           // Notes attach to turn 2 — it's the turn whose output the user
           // actually reads.
           if (turn2.stopReason === "max_tokens") {
-            if (stripTrailingOpenJsonFence(forwarded) !== forwarded) forward("\n```\n");
             const note = isItalian
               ? "_[Revisione troncata: raggiunto il limite di lunghezza. Riavviala per rigenerarla.]_"
               : "_[Review truncated: length limit reached. Re-run it to regenerate.]_";

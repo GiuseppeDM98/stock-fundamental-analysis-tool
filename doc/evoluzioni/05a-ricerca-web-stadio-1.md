@@ -1,7 +1,7 @@
 # 05a — Ricerca web strutturata (stadio 1): route di ricerca, verifica delle fonti, fusione paste + web al server
 
 > **Stato**: scritta 2026-10-11 (nata dalla divisione della 05, D-23); riletta in modo adversariale il 2026-10-11: 24 rilievi (la metà «stadio 1» dei 41 della 05), 6 decisioni (D-21, D-23, D-27, D-39, D-42, D-43); integrata il 2026-10-18 con DeepSeek nello stadio 1 via Search/Fetch API (D-70, D-71, T-34, T-35). Pronta per l'implementazione dopo la 04.
-> **Branch**: `feature/research-stage` da `develop`. **Dipende da**: 01 ritirata il 2026-10-29 (`tickerSchema`, `executeWebSearch` sulla Search API con l'helper `callDeepSeekTool`), 02 (contratto v3, `parseDeepValueJson` sull'ultima fence, `doc/guide/valutazione.md`), 04 (tabella dataset, provenienza con `mixed`, `saveFinancialDataset`, `POST /api/datasets`).
+> **Branch**: `feature/research-stage` da `develop`. **Dipende da**: 01 ritirata il 2026-10-29 (`tickerSchema`, `executeWebSearch` sulla Search API con l'helper `callDeepSeekTool`), 02 ritirata il 2026-10-29 (contratto v3, `parseDeepValueJson` sull'ultima fence, `doc/guide/valutazione.md`), 04 (tabella dataset, provenienza con `mixed`, `saveFinancialDataset`, `POST /api/datasets`).
 > **Indice**: [00-INDICE.md](00-INDICE.md) — decisioni D-2, D-5 (riscritta da D-71), D-11, D-21, D-23, D-27, D-39, D-42, D-43, D-70, D-71; scelte T-8, T-9, T-11, T-34, T-35; contratti C-5 (`lastJsonFence`), C-9, C-10, C-19.
 
 ## 1. Il problema oggi (prove, commit `17e54b6`, 2026-10-11)
@@ -154,7 +154,7 @@ export function preprocessResearchOutput(raw: unknown): unknown;
 
 ## 5. Vincoli e trappole
 
-- **DeepSeek nello stadio 1 (T-35)**: `effort: high` sempre (a `max` il modello usa più round, non ragiona meglio per round — AGENTS.md › Shared tool loop); `thinking: adaptive`; niente `cache_control` (il proxy lo rifiuta: `buildPromptCacheParam` è già vuoto); `DEEP_RESEARCH_MAX_TOOL_ITERATIONS = 35` conta i ROUND client (una turn con 3 search è un round): 30 search + 8 fetch in una sola turn ciascuna sarebbero 38 round, ma il modello ne raggruppa più per turn; se la run reale (A6) finisce in `hitIterationCap`, si alza il cap nella sessione e si annota. Una turn DeepSeek con N `web_search` in parallelo resta sotto i 5 QPS della Search API finché N ≤ 5: se la run mostra 429, si serializza (annotare, non nella 05a). Costo DeepSeek: 30 search + 8 fetch ≈ 0,03 $ + token (V4 Pro `high`: stima 0,05-0,3 $).
+- **DeepSeek nello stadio 1 (T-35)**: `effort: high` sempre (a `max` il modello usa più round, non ragiona meglio per round — `doc/guide/valutazione.md` § 6.2, «Shared tool loop»); `thinking: adaptive`; niente `cache_control` (il proxy lo rifiuta: `buildPromptCacheParam` è già vuoto); `DEEP_RESEARCH_MAX_TOOL_ITERATIONS = 35` conta i ROUND client (una turn con 3 search è un round): 30 search + 8 fetch in una sola turn ciascuna sarebbero 38 round, ma il modello ne raggruppa più per turn; se la run reale (A6) finisce in `hitIterationCap`, si alza il cap nella sessione e si annota. Una turn DeepSeek con N `web_search` in parallelo resta sotto i 5 QPS della Search API finché N ≤ 5: se la run mostra 429, si serializza (annotare, non nella 05a). Costo DeepSeek: 30 search + 8 fetch ≈ 0,03 $ + token (V4 Pro `high`: stima 0,05-0,3 $).
 - **Sonnet 5.5**: niente `temperature`, niente `tool_choice` forzato (il prompt chiede il JSON; `strict` non si applica ai server tool); `thinking` adaptive. `web_search_20260209`/`web_fetch_20260209` fanno filtering interno: NON dichiarare `code_execution`.
 - **pause_turn**: il loop già riprende; qui vuol dire che `DEEP_RESEARCH_MAX_TOOL_ITERATIONS` conta i resume: 35 basta per 30 search + 8 fetch; con il prompt caching ogni ripresa paga solo i token nuovi (D-42).
 - **Gotcha #13**: il testo finale può stare su più blocchi: `text` del loop è già concatenato; `lastJsonFence` sull'intero.
@@ -164,7 +164,7 @@ export function preprocessResearchOutput(raw: unknown): unknown;
 - **Costo**: una ricerca Sonnet 5.5 con 30 search + 8 fetch (≤ 3 PDF) con caching: stima 0,3–1 $; si misura nella run reale e si scrive in CLAUDE.md.
 - **`maxDuration`** su Vercel Hobby è 300 s (Fluid Compute; limite dichiarato della corsa fino al 2026-10-27, D-75, poi D-77: la corsa è a fasi e il limite resta per la singola fase): la ricerca è e resta UNA richiesta ≤ 300 s; la sezione «Vercel Hobby» di `SETUP.md` e di `README.md` nomina le route AI lunghe: si aggiunge `/api/ai/research`. La run reale (A6) ne misura la durata con `durationMs` e, oltre 240 s, lo annota nell'indice (05d); fino alla 05c una ricerca che supera il tetto gira in locale.
 - **COMMENTS.md**: il perché della verifica URL (il modello cita fonti che non ha aperto) e della fusione al server (anchor e `verified` calcolati in un solo posto) con la data.
-- **Test di route**: `// @vitest-environment node`, mock come nella 02 § 5.
+- **Test di route**: `// @vitest-environment node`, mock come nella regola 14 dell'indice (`AGENTS.md § Testing`, «Route tests»; esempio vivo `__tests__/deep-value-route.test.ts`).
 
 ## 6. Test
 

@@ -53,8 +53,8 @@ model Analysis {
   // Null until the user runs the review (either before saving or later from the
   // saved-analysis detail page). Stored as plain Markdown (no JSON block).
   reviewMd         String?
-  // The reviewer's own independent valuation, parsed from the review's leading JSON
-  // block. Same unit as fairValue* above (MoS-adjusted buy targets), so the two can be
+  // The reviewer's own independent valuation, parsed from the review's closing JSON
+  // block (its last fence; the only one in reviews saved before 2026-10-29). Same unit as fairValue* above (MoS-adjusted buy targets), so the two can be
   // averaged into a consensus. Null when no review was run or it emitted no valid JSON.
   // NOTE: review* is the "skeptic" analyst of the analyst panel (kept under the legacy
   // name to avoid renaming a shipped column). The optimist/quality analysts below mirror
@@ -91,7 +91,7 @@ model Analysis {
   // Grounded Deep Value mode: the confirmed GroundingPayload (raw paste blocks + the
   // structured extract) as JSON, when the analysis was generated with pasted financial
   // data. Null for Quick-mode analyses. NOT selected by the GET /api/analyses list (it's
-  // a blob the list never uses — see the select in app/api/analyses/route.ts) and NOT
+  // a blob the list never uses — see ANALYSIS_LIST_SELECT in lib/analyses-select.ts) and NOT
   // part of SavedAnalysis (see types/analysis.ts) — both exclusions are deliberate, not
   // oversights.
   groundingJson    String?
