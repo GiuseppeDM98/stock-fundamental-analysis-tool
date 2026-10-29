@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildAnalystSystemPrompt, buildDeepValueSystemPrompt } from "@/lib/ai/deep-value-prompts";
 import { CRITIQUE_START_MARKER, REPORT_START_MARKER } from "@/lib/report/parse-deep-value-json";
+import { buildGroundingPromptContext } from "@/lib/grounding/prompt-format";
+import { makeExtract, makeFinancialsRow, makeMeta } from "./grounding-test-helpers";
 
 // The output contract the routes and the parser rely on: research first, the report after
 // a sentinel line, the JSON block last. A wording change that drops one of these breaks
@@ -68,6 +70,43 @@ describe("Deep Value report prompt — research first, report, JSON last", () =>
     expect(quick).not.toContain("current year is 2025");
     expect(buildDeepValueSystemPrompt({ currentDate: "" })).not.toContain("Today's date");
   });
+
+  it("pins the rest of the template: the second lever, cross-check, sector, currency, units and no-tool rule", () => {
+    expect(quick).toContain('"leverB": {');
+    expect(quick).toContain('"crossCheck": {');
+    expect(quick).toContain('"sector": "<sector name, max 80 characters>"');
+    expect(quick).toContain('"currency": "<ISO 4217 code, 3 letters>"');
+    expect(quick).toContain("**Units.** Every monetary figure inside the bridges");
+    expect(quick).toContain("After that line do not call any tool");
+    // bull, base, bear and the cross-check each carry one bridge.
+    expect(quick.split('"bridge": {')).toHaveLength(5);
+  });
+});
+
+describe("Deep Value report prompt — Grounded mode keeps the same contract", () => {
+  const extract = makeExtract({
+    meta: makeMeta({ reportingCurrency: "EUR", units: "millions" }),
+    financials: [makeFinancialsRow({ fiscalYear: 2025, ebitda: 1000, netDebt: 500, sharesDiluted: 100 })],
+  });
+  const grounded = buildDeepValueSystemPrompt({
+    language: "English",
+    currentDate: "October 11, 2026",
+    mosPercent: 20,
+    grounding: buildGroundingPromptContext([], extract, 10, "EUR"),
+  });
+
+  it("asks for research first, the marker, and the JSON last", () => {
+    expect(grounded).toContain(`start the written answer with the exact line:\n${REPORT_START_MARKER}\n`);
+    expect(grounded).toContain("After section 10, as the very LAST thing you output, emit the JSON block below");
+    expect(grounded).toContain('"sensitivity": {');
+    expect(grounded).toContain('"dividends": null | {');
+  });
+
+  it("puts the bridge figures in the extract's own unit, not a declared one", () => {
+    expect(grounded).toContain("\"driverValue\": <driver's numeric value, SAME unit as the extract's meta.units>");
+    expect(grounded).not.toContain('in the unit you declare in "units"');
+    expect(grounded.split('"bridge": {')).toHaveLength(5);
+  });
 });
 
 describe("Analyst lens prompts — critique first, JSON last, no sensitivity", () => {
@@ -95,6 +134,14 @@ describe("Analyst lens prompts — critique first, JSON last, no sensitivity", (
     expect(blind).toContain(`Write your critique first, opening with the exact line \`${CRITIQUE_START_MARKER}\`, then emit the FINAL JSON`);
     expect(blind.split(`"method": "<${METHODS}>"`)).toHaveLength(3);
     expect(blind.split('"units": "<billions')).toHaveLength(3);
+  });
+
+  it("scopes the closing rules to Phase 2 in a blind-first review, so Phase 1 gets one order", () => {
+    const blind = buildAnalystSystemPrompt({ angle: "optimist", blindFirst: true, mosPercent: 20, currentDate: "October 11, 2026" });
+    expect(blind).toContain("- Phase 1: the JSON block opens your answer and the rationale follows it; no critique marker, no disclaimer.");
+    expect(blind).toContain(`- Phase 2: close the critique with the line "⚠️ This review is for informational purposes only and does not constitute financial advice.", then emit the final JSON block. Do not write anything before the \`${CRITIQUE_START_MARKER}\` line`);
+    expect(blind).not.toContain(`\n- Do not write anything before the \`${CRITIQUE_START_MARKER}\` line`);
+    expect(blind).not.toContain("\n- Close the critique with the line");
   });
 
   it("derives the current year from the date in the lens prompt too", () => {

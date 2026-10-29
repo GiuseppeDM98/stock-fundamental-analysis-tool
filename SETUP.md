@@ -191,7 +191,7 @@ A `PortfolioSnapshot` row is written for each user who has at least one position
 
 ### ⚠️ Vercel Hobby plan: long AI runs stop at 300 seconds
 
-The AI routes call the model with a high reasoning effort plus web search. A Deep Value run (`/api/ai/deep-value`) or an analyst lens (`/api/ai/deep-value/verify`, two full turns in the Grounded blind-first flow) takes several minutes and can run past the ceiling; the Advisor and the earnings lookup usually fit. On Vercel every API route is a function whose `maxDuration` is capped by the plan (Fluid Compute, Vercel's default — checked against Vercel's docs on 2026-10-20):
+The AI routes call the model with a high reasoning effort plus web search. A Deep Value run (`/api/ai/deep-value`) or an analyst lens (`/api/ai/deep-value/verify`, two full turns in the Grounded blind-first flow) takes several minutes and, at the default `xhigh` effort, runs past the ceiling (708 s and 510 s measured on 2026-10-29); the Advisor and the earnings lookup usually fit. On Vercel every API route is a function whose `maxDuration` is capped by the plan (Fluid Compute, Vercel's default — checked against Vercel's docs on 2026-10-20):
 
 | Plan | Default | Max `maxDuration` |
 |---|---|---|

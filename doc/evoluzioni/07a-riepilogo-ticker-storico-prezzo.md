@@ -1,7 +1,7 @@
 # 07a — Riepilogo deterministico per ticker, Advisor sul riepilogo, storico prezzo, link verso la pagina titolo
 
 > **Stato**: scritta 2026-10-11 (nata dalla divisione della 07, D-23); riletta in modo adversariale il 2026-10-11: 20 rilievi (la metà «riepilogo/Advisor/route/link» dei 42 della 07), 5 decisioni (D-21, D-23, D-24, D-47, D-50; T-29). Pronta per l'implementazione dopo la 06.
-> **Branch**: `feature/ticker-summary` da `develop`. **Dipende da**: 01 ritirata il 2026-10-29 (C-2 `latestAnalysisWithValues`/`verdictBasis`/`watchlistBuyTarget`, C-14 `normalizeTicker`/`tickerSchema`/`toWatchlistMosFraction`, `DetailBreadcrumb`), 02 (C-15 `ANALYSIS_SUMMARY_SELECT`, `resultJson`), 06 (nessun contratto: solo l'ordine della serie).
+> **Branch**: `feature/ticker-summary` da `develop`. **Dipende da**: 01 ritirata il 2026-10-29 (C-2 `latestAnalysisWithValues`/`verdictBasis`/`watchlistBuyTarget`, C-14 `normalizeTicker`/`tickerSchema`/`toWatchlistMosFraction`, `DetailBreadcrumb`), 02 ritirata il 2026-10-29 (C-15 `ANALYSIS_SUMMARY_SELECT`, `resultJson`), 06 (nessun contratto: solo l'ordine della serie).
 > **Indice**: [00-INDICE.md](00-INDICE.md) — decisioni D-3, D-18, D-19, D-21, D-23, D-24, D-47, D-50; scelte T-17, T-20, T-29; contratti C-12, C-13.
 
 ## 1. Il problema oggi (prove, commit `17e54b6`, 2026-10-11)
@@ -105,7 +105,7 @@ export function createTtlMap<V>(ttlMs: number, now: () => number = Date.now, max
 - **Gotcha #24**: i link del ticker fuori dai `<button>`.
 - **Advisor**: nessuna analisi nuova nel prompt: solo righe deterministiche.
 - **Visual**: spostare il ticker fuori dal bottone in /analyses e watchlist e cambiare la strip dell'hub modifica le baseline `analyses`, `watchlist`, `hub`, `portfolio`: `e2e:visual:update` PRIMA, differenze riportate.
-- **Test di route**: `// @vitest-environment node`, mock come nella 02 § 5.
+- **Test di route**: `// @vitest-environment node`, mock come nella regola 14 dell'indice (`AGENTS.md § Testing`, «Route tests»; esempio vivo `__tests__/deep-value-route.test.ts`).
 
 ## 6. Test
 

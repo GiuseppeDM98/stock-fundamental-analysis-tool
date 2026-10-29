@@ -117,4 +117,12 @@ describe("POST /api/ai/deep-value — effort and resolved settings", () => {
     expect(userFindUnique).not.toHaveBeenCalled();
     expect(JSON.parse(res.headers.get("X-AI-Settings")!)).toEqual({ model: "claude-opus-4-8", effort: "medium", thinking: false });
   });
+
+  it("applies an effort named without a model to the stored model", async () => {
+    userFindUnique.mockResolvedValue({ aiModel: "claude-opus-4-8", aiEffort: "high", aiThinkingEnabled: true });
+    const res = await POST(post({ ticker: "AAA", effort: "low" }));
+    await res.text();
+    expect(sentEffort()).toBe("low");
+    expect(JSON.parse(res.headers.get("X-AI-Settings")!)).toEqual({ model: "claude-opus-4-8", effort: "low", thinking: true });
+  });
 });

@@ -112,6 +112,14 @@ describe("```json-blind does NOT collide with the ```json fence", () => {
     expect(stripped).toContain("Critique.");
   });
 
+  // Reading the LAST fence makes the case above pass even if the blind fence matched; this
+  // is the case where a collision would change the result (a lens cut before its final block).
+  it("parseDeepValueJson ignores a blind fence when no final block follows", () => {
+    expect(parseDeepValueJson(BLIND_BLOCK)).toBeNull();
+    const cut = `${ANALYST_PHASE_MARKERS.blind}${BLIND_BLOCK}\nRationale.\n${ANALYST_PHASE_MARKERS.reconcile}${CRITIQUE_START_MARKER}Critique cut mid-`;
+    expect(parseDeepValueJson(cut)).toBeNull();
+  });
+
   it("parseBlindJson parses only the blind block, ignoring a final block later in the same text", () => {
     const stream = `${BLIND_BLOCK}\nRationale.\n${FINAL_BLOCK}\nCritique.`;
     expect(parseBlindJson(stream)?.base?.fairValue).toBe(8);
@@ -297,6 +305,17 @@ describe("sensitivity and dividends — drop, never repair", () => {
     expect(sanitizeSensitivity({ leverA: LEVER_A, leverB: LEVER_B, intrinsicPerShare: [GRID[0], [12.1, "12.9", 13.7], GRID[2]] })).toBeUndefined();
     expect(sanitizeSensitivity({ leverA: { ...LEVER_A, name: " " }, leverB: LEVER_B, intrinsicPerShare: GRID })).toBeUndefined();
     expect(sanitizeSensitivity({ leverA: { ...LEVER_A, values: [7, 8] }, leverB: LEVER_B, intrinsicPerShare: GRID })).toBeUndefined();
+  });
+
+  it("carries a well-formed grid through parseDeepValueJson and drops a malformed one", () => {
+    const fence = (obj: unknown) => "```json\n" + JSON.stringify(obj) + "\n```";
+    const base = { method: "EV/EBITDA", sector: "", currency: "EUR", base: { fairValue: 1 } };
+    expect(parseDeepValueJson(fence({ ...base, sensitivity: { leverA: LEVER_A, leverB: LEVER_B, intrinsicPerShare: GRID } }))!.sensitivity).toEqual({
+      leverA: LEVER_A,
+      leverB: LEVER_B,
+      intrinsicPerShare: GRID,
+    });
+    expect("sensitivity" in parseDeepValueJson(fence({ ...base, sensitivity: { leverA: LEVER_A, leverB: LEVER_B, intrinsicPerShare: GRID.slice(0, 2) } }))!).toBe(false);
   });
 
   it("keeps a declared non-payer (null) apart from a missing outlook", () => {

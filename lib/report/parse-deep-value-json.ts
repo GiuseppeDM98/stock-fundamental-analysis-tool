@@ -355,9 +355,10 @@ export function stripTrailingOpenJsonFence(text: string): string {
 // commitment as ```json-blind, deliberately NOT ```json — that string does not match
 // JSON_BLOCK_RE_GLOBAL above (there is no literal "```json\n" substring inside
 // "```json-blind\n"), so parseDeepValueJson (the last ```json fence) keeps resolving to the
-// Phase-2 FINAL block and stripJsonBlock leaves the blind fence alone. A dedicated test in
-// __tests__/parse-deep-value-json.test.ts asserts this non-collision explicitly — it is the
-// only thing holding this trick together.
+// Phase-2 FINAL block and stripJsonBlock leaves the blind fence alone. Dedicated tests in
+// __tests__/parse-deep-value-json.test.ts pin this non-collision both ways — blind + final
+// resolves to the final block, and a blind fence alone parses to null (the case where a
+// collision would show); they are the only thing holding this trick together.
 const BLIND_JSON_BLOCK_RE = /```json-blind\n([\s\S]*?)\n```/;
 
 /**

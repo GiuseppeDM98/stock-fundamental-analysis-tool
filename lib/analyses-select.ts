@@ -58,7 +58,7 @@ export const ANALYSIS_LIST_SELECT = {
 
 /**
  * The list select without the text blobs (reports, critiques, the lenses' blind and
- * result JSON), for readers that need only the numbers — the watchlist digest today. The
+ * result JSON), for any reader that needs only the numbers (the watchlist digest, for one). The
  * excluded fields come back undefined; a reader that needs one fetches it with a query of
  * its own. The base resultJson stays: it is the report's own numbers.
  */

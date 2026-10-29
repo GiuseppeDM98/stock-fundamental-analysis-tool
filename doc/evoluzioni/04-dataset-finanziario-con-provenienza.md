@@ -1,7 +1,7 @@
 # 04 — Dataset finanziario con provenienza (tabella, chip di fonte, retry per blocco, riuso)
 
 > **Stato**: scritta 2026-10-11; riletta in modo adversariale il 2026-10-11: 41 rilievi, 8 decisioni (D-21, D-26, D-27, D-36, D-37, D-38, D-39; T-32). Pronta per l'implementazione dopo la 03.
-> **Branch**: `feature/financial-dataset` da `develop`. **Dipende da**: 01 ritirata il 2026-10-29 (`tickerSchema`, `normalizeTicker`), 02 (`ANALYSIS_LIST_SELECT`/`ANALYSIS_SUMMARY_SELECT`, `__tests__/deep-value-route.test.ts`, `doc/guide/valutazione.md`), 03 (`checkValuationBridges` con `extract | null`, `ValuationChecksCard`, `AnalysisDetailBody`).
+> **Branch**: `feature/financial-dataset` da `develop`. **Dipende da**: 01 ritirata il 2026-10-29 (`tickerSchema`, `normalizeTicker`), 02 ritirata il 2026-10-29 (`ANALYSIS_LIST_SELECT`/`ANALYSIS_SUMMARY_SELECT`, `__tests__/deep-value-route.test.ts`, `doc/guide/valutazione.md`), 03 (`checkValuationBridges` con `extract | null`, `ValuationChecksCard`, `AnalysisDetailBody`).
 > **Indice**: [00-INDICE.md](00-INDICE.md) — decisioni D-2 (schema unico), D-7, D-13, D-14 (riscritta da D-26), D-20 (riscritta da D-27), D-21, D-26, D-27, D-36, D-37, D-38, D-39; scelte T-8, T-9, T-10, T-19, T-24, T-32; contratti C-9, C-16, C-21.
 
 ## 1. Il problema oggi (prove, commit `17e54b6`, 2026-10-11)

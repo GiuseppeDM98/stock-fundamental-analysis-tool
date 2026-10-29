@@ -51,6 +51,12 @@ describe("POST /api/ai/advisor — portfolio context", () => {
     expect(positionFindMany.mock.calls[0][0].where).toEqual({ userId: "u1", closedAt: null });
   });
 
+  it("should pass an effort named without a model on to the resolver", async () => {
+    const { resolveAiSettings } = await import("@/lib/ai/ai-preferences");
+    await (await POST(post({ messages: [{ role: "user", content: "x" }], effort: "low" }))).text();
+    expect(vi.mocked(resolveAiSettings).mock.calls.at(-1)![1]).toEqual({ effort: "low", thinking: undefined });
+  });
+
   it("should answer 400 with the Zod message on an invalid body", async () => {
     const res = await POST(post({ messages: [] }));
     expect(res.status).toBe(400);
