@@ -13,7 +13,7 @@
 import type { GroundedFinancials, FiscalYearFinancials } from "@/types/grounding";
 import type { Scenario, ValuationBridge, DeepValueResult, AnalystResult } from "@/components/report/types";
 import { grossUpToIntrinsic } from "@/lib/report/valuation";
-import { sanitizeDeepValueResult } from "@/lib/report/parse-deep-value-json";
+import { sanitizeDeepValueResult, type ParsedAnalystResult } from "@/lib/report/parse-deep-value-json";
 import { computeMarketImplied, percentileOf, type MarketImplied } from "@/lib/grounding/anchors";
 import { computeBasisReconciliation, bridgeToProviderMultiple, type BasisReconciliation } from "@/lib/grounding/basis";
 
@@ -28,8 +28,8 @@ export type BridgeScenario = Scenario;
  *  key (not its value) is what gates whether the kill_price entry appears in
  *  PostCheck.gates at all.
  *
- *  Typed as the contract, but treated as untrusted: callers pass `JSON.parse` output
- *  through an `as` cast, so checkValuationBridges re-sanitizes it on entry. */
+ *  checkValuationBridges accepts any ParsedAnalystResult (this type included) and
+ *  re-sanitizes it on entry, so a block missing a scenario is checked as "not declared". */
 export type BridgeCheckInput = DeepValueResult & Pick<AnalystResult, "killPrice" | "killPriceNote">;
 
 export type BridgeCheck = {
@@ -327,7 +327,7 @@ function checkNetDebtTrajectory(scenarios: ScenarioSet, latestFy: FiscalYearFina
   return { code: "netdebt_trajectory", status: failing ? "fail" : "pass", detail };
 }
 
-function checkRoicVsWacc(result: BridgeCheckInput, base: Scenario | undefined, basis: BasisReconciliation): Gate {
+function checkRoicVsWacc(result: ParsedAnalystResult, base: Scenario | undefined, basis: BasisReconciliation): Gate {
   const roic = result.assumptions?.roic;
   const wacc = result.assumptions?.wacc;
   if (!isFiniteNumber(roic) || !isFiniteNumber(wacc)) {
@@ -356,7 +356,7 @@ function checkProbabilities({ bull, base, bear }: ScenarioSet): Gate {
   return { code: "probabilities", status, detail };
 }
 
-function checkCrossCheck(result: BridgeCheckInput, baseIntrinsic: number | null): Gate {
+function checkCrossCheck(result: ParsedAnalystResult, baseIntrinsic: number | null): Gate {
   if (!result.crossCheck) {
     return { code: "cross_check", status: "unavailable", detail: "no cross-check declared" };
   }
@@ -374,7 +374,7 @@ function checkCrossCheck(result: BridgeCheckInput, baseIntrinsic: number | null)
  *  (no fairValue/MoS gross-up applies, unlike a bull/base/bear Scenario). null when the
  *  model declared no crossCheck.bridge at all. */
 function checkCrossCheckBridge(
-  result: BridgeCheckInput,
+  result: ParsedAnalystResult,
   extract: GroundedFinancials,
   basis: BasisReconciliation
 ): CrossCheckBridgeCheck | null {
@@ -413,7 +413,7 @@ function checkCrossCheckBridge(
  *  cross-check's multiple came from PEERS, not from Webuild's own historical distribution,
  *  so it doesn't match this specific signature; the existing cross_check delta gate is what
  *  caught that). */
-function checkCrossCheckBasis(result: BridgeCheckInput, basis: BasisReconciliation): Gate {
+function checkCrossCheckBasis(result: ParsedAnalystResult, basis: BasisReconciliation): Gate {
   if (!result.crossCheck) {
     return { code: "cross_check_basis", status: "unavailable", detail: "no cross-check declared" };
   }
@@ -494,7 +494,7 @@ function computeExpectedValue(
  * below as "not declared", never as a wrong-typed number.
  */
 export function checkValuationBridges(
-  rawResult: BridgeCheckInput,
+  rawResult: ParsedAnalystResult,
   mosPercent: number,
   price: number,
   quoteCurrency: string,
@@ -503,13 +503,8 @@ export function checkValuationBridges(
   if (extract.financials.length === 0) return null;
   const result = sanitizeDeepValueResult(rawResult);
   if (!result) return null;
-  // The contract types bull/base/bear as always present; after sanitization each may be
-  // missing, so read them through the honest type from here on.
-  const scenarioSet: ScenarioSet = {
-    bull: result.bull as Scenario | undefined,
-    base: result.base as Scenario | undefined,
-    bear: result.bear as Scenario | undefined,
-  };
+  // After sanitization each scenario may be missing (ParsedAnalystResult says so).
+  const scenarioSet: ScenarioSet = { bull: result.bull, base: result.base, bear: result.bear };
 
   const basis = computeBasisReconciliation(extract);
   const latestFy = extract.financials[extract.financials.length - 1];

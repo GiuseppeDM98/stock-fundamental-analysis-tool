@@ -190,7 +190,7 @@ The gates before a session's commit, in this order, with no lint stage (`next li
 
 After `npm ci` (or on a fresh checkout) run `npx prisma generate` once: stage 2 comes before the build that generates `generated/prisma`, and without it the type-check fails on `lib/db.ts` and on every implicit `any` that follows (2026-10-23).
 
-**On Windows** (2026-10-19, first run of the gate there): the e2e tooling starts `npx`/`npm` through a shell (`e2e/prepare-db.ts`, `e2e/run-isolated.ts` — Node refuses a `.cmd` without one, `spawnSync EINVAL`), and a fresh checkout needs `npx playwright install chromium` once before stage 4.
+**On Windows** (2026-10-19, first run of the gate there): the e2e tooling starts `npx`/`npm` through a shell (`e2e/prepare-db.ts`, `e2e/run-isolated.ts` — Node refuses a `.cmd` without one, `spawnSync EINVAL`), and a fresh checkout needs `npx playwright install chromium` once before stage 4. For a manual run from Git Bash (2026-10-28) write `$(pwd -W)` where the commands below say `$PWD`: `$PWD` is a `/c/Users/…` path that libsql cannot open (`ConnectionFailed … 14`, shown by Auth.js as `error=Configuration`). Stopping the background shell does not stop the `next dev` child, which keeps port 3200 until it is stopped by PID; `sqlite3` may be missing, then read the file with `@libsql/client`.
 
 ### End-to-end suite (Playwright)
 
@@ -225,7 +225,7 @@ Quotes are live in this mode, not stubbed. After any schema change restart the d
   - a Grounded analysis (`/analyses/e2e_an_grounded`, decoy *fenicottero*);
   - an analysis with all three analyst lenses (`/analyses/e2e_an_panel`, *ornitorinco*) plus an older save of the same ticker;
   - an old-format analysis with no JSON block (`/analyses/e2e_an_legacy`, *pangolino*);
-  - open and closed positions (some taxed at 26%), 3 watchlist items, 5 portfolio snapshots, one earnings estimate, one advisor session (*tapiro*);
+  - open and closed positions (some taxed at 26%), 3 watchlist items, 6 portfolio snapshots, one earnings estimate, one advisor session (*tapiro*);
   - a sacrificial analysis and position that `authorization.spec.ts` patches and deletes.
 - **B** — `e2e-b@example.test`, same password. Owns one analysis and one position (*quokka*).
 
@@ -235,7 +235,7 @@ For a throwaway user created on the fly: `POST /api/auth/register` with `{ "emai
 
 ### Inspecting real state
 
-- Isolated database: `sqlite3 .e2e/e2e.db "SELECT …"` (`sqlite3` is installed) or the read-only helper in `e2e/support/db.ts`. `DATABASE_URL="file:$PWD/.e2e/e2e.db" npx prisma studio` gives a browsable view.
+- Isolated database: `sqlite3 .e2e/e2e.db "SELECT …"` (where `sqlite3` is installed) or the read-only helper in `e2e/support/db.ts`. `DATABASE_URL="file:$PWD/.e2e/e2e.db" npx prisma studio` gives a browsable view.
 - Production: `turso db shell stock-analysis` (CLI installed, but it needs `turso auth login` first). Read-only `SELECT`s only, never a write during a collaudo. Check that a throwaway user is **absent** from production when a manual run is the first one after a change to the env handling.
 
 ### Handing the app to the owner (obligation 5)
@@ -257,7 +257,7 @@ The owner's browser cannot reuse the script's `storageState`: run `npm run seed:
   - **Nota** — traps and measurements, each with its date; include post-merge deploy actions (for example the Turso migration to apply by hand) and the user impact for the release notes, or "no perceptible user impact".
   - **Dove va a fine sessione** — `AGENTS.md` if it holds for the whole repo (including any error that cost more than 30 minutes to debug) · `WORKFLOW.md` if it is a session rule · `CLAUDE.md` if it is project state · `Draft Release Temp.md` if it is a user-facing change (GitHub Release format, append only) · `README.md` / `SETUP.md` if it is user or setup documentation · a comment on the right line if it is the *why* of one line (see `COMMENTS.md`).
 
-  Pre-merge ritual, on the session branch and after the owner's OK: write every entry into its destination, delete `SESSION_NOTES.md`, then make the single commit that carries code and docs together. In `CLAUDE.md` the session's "Last Updated" entry replaces the previous one (in English), and any project-state section the session changed is updated in place; the file has a hard limit of 40,000 characters, measured as Unicode characters with CR excluded (`node -e "console.log([...require('fs').readFileSync('CLAUDE.md','utf8').replace(/\r/g,'')].length)"`). `wc -c` counts bytes — about 350 more on an LF checkout, about 600 more on a Windows one, where it counts the CRs too — so it is never the measure against the limit (2026-10-19).
+  Pre-merge ritual, on the session branch and after the owner's OK: write every entry into its destination, delete `SESSION_NOTES.md`, then make the single commit that carries code and docs together. In `CLAUDE.md` the session's "Last Updated" entry replaces the previous one (in English), and any project-state section the session changed is updated in place (a spec of a series declares the balance of the body sections it rewrites in its § 9 — T-22 of `doc/evoluzioni/00-INDICE.md`); the file has a hard limit of 40,000 characters, measured as Unicode characters with CR excluded (`node -e "console.log([...require('fs').readFileSync('CLAUDE.md','utf8').replace(/\r/g,'')].length)"`). `wc -c` counts bytes — about 350 more on an LF checkout, about 600 more on a Windows one, where it counts the CRs too — so it is never the measure against the limit (2026-10-19).
 - **Outcome of a collaudo**: one line in `CLAUDE.md`'s "Last Updated" entry for that session (that it ran, and what was left to the owner's tour); which phases ran and how go in the commit message (§ 2, *Closing a verification*). Every finding that can be asserted by a test is promoted into `__tests__/` before the session ends.
 - **Conventions that already live elsewhere — not duplicated here**: `CLAUDE.md` (project state and hard invariants such as the position-blind Deep Value rule), `AGENTS.md` (implementation patterns and numbered gotchas: read the section of the domain you touch), `COMMENTS.md` and `DEVELOPMENT_GUIDELINES.md` (read both before writing code, every session). Touching a prompt builder in `lib/ai/deep-value-prompts.ts` requires the Quick-mode golden test (`__tests__/deep-value-prompts-quick-identical.test.ts`) to stay green.
 - **Rule 6 here** (the owner's decision, 2026-10-19): the regression fixtures built on a listed company's published accounts — the Iren case in `__tests__/grounding-basis.test.ts`, Iren and Webuild in the `grounding-postcheck`, `-anchors`, `-reconcile` and `-prompt-format` tests — are public data that is not the owner's, so they stay; a figure of the owner's own portfolio, positions or analyses never enters a test.

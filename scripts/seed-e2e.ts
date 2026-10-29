@@ -42,7 +42,7 @@ import {
 } from "../e2e/support/fixtures";
 import type { DeepValueResult } from "../components/report/types";
 import type { GroundingPayload } from "../types/grounding";
-import type { SnapshotData } from "../types/portfolio";
+import type { SnapshotData, SnapshotEntry } from "../types/portfolio";
 
 export * from "../e2e/support/fixtures";
 
@@ -246,7 +246,6 @@ async function wipeFixtureUsers(db: PrismaClient): Promise<void> {
   await db.position.deleteMany(byUser);
   await db.portfolioSnapshot.deleteMany(byUser);
   await db.watchlistItem.deleteMany(byUser);
-  await db.watchlistRun.deleteMany(byUser);
   await db.earningsEstimate.deleteMany(byUser);
   await db.user.deleteMany({ where: { id: { in: userIds } } });
 }
@@ -402,17 +401,45 @@ async function seedWatchlist(db: PrismaClient): Promise<void> {
 
 /** Five snapshots inside the API's 90-day window: one dividend day, one sale day. */
 async function seedSnapshots(db: PrismaClient, today: Date): Promise<void> {
-  const points = [
-    { totalEur: 3610, costEur: 3530, dividendsEur: 0, realizedEur: 0 },
-    { totalEur: 3655, costEur: 3530, dividendsEur: 40, realizedEur: 0 },
-    { totalEur: 3590, costEur: 3530, dividendsEur: 0, realizedEur: 0 },
-    { totalEur: 3720, costEur: 3530, dividendsEur: 0, realizedEur: 160 },
-    { totalEur: 3770, costEur: 3530, dividendsEur: 0, realizedEur: 0 },
+  // The dividends route sums entries[].dividendPaidEur (attributable to a ticker), never the
+  // day aggregate, so each dividend day carries the entry that paid it. The first point sits
+  // outside the snapshot route's 90-day window: the total (47.50) proves it is still counted.
+  const orntDividendEntry: SnapshotEntry = {
+    positionId: IDS.positionPanelOpen,
+    ticker: TICKERS.panel,
+    currency: "USD",
+    shares: 20,
+    purchasePrice: 140,
+    currentPrice: 150,
+    fxRate: 1.08,
+    valueEur: 2777.78,
+    costEur: 2592.59,
+    dividendPaidEur: 7.5,
+  };
+  const groundedDividendEntry: SnapshotEntry = {
+    positionId: IDS.positionGroundedLot1,
+    ticker: TICKERS.grounded,
+    currency: "EUR",
+    shares: 100,
+    purchasePrice: 10.5,
+    currentPrice: 11.4,
+    fxRate: 1,
+    valueEur: 1140,
+    costEur: 1050,
+    dividendPaidEur: 40,
+  };
+  const points: { totalEur: number; costEur: number; dividendsEur: number; realizedEur: number; entries: SnapshotEntry[] }[] = [
+    { totalEur: 3500, costEur: 3530, dividendsEur: 7.5, realizedEur: 0, entries: [orntDividendEntry] },
+    { totalEur: 3610, costEur: 3530, dividendsEur: 0, realizedEur: 0, entries: [] },
+    { totalEur: 3655, costEur: 3530, dividendsEur: 40, realizedEur: 0, entries: [groundedDividendEntry] },
+    { totalEur: 3590, costEur: 3530, dividendsEur: 0, realizedEur: 0, entries: [] },
+    { totalEur: 3720, costEur: 3530, dividendsEur: 0, realizedEur: 160, entries: [] },
+    { totalEur: 3770, costEur: 3530, dividendsEur: 0, realizedEur: 0, entries: [] },
   ];
   await db.portfolioSnapshot.createMany({
     data: SNAPSHOT_OFFSETS.map((offset, i) => {
       const p = points[i];
-      const data: SnapshotData = { dividendsEur: p.dividendsEur, entries: [], realizedEur: p.realizedEur, realizedEntries: [] };
+      const data: SnapshotData = { dividendsEur: p.dividendsEur, entries: p.entries, realizedEur: p.realizedEur, realizedEntries: [] };
       return { userId: USER_A.id, takenAt: daysFrom(today, offset, 20), totalEur: p.totalEur, costEur: p.costEur, data: JSON.stringify(data) };
     }),
   });

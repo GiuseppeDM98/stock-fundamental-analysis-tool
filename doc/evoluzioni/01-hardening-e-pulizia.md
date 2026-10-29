@@ -1,6 +1,6 @@
 # 01 — Hardening e pulizia
 
-> **Stato**: scritta 2026-10-11; riletta in modo adversariale il 2026-10-11: 36 rilievi, 7 decisioni (D-21, D-28, D-29, D-30, D-31; T-21, T-22); integrata il 2026-10-18 con B10/A11 (la ricerca web di DeepSeek passa alla Search API di DeepSeek, Tavily esce — D-70, T-34) e B11/A12 (catalogo: `deepseek-flash` con alias — D-72); integrata il 2026-10-19 con B12/A13 (output strutturato nell'estrazione Grounded — D-73); integrata il 2026-10-27 con B13/A14 (zod 4, dall'audit delle dipendenze — D-78). Pronta per l'implementazione.
+> **Stato**: scritta 2026-10-11; riletta in modo adversariale il 2026-10-11: 36 rilievi, 7 decisioni (D-21, D-28, D-29, D-30, D-31; T-21, T-22); integrata il 2026-10-18 con B10/A11 (la ricerca web di DeepSeek passa alla Search API di DeepSeek, Tavily esce — D-70, T-34) e B11/A12 (catalogo: `deepseek-flash` con alias — D-72); integrata il 2026-10-19 con B12/A13 (output strutturato nell'estrazione Grounded — D-73); integrata il 2026-10-27 con B13/A14 (zod 4, dall'audit delle dipendenze — D-78). Implementata il 2026-10-29, in attesa della migrazione Turso.
 > **Branch**: `fix/hardening-and-cleanup` da `develop`. **Dipende da**: nessuna spec.
 > **Indice**: [00-INDICE.md](00-INDICE.md) — decisioni D-16, D-21, D-28, D-29, D-30, D-31, D-70, D-72, D-73, D-78; scelte T-15, T-16, T-19, T-21, T-22, T-23, T-24, T-26, T-34; contratti C-1, C-2, C-3, C-14.
 

@@ -1,6 +1,6 @@
 // PATCH /api/watchlist/settings — update watchlistEmail, watchlistEnabled
-// (the digest is sent daily for everyone, so there is no per-user frequency setting; the
-//  legacy `watchlistFreq` column is left in the schema, unused).
+// (the digest is sent every weekday for everyone, so there is no per-user frequency
+//  setting; the legacy frequency column was dropped on 2026-10-28).
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
@@ -20,7 +20,7 @@ export async function PATCH(request: Request) {
     body = settingsSchema.parse(await request.json());
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return NextResponse.json({ error: err.errors[0].message }, { status: 400 });
+      return NextResponse.json({ error: err.issues[0].message }, { status: 400 });
     }
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }

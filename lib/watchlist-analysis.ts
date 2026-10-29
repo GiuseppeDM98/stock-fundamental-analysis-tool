@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { sendWatchlistDigest, type DigestItem } from "@/lib/email";
 import { grossUpToIntrinsic, type Triple } from "@/lib/report/valuation";
 import { presentAnalysts, meanTriple } from "@/lib/report/consensus";
+import { latestAnalysisWithValues, watchlistBuyTarget } from "@/lib/report/latest-analysis";
 import type { SavedAnalysis } from "@/types/analysis";
 import type { EarningsConfidence } from "@/types/earnings";
 import { aggregateOpenLots } from "@/lib/portfolio-math";
@@ -64,16 +65,58 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
   });
   const earningsByTicker = new Map(earningsEstimates.map((e) => [e.ticker, e]));
 
+  // Saved analyses for every watched ticker, batched once per user (it was one query per
+  // item) and picked with the same "newest with a full triple" rule as every UI surface.
+  // reportMd is left out: the digest never reads it.
+  const analysisRows = await db.analysis.findMany({
+    where: { userId: user.id, ticker: { in: items.map((i) => i.ticker) } },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      ticker: true,
+      companyName: true,
+      mosPercent: true,
+      createdAt: true,
+      priceAtAnalysis: true,
+      fairValueBull: true,
+      fairValueBase: true,
+      fairValueBear: true,
+      valuationMethod: true,
+      reviewMd: true,
+      reviewFairValueBull: true,
+      reviewFairValueBase: true,
+      reviewFairValueBear: true,
+      reviewValuationMethod: true,
+      optimistCritiqueMd: true,
+      optimistFairValueBull: true,
+      optimistFairValueBase: true,
+      optimistFairValueBear: true,
+      optimistValuationMethod: true,
+      qualityCritiqueMd: true,
+      qualityFairValueBull: true,
+      qualityFairValueBase: true,
+      qualityFairValueBear: true,
+      qualityValuationMethod: true,
+    },
+  });
+  type AnalysisRow = (typeof analysisRows)[number];
+  const analysesByTicker = new Map<string, AnalysisRow[]>();
+  for (const row of analysisRows) {
+    analysesByTicker.set(row.ticker, [...(analysesByTicker.get(row.ticker) ?? []), row]);
+  }
+
   const digestItems: DigestItem[] = [];
 
   for (const item of items) {
     // Source values from the user's latest saved Deep Value analysis for this ticker.
     // The lite analysis engine was removed entirely with the Compare page.
-    const analysis = await db.analysis.findFirst({
-      where: { userId: user.id, ticker: item.ticker, fairValueBase: { not: null } },
-      orderBy: { createdAt: "desc" },
-    });
-    if (!analysis) continue;
+    // The Prisma row is structurally a SavedAnalysis for the pure helpers (createdAt is a
+    // Date here, a string over the wire — none of the helpers reads it).
+    const valued = latestAnalysisWithValues(
+      (analysesByTicker.get(item.ticker) ?? []) as unknown as SavedAnalysis[]
+    );
+    if (!valued) continue;
+    const analysis = valued as unknown as AnalysisRow;
 
     // Stored fair values (analysis + analysts) are MoS-adjusted buy targets discounted by the
     // analysis's own MoS — gross them back up to the intrinsic fair value. The digest then
@@ -94,7 +137,7 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
       base: grossUpToIntrinsic(t.base, aMos),
       bull: grossUpToIntrinsic(t.bull, aMos),
     });
-    const analysts = presentAnalysts(analysis as unknown as SavedAnalysis).map(({ angle, triple }) => ({
+    const analysts = presentAnalysts(valued).map(({ angle, triple }) => ({
       angle,
       ...grossTriple(triple),
     }));
@@ -107,8 +150,9 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
     const { price: currentPrice, currency } = await fetchQuote(item.ticker);
     // Buy target/status prefer the consensus (analysis + every analyst that ran) over the
     // base analysis alone — more independent opinions is a more robust signal than one.
-    const verdictBase = consensus?.base ?? intrinsicBase;
-    const adjustedBase = verdictBase * (1 - item.mosPercent);
+    // watchlistBuyTarget re-discounts the verdict basis (consensus?.base ?? intrinsicBase
+    // above) with the item's MoS: the same rule the watchlist page uses.
+    const adjustedBase = watchlistBuyTarget(valued, item.mosPercent)!;
     const upside =
       currentPrice !== null ? (adjustedBase - currentPrice) / currentPrice : null;
     const status: DigestItem["status"] =

@@ -36,6 +36,16 @@ describe("Sonnet 5.5 catalog entry", () => {
   });
 });
 
+describe("DeepSeek web search tool", () => {
+  it("is the single client-executed web_search function, with the query length cap in its description", () => {
+    const tools = buildWebSearchTools("deepseek-v4-pro") as unknown as Record<string, unknown>[];
+    expect(tools).toHaveLength(1);
+    expect(tools[0].name).toBe("web_search");
+    expect(tools[0]).not.toHaveProperty("type");
+    expect(String(tools[0].description)).toContain("128");
+  });
+});
+
 describe("buildEffortConfig", () => {
   it("passes every effort level through as typed, xhigh included", () => {
     expect(buildEffortConfig("xhigh")).toEqual({ effort: "xhigh" });
@@ -46,7 +56,7 @@ describe("buildEffortConfig", () => {
 describe("usesServerSideFallback", () => {
   it("opts in Sonnet 5.5 only: no other catalog model, and never DeepSeek", () => {
     expect(usesServerSideFallback("claude-sonnet-5-5")).toBe(true);
-    for (const model of ["claude-opus-4-8", "claude-sonnet-5", "deepseek-v4-pro", "deepseek-v4-flash"]) {
+    for (const model of ["claude-opus-4-8", "claude-sonnet-5", "deepseek-v4-pro", "deepseek-flash"]) {
       expect(usesServerSideFallback(model)).toBe(false);
     }
   });

@@ -298,7 +298,10 @@ export default function AdvisorClient() {
     ])
       .then(([positions, analyses]) => {
         setContextCounts({
-          positions: Array.isArray(positions) ? positions.length : 0,
+          // Open lots only — the same set the Advisor's prompt receives.
+          positions: Array.isArray(positions)
+            ? positions.filter((p: { closedAt?: string | null }) => p.closedAt == null).length
+            : 0,
           analyses: Array.isArray(analyses) ? analyses.length : 0,
         });
       })

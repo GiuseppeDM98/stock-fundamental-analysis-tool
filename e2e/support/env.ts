@@ -78,7 +78,6 @@ export function buildIsolatedEnv(): Record<string, string> {
     // the email digest fails loudly instead of spending money or sending mail.
     ANTHROPIC_API_KEY: "",
     DEEPSEEK_API_KEY: "",
-    TAVILY_API_KEY: "",
     RESEND_API_KEY: "",
     RESEND_FROM_EMAIL: "",
     CRON_SECRET: "e2e-cron-secret",

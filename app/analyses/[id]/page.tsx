@@ -1,12 +1,11 @@
 import { redirect, notFound } from "next/navigation";
-import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import OpenPositionBanner from "@/components/open-position-banner";
 import ReportBody from "@/components/report/report-body";
 import SavedValuationSummary, { type SavedValuationMeta } from "@/components/saved-valuation-summary";
 import AnalystPanel from "@/components/analyst-panel";
-import DownloadPdfButton from "@/components/download-pdf-button";
+import { DetailBreadcrumb, DetailFooterActions } from "@/components/analysis-detail-chrome";
 import type { GroundingPayload } from "@/types/grounding";
 import type { Triple } from "@/lib/report/valuation";
 
@@ -105,14 +104,7 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-10">
-      {/* Breadcrumb */}
-      <div className="mb-6 flex items-center gap-2 text-sm text-slate-400 print:hidden">
-        <Link href="/analyses" className="hover:text-slate-200">
-          Saved Analyses
-        </Link>
-        <span>/</span>
-        <span className="font-mono text-sky-400">{analysis.ticker}</span>
-      </div>
+      <DetailBreadcrumb ticker={analysis.ticker} />
 
       {/* Open position banner — shown when the user holds this ticker in their portfolio */}
       {positions.length > 0 && (
@@ -181,24 +173,7 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
         />
       )}
 
-      <div className="mt-6 flex items-center justify-between print:hidden">
-        <Link
-          href="/analyses"
-          className="text-sm text-slate-400 hover:text-slate-200"
-        >
-          ← Back to Saved Analyses
-        </Link>
-        <div className="flex items-center gap-3">
-          <DownloadPdfButton label="Download PDF" />
-          {/* Re-run opens dashboard with this ticker pre-loaded */}
-          <a
-            href={`/analyze?ticker=${encodeURIComponent(analysis.ticker)}`}
-            className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-sky-400 transition hover:border-sky-500/50 hover:text-sky-300"
-          >
-            Re-run Analysis
-          </a>
-        </div>
-      </div>
+      <DetailFooterActions ticker={analysis.ticker} />
     </main>
   );
 }

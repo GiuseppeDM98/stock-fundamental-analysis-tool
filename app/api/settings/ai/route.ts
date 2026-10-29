@@ -4,17 +4,22 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { AI_MODEL_CATALOG, AI_MODEL_IDS, isAiModelId } from "@/types/ai-settings";
+import { aiModelIdSchema } from "@/lib/ai/ai-preferences";
+import { AI_MODEL_CATALOG, normalizeAiModelId } from "@/types/ai-settings";
 import type { AiSettings } from "@/types/ai-settings";
 
 const settingsSchema = z
   .object({
-    model: z.enum(AI_MODEL_IDS),
+    // A retired id (an old client) is saved as its successor, so reopening the gear and
+    // saving retires the alias from the row by itself.
+    model: aiModelIdSchema,
     effort: z.string(),
     thinking: z.boolean(),
   })
   .refine(
-    (data) => (AI_MODEL_CATALOG[data.model].efforts as readonly string[]).includes(data.effort),
+    // Zod may still run this check after the model failed (the field is then not a catalog
+    // id), so the lookup is guarded: an unknown model must answer 400, not throw.
+    (data) => (AI_MODEL_CATALOG[data.model]?.efforts as readonly string[] | undefined)?.includes(data.effort) ?? false,
     { message: "Effort level not supported by this model", path: ["effort"] }
   );
 
@@ -28,7 +33,7 @@ export async function GET() {
   });
 
   const settings: AiSettings = {
-    model: user && isAiModelId(user.aiModel) ? user.aiModel : "claude-opus-4-8",
+    model: (user && normalizeAiModelId(user.aiModel)) ?? "claude-opus-4-8",
     effort: (user?.aiEffort as AiSettings["effort"]) ?? "high",
     thinking: user?.aiThinkingEnabled ?? true,
   };
@@ -45,7 +50,7 @@ export async function PATCH(request: Request) {
     body = settingsSchema.parse(await request.json());
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return NextResponse.json({ error: err.errors[0].message }, { status: 400 });
+      return NextResponse.json({ error: err.issues[0].message }, { status: 400 });
     }
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }

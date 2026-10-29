@@ -9,6 +9,11 @@ type Props = {
   bearLabel: string;
   baseLabel: string;
   bullLabel: string;
+  scenarioHeader: string;
+  vsPriceHeader: string;
+  buyTargetHeader: string;
+  fairValueHeader: string;
+  fvShort: string;
 };
 
 // Recap table — quick at-a-glance summary of all three scenarios vs. the live
@@ -24,6 +29,11 @@ export default function RecapTable({
   bearLabel,
   baseLabel,
   bullLabel,
+  scenarioHeader,
+  vsPriceHeader,
+  buyTargetHeader,
+  fairValueHeader,
+  fvShort,
 }: Props) {
   // Upside vs. the live price, computed deterministically from the displayed value.
   // The AI's JSON `upside` field is unreliable (it sometimes returns the ratio unscaled,
@@ -36,7 +46,7 @@ export default function RecapTable({
   const intrinsicOf = (buyTarget: number): number | null =>
     mosPercent > 0 ? buyTarget / (1 - mosPercent / 100) : null;
 
-  const valueColumnLabel = `${result.currency} ${mosPercent > 0 ? `Buy Target (-${mosPercent}%)` : "Fair Value"}`;
+  const valueColumnLabel = `${result.currency} ${mosPercent > 0 ? `${buyTargetHeader} (-${mosPercent}%)` : fairValueHeader}`;
 
   const rows: { label: string; value: number | null; intrinsic?: number | null; upside: number | null; highlight?: "base" }[] = [
     ...(currentPrice != null ? [{ label: currentPriceLabel, value: currentPrice, upside: null as null }] : []),
@@ -51,9 +61,9 @@ export default function RecapTable({
       <table className="rtable w-full text-xs sm:text-sm">
         <thead>
           <tr className="border-b border-slate-700/60 print:border-slate-300">
-            <th className="pb-2 pr-2 text-left font-medium text-slate-400 sm:pr-4 print:text-slate-600">Scenario</th>
+            <th className="pb-2 pr-2 text-left font-medium text-slate-400 sm:pr-4 print:text-slate-600">{scenarioHeader}</th>
             <th className="pb-2 text-right font-medium text-slate-400 print:text-slate-600">{valueColumnLabel}</th>
-            <th className="pb-2 pl-2 text-right font-medium text-slate-400 sm:pl-4 print:text-slate-600">vs. Price</th>
+            <th className="pb-2 pl-2 text-right font-medium text-slate-400 sm:pl-4 print:text-slate-600">{vsPriceHeader}</th>
           </tr>
         </thead>
         <tbody>
@@ -81,10 +91,10 @@ export default function RecapTable({
                 <td className="py-2.5 text-right text-slate-200 print:text-slate-900" data-label={valueColumnLabel}>
                   {row.value != null ? row.value.toFixed(2) : "—"}
                   {row.intrinsic != null && (
-                    <span className="block text-xs font-normal text-slate-500 print:text-slate-600">{`FV ${row.intrinsic.toFixed(2)}`}</span>
+                    <span className="block text-xs font-normal text-slate-500 print:text-slate-600">{`${fvShort} ${row.intrinsic.toFixed(2)}`}</span>
                   )}
                 </td>
-                <td className="py-2.5 pl-2 text-right sm:pl-4" data-label="vs. Price">
+                <td className="py-2.5 pl-2 text-right sm:pl-4" data-label={vsPriceHeader}>
                   {row.upside != null ? (
                     <span
                       className={`font-semibold ${

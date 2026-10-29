@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { GROUNDING_BLOCK_KINDS } from "@/types/grounding";
 import { buildGroundingExtractSystemPrompt } from "@/lib/ai/grounding-extract-prompt";
-import { EXTRACTION_SCHEMA_BY_KIND } from "@/lib/ai/grounding-extract-schema";
+import { EXTRACTION_SCHEMA_BY_KIND, extractionOutputFormat } from "@/lib/ai/grounding-extract-schema";
 
 // The extraction prompt's JSON example and the route's Zod schema are one contract: a key
 // the schema expects but the example omits is a field the model is never shown (it then
@@ -16,19 +16,20 @@ function exampleFor(kind: (typeof GROUNDING_BLOCK_KINDS)[number]): unknown {
   return JSON.parse(match[1]);
 }
 
-/** Strips the wrappers that don't change an object's key set. */
-function unwrap(schema: z.ZodTypeAny): z.ZodTypeAny {
-  if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) return unwrap(schema.unwrap());
-  if (schema instanceof z.ZodDefault) return unwrap(schema._def.innerType);
+/** Strips the wrappers that don't change an object's key set. zod 4 types the inner schema
+ *  of a wrapper as the core `$ZodType`, so it is re-cast to the classic `ZodType`. */
+function unwrap(schema: z.ZodType): z.ZodType {
+  if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) return unwrap(schema.unwrap() as z.ZodType);
+  if (schema instanceof z.ZodDefault) return unwrap(schema.def.innerType as z.ZodType);
   return schema;
 }
 
 /** Every key-set mismatch between `schema` and `value`, as readable paths. */
-function keyMismatches(schema: z.ZodTypeAny, value: unknown, path: string): string[] {
+function keyMismatches(schema: z.ZodType, value: unknown, path: string): string[] {
   const inner = unwrap(schema);
   if (inner instanceof z.ZodArray) {
     if (!Array.isArray(value)) return [];
-    return value.flatMap((item, i) => keyMismatches(inner.element, item, `${path}[${i}]`));
+    return value.flatMap((item, i) => keyMismatches(inner.element as z.ZodType, item, `${path}[${i}]`));
   }
   if (inner instanceof z.ZodObject) {
     if (value == null || typeof value !== "object") return [];
@@ -52,6 +53,9 @@ describe("grounding extraction prompt ↔ schema contract", () => {
   });
 
   it.each(GROUNDING_BLOCK_KINDS)("the %s example states exactly the schema's keys", (kind) => {
+    // A schema built with another zod major fails every instanceof below and would compare
+    // nothing: pin the walk's entry point so that drift reads as red, not as "no mismatch".
+    expect(unwrap(EXTRACTION_SCHEMA_BY_KIND[kind])).toBeInstanceOf(z.ZodObject);
     expect(keyMismatches(EXTRACTION_SCHEMA_BY_KIND[kind], exampleFor(kind), kind)).toEqual([]);
   });
 
@@ -59,6 +63,35 @@ describe("grounding extraction prompt ↔ schema contract", () => {
     const example = exampleFor("other") as { multiples: Record<string, unknown>[] };
     expect(example.multiples[0]).toHaveProperty("marketCap");
     expect(example.multiples[0]).toHaveProperty("enterpriseValue");
+  });
+});
+
+/** Paths of the properties a JSON Schema leaves out of `required`, at every nesting level. */
+function optionalProperties(node: unknown, path: string): string[] {
+  if (node == null || typeof node !== "object") return [];
+  const n = node as Record<string, unknown>;
+  const own =
+    n.properties && typeof n.properties === "object"
+      ? Object.keys(n.properties).filter((k) => !((n.required as string[] | undefined) ?? []).includes(k))
+      : [];
+  return [
+    ...own.map((k) => `${path}.${k}`),
+    ...Object.entries(n).flatMap(([k, v]) => optionalProperties(v, `${path}/${k}`)),
+  ];
+}
+
+describe("grounding extraction structured-output format", () => {
+  // The API caps a request at 24 properties outside `required` across its schemas and
+  // answers 400 past it (structured-outputs docs, checked 2026-10-29). Every block is its
+  // own request, so one kind past the cap would fail all its blocks before any generation.
+  it.each(GROUNDING_BLOCK_KINDS)("the %s format stays within the optional-property cap", (kind) => {
+    const { schema } = extractionOutputFormat(kind) as unknown as { schema: unknown };
+    expect(optionalProperties(schema, kind).length).toBeLessThanOrEqual(24);
+  });
+
+  it("leaves out of required only the arrays the other prompt says to omit", () => {
+    const { schema } = extractionOutputFormat("other") as unknown as { schema: unknown };
+    expect(optionalProperties(schema, "other")).toEqual(["other.financials", "other.multiples", "other.estimates"]);
   });
 });
 

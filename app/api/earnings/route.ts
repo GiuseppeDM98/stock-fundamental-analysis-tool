@@ -10,6 +10,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { tickerSchema } from "@/lib/ticker";
 import { buildEarningsSystemPrompt, buildEarningsUserPrompt, EARNINGS_MAX_TOKENS } from "@/lib/ai/earnings-prompt";
 import { getAiClient, buildThinkingParam, buildEffortConfig, buildWebSearchTools } from "@/lib/ai/client";
 import { resolveAiSettings } from "@/lib/ai/ai-preferences";
@@ -21,7 +22,7 @@ import type { EarningsConfidence, EarningsEstimate } from "@/types/earnings";
 const DEFAULT_SETTINGS: AiSettings = { model: "claude-sonnet-5-5", effort: "medium", thinking: true };
 
 const requestSchema = z.object({
-  ticker: z.string().min(1).max(20),
+  ticker: tickerSchema,
   companyName: z.string().min(1).max(120),
 });
 
@@ -77,12 +78,12 @@ export async function POST(request: Request) {
     body = requestSchema.parse(await request.json());
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return NextResponse.json({ error: err.errors[0].message }, { status: 400 });
+      return NextResponse.json({ error: err.issues[0].message }, { status: 400 });
     }
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  const ticker = body.ticker.toUpperCase();
+  const ticker = body.ticker;
 
   try {
     const currentDate = new Date().toLocaleDateString("en-US", {

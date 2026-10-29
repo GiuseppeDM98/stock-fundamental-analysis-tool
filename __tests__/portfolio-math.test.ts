@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { realizedPnlNative, holdingDays, estimateCapitalGainsTax, aggregateOpenLots } from "@/lib/portfolio-math";
+import { realizedPnlNative, holdingDays, estimateCapitalGainsTax, aggregateOpenLots, sumDividendsByTicker } from "@/lib/portfolio-math";
+import type { SnapshotEntry } from "@/types/portfolio";
 
 describe("realizedPnlNative", () => {
   it("returns a positive gain when sold above cost", () => {
@@ -109,5 +110,33 @@ describe("aggregateOpenLots", () => {
   it("supports fractional shares", () => {
     const r = aggregateOpenLots([{ shares: 2.5, purchasePrice: 40 }]);
     expect(r?.weightedAvgCost).toBeCloseTo(40, 10);
+  });
+});
+
+describe("sumDividendsByTicker", () => {
+  const entry = (ticker: string, dividendPaidEur?: number): SnapshotEntry => ({
+    positionId: `p-${ticker}`,
+    ticker,
+    currency: "EUR",
+    shares: 10,
+    purchasePrice: 50,
+    currentPrice: 50,
+    fxRate: 1,
+    valueEur: 500,
+    costEur: 500,
+    ...(dividendPaidEur !== undefined ? { dividendPaidEur } : {}),
+  });
+
+  it("sums per-entry dividends across snapshots, overall and per ticker", () => {
+    // The day aggregates (dividendsEur) are deliberately ignored: 999 must not leak in.
+    const totals = sumDividendsByTicker([
+      { dividendsEur: 999, entries: [entry("AAA", 40), entry("BBB")] },
+      { dividendsEur: 999, entries: [entry("AAA", 10)] },
+    ]);
+    expect(totals).toEqual({ totalEur: 50, byTicker: { AAA: 50 } });
+  });
+
+  it("returns zero for no snapshots", () => {
+    expect(sumDividendsByTicker([])).toEqual({ totalEur: 0, byTicker: {} });
   });
 });

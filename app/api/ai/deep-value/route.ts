@@ -11,11 +11,11 @@ import {
   buildDeepValueUserPrompt,
 } from "@/lib/ai/deep-value-prompts";
 import { getAiClient, buildThinkingParam, buildEffortConfig, buildWebSearchTools } from "@/lib/ai/client";
-import { resolveAiSettings } from "@/lib/ai/ai-preferences";
+import { resolveAiSettings, aiModelIdSchema } from "@/lib/ai/ai-preferences";
 import { runStreamWithToolLoop, DEEP_RESEARCH_MAX_TOOL_ITERATIONS, GROUNDED_MAX_TOOL_ITERATIONS } from "@/lib/ai/tool-loop";
 import { fallbackNote } from "@/lib/ai/fallback";
 import { routeErrorStatus } from "@/lib/ai/error-status";
-import { AI_MODEL_IDS, AI_EFFORT_LEVELS, type AiSettings } from "@/types/ai-settings";
+import { AI_EFFORT_LEVELS, type AiSettings } from "@/types/ai-settings";
 import { groundingPayloadSchema } from "@/lib/grounding/schema";
 import { buildGroundingPromptContext, type GroundingPromptContext } from "@/lib/grounding/prompt-format";
 
@@ -25,7 +25,7 @@ const requestSchema = z.object({
   ticker: z.string().min(1).max(20),
   language: z.string().min(1).max(30).default("English"),
   mosPercent: z.number().min(0).max(80).default(0),
-  model: z.enum(AI_MODEL_IDS).optional(),
+  model: aiModelIdSchema.optional(),
   effort: z.enum(AI_EFFORT_LEVELS).optional(),
   thinking: z.boolean().optional(),
   // Grounded mode: the client sends only blocks + the confirmed extract; the route
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     body = requestSchema.parse(await request.json());
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return NextResponse.json({ error: err.errors[0].message }, { status: 400 });
+      return NextResponse.json({ error: err.issues[0].message }, { status: 400 });
     }
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }

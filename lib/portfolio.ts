@@ -6,6 +6,7 @@ import type {
   ClosePositionRequest,
   SnapshotPoint,
 } from "@/types/portfolio";
+import type { DividendTotals } from "@/lib/portfolio-math";
 
 export async function fetchPositions(): Promise<Position[]> {
   const res = await fetch("/api/positions");
@@ -54,5 +55,11 @@ export async function closePosition(
 export async function fetchSnapshots(): Promise<SnapshotPoint[]> {
   const res = await fetch("/api/portfolio/snapshots");
   if (!res.ok) throw new Error("Failed to load portfolio history");
+  return res.json();
+}
+
+export async function fetchDividendTotals(): Promise<DividendTotals> {
+  const res = await fetch("/api/portfolio/dividends");
+  if (!res.ok) throw new Error("Failed to load dividends");
   return res.json();
 }

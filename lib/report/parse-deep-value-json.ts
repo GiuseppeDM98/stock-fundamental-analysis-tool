@@ -16,6 +16,19 @@ import type {
   ValuationBridge,
 } from "@/components/report/types";
 
+/** What the parser can prove about a JSON block: every scenario may be missing, because
+ *  sanitizeDeepValueResult legitimately drops a malformed one (reproduced on a missing
+ *  `bear`, 2026-10-11). Consumers that dereference `.bull/.base/.bear` must narrow through
+ *  hasFullTriple first — the compiler refuses a bare dereference on this type. */
+export type ParsedAnalystResult = Omit<AnalystResult, "bull" | "base" | "bear"> &
+  Partial<Pick<AnalystResult, "bull" | "base" | "bear">>;
+
+/** The ONLY door to any consumer that needs the full triple (ReportShell, the save request,
+ *  the analyst PATCH, the gates). */
+export function hasFullTriple(result: ParsedAnalystResult | null): result is AnalystResult {
+  return !!result && !!result.bull && !!result.base && !!result.bear;
+}
+
 // Matches the fenced JSON block anywhere in the text (the stream may carry preamble in
 // degraded cases). Kept in sync with stripJsonBlock below — same fence convention.
 const JSON_BLOCK_RE = /```json\n([\s\S]*?)\n```/;
@@ -141,9 +154,9 @@ function sanitizeRevisions(raw: unknown): AnalystResult["revisions"] {
  * is valid (see the section comment above). Never throws.
  *
  * Two presence rules matter to downstream code and are preserved deliberately:
- * - A bull/base/bear key is set only when that scenario is valid. The type still declares
- *   all three (they are the contract), so callers that need the full triple must check —
- *   as the saved-detail page and the blind-commitment picker already do.
+ * - A bull/base/bear key is set only when that scenario is valid, so the return type
+ *   declares all three optional: callers that need the full triple narrow through
+ *   hasFullTriple.
  * - `killPrice` is set only when the key was present in the block: its PRESENCE is what
  *   makes lib/grounding/postcheck.ts add the kill_price gate (analyst lenses only). A
  *   present but non-numeric value becomes null — a declared-but-unusable kill price must
@@ -151,13 +164,13 @@ function sanitizeRevisions(raw: unknown): AnalystResult["revisions"] {
  *
  * @returns the sanitized result, or null when `raw` isn't a JSON object at all.
  */
-export function sanitizeDeepValueResult(raw: unknown): AnalystResult | null {
+export function sanitizeDeepValueResult(raw: unknown): ParsedAnalystResult | null {
   if (!isObject(raw)) return null;
-  const result = {
+  const result: ParsedAnalystResult = {
     method: typeof raw.method === "string" ? raw.method : "",
     sector: typeof raw.sector === "string" ? raw.sector : "",
     currency: typeof raw.currency === "string" ? raw.currency : "",
-  } as AnalystResult;
+  };
 
   for (const key of ["bull", "base", "bear"] as const) {
     const scenario = sanitizeScenario(raw[key]);
@@ -177,7 +190,7 @@ export function sanitizeDeepValueResult(raw: unknown): AnalystResult | null {
   return result;
 }
 
-function parseFencedBlock(text: string, re: RegExp): AnalystResult | null {
+function parseFencedBlock(text: string, re: RegExp): ParsedAnalystResult | null {
   const match = text.match(re);
   if (!match) return null;
   try {
@@ -192,7 +205,7 @@ function parseFencedBlock(text: string, re: RegExp): AnalystResult | null {
  * @returns the sanitized result (analyst-only fields included when the block carries
  *   them), or null if no block is present or it is not a JSON object.
  */
-export function parseDeepValueJson(text: string): AnalystResult | null {
+export function parseDeepValueJson(text: string): ParsedAnalystResult | null {
   return parseFencedBlock(text, JSON_BLOCK_RE);
 }
 
@@ -216,7 +229,7 @@ const BLIND_JSON_BLOCK_RE = /```json-blind\n([\s\S]*?)\n```/;
  * Parse the Phase-1 (blind) commitment out of a blind-first analyst stream.
  * @returns the sanitized result, or null if no blind block is present or it is malformed.
  */
-export function parseBlindJson(text: string): AnalystResult | null {
+export function parseBlindJson(text: string): ParsedAnalystResult | null {
   return parseFencedBlock(text, BLIND_JSON_BLOCK_RE);
 }
 

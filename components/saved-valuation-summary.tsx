@@ -65,6 +65,12 @@ export default function SavedValuationSummary({ meta, mosPercent, ticker, compan
           bearLabel: t("bearLabel"),
           baseLabel: t("baseLabel"),
           bullLabel: t("bullLabel"),
+          disclaimer: t("reportDisclaimer"),
+          scenarioHeader: t("recapScenario"),
+          vsPriceHeader: t("recapVsPrice"),
+          buyTargetHeader: t("recapBuyTarget"),
+          fairValueHeader: t("recapFairValue"),
+          fvShort: t("fvShort"),
         }}
       />
       {groundingExtract && currentPrice != null && currency && (

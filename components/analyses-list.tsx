@@ -18,6 +18,7 @@ import { getVerdict, VERDICT_BADGE, VERDICT_TEXT, type Verdict } from "@/lib/rep
 import { getSignalStrength } from "@/lib/report/signal";
 import { grossUpToIntrinsic } from "@/lib/report/valuation";
 import { presentAnalysts, consensusTriple } from "@/lib/report/consensus";
+import { latestAnalysisWithValues, verdictBasis } from "@/lib/report/latest-analysis";
 import { computeEvolutionChain, type Evolution, type SourceDelta } from "@/lib/report/evolution";
 import { EarningsBadge } from "@/components/earnings-badge";
 import { isAnalysisStalePreEarnings, isFutureEarnings, formatEarningsDate } from "@/lib/earnings";
@@ -293,9 +294,15 @@ function TickerGroup({
   // Shared level for the ruler + table: fair value (intrinsic) vs MoS-adjusted buy target.
   const [level, setLevel] = useState<"intrinsic" | "buyTarget">("intrinsic");
 
+  // The newest save drives the header, the link, the history, the earnings nudge and the
+  // sorts; the valuation (ruler, verdict, marks, table, weak signal, percentage) comes from
+  // the newest save WITH fair values — the same rule as the watchlist, the digest and the
+  // portfolio exit signal (lib/report/latest-analysis.ts).
   const latest = analyses[0];
   const older = analyses.slice(1);
-  const mos = (latest.mosPercent ?? 0) / 100;
+  const valued = latestAnalysisWithValues(analyses);
+  const basis = valued && verdictBasis(valued);
+  const mos = (valued?.mosPercent ?? 0) / 100;
 
   // Nudge to re-run when a fresh quarter has likely been reported since the latest save.
   const earningsStale = isAnalysisStalePreEarnings(latest.createdAt, earnings?.nextEarningsDate ?? null);
@@ -311,30 +318,26 @@ function TickerGroup({
   // AI prompt, purely a display of how the thesis moved over time.
   const evolutionSteps = computeEvolutionChain(analyses);
 
-  const hasFV =
-    latest.fairValueBear != null && latest.fairValueBase != null && latest.fairValueBull != null;
-  // Analyst-panel opinions present on the latest save, and their consensus with the base.
-  const presentAn = presentAnalysts(latest);
-  const consensusT = consensusTriple(latest);
+  // Analyst-panel opinions present on the valued save, and their consensus with the base.
+  const presentAn = valued ? presentAnalysts(valued) : [];
+  const consensusT = valued ? consensusTriple(valued) : null;
   const hasSnapshot = latest.priceAtAnalysis != null && currentPrice != null;
 
   // Stored fairValues are MoS-adjusted buy targets; intrinsic = target / (1 - mos).
   const grossUp = (v: number) => grossUpToIntrinsic(v, mos);
 
   // Verdict/zones prefer the consensus (base analysis + every analyst lens that ran) over
-  // the base analysis alone — more independent opinions is a more robust signal than one.
-  // Falls back to the base analysis's own buy target when no analyst has run yet.
-  const verdictBase = consensusT ? consensusT.base : latest.fairValueBase;
-
-  // Everything below is only meaningful when the latest analysis carries fair values.
-  const ruler = hasFV
-    ? {
-        buyTargetBase: verdictBase!,
-        intrinsicBase: grossUp(verdictBase!),
-        min: grossUp(latest.fairValueBear!),
-        max: grossUp(latest.fairValueBull!),
-      }
-    : null;
+  // the base analysis alone — verdictBasis decides, with the base as fallback.
+  // Everything below is only meaningful when some save carries fair values.
+  const ruler =
+    valued && basis
+      ? {
+          buyTargetBase: basis.buyTargetBase,
+          intrinsicBase: basis.intrinsicBase,
+          min: grossUp(valued.fairValueBear!),
+          max: grossUp(valued.fairValueBull!),
+        }
+      : null;
 
   const verdict =
     ruler && currentPrice != null
@@ -364,10 +367,11 @@ function TickerGroup({
   // Ruler marks, projected to the selected level (FV = intrinsic, or MoS-adjusted buy
   // target). The axis + zones stay on the intrinsic scale; only the marks/values move.
   const project = (v: number) => (level === "intrinsic" && mos > 0 ? grossUp(v) : v);
-  const markers = ruler
+  const markers =
+    ruler && valued
     ? {
         analysisLabel: level === "intrinsic" ? t("fvShort") : t("buyTargetBarLabel"),
-        analysis: project(latest.fairValueBase!),
+        analysis: project(valued.fairValueBase!),
         analysts: presentAn.map(({ angle, triple }) => ({
           key: angle,
           label: analystLabel(angle),
@@ -476,7 +480,7 @@ function TickerGroup({
       {/* Expanded body */}
       {expanded && (
         <div className="mt-3">
-          {ruler ? (
+          {ruler && valued ? (
             <>
               {/* Verdict line */}
               {verdict && buyTargetPct != null && (
@@ -532,7 +536,7 @@ function TickerGroup({
               )}
 
               <ComparisonTable
-                analysis={{ bear: latest.fairValueBear!, base: latest.fairValueBase!, bull: latest.fairValueBull! }}
+                analysis={{ bear: valued.fairValueBear!, base: valued.fairValueBase!, bull: valued.fairValueBull! }}
                 analysts={presentAn.map(({ angle, triple }) => ({
                   key: angle,
                   label: analystLabel(angle),
@@ -667,8 +671,10 @@ export default function AnalysesList() {
       .then(([data, posData]) => {
         setAnalyses(data);
 
+        // Open lots only: a sold lot is history, not a position (the badge used to add its
+        // shares to the open ones, 2026-10-11).
         const posMap: Record<string, Position[]> = {};
-        for (const p of posData) {
+        for (const p of posData.filter((pos) => pos.closedAt == null)) {
           posMap[p.ticker] = [...(posMap[p.ticker] ?? []), p];
         }
         setPositionsByTicker(posMap);
@@ -746,13 +752,13 @@ export default function AnalysesList() {
       const matchesCompany = group[0].companyName.toLowerCase().includes(q);
       if (q && !matchesTicker && !matchesCompany) continue;
 
-      // Filter by Under FV: check if the latest analysis for this ticker is under base FV
+      // Filter by Under FV: the price is under the buy target of the same basis the card's
+      // verdict uses (newest save with fair values; consensus once a lens ran).
       if (underFvOnly) {
-        const latest = group[0];
+        const latest = latestAnalysisWithValues(group);
+        const basis = latest && verdictBasis(latest);
         const price = currentPrices[ticker];
-        if (price == null || latest.fairValueBase == null || price >= latest.fairValueBase) {
-          continue;
-        }
+        if (!basis || price == null || price >= basis.buyTargetBase) continue;
       }
 
       filtered.push([ticker, group]);

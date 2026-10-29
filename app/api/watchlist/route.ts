@@ -2,14 +2,15 @@
 // POST /api/watchlist — add a ticker to the watchlist
 //
 // Values are sourced client-side from each ticker's latest saved Deep Value analysis (see
-// watchlist-client.tsx). The legacy per-item WatchlistRun table is no longer read here.
+// watchlist-client.tsx). The legacy per-item run table was dropped on 2026-10-28.
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { tickerSchema } from "@/lib/ticker";
 
 const addSchema = z.object({
-  ticker: z.string().min(1).max(10).transform((v) => v.toUpperCase()),
+  ticker: tickerSchema,
   companyName: z.string().min(1).max(100),
   mosPercent: z.number().min(0).max(0.8).default(0.2),
   notes: z.string().max(500).optional(),
@@ -61,7 +62,7 @@ export async function POST(request: Request) {
     body = addSchema.parse(await request.json());
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return NextResponse.json({ error: err.errors[0].message }, { status: 400 });
+      return NextResponse.json({ error: err.issues[0].message }, { status: 400 });
     }
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
