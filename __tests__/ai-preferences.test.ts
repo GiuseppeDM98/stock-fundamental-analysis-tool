@@ -34,7 +34,7 @@ describe("resolveAiSettings", () => {
     expect(result).toEqual(FALLBACK);
   });
 
-  it("clamps an effort level the selected model doesn't support down to the model's max", async () => {
+  it("clamps an effort level the selected model doesn't support down to the nearest lower one", async () => {
     findUniqueMock.mockResolvedValueOnce({
       aiModel: "deepseek-v4-pro",
       aiEffort: "xhigh", // not in deepseek's ["low","high","max"] catalog list
@@ -42,7 +42,8 @@ describe("resolveAiSettings", () => {
     });
     const result = await resolveAiSettings("user4", undefined, FALLBACK);
     expect(result.model).toBe("deepseek-v4-pro");
-    expect(result.effort).toBe("max");
+    // Down, never up: a cheaper fallback, not a pricier one (was "max" until 2026-10).
+    expect(result.effort).toBe("high");
   });
 
   it("a partial override (model only) is merged over the stored default, not treated as complete", async () => {

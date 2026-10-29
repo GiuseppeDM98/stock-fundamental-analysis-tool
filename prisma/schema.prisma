@@ -95,6 +95,20 @@ model Analysis {
   // part of SavedAnalysis (see types/analysis.ts) — both exclusions are deliberate, not
   // oversights.
   groundingJson    String?
+  // Result persistence (2026-10): the sanitized final JSON block, so no surface has to
+  // re-parse reportMd, plus the run's own metadata as RESOLVED by the server (which model
+  // produced the number — the client only asked).
+  resultJson       String?
+  currency         String?
+  sector           String?
+  reportLanguage   String?
+  aiModel          String?
+  aiEffort         String?
+  aiThinking       Boolean?
+  // Each lens's FINAL sanitized JSON (killPrice, revisions, assumptions, crossCheck …).
+  reviewResultJson   String?
+  optimistResultJson String?
+  qualityResultJson  String?
   createdAt        DateTime @default(now())
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 

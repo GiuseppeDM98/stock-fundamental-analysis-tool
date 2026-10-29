@@ -39,7 +39,8 @@ function streamResponse(text: string) {
       c.close();
     },
   });
-  return { ok: true, status: 200, body, json: async () => ({}) };
+  // The panel reads the route's X-AI-Settings header; a real Response always has headers.
+  return { ok: true, status: 200, body, headers: new Headers(), json: async () => ({}) };
 }
 
 function jsonResponse(status: number, body: unknown) {

@@ -2,7 +2,7 @@
 
 - **Next-earnings calendar for your stocks** — know when a company next reports, so you know when to re-run its analysis. On the Saved Analyses, Watchlist, and Portfolio pages, each stock has a **"Find next earnings (AI)"** button that looks up the next results date via AI web search and remembers it (with the date it was fetched and a 🔄 to refresh). The Saved Analyses page lists all upcoming dates nearest-first in an "Upcoming earnings" strip, and shows an amber **"New data since last analysis"** nudge when a company has reported since you last analysed it — a clear signal it's time for a fresh look. Works for companies that report quarterly, half-yearly, or annually.
 
-- **AI Deep Value analysis** — the core of the app. A single AI panel on `/analyze` produces a full equity-research report for any stock worldwide, including tickers where market data is incomplete. The AI autonomously picks the valuation method (DCF, DDM, EV/EBITDA, or P/B) based on the sector, sources all financial data via web search, and outputs Bull / Base / Bear fair values plus a structured report (Company Overview, Competitive Moat, Valuation Method, Key Financial Data & Quality Metrics, Bull/Base/Bear cases, Key Risks, Near-term Catalysts, Investment Summary). Available in 8 languages (EN, IT, ES, FR, DE, PT, ZH, JA).
+- **AI Deep Value analysis** — the core of the app. A single AI panel on `/analyze` produces a full equity-research report for any stock worldwide, including tickers where market data is incomplete. The AI autonomously picks the valuation method (DCF, DDM, EV/EBITDA, P/E, P/B, sum-of-the-parts, NAV, EV/RAB or residual income) based on the sector, sources all financial data via web search, and writes a structured report (Company Overview, Competitive Moat, Valuation Method, Key Financial Data & Quality Metrics, Bull/Base/Bear cases, Key Risks, Near-term Catalysts, Investment Summary) that you read as it is written, closed by the valuation: Bull / Base / Bear fair values, a 3×3 sensitivity grid and a three-year dividend outlook. Available in 8 languages (EN, IT, ES, FR, DE, PT, ZH, JA).
 
 - **Analyst Panel — three independent second opinions** — on any saved analysis, run up to three independent AI passes, each through a distinct lens: **Skeptic** (red-teams the numbers and assumptions), **Optimist** (builds the constructive bull case), and **Quality** (stress-tests the moat and long-term durability). Each lens commits to its own Bull/Base/Bear valuation and a written critique, run on demand from the saved-analysis page. Every lens that has run is shown next to the base analysis on the valuation ruler and comparison table, along with a **consensus** — the average across the base analysis and every lens that ran — so you can see at a glance how much (and in which direction) independent reviewers disagree. Results are saved with the analysis, shown in a distinct panel with a **✓ Reviewed** badge on the list card, regenerable anytime, and included in the PDF export. (Replaces the earlier single "Analyst Review" red-team pass — the Skeptic lens is that same review, now joined by two more perspectives.)
 
@@ -62,7 +62,7 @@
 
 - Added **DeepSeek V4.1 Flash** as a selectable AI model — a faster, lower-cost alternative to DeepSeek V4 Pro, available anywhere you can already choose DeepSeek.
 
-- Added a **"Low" reasoning-effort option** for DeepSeek models — previously only High and Max were available, so simpler runs can now trade some depth for speed and cost.
+- Added a **"Low" reasoning-effort option** for DeepSeek models — previously only High and Max were available, so simpler runs can now trade some depth for speed and cost. Switching a run to DeepSeek turns an effort it doesn't offer into the nearest level below it (Extra High becomes High), never into Max.
 
 - Added **Claude Sonnet 5.5** as a selectable AI model; its reasoning stays on at the Extra High and Max effort levels. Grounded data extraction now always runs on it at medium effort, whatever your default model.
 
@@ -168,7 +168,7 @@
 
 - **Deep Value reports read like professional research** — clearer section dividers, consistent spacing and colors, and the exact same layout whether streaming live or opened from your saved history. The recap table collapses to stacked cards on narrow screens.
 
-- **Deep Value analyses dig deeper** — they run at a higher reasoning effort with far more room to work, sourcing up to 5 years of financial data, so reports are more thorough and less likely to be cut short on complex companies.
+- **Deep Value analyses dig deeper** — they run at Extra High reasoning effort by default, the analyst lenses too, with far more room to work, sourcing up to 5 years of financial data, so reports are more thorough and less likely to be cut short on complex companies.
 
 - **Every analysis is independent of your position** — a Deep Value analysis (and every analyst-panel lens) is never told what you paid or what a previous run estimated, so its fair values can't be unconsciously anchored to your cost basis or nudged to justify holding. Reaching fair value is a checkpoint, not an automatic sell — take the fresh, unbiased numbers to the Advisor, which knows your holdings and can weigh hold / add / exit (including dividend considerations) for you.
 

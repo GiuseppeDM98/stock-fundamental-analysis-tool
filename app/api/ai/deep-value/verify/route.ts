@@ -1,11 +1,12 @@
 // POST /api/ai/deep-value/verify — one independent analyst-panel pass over a completed
 // report. A fresh-context Opus pass that reviews the saved Deep Value report through one
 // LENS (skeptic / optimist / quality — see `angle`): it stress-tests numbers/assumptions
-// and spot-checks figures via web search. It streams a leading JSON block with the
-// analyst's OWN bull/base/bear valuation (same MoS-adjusted unit as the base analysis, so
-// the base + every analyst can be averaged into a consensus) followed by the plain-Markdown
-// critique. The lens only swaps persona/focus in the prompt — path and streaming machinery
-// are identical, so all three analysts reuse this one route.
+// and spot-checks figures via web search. It streams the plain-Markdown critique followed
+// by a closing JSON block with the analyst's OWN bull/base/bear valuation (same
+// MoS-adjusted unit as the base analysis, so the base + every analyst can be averaged into
+// a consensus); research chatter before the critique's start marker never reaches the
+// client (lib/ai/stream-gate.ts). The lens only swaps persona/focus in the prompt — path
+// and streaming machinery are identical, so all three analysts reuse this one route.
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
@@ -20,6 +21,7 @@ import {
   buildAnalystReconcileUserPrompt,
 } from "@/lib/ai/deep-value-prompts";
 import { getAiClient, buildThinkingParam, buildEffortConfig, buildWebSearchTools } from "@/lib/ai/client";
+import { createStreamGate } from "@/lib/ai/stream-gate";
 import { resolveAiSettings, aiModelIdSchema } from "@/lib/ai/ai-preferences";
 import {
   runStreamWithToolLoop,
@@ -30,9 +32,14 @@ import {
 } from "@/lib/ai/tool-loop";
 import { fallbackNote } from "@/lib/ai/fallback";
 import { routeErrorStatus } from "@/lib/ai/error-status";
-import { AI_EFFORT_LEVELS, type AiSettings } from "@/types/ai-settings";
+import { AI_EFFORT_LEVELS, deepValueDefaultEffort, type AiSettings } from "@/types/ai-settings";
 import { buildGroundingPromptContext, formatGatesForPrompt, type GroundingPromptContext } from "@/lib/grounding/prompt-format";
-import { parseDeepValueJson, ANALYST_PHASE_MARKERS } from "@/lib/report/parse-deep-value-json";
+import {
+  parseDeepValueJson,
+  stripTrailingOpenJsonFence,
+  ANALYST_PHASE_MARKERS,
+  CRITIQUE_START_MARKER,
+} from "@/lib/report/parse-deep-value-json";
 import { pickBlindCommitment } from "@/lib/ai/blind-commitment";
 import { checkValuationBridges } from "@/lib/grounding/postcheck";
 
@@ -49,7 +56,9 @@ export const maxDuration = 300;
 
 const requestSchema = z.object({
   ticker: z.string().min(1).max(20),
-  reportMd: z.string().min(1).max(60000),
+  // 120k since 2026-10: a report now carries a sensitivity table and a dividend outlook,
+  // plus its closing JSON block with both.
+  reportMd: z.string().min(1).max(120000),
   language: z.string().min(1).max(30).default("English"),
   // Which analyst lens is reviewing. Defaults to "skeptic" — the original red-team pass —
   // so older clients that omit it keep their existing behavior.
@@ -164,11 +173,19 @@ export async function POST(request: Request) {
     });
     const isItalian = body.language === "Italiano" || body.language === "Italian";
 
-    const aiSettings = await resolveAiSettings(
+    // An override without an effort is not a complete override: resolveAiSettings then
+    // reads the user's stored default, which the Deep Value floor below starts from.
+    let aiSettings = await resolveAiSettings(
       session.user.id,
-      body.model ? { model: body.model, effort: body.effort ?? DEFAULT_SETTINGS.effort, thinking: body.thinking ?? DEFAULT_SETTINGS.thinking } : undefined,
+      body.model ? { model: body.model, effort: body.effort, thinking: body.thinking ?? DEFAULT_SETTINGS.thinking } : undefined,
       DEFAULT_SETTINGS
     );
+    // No effort chosen for this run: a lens starts at the same floor as the report it
+    // reviews — the higher of the global default and xhigh (types/ai-settings.ts).
+    if (body.effort == null) {
+      aiSettings = { ...aiSettings, effort: deepValueDefaultEffort(aiSettings.model, aiSettings.effort) };
+    }
+    const thinkingParam = buildThinkingParam(aiSettings.thinking, aiSettings.model, aiSettings.effort);
     const client = getAiClient(aiSettings.model);
 
     const readable = new ReadableStream({
@@ -189,11 +206,17 @@ export async function POST(request: Request) {
               grounding: groundingContext,
             });
 
-            // Buffer text before the JSON block to suppress reasoning text Claude emits
-            // between web-search tool calls; only forward once ```json is seen. Mirrors
-            // the Deep Value route now that the reviewer leads with its own valuation JSON.
-            let jsonBlockStarted = false;
-            let preJsonBuffer = "";
+            // Text before the critique marker is reasoning the model writes between
+            // web-search calls: dropped, as in the Deep Value route. `forwarded` mirrors
+            // what reached the client, so a cut-off review can tell whether it stopped
+            // inside the closing JSON block.
+            const gate = createStreamGate(CRITIQUE_START_MARKER);
+            let forwarded = "";
+            const forward = (text: string) => {
+              if (!text) return;
+              forwarded += text;
+              controller.enqueue(new TextEncoder().encode(text));
+            };
 
             const { stopReason, hitIterationCap, servedBy } = await runStreamWithToolLoop(
               client,
@@ -206,41 +229,32 @@ export async function POST(request: Request) {
                 // wide anti-truncation margin. Ceiling, not target — normal replies still
                 // stop at end_turn and cost the same. Streaming, so no HTTP-timeout risk.
                 max_tokens: 64000,
-                thinking: buildThinkingParam(aiSettings.thinking, aiSettings.model, aiSettings.effort),
+                thinking: thinkingParam,
                 output_config: buildEffortConfig(aiSettings.effort),
                 system: systemPrompt,
                 tools: buildWebSearchTools(aiSettings.model),
                 messages: [{ role: "user", content: userPrompt }],
               },
-              (text) => {
-                if (!jsonBlockStarted) {
-                  preJsonBuffer += text;
-                  const jsonIdx = preJsonBuffer.indexOf("```json");
-                  if (jsonIdx !== -1) {
-                    jsonBlockStarted = true;
-                    controller.enqueue(new TextEncoder().encode(preJsonBuffer.slice(jsonIdx)));
-                    preJsonBuffer = "";
-                  }
-                  // Silently discard pre-JSON reasoning text.
-                } else {
-                  controller.enqueue(new TextEncoder().encode(text));
-                }
-              },
+              (text) => forward(gate.push(text)),
               // Ungrounded here means groundingContext is always undefined — always the
               // heavy research cap (the rescoped GROUNDED cap only applies to the
               // blind-first branch below now).
               DEEP_RESEARCH_MAX_TOOL_ITERATIONS
             );
 
-            // Failsafe: if the model never emitted a JSON fence (e.g. it opened straight
-            // into prose), flush the buffered text so the critique is not swallowed.
-            if (!jsonBlockStarted && preJsonBuffer) {
-              controller.enqueue(new TextEncoder().encode(preJsonBuffer));
-            }
+            // Failsafe: if the model never wrote the critique marker (e.g. it opened
+            // straight into prose), flush the buffered text so the critique is not
+            // swallowed — and say so in the log.
+            const rest = gate.flush();
+            forward(rest);
+            if (!gate.opened()) console.warn("[verify] critique marker never arrived; flushed", rest.length);
 
             // Surface a hard token-cap cutoff instead of truncating silently — a clean
             // mid-word cut is indistinguishable from a normal end. Mirrors /api/ai/advisor.
             if (stopReason === "max_tokens") {
+              // A cut inside the closing JSON block leaves its fence open: close it, so the
+              // parser returns null on the broken block and stripJsonBlock hides it.
+              if (stripTrailingOpenJsonFence(forwarded) !== forwarded) forward("\n```\n");
               const note = isItalian
                 ? "_[Revisione troncata: raggiunto il limite di lunghezza. Riavviala per rigenerarla.]_"
                 : "_[Review truncated: length limit reached. Re-run it to regenerate.]_";
@@ -287,7 +301,7 @@ export async function POST(request: Request) {
               // a full critique — capped below the single-phase 64k since this turn's
               // thinking gets replayed as input into turn 2 (it can't be stripped).
               max_tokens: 32000,
-              thinking: buildThinkingParam(aiSettings.thinking, aiSettings.model, aiSettings.effort),
+              thinking: thinkingParam,
               output_config: buildEffortConfig(aiSettings.effort),
               system: systemPrompt,
               tools: buildWebSearchTools(aiSettings.model),
@@ -351,15 +365,22 @@ export async function POST(request: Request) {
 
           controller.enqueue(new TextEncoder().encode(ANALYST_PHASE_MARKERS.reconcile));
 
-          let jsonBlockStarted = false;
-          let preJsonBuffer = "";
+          // Same gate as the single-phase branch. Turn 2 only: the blind block and the
+          // phase markers above are written by this route, not by the model.
+          const gate = createStreamGate(CRITIQUE_START_MARKER);
+          let forwarded = "";
+          const forward = (text: string) => {
+            if (!text) return;
+            forwarded += text;
+            controller.enqueue(new TextEncoder().encode(text));
+          };
 
           const turn2 = await runStreamWithToolLoop(
             client,
             {
               model: aiSettings.model,
               max_tokens: 64000,
-              thinking: buildThinkingParam(aiSettings.thinking, aiSettings.model, aiSettings.effort),
+              thinking: thinkingParam,
               output_config: buildEffortConfig(aiSettings.effort),
               system: systemPrompt,
               tools: buildWebSearchTools(aiSettings.model),
@@ -377,28 +398,15 @@ export async function POST(request: Request) {
               // cached turn-1 prefix (and caches the longer prefix for any resumed round).
               ...buildPromptCacheParam(aiSettings.model),
             },
-            (text) => {
-              if (!jsonBlockStarted) {
-                preJsonBuffer += text;
-                const jsonIdx = preJsonBuffer.indexOf("```json");
-                if (jsonIdx !== -1) {
-                  jsonBlockStarted = true;
-                  controller.enqueue(new TextEncoder().encode(preJsonBuffer.slice(jsonIdx)));
-                  preJsonBuffer = "";
-                }
-                // Silently discard pre-JSON reasoning text.
-              } else {
-                controller.enqueue(new TextEncoder().encode(text));
-              }
-            },
+            (text) => forward(gate.push(text)),
             // Reconciliation, not research — far fewer rounds needed than either
             // research cap.
             RECONCILE_MAX_TOOL_ITERATIONS
           );
 
-          if (!jsonBlockStarted && preJsonBuffer) {
-            controller.enqueue(new TextEncoder().encode(preJsonBuffer));
-          }
+          const rest = gate.flush();
+          forward(rest);
+          if (!gate.opened()) console.warn("[verify] critique marker never arrived; flushed", rest.length);
 
           if (!blindCommitment) {
             const note = isItalian
@@ -409,6 +417,7 @@ export async function POST(request: Request) {
           // Notes attach to turn 2 — it's the turn whose output the user
           // actually reads.
           if (turn2.stopReason === "max_tokens") {
+            if (stripTrailingOpenJsonFence(forwarded) !== forwarded) forward("\n```\n");
             const note = isItalian
               ? "_[Revisione troncata: raggiunto il limite di lunghezza. Riavviala per rigenerarla.]_"
               : "_[Review truncated: length limit reached. Re-run it to regenerate.]_";
@@ -441,6 +450,8 @@ export async function POST(request: Request) {
         "Content-Type": "text/plain; charset=utf-8",
         "Transfer-Encoding": "chunked",
         "X-Content-Type-Options": "nosniff",
+        // The settings this review actually uses, as in the Deep Value route.
+        "X-AI-Settings": JSON.stringify({ model: aiSettings.model, effort: aiSettings.effort, thinking: thinkingParam.type !== "disabled" }),
       },
     });
   } catch (error) {

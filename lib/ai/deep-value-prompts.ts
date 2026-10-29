@@ -2,11 +2,21 @@
 // Unlike the standard analysis, Claude here finds all financial data via web search
 // and autonomously picks the valuation method — no Yahoo Finance dependency.
 // Business logic lives here (not in the API route) per project conventions.
+//
+// Output order (2026-10): research first, then a sentinel line (<!--report--> for the
+// report, <!--critique--> for a lens), then the prose, then the JSON block as the very LAST
+// thing. The numbers then restate what the prose already argued instead of being fixed
+// before it (the old JSON-first order made the report a rationalisation, with no reasoning
+// at all before the numbers when thinking was off), and the report can stream to the
+// client from its first heading. The sentinel is a line, not the `## 1.` heading, so it
+// does not depend on the report language or the section numbering; the routes drop
+// everything before it (lib/ai/stream-gate.ts).
 
 import type { AnalystAngle } from "@/types/analysis";
 import type { GroundingPromptContext } from "@/lib/grounding/prompt-format";
 import { formatGroundingForPrompt } from "@/lib/grounding/prompt-format";
 import type { Triple } from "@/lib/report/valuation";
+import { REPORT_START_MARKER, CRITIQUE_START_MARKER } from "@/lib/report/parse-deep-value-json";
 
 // "Analytical rigor" checklist injected into the Deep Value system prompt
 // (between the scenario step and the output step). Each item hardens against a
@@ -66,6 +76,8 @@ These are non-negotiable. A valuation that fails them is not defensible.
 17. **Second method (mandatory).** Every valuation must be cross-checked with a SECOND, structurally different method, and the delta reconciled explicitly. Pick the method the asset's own economics suggest: a regulated utility has a natural anchor in RAB (EV/RAB, or a regulated/unregulated SOTP) and — where the dividend policy is explicit and the payout is central to the thesis — a DDM. A section explaining WHY you chose your primary method is not a cross-check: a cross-check produces a second number and reconciles it to the first.
 
 18. **Scenario probabilities.** Assign an explicit probability to bull, base and bear (summing to 1). Three scenarios without weights do not produce an expected value, so a statement like "the price is below the buy target in all scenarios" carries far less information than it appears to.
+
+19. **Sensitivity honesty.** The 3×3 grid must be recomputed, not interpolated: the corner cells must come from the same model with both levers moved; a grid whose centre differs from your base intrinsic value is a contradiction, not a rounding.
 `;
 
 // Injected only in Grounded mode (when the caller passes `grounding`) — the user has
@@ -90,60 +102,95 @@ The user has pasted authoritative financial data for this company. It has been t
 10. **Horizon.** The historical multiple distribution is built on TRAILING, reported-fiscal-year EBITDA. Any multiple you apply to a forward estimate lives in a different space and cannot be ranked against that distribution without the LTM-equivalent the anchors provide.
 `;
 
+// The valuation methods the JSON "method" field may name — one list for the report and
+// every lens, so a lens can disagree with the report's method without leaving the contract.
+const METHOD_LIST = "DCF|DDM|EV/EBITDA|P/E|P/B|SOTP|EV/RAB|NAV|Residual Income";
+
+// Where every bridge figure's unit comes from. Grounded mode has the extract's declared
+// unit; Quick mode has only the "units" key the model declares in the same block.
+function bridgeUnitPhrases(grounding: GroundingPromptContext | undefined): { money: string; shares: string } {
+  return grounding
+    ? { money: "SAME unit as the extract's meta.units", shares: "SAME unit as sharesDiluted" }
+    : { money: 'in the unit you declare in "units"', shares: 'on the same scale as "units"' };
+}
+
+// The "units" key, shared by the report and the lenses: without it a Quick-mode bridge
+// has no scale, and a gate cannot tell 1,200 (millions) from 1.2 (billions).
+const UNITS_JSON_LINE = `  "units": "<billions|millions|thousands|units — the scale of EVERY monetary figure in the bridges below (shares on the same scale)>",`;
+
+// Printed under every JSON template (report and lenses). Since 2026-10 every scenario
+// declares a bridge in every mode, for every method, so the arithmetic is checkable even
+// without pasted data; the rule fixes what the bridge means per method family, because
+// an equity-value method run through an EV bridge subtracts net debt twice.
+const BRIDGE_RULE = `**Bridge rule.** The bridge always reads (multiple × driverValue − netDebt − minorities) / shares, or intrinsicPerShare directly when "multiple" is omitted.
+- EV methods (EV/EBITDA, DCF on FCFF): driverValue = EBITDA or the enterprise value you derived; netDebt and minorities as reported for THAT scenario.
+- Equity-value methods (P/E, P/B, Residual Income, DDM, DCF on FCFE): driverValue = the EQUITY driver (net income, book value, DPS, FCFE), "netDebt": 0 and "minorities": 0 (the driver is already an equity figure), "multiple" = the equity multiple (P/E, P/B) or omitted (RI, DDM, FCFE).
+- SOTP, NAV, EV/RAB: driverValue = the summed enterprise value (or NAV / RAB × premium) already computed, "multiple" omitted, netDebt and minorities as for EV methods.
+Never subtract net debt from a value that is already equity.`;
+
 // One scenario's JSON template line — the SAME contract shape for the base Deep Value
 // report and every analyst lens, so lib/grounding/postcheck.ts can verify a lens's own
-// numbers, not just the base report's. `bridge` stays Grounded-only (mirrors the base
-// report: there is no extract to check it against in Quick mode); `probability` is
-// unconditional (rigor check 18).
+// numbers, not just the base report's. `bridge` is requested in every mode (until
+// 2026-10 it was Grounded-only, which left Quick reports with nothing to check);
+// `probability` is unconditional (rigor check 18).
 function scenarioJsonLine(
   name: "bull" | "base" | "bear",
   mosPercent: number,
   grounding: GroundingPromptContext | undefined
 ): string {
-  return grounding
-    ? `  "${name}": {
+  const unit = bridgeUnitPhrases(grounding);
+  return `  "${name}": {
     "fairValue": <buy target after ${mosPercent}% MoS>,
     "probability": <0..1 — bull+base+bear should sum to ≈1>,
     "bridge": {
       "driver": "<short label for the value driver, e.g. \\"Normalized EBITDA 2026e\\">",
-      "driverValue": <driver's numeric value, SAME unit as the extract's meta.units>,
+      "driverValue": <driver's numeric value, ${unit.money}>,
       "driverYear": <the fiscal year driverValue refers to>,
-      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM>,
-      "netDebt": <THIS scenario's net debt, SAME unit as meta.units>,
-      "minorities": <THIS scenario's minority interests, SAME unit as meta.units>,
-      "shares": <SAME unit as sharesDiluted>,
+      "multiple": <the multiple you applied to driverValue — OMIT this whole key for DCF/DDM/NAV/SOTP/EV-RAB/Residual Income>,
+      "netDebt": <THIS scenario's net debt, ${unit.money}>,
+      "minorities": <THIS scenario's minority interests, ${unit.money}>,
+      "shares": <${unit.shares}>,
       "intrinsicPerShare": <the fair value BEFORE the ${mosPercent}% MoS — NOT the same number as "fairValue" above unless MoS is 0>
     }
-  }`
-    : `  "${name}": { "fairValue": <buy target after ${mosPercent}% MoS>, "probability": <0..1 — bull+base+bear should sum to ≈1> }`;
+  }`;
 }
 
 // Shared top-level JSON keys for `assumptions`/`crossCheck`, reused verbatim by both the
-// base report and every analyst lens. `crossCheck.bridge` is Grounded-only (mirrors
-// scenarioJsonLine's own bridge — no extract to check it against in Quick mode): it lets
-// lib/grounding/postcheck.ts verify the cross-check's OWN arithmetic and same-basis-ness,
-// which nothing did before — added after a live run (Webuild) showed the cross-check can
-// be exactly where an unverified basis mismatch surfaces even when the PRIMARY method
-// (a DCF here) has no `multiple` at all for the existing basis_same gate to check.
+// base report and every analyst lens. `crossCheck.bridge` lets lib/grounding/postcheck.ts
+// verify the cross-check's OWN arithmetic and same-basis-ness — added after a live run
+// (Webuild) showed the cross-check can be exactly where an unverified basis mismatch
+// surfaces even when the PRIMARY method (a DCF there) has no `multiple` at all for the
+// basis_same gate to check. Requested in every mode, like the scenario bridges.
+// The assumptions are in percentage points: "%" alone let the model write 0.085.
 function assumptionsCrossCheckJson(grounding: GroundingPromptContext | undefined): string {
-  const crossCheckLine = grounding
-    ? `  "crossCheck": {
-    "method": "<a SECOND, structurally different method than the primary one — e.g. DDM, EV/RAB, SOTP>",
+  const unit = bridgeUnitPhrases(grounding);
+  return `  "assumptions": { "wacc": <percentage points, e.g. 8.5 — or null>, "roic": <percentage points, on invested capital, not ROE — or null>, "terminalGrowth": <percentage points — or null> },
+  "crossCheck": {
+    "method": "<a SECOND method, structurally different from the primary one, from the same list as \\"method\\" — e.g. DDM, EV/RAB, SOTP>",
     "intrinsicPerShare": <BASE scenario, pre-MoS, from the second method>,
     "reconciliation": "<1-2 sentences: why the two methods diverge>",
     "bridge": {
       "driver": "<short label for the cross-check's own value driver, e.g. \\"Peer EV/EBITDA 2026e\\">",
-      "driverValue": <driver's numeric value, SAME unit as the extract's meta.units>,
+      "driverValue": <driver's numeric value, ${unit.money}>,
       "driverYear": <the fiscal year driverValue refers to>,
       "multiple": <the multiple you applied — OMIT this whole key if the cross-check method has no multiple, e.g. DDM>,
-      "netDebt": <net debt used in THIS bridge, SAME unit as meta.units>,
-      "minorities": <minority interests used in THIS bridge, SAME unit as meta.units>,
-      "shares": <SAME unit as sharesDiluted>
+      "netDebt": <net debt used in THIS bridge, ${unit.money}>,
+      "minorities": <minority interests used in THIS bridge, ${unit.money}>,
+      "shares": <${unit.shares}>
     }
-  }`
-    : `  "crossCheck": { "method": "<a SECOND, structurally different method than the primary one — e.g. DDM, EV/RAB, SOTP>", "intrinsicPerShare": <BASE scenario, pre-MoS, from the second method>, "reconciliation": "<1-2 sentences: why the two methods diverge>" }`;
-  return `  "assumptions": { "wacc": <% or null>, "roic": <% or null, on invested capital — not ROE>, "terminalGrowth": <% or null> },
-${crossCheckLine}`;
+  }`;
+}
+
+// "Now" for both builders. The year is read from the server-formatted date rather than
+// written into the prompt: a hardcoded year aged the moment the calendar moved on, and
+// the model's own training year is exactly the anchor this clause exists to break.
+function dateClauseFor(currentDate: string): string {
+  if (!currentDate) return "";
+  const year = Number(currentDate.match(/\b(?:19|20)\d{2}\b/)?.[0]);
+  const recency = Number.isFinite(year)
+    ? ` It is the only source of "now": the latest reported fiscal year may be ${year - 1} or ${year - 2} depending on the company's publication calendar — verify via web search which annual and interim results are out. Never assume a different current year than ${year}.`
+    : "";
+  return `\n**Today's date: ${currentDate}.**${recency}\n`;
 }
 
 /**
@@ -151,8 +198,9 @@ ${crossCheckLine}`;
  * 1. Identify sector via web search
  * 2. Pick the appropriate valuation method
  * 3. Source all financial data via web search
- * 4. Compute bull/base/bear fair values
- * 5. Emit a JSON block first, then the full Markdown report
+ * 4. Compute bull/base/bear fair values, a 3×3 sensitivity and the dividend path
+ * 5. Finish the research, then write the full Markdown report after the
+ *    <!--report--> line, and emit the JSON block as the very last thing
  *
  * @param language - Report language (e.g. "English", "Italiano")
  * @param currentDate - Today's date string injected from the server (e.g. "May 7, 2026")
@@ -171,9 +219,7 @@ export function buildDeepValueSystemPrompt({
   // formatGroundingForPrompt). Undefined (Quick) leaves the prompt byte-identical.
   grounding?: GroundingPromptContext;
 } = {}): string {
-  const dateClause = currentDate
-    ? `\n**Today's date: ${currentDate}.** Use this to determine what counts as "most recent" data. Financial data from 2025 is historical — fiscal year 2025 results may or may not have been published yet; verify via web search. Do NOT assume the current year is 2025.\n`
-    : "";
+  const dateClause = dateClauseFor(currentDate);
   const groundedRulesClause = grounding ? `\n${GROUNDED_RULES_BLOCK}\n` : "";
   // Grounded mode rescopes Step 2 instead of leaving the Quick-mode "gather via web
   // search" wording in place: read literally, it contradicts the Grounded rules that
@@ -192,6 +238,9 @@ Use web search to identify the company's sector and choose the valuation method:
 - **DDM** (dividend discount model): Utilities, companies with stable multi-year dividend history
 - **EV/EBITDA** (enterprise value multiple): Energy, Materials, Mining
 - **P/B** (price-to-book): Banks, Insurance, Financial Services
+- **NAV / SOTP**: REITs, holding companies, conglomerates with separable segments, asset-heavy businesses valued on appraised assets
+- **P/E**: mature, stable-margin businesses where earnings are the cleanest driver (consumer staples, some industrials) — only when EV/EBITDA bridge items are immaterial
+- **EV/RAB**: regulated networks (as the primary method when regulation sets the return; otherwise as the cross-check of rigor 17)
 
 ${step2Intro}
 
@@ -225,25 +274,40 @@ Apply the chosen method with three scenario sets. For each scenario compute:
 **EV/EBITDA**: EV = EBITDA × multiple → subtract net debt → subtract minority interests, preferred equity and unfunded pension/decommissioning liabilities → add associates/JVs carried at equity → divide by shares. When consolidated EBITDA includes subsidiaries that are not wholly owned (third-party or JV stakes), the minority share of that value is not shareholders' — never treat EV − net debt as equity.
 **P/B**: Fair value = Book Value per Share × target P/B multiple.
 
+**Sensitivity (mandatory).** Choose the two levers that move your BASE value most — the valuation lever (multiple, WACC, cost of equity, cap rate) and the operating driver (EBITDA/FCF/DPS of the driver year, or terminal growth) — and recompute the base-case intrinsic value per share on a 3×3 grid (low/base/high for each lever, the base of each lever being exactly what your base case uses). The centre cell IS your base intrinsic value: if it is not, your base case is not what you say it is. Report the grid in section 6 as a Markdown table and in the JSON "sensitivity" field.
+
+**Dividend path (mandatory when the company pays a dividend).** State the latest complete fiscal year's total ordinary DPS (interim + final, specials excluded) and the company's stated payout policy, then project the annual DPS for the next three fiscal years under each scenario, consistent with that scenario's cash generation (rigor check 15: a dividend that FCF cannot cover is a risk, not a support). Report it in section 4 under "Dividend outlook" and in the JSON "dividends" field; emit "dividends": null for a non-payer.
+
+**Units.** Every monetary figure inside the bridges (driverValue, netDebt, minorities) is on ONE scale, declared once in "units"; shares are on the same scale (millions of currency ⇔ millions of shares). Per-share values (fairValue, intrinsicPerShare, DPS) are plain currency units.
+
 ${ANALYTICAL_RIGOR_BLOCK}
 ## Step 4 — Output format (MANDATORY — follow exactly)
-First, emit a JSON block with the computed values. Then write the full report.
+Do ALL your research (every web search) FIRST. Only when your research is complete, start the written answer with the exact line:
+${REPORT_START_MARKER}
+After that line do not call any tool and do not write search commentary: write sections 1–10 straight through. Anything before ${REPORT_START_MARKER} is discarded.
 
-The JSON block MUST be the very first thing you output, before any other text:
+After section 10, as the very LAST thing you output, emit the JSON block below — it restates the numbers the report has already argued (every figure in it must appear in the corresponding section). Nothing after the closing fence.
 
 \`\`\`json
 {
-  "method": "<DCF|DDM|EV/EBITDA|P/B>",
-  "sector": "<sector name>",
-  "currency": "<ISO currency code, e.g. USD, EUR>",
+  "method": "<${METHOD_LIST}>",
+  "sector": "<sector name, max 80 characters>",
+  "currency": "<ISO 4217 code, 3 letters>",
+${UNITS_JSON_LINE}
 ${scenarioJsonLine("bull", mosPercent, grounding)},
 ${scenarioJsonLine("base", mosPercent, grounding)},
 ${scenarioJsonLine("bear", mosPercent, grounding)},
-${assumptionsCrossCheckJson(grounding)}
+${assumptionsCrossCheckJson(grounding)},
+  "sensitivity": {
+    "leverA": { "name": "<the primary lever, e.g. \\"EV/EBITDA exit multiple\\" or \\"WACC\\">", "values": [<low>, <base>, <high>] },
+    "leverB": { "name": "<the operating driver, e.g. \\"EBITDA 2026e\\" or \\"terminal growth\\">", "values": [<low>, <base>, <high>] },
+    "intrinsicPerShare": [[<a1b1>, <a1b2>, <a1b3>], [<a2b1>, <BASE — must equal base.bridge.intrinsicPerShare>, <a2b3>], [<a3b1>, <a3b2>, <a3b3>]]
+  },
+  "dividends": null | { "policy": "<one sentence>", "lastDps": <total ordinary DPS of the latest complete fiscal year>, "path": [ { "year": <next FY end year>, "bull": <DPS>, "base": <DPS>, "bear": <DPS> }, { "year": <+1> ... }, { "year": <+2> ... } ] }
 }
 \`\`\`
 
-After the JSON block, write the full Markdown report entirely in ${language}.
+${BRIDGE_RULE}
 
 ## Report sections (write in ${language})
 ## 1. Company Overview
@@ -272,6 +336,8 @@ Present the key data gathered in Step 2 in a structured way:
 - Balance sheet health (net debt, debt/equity, current ratio)
 - Historical valuation context (how current multiples compare to the 3–5 year average)
 
+### Dividend outlook — latest DPS, stated policy, three-year path per scenario and FCF coverage (omit for a non-payer, say so in one line)
+
 Then add a **"What must be true for the current price to be right"** subsection. Starting from the *authoritative current price*, do not stop at reporting what multiple it implies — SOLVE FOR WHAT MUST BE TRUE at your independently-anchored (history + peers) base multiple: the EBITDA/earnings level, or — for a commodity/cyclical name — the commodity price (once you FIX the multiple, per rigor check 10), that the current price would require to be correct. This is a **CONTROL, not the source of your base multiple** (rigor check 10). Then JUDGE whether those implied conditions are plausible — that judgment, not the bare gap, is the signal (e.g. "at ${language === "Italiano" ? "il prezzo corrente" : "the current price"} to be right at my Wx anchored multiple, EBITDA would need to be €Y bn, ${language === "Italiano" ? "il" : ""} Z% below/above the latest reported figure — I judge this [plausible/unlikely] because …"). If the price-implied level coincides with your anchored base, say so as a finding ("the market already prices my anchored multiple; there is little valuation edge here"), not as your method.
 
 ## 5. Bull Case — Intrinsic Value: [intrinsic_value] | Buy Target (−${mosPercent}% MoS): [buy_target] | Probability: [probability]
@@ -279,6 +345,8 @@ What would need to go right? Key assumptions and catalysts. State the same year 
 
 ## 6. Base Case — Intrinsic Value: [intrinsic_value] | Buy Target (−${mosPercent}% MoS): [buy_target] | Probability: [probability]
 The most likely scenario. Moderate growth assumptions and current trends.
+
+### Sensitivity — the 3×3 table (lever A rows × lever B columns), centre = base
 
 ## 7. Bear Case — Intrinsic Value: [intrinsic_value] | Buy Target (−${mosPercent}% MoS): [buy_target] | Probability: [probability]
 What could go wrong? Key downside risks. State explicitly whether this bear-case intrinsic value BREAKS the current market price (falls below it) — per rigor check 13, a bear that stays above the current price never contemplates the market being right. If you cannot construct a bear that breaks the price, say so and defend why no coherent adverse scenario exists at this price, rather than silently leaving the bear timid.
@@ -296,8 +364,8 @@ A concise synthesis: is this stock attractively valued at the current price? Sum
 Rules:
 - Write the entire report in ${language} — every word, header, and disclaimer. Use ONLY the writing system of ${language}: never emit stray characters from another script (e.g. no CJK/Chinese/Japanese/Korean characters when the language is not one of those). If a foreign-script word slips in, replace it with its ${language} equivalent.
 - Cite your sources (e.g. "According to [source]...")
-- End with: "⚠️ This report is for informational purposes only and does not constitute financial advice."
-- Do not write any preamble before the JSON block (no "Let me search...", "I'll start by...")`;
+- Close section 10 with the line "⚠️ This report is for informational purposes only and does not constitute financial advice.", then emit the JSON block; nothing after its closing fence.
+- Do not write anything before the \`${REPORT_START_MARKER}\` line, and nothing after the JSON block's closing fence`;
 }
 
 /**
@@ -342,8 +410,8 @@ ${dataInstruction} the appropriate valuation method, compute the fair values for
 // ─── Analyst panel prompts (independent second opinions) ─────────────────────
 // After a Deep Value report is SAVED, the user can run a panel of up to three
 // independent Opus passes, each reading the same finished report through a distinct
-// LENS and committing to its OWN bull/base/bear valuation (leading JSON block, same
-// MoS-adjusted unit as the report). The app averages the base analysis with every
+// LENS and committing to its OWN bull/base/bear valuation (a JSON block after the
+// critique, same MoS-adjusted unit as the report). The app averages the base analysis with every
 // analyst run into a "consensus" and surfaces the disagreement spatially. None of
 // these passes rewrites the report — they stress-test it and give a second opinion
 // before the user acts on a money decision. The JSON is stripped before the critique
@@ -466,9 +534,7 @@ export function buildAnalystSystemPrompt({
   blindFirst?: boolean;
 } = {}): string {
   const cfg = ANGLE_CONFIG[angle];
-  const dateClause = currentDate
-    ? `\n**Today's date: ${currentDate}.** Do NOT assume the current year is 2025; verify recency via web search.\n`
-    : "";
+  const dateClause = dateClauseFor(currentDate);
   const focusList = cfg.focus.map((f, i) => `${i + 1}. ${f}`).join("\n");
   const groundedRulesClause = grounding ? `\n${GROUNDED_RULES_BLOCK}\n` : "";
   // In Grounded mode the pasted historical figures are authoritative, so the lens checks the
@@ -495,9 +561,10 @@ This review runs across two user messages — you will not always have the repor
 
 \`\`\`json
 {
-  "method": "<DCF|DDM|EV/EBITDA|P/B>",
+  "method": "<${METHOD_LIST}>",
   "sector": "<sector name>",
   "currency": "<ISO currency code, e.g. USD, EUR>",
+${UNITS_JSON_LINE}
 ${scenarioJsonLine("bull", mosPercent, grounding)},
 ${scenarioJsonLine("base", mosPercent, grounding)},
 ${scenarioJsonLine("bear", mosPercent, grounding)},
@@ -505,13 +572,14 @@ ${assumptionsCrossCheckJson(grounding)}${killPriceLine}
 }
 \`\`\`
 
-**PHASE 2 — a later message brings you the finished report.** Reconcile your Phase-1 commitment against it. For EACH scenario you may revise your Phase-1 number ONLY by citing a specific fact or arithmetic error you did NOT have in Phase 1 — "the report argues X" is NOT a reason on its own. If you have no such fact, restate your Phase-1 number unchanged. Emit the FINAL JSON — same shape as Phase 1, plus a mandatory "revisions" array (empty if you revised nothing) — followed by your critique.
+**PHASE 2 — a later message brings you the finished report.** Reconcile your Phase-1 commitment against it. For EACH scenario you may revise your Phase-1 number ONLY by citing a specific fact or arithmetic error you did NOT have in Phase 1 — "the report argues X" is NOT a reason on its own. If you have no such fact, restate your Phase-1 number unchanged. Write your critique first, opening with the exact line \`${CRITIQUE_START_MARKER}\`, then emit the FINAL JSON — same shape as Phase 1, plus a mandatory "revisions" array (empty if you revised nothing) — as the very LAST thing.
 
 \`\`\`json
 {
-  "method": "<DCF|DDM|EV/EBITDA|P/B>",
+  "method": "<${METHOD_LIST}>",
   "sector": "<sector name>",
   "currency": "<ISO currency code, e.g. USD, EUR>",
+${UNITS_JSON_LINE}
 ${scenarioJsonLine("bull", mosPercent, grounding)},
 ${scenarioJsonLine("base", mosPercent, grounding)},
 ${scenarioJsonLine("bear", mosPercent, grounding)},
@@ -520,17 +588,20 @@ ${assumptionsCrossCheckJson(grounding)}${killPriceLine},
 }
 \`\`\`
 
+${BRIDGE_RULE}
+
 Each \`fairValue\` is your intrinsic estimate AFTER applying a margin of safety of ${mosPercent}% (buy target = intrinsic × (1 − ${mosPercent}/100)) — same convention as the report under review, so the two are directly comparable.`
     : `## Your own independent valuation (MANDATORY)
 ${cfg.valuationFraming}
 
-Emit it as a JSON block that MUST be the very FIRST thing you output, before any critique text:
+Write the critique first, opening with the exact line \`${CRITIQUE_START_MARKER}\`, and emit the JSON block as the very LAST thing. Nothing before the marker, nothing after the fence.
 
 \`\`\`json
 {
-  "method": "<DCF|DDM|EV/EBITDA|P/B>",
+  "method": "<${METHOD_LIST}>",
   "sector": "<sector name>",
   "currency": "<ISO currency code, e.g. USD, EUR>",
+${UNITS_JSON_LINE}
 ${scenarioJsonLine("bull", mosPercent, grounding)},
 ${scenarioJsonLine("base", mosPercent, grounding)},
 ${scenarioJsonLine("bear", mosPercent, grounding)},
@@ -538,7 +609,9 @@ ${assumptionsCrossCheckJson(grounding)}${killPriceLine}
 }
 \`\`\`
 
-Each \`fairValue\` is your intrinsic estimate AFTER applying a margin of safety of ${mosPercent}% (buy target = intrinsic × (1 − ${mosPercent}/100)) — same convention as the report under review, so the two are directly comparable. After the JSON block, write the critique.`;
+${BRIDGE_RULE}
+
+Each \`fairValue\` is your intrinsic estimate AFTER applying a margin of safety of ${mosPercent}% (buy target = intrinsic × (1 − ${mosPercent}/100)) — same convention as the report under review, so the two are directly comparable.`;
 
   return `You are ${cfg.persona}
 ${dateClause}
@@ -560,8 +633,8 @@ Rules:
 - Be concise: this is a review, not a second full report. Use short sections and bullet points.
 - The ONLY JSON you emit is ${jsonBlocksPhrase}; do NOT restate the whole report.
 - **Do not escalate prescriptiveness beyond the report you review.** Your output is a second opinion on the VALUATION: commit to your own bull/base/bear and say whether the report's fair value should be revised up or down. Do NOT issue an operational trade instruction more prescriptive than the base report — no "buy at €X", "accumulate below €Y", "sell now" when the report itself only concludes "hold". Judge the number; do not originate a trade call the report did not make.
-- End with: "⚠️ This review is for informational purposes only and does not constitute financial advice."
-- Do not write any preamble before the JSON block (no "Let me review...", "I'll start by...").`;
+- Close the critique with the line "⚠️ This review is for informational purposes only and does not constitute financial advice.", then emit the JSON block.
+- Do not write anything before the \`${CRITIQUE_START_MARKER}\` line, and nothing after the JSON block's closing fence.`;
 }
 
 /**
@@ -696,7 +769,7 @@ export function buildAnalystReconcileUserPrompt({
     ? ` Apply a margin of safety of ${mosPercent}% to your fair values in the JSON block (buy target = intrinsic value × ${(1 - mosPercent / 100).toFixed(2)}).`
     : "";
   const gatesSection = gatesText ? `\n\n${gatesText}` : "";
-  return `PHASE 2 — here is the finished Deep Value report on ${ticker}.${dateClause}${mosClause} Reconcile your Phase-1 commitment against it: your own bull/base/bear buy targets were bull ${blind.bull.toFixed(2)} / base ${blind.base.toFixed(2)} / bear ${blind.bear.toFixed(2)}. You may revise a scenario ONLY by citing a specific fact or arithmetic error you did NOT have in Phase 1 — "the report argues X" is NOT a reason on its own; if you have no such fact, restate your Phase-1 number unchanged. Emit the FINAL JSON (same shape as Phase 1, plus the mandatory "revisions" array) and then your critique, in ${language}.${gatesSection}
+  return `PHASE 2 — here is the finished Deep Value report on ${ticker}.${dateClause}${mosClause} Reconcile your Phase-1 commitment against it: your own bull/base/bear buy targets were bull ${blind.bull.toFixed(2)} / base ${blind.base.toFixed(2)} / bear ${blind.bear.toFixed(2)}. You may revise a scenario ONLY by citing a specific fact or arithmetic error you did NOT have in Phase 1 — "the report argues X" is NOT a reason on its own; if you have no such fact, restate your Phase-1 number unchanged. Write your critique first, opening with the line \`${CRITIQUE_START_MARKER}\`, then the FINAL JSON (same shape as Phase 1, plus the mandatory "revisions" array) as the very last thing, in ${language}.${gatesSection}
 
 --- REPORT UNDER REVIEW ---
 ${reportMd}

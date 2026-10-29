@@ -5,6 +5,9 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { tickerSchema } from "@/lib/ticker";
+import { ANALYSIS_LIST_SELECT } from "@/lib/analyses-select";
+import { sanitizeResultJson } from "@/lib/report/parse-deep-value-json";
+import { AI_EFFORT_LEVELS, AI_MODEL_IDS } from "@/types/ai-settings";
 
 // A new analysis is saved with only its own (base) valuation. Analyst-panel opinions
 // (skeptic/optimist/quality) are run afterward on the saved-analysis detail page and
@@ -19,10 +22,22 @@ const saveSchema = z.object({
   fairValueBull: z.number().positive().optional(),
   fairValueBase: z.number().positive().optional(),
   fairValueBear: z.number().positive().optional(),
-  valuationMethod: z.string().optional(),
+  // 40: the longest method name the prompt offers is "Residual Income"; the client trims
+  // the model's string to this before sending.
+  valuationMethod: z.string().max(40).optional(),
   // Grounded Deep Value mode — the confirmed GroundingPayload (blocks + extract), as
   // JSON. Present only when the analysis was generated with pasted financial data.
   groundingJson: z.string().max(400000).optional(),
+  // The report's final JSON block. Re-sanitized below: what is stored is the server's
+  // reading of it, never the client's text.
+  resultJson: z.string().max(30000).optional(),
+  currency: z.string().max(10).optional(),
+  sector: z.string().max(80).optional(),
+  reportLanguage: z.string().max(30).optional(),
+  // The settings the Deep Value route resolved for this run (its X-AI-Settings header).
+  aiModel: z.enum(AI_MODEL_IDS).optional(),
+  aiEffort: z.enum(AI_EFFORT_LEVELS).optional(),
+  aiThinking: z.boolean().optional(),
 });
 
 export async function GET() {
@@ -32,44 +47,10 @@ export async function GET() {
   const analyses = await db.analysis.findMany({
     where: { userId: session.user.id },
     orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      ticker: true,
-      companyName: true,
-      mosPercent: true,
-      createdAt: true,
-      reportMd: true,
-      priceAtAnalysis: true,
-      fairValueBull: true,
-      fairValueBase: true,
-      fairValueBear: true,
-      valuationMethod: true,
-      // Skeptic analyst (legacy review* columns).
-      reviewMd: true,
-      reviewFairValueBull: true,
-      reviewFairValueBase: true,
-      reviewFairValueBear: true,
-      reviewValuationMethod: true,
-      // Optimist analyst.
-      optimistCritiqueMd: true,
-      optimistFairValueBull: true,
-      optimistFairValueBase: true,
-      optimistFairValueBear: true,
-      optimistValuationMethod: true,
-      // Quality analyst.
-      qualityCritiqueMd: true,
-      qualityFairValueBull: true,
-      qualityFairValueBase: true,
-      qualityFairValueBear: true,
-      qualityValuationMethod: true,
-      // groundingJson is DELIBERATELY OMITTED here — it's a JSON blob (raw paste blocks
-      // + extract, up to 400KB) and this list view never renders it (no ruler/table/card
-      // on /analyses needs it). Selecting it would bloat every list load for a value
-      // nobody reads on this screen. If a future feature on THIS list needs grounding
-      // data, add it back deliberately — don't "restore" it reflexively because it looks
-      // missing next to the other columns. types/analysis.ts's SavedAnalysis mirrors this
-      // same exclusion; keep the two in sync.
-    },
+    // Exactly the SavedAnalysis fields. groundingJson is DELIBERATELY not among them —
+    // it's a JSON blob (raw paste blocks + extract, up to 400KB) this list never renders;
+    // don't "restore" it reflexively because it looks missing (see lib/analyses-select.ts).
+    select: ANALYSIS_LIST_SELECT,
   });
 
   return NextResponse.json(analyses);
@@ -89,6 +70,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
+  // A blob without a full triple is worse than none: the client omits it in that case,
+  // so one that arrives incomplete is a client bug, answered as such.
+  let resultJson: string | undefined;
+  if (body.resultJson !== undefined) {
+    resultJson = sanitizeResultJson(body.resultJson) ?? undefined;
+    if (!resultJson) return NextResponse.json({ error: "resultJson must carry bull/base/bear" }, { status: 400 });
+  }
+
   const analysis = await db.analysis.create({
     data: {
       userId: session.user.id,
@@ -102,6 +91,13 @@ export async function POST(request: Request) {
       fairValueBear: body.fairValueBear,
       valuationMethod: body.valuationMethod,
       groundingJson: body.groundingJson,
+      resultJson,
+      currency: body.currency,
+      sector: body.sector,
+      reportLanguage: body.reportLanguage,
+      aiModel: body.aiModel,
+      aiEffort: body.aiEffort,
+      aiThinking: body.aiThinking,
     },
   });
 
