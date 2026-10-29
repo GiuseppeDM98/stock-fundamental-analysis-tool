@@ -8,6 +8,7 @@
 // better placed to judge than a hard gate.
 import type { GroundedFinancials } from "@/types/grounding";
 import { SAME_BASIS_TOLERANCE, EV_BRIDGE_TOLERANCE, type BasisReconciliation } from "@/lib/grounding/basis";
+import { sameCurrency } from "@/lib/grounding/currency";
 
 export type ReconciliationWarning = {
   code:
@@ -177,8 +178,8 @@ export function checkReconciliation(extract: GroundedFinancials, basis: BasisRec
 /**
  * `currency_mismatch` when the extract's reporting currency is unknown or differs from the
  * quote currency, else null. Mirrors the currency guard in computeMarketImplied /
- * computeImpliedExpectations (lib/grounding/anchors.ts) EXACTLY — same strict comparison,
- * so "GBp" (pence quote) vs "GBP" (pound statements) is a mismatch, as it must be — so
+ * computeImpliedExpectations (lib/grounding/anchors.ts) EXACTLY — all three go through
+ * sameCurrency, so "GBp" (pence quote) vs "GBP" (pound statements) is a mismatch — so
  * whenever those reads are dropped for currency reasons, this warning is what explains it.
  * Shared by the prompt context builder (so the model and the analyst lenses are told why
  * the market-implied section is missing) and the UI surfaces.
@@ -188,7 +189,7 @@ export function checkReconciliation(extract: GroundedFinancials, basis: BasisRec
  */
 export function checkCurrencyMismatch(extract: Pick<GroundedFinancials, "meta">, quoteCurrency: string): ReconciliationWarning | null {
   const reporting = extract.meta.reportingCurrency;
-  if (reporting && reporting === quoteCurrency) return null;
+  if (sameCurrency(reporting, quoteCurrency)) return null;
   return {
     code: "currency_mismatch",
     severity: "warn",

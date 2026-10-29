@@ -10,7 +10,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: October 29, 2026 — **Spec 02 (valuation contract) retired**: verified criterion by criterion, then deleted (`git log -- doc/evoluzioni/02-contratto-di-valutazione-v3.md` is its archive). It was in service: PR #50 merged and promoted (#51), migration `add_analysis_result_json` applied to Turso. The retirement fixed code too, so the in-service signals hold for the code before it and are to redo after the deploy: the verify route closes a fence cut by `max_tokens` before its Phase-1 note; an effort sent without a model now applies to the stored model (Deep Value, verify, Advisor); a blind-first lens gets its closing rules for Phase 2 only. Valuation detail moved into `doc/guide/valutazione.md`, the route-test mocks into AGENTS.md § Testing; live specs repointed. Open: the first-real-analysis check (index § 5, row 2); `/deep-value` stays suspended (D-76). Next: spec 03, prerequisites in place.
+**Last Updated**: October 29, 2026 — **Spec 03 (universal gates, checks card) implemented** on `feature/universal-gates`, no migration: 17 deterministic gates on every analysis, with or without pasted data, named for the reader on every card; one price per saved page (`AnalysisDetailBody`, live with a labeled `priceAtAnalysis` fallback) and the same gates in every lens prompt; a lens's final kill price, revisions and gates read back on reload, its slot `done` only once saved. Documented in `doc/guide/valutazione.md` (§ 5.1 the gate table, § 2.4 the page, § 3 the lenses). Collaudo: automated phases green, real Quick + Skeptic run from localhost; the real Grounded run skipped by the owner; the owner's tour done and closed. Open: a DDM cross-check on a per-share DPS still gets a meaningless implied multiple with a dataset (guide § 5.1); the first-real-analysis check (index § 5, row 2); `/deep-value` suspended (D-76). Next: deploy, then spec 04.
 
 ---
 
@@ -56,13 +56,13 @@ Full detail: [doc/guide/valutazione.md](doc/guide/valutazione.md).
 - **Persistence**: the server re-sanitizes the block into `Analysis.resultJson` and stores `currency`/`sector`/`reportLanguage`/`aiModel`/`aiEffort`/`aiThinking` (the last three from the `X-AI-Settings` header); the scalar `fairValue*` stay what consensus, ruler, watchlist and digest read. The detail page reads `resultJson`, else the report's last fence.
 - **Analyst panel** (saved analyses only, `/verify` with `angle`): Skeptic (must give a kill price), Optimist, Quality, one on-demand button each, same `xhigh` floor; the critique after `<!--critique-->`, then its own MoS-adjusted bull/base/bear JSON; no-praise rule. Grounded analyses run blind-first (Phase 1 commits from the anchors alone; a Phase-2 revision must cite a fact unavailable blind; drift in `<AnalystBlindCard>`). Lens columns include `*BlindJson` and `*ResultJson`. **Mirror a new persisted field** across Zod, `types/analysis.ts`, `ANALYSIS_LIST_SELECT` (`lib/analyses-select.ts`) and `ANALYST_COLUMNS`.
 - **Report UI + PDF**: `<ReportShell>` on the live panel and the detail page; "Download PDF" → `window.print()`. **Decision Panel**: "Add to Watchlist" (409 → "In Watchlist").
+- **Deterministic checks** (every analysis, with or without pasted data): 17 gates recomputed in code on the model's own bridges, one price per saved page (live with `priceAtAnalysis` fallback); table in `doc/guide/valutazione.md` § 5.1, the `kE`/`kB` basis reconciliation in § 5.
 - **Position-blind (hard invariant)**: never a position or prior estimate in a Deep Value or lens prompt; hold/exit → the Advisor, evolution → deterministic diff on `/analyses`.
 
 ### Grounded Deep Value (paste-your-own-data mode)
 - Optional, above the Deep Value panel on `/analyze`: a collapsible "Pasted data" section (`components/grounding-input.tsx`) where the user adds typed blocks — income statement, balance sheet, cash flow, historical multiples, forward estimates, peer comps (with a ticker) — each a labeled textarea (cap 40k chars/block, 200k total, draft persisted per-ticker in `localStorage`). Source-agnostic by design (no format-specific parser); TIKR is the suggested source in the UI copy only.
 - **Prepare data** → `POST /api/ai/grounding/extract` (Sonnet 5.5, `tools: []` — pure transcription, no web search, no arithmetic) transcribes each block in parallel into a per-kind-scoped Zod schema, merges by fiscal year (`lib/grounding/merge.ts`), and returns a **verifiable preview** (`components/report/grounding-preview.tsx`): currency/units/years covered, the historical multiple distribution (min/p25/median/p75/max + an early→late trend), current peer multiples, the market-implied multiple + percentile (or why it's unavailable), and any `ReconciliationWarning`s (EPS/net-debt mismatches, share-count jumps) — never blocking, just shown.
 - **Analyze with this data →** confirms the payload (`GroundingPayload = { blocks, extract }`) and threads it into `/api/ai/deep-value`'s POST body. The route recomputes the deterministic anchors server-side (never trusts client-sent stats) and injects both the raw paste and the anchors into the prompt via `formatGroundingForPrompt()` (`lib/grounding/prompt-format.ts`) — web search is **rescoped, not disabled**: forbidden on historical data already provided, required for anything published after the paste's coverage date plus qualitative context (moat/risks/catalysts).
-- **Basis reconciliation + 11 deterministic gates** (`lib/grounding/basis.ts` + `lib/grounding/postcheck.ts`, surfaced in `<GroundingCard>`): before any multiple is applied, `kE`/`kB` reconcile the historical-multiples table against the pasted income statement (provider vs. statement accounting space) — a `BASIS RECONCILIATION` prompt section makes this binding, not advisory, and degrades honestly to "unavailable"/"low confidence" rather than assuming same-basis. Gates then recompute each scenario's own declared bridge and check assumption validity, not just internal arithmetic: `basis_same`, `horizon_consistent`, `bear_breaks_price`, `multiple_vs_market`, `trailing_forward` (forward driver re-expressed on trailing EBITDA before ranking against history), `netdebt_trajectory`, `roic_vs_wacc`, `probabilities` → `expectedValue`, `cross_check` (mandatory second method, ≤25% delta) + `cross_check_basis` (the same basis check run on the cross-check's own bridge — the primary method may have none, e.g. a DCF). Cures a real misvaluation class (Iren S.p.A.: a historical multiple applied to an EBITDA on a ~17%-different basis inflated fair value by the same amount). Full gate list and the `kE`/`kB` algorithm: the guide, § 5.
 - **Persists with the analysis** (`Analysis.groundingJson`, nullable) and **reaches the Analyst Panel lenses**, blind-first (see above), on a saved analysis — the verify route re-reads it server-side via `analysisId` and injects the extract + anchors (never the raw paste, to keep 3 Opus xhigh passes affordable).
 - Quick mode (no paste) never receives any Grounded text: its prompts are locked by a golden snapshot (`__tests__/deep-value-prompts-quick-identical.test.ts`) that must stay green on every touch of the shared prompt builders. Last regenerated on purpose on 2026-10-29 for the output contract; its header names the next allowed change.
 
@@ -132,7 +132,6 @@ Installable (Android Chrome "Install" prompt; iOS Share → Add to Home Screen).
 - **No caching** — every search hits Yahoo.
 - **Vercel Hobby: 300 s per function (declared limit, 2026-10-20)** — at the default `xhigh` a Deep Value run or a lens takes 8–12 min (708 s and 510 s measured on 2026-10-29), so on the deployment it is killed mid-stream; run it from localhost (`npm run dev`; `/deep-value` is suspended until its realignment, D-76). Pro, a queue or Vercel Workflows: evaluated, not planned. Spec 05c (D-77, 2026-10-27) splits every AI call into its own request, persisted by the server and retried per phase; the limit then holds only for a single model turn. SETUP.md § Vercel Hobby.
 - **Deep Value JSON parse is all-or-nothing** — one malformed nested field in the model's closing JSON block (the last ` ```json ` fence) discards the whole bull/base/bear/method via `JSON.parse`; the saved page still renders the report, but without the valuation summary.
-- **Open edges left after the design-vs-code audit (2026-10-11)**: `cross_check_basis` still passes when the declared multiple matches neither median; the kill-price gate on the FINAL Skeptic JSON only shows on a live run (`reviewResultJson` stores that JSON since 2026-10-29, but the page doesn't read it); aborting a lens re-run hides its blind card until reload. The `groundingJson` and `*BlindJson` columns were confirmed present on the production Turso database on 2026-10-11 (read-only check).
 - **Tailwind 4 browser floor** — Safari 16.4+, Chrome/Edge 111+, Firefox 128+ (it relies on `@property`, `color-mix()` and cascade layers); older iOS renders the app incorrectly. Tailwind 3's hex palette is pinned in `app/tailwind-v3-palette.css` to keep the look unchanged on P3 screens; delete that file to adopt v4's OKLCH colours. Details: AGENTS.md gotcha #32.
 
 ---
@@ -171,7 +170,7 @@ lib/
   report/latest-analysis.ts  # pure: latestAnalysisWithValues/verdictBasis/watchlistBuyTarget — one verdict basis
   report/consensus.ts        # pure: N-way consensus (consensusTriple/meanTriple/presentAnalysts) + ANALYST_COLUMNS
   report/evolution.ts        # computeEvolution()/computeEvolutionChain() — deterministic history (no AI)
-  grounding/                 # pure: merge/anchors/reconcile/postcheck/prompt-format/schema — Grounded mode
+  grounding/                 # pure: merge/anchors/reconcile/postcheck/prompt-format/schema/currency — Grounded mode + every analysis's gates
   ai/grounding-extract-prompt.ts  # per-kind extraction prompt builders (Sonnet 5.5, no web search)
   grounding-client.ts        # client helper: extractGrounding()
   ticker.ts                  # pure: normalizeTicker/tickerSchema (trim + uppercase, max 20)
@@ -186,13 +185,15 @@ app/
       ai/deep-value(+/verify)  ai/advisor  ai/grounding/extract  advisor/sessions(+/[id](+/messages))
       settings/ai (GET/PATCH — global AI model/effort/thinking default)
 components/                  # hub-client, analyze-client, deep-value-panel, analyses-list, grounding-input,
-                             #   earnings-badge, analyst-panel (3-lens panel on saved detail),
+                             #   earnings-badge, analysis-detail-body (one price per saved page),
+                             #   analyst-panel (3-lens panel on saved detail),
                              #   ai-settings-control (per-run selector), ai-preferences-modal (global default),
                              #   portfolio-list, portfolio-history-chart, watchlist-client,
                              #   advisor-client, nav-bar, download-pdf-button, …
   report/                    # report-shell, recap-table, fair-value-cards, report-body,
                              #   method-badges, valuation-ruler (ValuationRuler + ComparisonTable),
-                             #   grounding-card, grounding-preview, analyst-blind-card (blind vs. final drift)
+                             #   valuation-checks-card (the gates), grounding-preview,
+                             #   analyst-blind-card (blind vs. final drift), analyst-final-card
 context/language-context.tsx
 public/sw.js  public/icons/
 prisma/  generated/prisma/ (gitignored)  vercel.json  WORKFLOW.md

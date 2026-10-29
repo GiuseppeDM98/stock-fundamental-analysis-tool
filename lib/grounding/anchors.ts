@@ -10,6 +10,7 @@
 // that inflated a real Iren valuation.
 import type { FiscalYearFinancials, FiscalYearMultiples, GroundedFinancials } from "@/types/grounding";
 import { bridgeToProviderMultiple, type BasisReconciliation } from "@/lib/grounding/basis";
+import { sameCurrency } from "@/lib/grounding/currency";
 
 /**
  * The p-th quantile of `sorted` (ascending), via linear interpolation between the two
@@ -255,7 +256,7 @@ export function computeMarketImplied(
   extract: GroundedFinancials,
   basis: BasisReconciliation
 ): MarketImplied {
-  if (!extract.meta.reportingCurrency || extract.meta.reportingCurrency !== quoteCurrency) {
+  if (!sameCurrency(extract.meta.reportingCurrency, quoteCurrency)) {
     return null;
   }
 
@@ -322,7 +323,7 @@ export function computeImpliedExpectations(
   extract: GroundedFinancials,
   basis: BasisReconciliation
 ): ImpliedExpectations | null {
-  if (!extract.meta.reportingCurrency || extract.meta.reportingCurrency !== quoteCurrency) return null;
+  if (!sameCurrency(extract.meta.reportingCurrency, quoteCurrency)) return null;
 
   const latestFy = extract.financials[extract.financials.length - 1];
   if (!latestFy || latestFy.netDebt == null || latestFy.minorityInterest == null || latestFy.sharesDiluted == null) return null;

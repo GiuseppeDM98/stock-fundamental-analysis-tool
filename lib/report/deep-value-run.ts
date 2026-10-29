@@ -6,7 +6,7 @@
 // never generated from — a Grounded report saved as Quick (grounding cleared after the
 // run), a report saved with a different extract than the one it used, or fair values
 // computed at one MoS stored under another. Everything that describes the run (save
-// request, post-check card) reads this snapshot instead.
+// request, checks card) reads this snapshot instead.
 //
 // Pure (no I/O) so the snapshot-to-request mapping is unit-testable.
 import type { SaveAnalysisRequest } from "@/types/analysis";

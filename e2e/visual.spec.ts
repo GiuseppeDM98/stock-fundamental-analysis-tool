@@ -30,7 +30,7 @@ const PAGES: Array<{ name: string; url: string; ready: string; loggedOut?: boole
   { name: "login", url: "/login", ready: "Sign in", loggedOut: true },
   { name: "hub", url: "/", ready: "Pick up where you left off" },
   { name: "analyses", url: "/analyses", ready: DECOY.panelCompany },
-  { name: "analysis-grounded", url: `/analyses/${IDS.analysisGrounded}`, ready: "Deterministic post-check" },
+  { name: "analysis-grounded", url: `/analyses/${IDS.analysisGrounded}`, ready: "Deterministic checks" },
   { name: "analysis-panel", url: `/analyses/${IDS.analysisPanel}`, ready: DECOY.qualityCritique },
   { name: "analysis-legacy", url: `/analyses/${IDS.analysisLegacy}`, ready: DECOY.legacyReport },
   { name: "portfolio", url: "/portfolio", ready: "Portfolio value over time" },
@@ -55,7 +55,7 @@ for (const p of PAGES) {
 }
 
 const PRINT_PAGES: Array<{ name: string; url: string; ready: string }> = [
-  { name: "analysis-grounded-print", url: `/analyses/${IDS.analysisGrounded}`, ready: "Deterministic post-check" },
+  { name: "analysis-grounded-print", url: `/analyses/${IDS.analysisGrounded}`, ready: "Deterministic checks" },
   { name: "analysis-panel-print", url: `/analyses/${IDS.analysisPanel}`, ready: DECOY.qualityCritique },
 ];
 

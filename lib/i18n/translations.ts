@@ -232,6 +232,7 @@ export type Translations = {
   // ─── Deep value recap table ─────────────────────────────────────────────────
   recapTableTitle: string;
   recapCurrentPrice: string;
+  recapPriceAtAnalysis: string;
 
   // ─── Price summary ──────────────────────────────────────────────────────────
   marketSnapshot: string;
@@ -517,7 +518,6 @@ export type Translations = {
   groundingWarnEvBridgeMismatch: string;
   groundingWarnDividendNotCovered: string;
   groundingWarnGeneric: string;
-  groundingCardTitle: string;
   groundingCardArithmeticLabel: string;
   groundingCardMosLabel: string;
   groundingCardNoBridge: string;
@@ -530,7 +530,6 @@ export type Translations = {
   groundingBasisSameLabel: string;
   groundingBasisMismatchLabel: string;
   groundingBasisUnverifiableLabel: string;
-  groundingGateDashboardTitle: string;
   groundingGateBasisSame: string;
   groundingGateHorizonConsistent: string;
   groundingGateBearBreaksPrice: string;
@@ -542,6 +541,19 @@ export type Translations = {
   groundingGateCrossCheck: string;
   groundingGateCrossCheckBasis: string;
   groundingGateKillPrice: string;
+  groundingGateScenarioOrder: string;
+  groundingGateMethodDistinct: string;
+  groundingGateSensitivityCenter: string;
+  groundingGateDividendCoverage: string;
+  groundingGateUnitsMatch: string;
+  groundingGateSectionsPresent: string;
+  valuationChecksTitle: string;
+  valuationChecksGatesSubtitle: string;
+  valuationChecksPriceLive: string;
+  valuationChecksPriceAtAnalysis: string;
+  valuationChecksNoDataset: string;
+  valuationChecksNoPrice: string;
+  analystFinalCardTitle: string;
   groundingCrossCheckBridgeLabel: string;
   groundingExpectedValueTitle: string;
   groundingExpectedValueIntrinsicLabel: string;
@@ -823,6 +835,7 @@ const en: Translations = {
   // Deep value recap table
   recapTableTitle: "Valuation Summary",
   recapCurrentPrice: "Current Price",
+  recapPriceAtAnalysis: "Price at analysis",
 
   // Price summary
   marketSnapshot: "Market snapshot",
@@ -1108,7 +1121,6 @@ const en: Translations = {
   groundingWarnEvBridgeMismatch: "The provider's EV bridge includes items ours doesn't (leases, pensions, associates)",
   groundingWarnDividendNotCovered: "Dividend not covered by average free cash flow — may be financed by debt",
   groundingWarnGeneric: "Data quality warning",
-  groundingCardTitle: "Deterministic post-check",
   groundingCardArithmeticLabel: "Bridge arithmetic",
   groundingCardMosLabel: "MoS applied",
   groundingCardNoBridge: "The model did not declare a valuation bridge for this scenario.",
@@ -1121,7 +1133,6 @@ const en: Translations = {
   groundingBasisSameLabel: "Same EBITDA basis as the income statement",
   groundingBasisMismatchLabel: "Historical multiples are on a different EBITDA basis",
   groundingBasisUnverifiableLabel: "EBITDA basis unverifiable",
-  groundingGateDashboardTitle: "Deterministic checks",
   groundingGateBasisSame: "Same EBITDA basis",
   groundingGateHorizonConsistent: "Consistent scenario horizon",
   groundingGateBearBreaksPrice: "Bear breaks current price",
@@ -1133,6 +1144,19 @@ const en: Translations = {
   groundingGateCrossCheck: "Second-method cross-check",
   groundingGateCrossCheckBasis: "Cross-check same basis",
   groundingGateKillPrice: "Kill price declared",
+  groundingGateScenarioOrder: "Scenario order bear < base < bull",
+  groundingGateMethodDistinct: "Cross-check method differs from primary",
+  groundingGateSensitivityCenter: "Sensitivity grid centre = base",
+  groundingGateDividendCoverage: "Dividend covered by FCF",
+  groundingGateUnitsMatch: "Declared units match the dataset",
+  groundingGateSectionsPresent: "All 10 report sections present",
+  valuationChecksTitle: "Deterministic checks",
+  valuationChecksGatesSubtitle: "Gates",
+  valuationChecksPriceLive: "checks against the live price",
+  valuationChecksPriceAtAnalysis: "checks against the price at analysis (live quote unavailable)",
+  valuationChecksNoDataset: "No dataset: basis, market-implied and net-debt gates unavailable",
+  valuationChecksNoPrice: "Deterministic checks need a price: no live quote and no price saved with this analysis.",
+  analystFinalCardTitle: "Final valuation checks",
   groundingCrossCheckBridgeLabel: "Cross-check bridge",
   groundingExpectedValueTitle: "Expected value (probability-weighted)",
   groundingExpectedValueIntrinsicLabel: "Intrinsic",
@@ -1413,6 +1437,7 @@ const it: Translations = {
   // Deep value recap table
   recapTableTitle: "Riepilogo Valutazione",
   recapCurrentPrice: "Prezzo Attuale",
+  recapPriceAtAnalysis: "Prezzo all'analisi",
 
   // Price summary
   marketSnapshot: "Dati di mercato",
@@ -1699,7 +1724,6 @@ const it: Translations = {
   groundingWarnEvBridgeMismatch: "Il ponte EV del fornitore include voci che il nostro non ha (leasing, pensioni, collegate)",
   groundingWarnDividendNotCovered: "Il dividendo non è coperto dal free cash flow medio — potrebbe essere finanziato a debito",
   groundingWarnGeneric: "Avviso sulla qualità dei dati",
-  groundingCardTitle: "Post-check deterministico",
   groundingCardArithmeticLabel: "Aritmetica del ponte",
   groundingCardMosLabel: "MoS applicata",
   groundingCardNoBridge: "Il modello non ha dichiarato un ponte di valutazione per questo scenario.",
@@ -1712,7 +1736,6 @@ const it: Translations = {
   groundingBasisSameLabel: "Stessa base EBITDA del conto economico",
   groundingBasisMismatchLabel: "I multipli storici sono su una base EBITDA diversa",
   groundingBasisUnverifiableLabel: "Base EBITDA non verificabile",
-  groundingGateDashboardTitle: "Controlli deterministici",
   groundingGateBasisSame: "Stessa base EBITDA",
   groundingGateHorizonConsistent: "Orizzonte scenari coerente",
   groundingGateBearBreaksPrice: "Il bear rompe il prezzo corrente",
@@ -1724,6 +1747,19 @@ const it: Translations = {
   groundingGateCrossCheck: "Cross-check con secondo metodo",
   groundingGateCrossCheckBasis: "Stessa base nel cross-check",
   groundingGateKillPrice: "Kill price dichiarato",
+  groundingGateScenarioOrder: "Ordine degli scenari bear < base < bull",
+  groundingGateMethodDistinct: "Il metodo di cross-check è diverso dal primario",
+  groundingGateSensitivityCenter: "Centro della griglia di sensibilità = base",
+  groundingGateDividendCoverage: "Dividendo coperto dal FCF",
+  groundingGateUnitsMatch: "Unità dichiarate coerenti col dataset",
+  groundingGateSectionsPresent: "Tutte le 10 sezioni del report presenti",
+  valuationChecksTitle: "Verifiche deterministiche",
+  valuationChecksGatesSubtitle: "Gate",
+  valuationChecksPriceLive: "verifiche sul prezzo live",
+  valuationChecksPriceAtAnalysis: "verifiche sul prezzo all'epoca dell'analisi (quotazione live non disponibile)",
+  valuationChecksNoDataset: "Nessun dataset: i gate su base contabile, multiplo implicito e debito netto non sono verificabili",
+  valuationChecksNoPrice: "Le verifiche deterministiche richiedono un prezzo: nessuna quotazione live e nessun prezzo salvato con questa analisi.",
+  analystFinalCardTitle: "Verifiche sulla valutazione finale",
   groundingCrossCheckBridgeLabel: "Ponte del cross-check",
   groundingExpectedValueTitle: "Valore atteso (ponderato per probabilità)",
   groundingExpectedValueIntrinsicLabel: "Intrinseco",

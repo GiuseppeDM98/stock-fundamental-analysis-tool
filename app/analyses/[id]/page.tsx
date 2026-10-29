@@ -1,10 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import OpenPositionBanner from "@/components/open-position-banner";
-import ReportBody from "@/components/report/report-body";
-import SavedValuationSummary from "@/components/saved-valuation-summary";
-import AnalystPanel from "@/components/analyst-panel";
+import AnalysisDetailBody from "@/components/analysis-detail-body";
 import { DetailBreadcrumb, DetailFooterActions } from "@/components/analysis-detail-chrome";
 import type { GroundingPayload } from "@/types/grounding";
 import type { Triple } from "@/lib/report/valuation";
@@ -60,11 +57,14 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
     where: { ticker: analysis.ticker, userId: session.user.id, closedAt: null },
   });
   const totalShares = positions.reduce((s, p) => s + p.shares, 0);
-  const wac =
+  const position =
     totalShares > 0
-      ? positions.reduce((s, p) => s + p.purchasePrice * p.shares, 0) / totalShares
-      : 0;
-  const currency = positions[0]?.currency ?? "EUR";
+      ? {
+          totalShares,
+          weightedAvgCost: positions.reduce((s, p) => s + p.purchasePrice * p.shares, 0) / totalShares,
+          currency: positions[0].currency,
+        }
+      : null;
 
   const formattedDate = new Date(analysis.createdAt).toLocaleDateString(undefined, {
     year: "numeric",
@@ -93,72 +93,41 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
     <main className="mx-auto max-w-3xl px-4 py-10">
       <DetailBreadcrumb ticker={analysis.ticker} />
 
-      {/* Open position banner — shown when the user holds this ticker in their portfolio */}
-      {positions.length > 0 && (
-        <div className="print:hidden">
-          <OpenPositionBanner
-            ticker={analysis.ticker}
-            totalShares={totalShares}
-            wac={wac}
-            currency={currency}
-          />
-        </div>
-      )}
-
-      {/* Full report shell — method/cards/body/recap reconstructed from the saved JSON block */}
-      {valuationMeta ? (
-        <SavedValuationSummary
-          meta={valuationMeta}
-          mosPercent={analysis.mosPercent}
-          ticker={analysis.ticker}
-          companyName={analysis.companyName}
-          reportDate={formattedDate}
-          markdown={markdown}
-          groundingExtract={groundingPayload?.extract ?? null}
-        />
-      ) : (
-        // Fallback for older/non-Deep-Value analyses, or a Deep Value report whose JSON
-        // block failed to parse (e.g. a malformed field from the model) — the Markdown
-        // body itself is still perfectly readable, so render it through the same
-        // ReportBody every other report uses instead of dumping raw text.
-        <div className="card">
-          <h1 className="mb-1 text-2xl font-bold text-slate-100">{analysis.companyName}</h1>
-          <p className="mb-4 text-sm text-slate-500">
-            <span className="font-mono text-sky-400">{analysis.ticker}</span> · {formattedDate}
-          </p>
-          <ReportBody markdown={markdown} />
-        </div>
-      )}
-
-      {/* Analyst panel — render existing critiques or let the user generate + persist each
-          lens (skeptic/optimist/quality). Only meaningful for reports with a parseable
-          Deep Value JSON block. */}
-      {valuationMeta && (
-        <AnalystPanel
-          analysisId={analysis.id}
-          ticker={analysis.ticker}
-          reportMd={markdown}
-          mosPercent={analysis.mosPercent}
-          initialCritiques={{
-            skeptic: analysis.reviewMd,
-            optimist: analysis.optimistCritiqueMd,
-            quality: analysis.qualityCritiqueMd,
-          }}
-          initialBlind={{
-            skeptic: analysis.reviewBlindJson,
-            optimist: analysis.optimistBlindJson,
-            quality: analysis.qualityBlindJson,
-          }}
-          initialFinal={{
-            skeptic: tripleOrNull(analysis.reviewFairValueBull, analysis.reviewFairValueBase, analysis.reviewFairValueBear),
-            optimist: tripleOrNull(analysis.optimistFairValueBull, analysis.optimistFairValueBase, analysis.optimistFairValueBear),
-            quality: tripleOrNull(analysis.qualityFairValueBull, analysis.qualityFairValueBase, analysis.qualityFairValueBear),
-          }}
-          groundingExtract={groundingPayload?.extract ?? null}
-          currentPrice={analysis.priceAtAnalysis ?? null}
-          currency={valuationMeta.currency}
-        />
-      )}
+      {/* Banner, report shell, deterministic checks and analyst panel — one client body, so
+          every card reads the same price (live, else the price saved with the analysis). A
+          row without a complete valuation block gets the Markdown fallback only. */}
+      <AnalysisDetailBody
+        analysisId={analysis.id}
+        ticker={analysis.ticker}
+        companyName={analysis.companyName}
+        reportDate={formattedDate}
+        markdown={markdown}
+        result={valuationMeta}
+        mosPercent={analysis.mosPercent}
+        priceAtAnalysis={analysis.priceAtAnalysis ?? null}
+        groundingExtract={groundingPayload?.extract ?? null}
+        position={position}
+        initialCritiques={{
+          skeptic: analysis.reviewMd,
+          optimist: analysis.optimistCritiqueMd,
+          quality: analysis.qualityCritiqueMd,
+        }}
+        initialBlind={{
+          skeptic: analysis.reviewBlindJson,
+          optimist: analysis.optimistBlindJson,
+          quality: analysis.qualityBlindJson,
+        }}
+        initialResult={{
+          skeptic: analysis.reviewResultJson,
+          optimist: analysis.optimistResultJson,
+          quality: analysis.qualityResultJson,
+        }}
+        initialFinal={{
+          skeptic: tripleOrNull(analysis.reviewFairValueBull, analysis.reviewFairValueBase, analysis.reviewFairValueBear),
+          optimist: tripleOrNull(analysis.optimistFairValueBull, analysis.optimistFairValueBase, analysis.optimistFairValueBear),
+          quality: tripleOrNull(analysis.qualityFairValueBull, analysis.qualityFairValueBase, analysis.qualityFairValueBear),
+        }}
+      />
 
       <DetailFooterActions ticker={analysis.ticker} />
     </main>

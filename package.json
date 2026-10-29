@@ -13,7 +13,7 @@
     "seed:e2e": "tsx scripts/seed-e2e.ts",
     "e2e": "playwright test --project=e2e",
     "e2e:visual": "playwright test --project=visual-desktop --project=visual-phone",
-    "e2e:visual:update": "playwright test --project=visual-desktop --project=visual-phone --update-snapshots",
+    "e2e:visual:update": "playwright test --project=visual-desktop --project=visual-phone --update-snapshots=all",
     "ci:local": "bash scripts/ci-local.sh"
   },
   "dependencies": {
