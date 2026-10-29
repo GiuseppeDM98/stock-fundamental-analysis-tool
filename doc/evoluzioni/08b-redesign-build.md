@@ -31,7 +31,7 @@ Un'app coerente con la direzione approvata nella 08a su TUTTE le pagine (hub, an
 - **D-4, D-51** (owner): redesign completo sulla direzione della 08a. **D-53**: emoji → SVG. **D-54**: `print.css` ridefinisce i token in `@media print { .print-report { --card: #fff; --muted: #64748b; … } }` e i componenti usano solo utility su token: nessun selettore per classe. **D-55**: tinte sui token. **D-56**: `--chart-1..4` migrati e tolti.
 - **D-58…** (08a): North Star, tipografia, palette dataviz, accento AI, consenso, densità, stampa: lette dall'indice.
 - **D-74** (owner, 2026-10-19, dal tagliando): a serie implementata ogni modello Claude dell'app è della serie 5.5, che sia Opus, Sonnet o Haiku; la migrazione sta in questa spec, l'ultima della serie, non in una spec nuova. D-9 resta: Deep Value e lenti partono al più alto fra il default globale e `xhigh`, ora su Opus 5.5.
-- Adottata, ribaltabile (D-74): Haiku 5.5 entra nel catalogo come scelta dell'utente, senza diventare il fallback di nessuna route; l'estrazione Grounded resta su Sonnet 5.5 `medium` (`EXTRACT_AI_SETTINGS` in `app/api/ai/grounding/extract/route.ts`, AGENTS.md › Multi-Provider AI Settings).
+- Adottata, ribaltabile (D-74): Haiku 5.5 entra nel catalogo come scelta dell'utente, senza diventare il fallback di nessuna route; l'estrazione Grounded resta su Sonnet 5.5 `medium` (`EXTRACT_AI_SETTINGS` in `app/api/ai/grounding/extract/route.ts`, `doc/guide/valutazione.md` § 6.2).
 - Adottata, ribaltabile (D-74): nessun DDL. Il default di schema `claude-opus-4-8` resta e si legge tramite l'alias (cambiarlo su SQLite ricostruisce `User`); il commento in `prisma/schema.prisma` lo dice, e § 8 ha il `SELECT` e l'`UPDATE` facoltativo.
 - **T-30**: stati AI di `/analyze` via visual (`/analyze` vuoto e `/register` in `PAGES`) + dettaglio + run reale.
 - Adottata, ribaltabile: la stampa segue la decisione D-58… della 08a (light o dark) e viene rivalutata dal finish-reviewer sulle 2 pagine print del visual.
@@ -102,7 +102,7 @@ Nessun DDL. Deploy. Giro dell'owner in produzione sulle stesse pagine (nessuna m
 - `CLAUDE.md` (misurare): «Interactive UI» riscritta in ≤ 763 caratteri (gli stessi di oggi); «Not yet present»: «light theme» (+40); voce Last Updated sostituita; `wc -c` < 40.000.
 - `README.md`: nessuno screenshot presente; `README.md:76` aggiornata con il colore finale del marker «Sold».
 - `Draft Release Temp.md`: «Visual refresh across the app: coherent design on tokens, accessible charts and ruler, print and email aligned, language-aware HTML».
-- Modelli (D-74): `CLAUDE.md` «Tech Stack» e «AI Model Selection» (Opus 5.5 al posto di Opus 4.8, Haiku 5.5 nel catalogo; saldo dichiarato); `AGENTS.md` «Model split», «Catalog» e «Multi-Provider AI Settings» (stesse righe, D-22); `README.md` dove nomina i modelli; `Draft Release Temp.md`: «All Claude models moved to the 5.5 series (Opus, Sonnet, Haiku); a saved Opus 4.8 or Sonnet 5 preference carries over automatically».
+- Modelli (D-74): `CLAUDE.md` «Tech Stack» e «AI Model Selection» (Opus 5.5 al posto di Opus 4.8, Haiku 5.5 nel catalogo; saldo dichiarato); `doc/guide/valutazione.md` «Model split» (§ 6.1), «Catalog» e il resto di § 6.2 (stesse righe; in AGENTS.md resta il rimando di una riga, D-22); `README.md` dove nomina i modelli; `Draft Release Temp.md`: «All Claude models moved to the 5.5 series (Opus, Sonnet, Haiku); a saved Opus 4.8 or Sonnet 5 preference carries over automatically».
 - Riga `> **Stato**` e indice § 5 aggiornati.
 
 ## 10. Fuori ambito, dichiarato

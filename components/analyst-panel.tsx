@@ -4,13 +4,14 @@
 //
 // After an analysis is saved, the user can run up to three independent second-opinion
 // passes over it — a skeptic (red-team), an optimist (bull case) and a quality lens —
-// each streaming from /api/ai/deep-value/verify with its `angle`. Each pass commits to its
-// own bull/base/bear valuation (leading JSON block) and a critique; on completion the slot
-// persists both via PATCH /api/analyses/:id (updateAnalystOpinion). The base analysis plus
-// every analyst run are averaged into the consensus shown on the analyses list and watchlist.
+// each streaming from /api/ai/deep-value/verify with its `angle`. Each pass writes a
+// critique and closes it with its own bull/base/bear valuation (the JSON block last); on
+// completion the slot persists both via PATCH /api/analyses/:id (updateAnalystOpinion).
+// The base analysis plus every analyst run are averaged into the consensus shown on the
+// analyses list and watchlist.
 //
 // Each analyst is on-demand (its own button) — never auto-run: each is an Opus xhigh + web
-// search pass that costs real tokens and takes 10–30s.
+// search pass that costs real tokens and takes minutes (510 s for the Skeptic on 2026-10-29).
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useLanguage } from "@/context/language-context";
 import { APP_TO_AI_LANGUAGE } from "@/lib/i18n/translations";
@@ -205,7 +206,7 @@ function AnalystSlot({
   const finalIncomplete = hasLiveRun && status === "done" && !hasFullTriple(liveFinal);
 
   // Only present on a fresh run in the same session — the FINAL JSON's own revisions[]
-  // aren't persisted as a blob (only the scalar fairValue* columns are), so
+  // are stored in *ResultJson since 2026-10-29 but nothing reads them back yet, so
   // this is always undefined after a page reload with no re-run.
   const revisions = liveFinal?.revisions;
 

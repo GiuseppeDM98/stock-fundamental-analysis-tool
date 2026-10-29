@@ -92,10 +92,16 @@ export async function POST(request: Request) {
     const userPrompt = buildDeepValueUserPrompt({ ticker: body.ticker, currentPrice, currency, language: body.language, currentDate, mosPercent: body.mosPercent, grounding: groundingContext });
 
     // An override without an effort is not a complete override: resolveAiSettings then
-    // reads the user's stored default, which the Deep Value floor below starts from.
+    // reads the user's stored default, which the Deep Value floor below starts from. An
+    // effort named without a model applies to the stored model (until 2026-10-29 it was
+    // silently dropped, so the run went at the stored effort).
     let aiSettings = await resolveAiSettings(
       session.user.id,
-      body.model ? { model: body.model, effort: body.effort, thinking: body.thinking ?? DEFAULT_SETTINGS.thinking } : undefined,
+      body.model
+        ? { model: body.model, effort: body.effort, thinking: body.thinking ?? DEFAULT_SETTINGS.thinking }
+        : body.effort
+          ? { effort: body.effort, thinking: body.thinking }
+          : undefined,
       DEFAULT_SETTINGS
     );
     // No effort chosen for this run: a valuation starts at the higher of the global
