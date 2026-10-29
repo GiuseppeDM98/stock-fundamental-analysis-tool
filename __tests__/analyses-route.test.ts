@@ -4,6 +4,7 @@ import { sanitizeDeepValueResult } from "@/lib/report/parse-deep-value-json";
 
 const createMock = vi.fn();
 const updateMock = vi.fn();
+const datasetFindFirst = vi.fn();
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(async () => ({ user: { id: "u1" } })) }));
 vi.mock("@/lib/db", () => ({
   db: {
@@ -12,6 +13,7 @@ vi.mock("@/lib/db", () => ({
       findUnique: vi.fn(async () => ({ id: "a1", userId: "u1" })),
       update: (...args: unknown[]) => updateMock(...args),
     },
+    financialDataset: { findFirst: (...args: unknown[]) => datasetFindFirst(...args) },
   },
 }));
 
@@ -81,6 +83,33 @@ describe("POST /api/analyses — resultJson and run metadata", () => {
   it("rejects an unknown model id and an over-long method", async () => {
     expect((await POST(post({ ...SAVE, aiModel: "gpt-9" }))).status).toBe(400);
     expect((await POST(post({ ...SAVE, valuationMethod: "M".repeat(41) }))).status).toBe(400);
+  });
+});
+
+describe("POST /api/analyses — the dataset of a grounded run", () => {
+  beforeEach(() => {
+    createMock.mockReset().mockResolvedValue({ id: "a1" });
+    datasetFindFirst.mockReset();
+  });
+
+  it("answers 400 to another user's dataset, or one of another ticker", async () => {
+    // The lookup is scoped to the user: another user's dataset comes back as none.
+    datasetFindFirst.mockResolvedValue(null);
+    expect((await POST(post({ ...SAVE, datasetId: "ds-foreign" }))).status).toBe(400);
+    expect(datasetFindFirst).toHaveBeenCalledWith({ where: { id: "ds-foreign", userId: "u1" }, select: { ticker: true } });
+
+    datasetFindFirst.mockResolvedValue({ ticker: "BBB" });
+    const mismatch = await POST(post({ ...SAVE, datasetId: "ds1" }));
+    expect(mismatch.status).toBe(400);
+    expect((await mismatch.json()).error).toBe("dataset ticker mismatch");
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it("saves the user's own dataset of the same ticker with the analysis", async () => {
+    datasetFindFirst.mockResolvedValue({ ticker: "AAA" });
+    const res = await POST(post({ ...SAVE, ticker: "aaa", datasetId: "ds1" }));
+    expect(res.status).toBe(201);
+    expect(createMock.mock.calls[0][0].data).toMatchObject({ ticker: "AAA", datasetId: "ds1" });
   });
 });
 

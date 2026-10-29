@@ -1,6 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { groundingPayloadSchema, parseStoredExtract, GROUNDING_MAX_BLOCKS, GROUNDING_MAX_BLOCK_CHARS, GROUNDING_MAX_TOTAL_CHARS } from "@/lib/grounding/schema";
+import {
+  dataSourceSchema,
+  estimateRowSchema,
+  financialsRowSchema,
+  groundingPayloadSchema,
+  multiplesRowSchema,
+  parseStoredExtract,
+  GROUNDING_MAX_BLOCKS,
+  GROUNDING_MAX_BLOCK_CHARS,
+  GROUNDING_MAX_TOTAL_CHARS,
+} from "@/lib/grounding/schema";
 import type { GroundingBlock } from "@/types/grounding";
+import { EMPTY_ROW_SOURCES, type DataSource } from "@/types/dataset";
 import { makeExtract, makeFinancialsRow, makeMultiplesRow } from "./grounding-test-helpers";
 
 function payload(blocks: GroundingBlock[]) {
@@ -56,6 +67,35 @@ describe("parseStoredExtract — Analysis.groundingJson read back", () => {
     const { marketCap: _m, enterpriseValue: _e, ...oldRow } = extract.multiples[0];
     const parsed = parseStoredExtract(JSON.stringify({ blocks: [], extract: { ...extract, multiples: [oldRow] } }));
     expect(parsed?.multiples[0]).toMatchObject({ evEbitda: 6, marketCap: null, enterpriseValue: null });
+  });
+
+  it("reads an extract saved before rows carried sources, with every source null and nothing mixed", () => {
+    // The shape of an analysis saved before the dataset table: no `sources`, no `source`.
+    const v1 = {
+      meta: { reportingCurrency: "EUR", units: "millions", latestPeriodLabel: "FY2025", fiscalYearEnd: "December" },
+      financials: [2024, 2025].map((fiscalYear) => {
+        const { sources: _s, ...row } = makeFinancialsRow({ fiscalYear, revenue: 1000, totalDebt: 400, cfo: 150 });
+        return row;
+      }),
+      multiples: [{ fiscalYear: 2025, evEbitda: 8, evSales: 1.6, pe: 12, pb: 1.5, fcfYield: 6, dividendYield: 4, marketCap: 1200, enterpriseValue: 1600 }],
+      estimates: [{ fiscalYear: 2026, revenue: 1050, ebitda: 210, ebit: 165, netIncome: 95, eps: 0.95 }],
+      peers: [{ ticker: "PEER.MI", companyName: null, multiples: [{ fiscalYear: 2025, evEbitda: 9, evSales: null, pe: null, pb: null, fcfYield: null, dividendYield: null }] }],
+    };
+    const parsed = parseStoredExtract(JSON.stringify({ blocks: [], extract: v1 }));
+    expect(parsed?.financials.map((f) => f.sources)).toEqual([EMPTY_ROW_SOURCES, EMPTY_ROW_SOURCES]);
+    // Each row got its own object from the factory, not one shared default.
+    expect(parsed?.financials[0].sources.mixed).not.toBe(parsed?.financials[1].sources.mixed);
+    expect(parsed?.multiples[0].source).toBeNull();
+    expect(parsed?.estimates[0].source).toBeNull();
+    expect(parsed?.peers[0].multiples[0].source).toBeNull();
+  });
+
+  it("exports the row schemas, which keep a written source", () => {
+    const source: DataSource = { kind: "web", url: "https://example.com/ar-2025.pdf", title: "Annual report 2025", asOf: "2026-03-01", blockId: null, verified: false };
+    expect(multiplesRowSchema.parse(makeMultiplesRow({ fiscalYear: 2025, pe: 12, source })).source).toEqual(source);
+    expect(estimateRowSchema.parse({ fiscalYear: 2026, revenue: 1, ebitda: null, ebit: null, netIncome: null, eps: null }).source).toBeNull();
+    expect(financialsRowSchema.safeParse(makeFinancialsRow({ fiscalYear: 2025 })).success).toBe(true);
+    expect(dataSourceSchema.safeParse({ ...source, kind: "fax" }).success).toBe(false);
   });
 
   it("reads a partial extract (no financials) as no dataset, not as a shape the gates would crash on", () => {

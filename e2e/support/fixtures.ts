@@ -22,6 +22,8 @@ export const REGISTERED_EMAIL_PREFIX = "e2e-reg-";
 export const DECOY = {
   groundedCompany: "Fenicottero Holding S.p.A.",
   groundedReport: "fenicottero-rosa-report",
+  /** The older Grounded save of the same ticker, whose extract lives in groundingJson. */
+  groundingLegacyReport: "fenicottero-legacy",
   panelCompany: "Ornitorinco Industries Inc.",
   panelReport: "ornitorinco-dcf-report",
   skepticCritique: "scettico-pangolino-critica",
@@ -46,6 +48,7 @@ export const DECOY = {
 // ─── Record ids (fixed, so specs can address rows directly) ────────────────────
 export const IDS = {
   analysisGrounded: "e2e_an_grounded",
+  analysisGroundingLegacy: "e2e_an_grounding_legacy",
   analysisPanel: "e2e_an_panel",
   analysisPanelOlder: "e2e_an_panel_older",
   analysisLegacy: "e2e_an_legacy",
@@ -61,6 +64,9 @@ export const IDS = {
   positionAuthz: "e2e_pos_authz",
   positionUserB: "e2e_pos_user_b",
   advisorSession: "e2e_adv_session",
+  /** A's FNCT.MI dataset, two days old: the grounded analysis reads it, /analyze offers it. */
+  datasetGrounded: "e2e_ds_fnct",
+  datasetUserB: "e2e_ds_user_b",
 } as const;
 
 export const TICKERS = {

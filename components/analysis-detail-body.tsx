@@ -14,6 +14,7 @@ import { useLanguage } from "@/context/language-context";
 import ReportShell from "@/components/report/report-shell";
 import ReportBody from "@/components/report/report-body";
 import { ValuationChecksCard } from "@/components/report/valuation-checks-card";
+import { DatasetTables } from "@/components/report/dataset-tables";
 import AnalystPanel from "@/components/analyst-panel";
 import OpenPositionBanner from "@/components/open-position-banner";
 import { sameCurrency } from "@/lib/grounding/currency";
@@ -162,6 +163,14 @@ function ValuationBody({
         </div>
       )}
       {price.status === "none" && <p className="mt-4 text-sm text-muted print:break-inside-avoid">{t("valuationChecksNoPrice")}</p>}
+
+      {/* The numbers the analysis was grounded on, each with its source. A sibling of
+          the report: `.print-report` gives it the report's light print theme (gotcha #27). */}
+      {groundingExtract && (
+        <div className="print-report mt-4">
+          <DatasetTables extract={groundingExtract} />
+        </div>
+      )}
 
       <AnalystPanel
         analysisId={analysisId}

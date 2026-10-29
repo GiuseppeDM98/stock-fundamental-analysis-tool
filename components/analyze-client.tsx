@@ -7,10 +7,10 @@ import { DisclaimerBanner } from "@/components/disclaimer-banner";
 import { PriceSummary } from "@/components/price-summary";
 import { TickerSearch } from "@/components/ticker-search";
 import DeepValuePanel from "@/components/deep-value-panel";
-import { GroundingInput } from "@/components/grounding-input";
+import { DatasetSection } from "@/components/dataset-section";
 import { useLanguage } from "@/context/language-context";
 import { QuoteResponse } from "@/types/market";
-import type { GroundingPayload } from "@/types/grounding";
+import type { GroundedFinancials } from "@/types/grounding";
 
 type LoadState = "idle" | "loading" | "success" | "error";
 
@@ -61,9 +61,9 @@ export function AnalyzeClient() {
   const [errorMessage, setErrorMessage] = useState("");
   const [quote, setQuote] = useState<QuoteResponse | null>(null);
   const [mosPercent, setMosPercent] = useState(25);
-  // Lifted from GroundingInput and threaded into the Deep Value POST body below — a
-  // confirmed payload switches that run into Grounded mode; null/unconfirmed stays Quick.
-  const [grounding, setGrounding] = useState<GroundingPayload | null>(null);
+  // Lifted from DatasetSection and threaded into the Deep Value POST body below — a
+  // confirmed dataset switches that run into Grounded mode; null/unconfirmed stays Quick.
+  const [dataset, setDataset] = useState<{ id: string; extract: GroundedFinancials } | null>(null);
   // Tracks whether client-side hydration has completed to prevent localStorage reads during SSR
   const [isHydrated, setIsHydrated] = useState(false);
 
@@ -212,7 +212,12 @@ export function AnalyzeClient() {
               </label>
             </div>
 
-            <GroundingInput ticker={ticker} value={grounding} onChange={setGrounding} />
+            <DatasetSection
+              ticker={ticker}
+              quote={{ price: quote.regularMarketPrice, currency: quote.currency }}
+              value={dataset}
+              onChange={setDataset}
+            />
 
             <DeepValuePanel
               ticker={ticker}
@@ -220,7 +225,7 @@ export function AnalyzeClient() {
               mosPercent={mosPercent}
               currentPrice={quote.regularMarketPrice}
               currency={quote.currency}
-              grounding={grounding}
+              dataset={dataset}
             />
           </motion.div>
         )}

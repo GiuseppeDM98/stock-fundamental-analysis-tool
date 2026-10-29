@@ -529,7 +529,8 @@ export function buildAnalystSystemPrompt({
   mosPercent?: number;
   // Presence gates GROUNDED_RULES_BLOCK, same as buildDeepValueSystemPrompt — the lens
   // reads the actual data (extract + anchors + warnings) from the user prompt via
-  // formatGroundingForPrompt, re-read server-side from Analysis.groundingJson.
+  // formatGroundingForPrompt, re-read server-side through readAnalysisGrounding (the
+  // analysis's dataset, or its legacy groundingJson).
   grounding?: GroundingPromptContext;
   blindFirst?: boolean;
 } = {}): string {
@@ -675,8 +676,8 @@ export function buildAnalystUserPrompt({
   currentPrice?: number;
   currency?: string;
   mosPercent?: number;
-  // Re-read from Analysis.groundingJson by the caller (verify/route.ts), never passed in
-  // the request body (it would add 100-200KB per lens). `blocks` is deliberately empty
+  // Re-read through readAnalysisGrounding by the caller (verify/route.ts: the analysis's
+  // dataset, or its legacy groundingJson), never passed in the request body (it would add 100-200KB per lens). `blocks` is deliberately empty
   // even when the saved analysis has raw paste blocks: the lens's job is to judge the
   // JUDGMENT, and the anchors/extract already give it that; the extra line-item detail
   // would triple the input cost across 3 Opus xhigh passes for no proportional benefit

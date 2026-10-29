@@ -1,10 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { buildSaveAnalysisRequest, parseResolvedAiSettings, type DeepValueRunInputs } from "@/lib/report/deep-value-run";
 import type { DeepValueResult } from "@/components/report/types";
-import type { GroundingPayload } from "@/types/grounding";
 import { makeExtract } from "./grounding-test-helpers";
 
-const GROUNDING: GroundingPayload = { blocks: [{ id: "1", kind: "balance_sheet", text: "pasted" }], extract: makeExtract({}) };
+const DATASET = { id: "ds1", extract: makeExtract({}) };
 
 const RUN: DeepValueRunInputs = {
   ticker: "ENI.MI",
@@ -12,7 +11,7 @@ const RUN: DeepValueRunInputs = {
   mosPercent: 20,
   currentPrice: 14.18,
   currency: "EUR",
-  grounding: GROUNDING,
+  dataset: DATASET,
   language: "English",
   aiSettingsResolved: { model: "claude-opus-4-8", effort: "xhigh", thinking: true },
 };
@@ -36,9 +35,11 @@ describe("buildSaveAnalysisRequest", () => {
     expect(buildSaveAnalysisRequest({ ...RUN, currentPrice: 0 }, "# r", RESULT).priceAtAnalysis).toBeUndefined();
   });
 
-  it("serializes the grounding payload the run used, and none for a Quick run", () => {
-    expect(JSON.parse(buildSaveAnalysisRequest(RUN, "# r", RESULT).groundingJson!)).toEqual(GROUNDING);
-    expect(buildSaveAnalysisRequest({ ...RUN, grounding: null }, "# r", RESULT).groundingJson).toBeUndefined();
+  it("names the dataset the run used, and none for a Quick run", () => {
+    const request = buildSaveAnalysisRequest(RUN, "# r", RESULT);
+    expect(request.datasetId).toBe("ds1");
+    expect("groundingJson" in request).toBe(false);
+    expect(buildSaveAnalysisRequest({ ...RUN, dataset: null }, "# r", RESULT).datasetId).toBeUndefined();
   });
 
   it("maps the snapshot's MoS and the parsed fair values", () => {

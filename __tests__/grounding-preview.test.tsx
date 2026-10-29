@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { createElement } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 
 import { GroundingPreview } from "@/components/report/grounding-preview";
 import type { GroundingExtractResponse } from "@/lib/grounding-client";
@@ -46,6 +46,8 @@ const EXTRACT = makeExtract({
 function buildResult(): GroundingExtractResponse {
   const basis = computeBasisReconciliation(EXTRACT);
   return {
+    blockResults: [],
+    failedBlockIds: [],
     extract: EXTRACT,
     basis,
     stats: computeMultipleStats(EXTRACT.multiples),
@@ -63,7 +65,8 @@ function renderPreview(result: GroundingExtractResponse = buildResult()) {
 describe("GroundingPreview", () => {
   it("translates the grid row labels and tags each row with its horizon", () => {
     renderPreview();
-    const grid = within(screen.getByRole("table"));
+    // The dataset tables come first; the grid is the table with the horizon tags.
+    const grid = within(screen.getAllByRole("table").find((table) => within(table).queryByText("trailing"))!);
 
     expect(grid.getByText(/Ultimo esercizio \(2025\)/)).toBeInTheDocument();
     expect(grid.getByText(/Mediana 5a/)).toBeInTheDocument();
@@ -101,5 +104,36 @@ describe("GroundingPreview", () => {
     renderPreview({ ...buildResult(), impliedExpectations: null });
 
     expect(screen.queryByText("Cosa deve essere vero")).not.toBeInTheDocument();
+  });
+
+  it("opens on the dataset tables, with the source row first", () => {
+    renderPreview();
+    const income = within(screen.getByTestId("dataset-table-income"));
+    expect(income.getByText("Conto economico")).toBeInTheDocument();
+    const [sourceRow] = income.getAllByRole("row").slice(1); // after the header row
+    expect(within(sourceRow).getByText("Fonte")).toBeInTheDocument();
+  });
+
+  it("offers a retry for each failed block, and only with an onRetry", () => {
+    const onRetry = vi.fn();
+    const result = { ...buildResult(), failedBlockIds: ["blk-2"] };
+    render(
+      createElement(GroundingPreview, {
+        ticker: "AAA.MI",
+        result,
+        confirmed: false,
+        onEdit: () => {},
+        onConfirm: () => {},
+        failedBlocks: [{ id: "blk-2", position: 2 }],
+        onRetry,
+      })
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Riprova questo blocco #2/ }));
+    expect(onRetry).toHaveBeenCalledWith("blk-2");
+  });
+
+  it("renders no retry button without an onRetry", () => {
+    renderPreview();
+    expect(screen.queryByRole("button", { name: /Riprova questo blocco/ })).not.toBeInTheDocument();
   });
 });

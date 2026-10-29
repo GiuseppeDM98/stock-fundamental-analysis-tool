@@ -25,8 +25,11 @@ const saveSchema = z.object({
   // 40: the longest method name the prompt offers is "Residual Income"; the client trims
   // the model's string to this before sending.
   valuationMethod: z.string().max(40).optional(),
-  // Grounded Deep Value mode — the confirmed GroundingPayload (blocks + extract), as
-  // JSON. Present only when the analysis was generated with pasted financial data.
+  // Grounded Deep Value mode — the dataset the analysis was generated on. Checked below:
+  // it must be the user's and of the same ticker.
+  datasetId: z.string().min(1).optional(),
+  // Legacy: the GroundingPayload analyses carried before the dataset table. Still
+  // accepted, no longer sent by the app.
   groundingJson: z.string().max(400000).optional(),
   // The report's final JSON block. Re-sanitized below: what is stored is the server's
   // reading of it, never the client's text.
@@ -78,6 +81,13 @@ export async function POST(request: Request) {
     if (!resultJson) return NextResponse.json({ error: "resultJson must carry bull/base/bear" }, { status: 400 });
   }
 
+  if (body.datasetId) {
+    const dataset = await db.financialDataset.findFirst({ where: { id: body.datasetId, userId: session.user.id }, select: { ticker: true } });
+    // Another user's dataset reads as a missing one: its existence never leaks.
+    if (!dataset) return NextResponse.json({ error: "dataset not found" }, { status: 400 });
+    if (dataset.ticker !== body.ticker) return NextResponse.json({ error: "dataset ticker mismatch" }, { status: 400 });
+  }
+
   const analysis = await db.analysis.create({
     data: {
       userId: session.user.id,
@@ -90,6 +100,7 @@ export async function POST(request: Request) {
       fairValueBase: body.fairValueBase,
       fairValueBear: body.fairValueBear,
       valuationMethod: body.valuationMethod,
+      datasetId: body.datasetId,
       groundingJson: body.groundingJson,
       resultJson,
       currency: body.currency,

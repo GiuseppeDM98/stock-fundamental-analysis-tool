@@ -14,7 +14,7 @@ import { db } from "@/lib/db";
 import { getQuote } from "@/lib/yahoo-client";
 import { ANALYST_ANGLES } from "@/types/analysis";
 import type { GroundedFinancials } from "@/types/grounding";
-import { parseStoredExtract } from "@/lib/grounding/schema";
+import { readAnalysisGrounding } from "@/lib/datasets/store";
 import {
   buildAnalystSystemPrompt,
   buildAnalystUserPrompt,
@@ -75,7 +75,7 @@ const requestSchema = z.object({
   effort: z.enum(AI_EFFORT_LEVELS).optional(),
   thinking: z.boolean().optional(),
   // When present, grounds this lens the same way as the base analysis: the route
-  // re-reads Analysis.groundingJson (never trusts a client-sent copy) rather
+  // re-reads the analysis's dataset (never trusts a client-sent copy) rather
   // than accepting the payload in the body, which would be 100-200KB per lens.
   analysisId: z.string().min(1).optional(),
 });
@@ -170,17 +170,17 @@ export async function POST(request: Request) {
     if (body.analysisId) {
       const analysis = await db.analysis.findFirst({
         where: { id: body.analysisId, userId: session.user.id },
-        select: { groundingJson: true, mosPercent: true, reportMd: true, priceAtAnalysis: true, resultJson: true, createdAt: true },
+        select: { datasetId: true, groundingJson: true, mosPercent: true, reportMd: true, priceAtAnalysis: true, resultJson: true, createdAt: true },
       });
       if (analysis) {
         effectiveMosPercent = analysis.mosPercent;
         // A malformed or partial stored extract reads as none: the review proceeds ungrounded.
-        const extract = parseStoredExtract(analysis.groundingJson);
-        if (extract) {
+        const grounding = await readAnalysisGrounding(session.user.id, analysis);
+        if (grounding) {
           try {
             // Lenses get extract + anchors + warnings, never the raw paste — see the doc
             // comment on buildAnalystUserPrompt's `grounding` param for why.
-            groundingContext = buildGroundingPromptContext([], extract, currentPrice ?? null, currency);
+            groundingContext = buildGroundingPromptContext([], grounding.extract, currentPrice ?? null, currency, grounding.warnings);
           } catch {
             // Anchors that cannot be built on this extract: proceed ungrounded, as above.
           }

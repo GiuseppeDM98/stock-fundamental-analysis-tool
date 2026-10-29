@@ -11,7 +11,7 @@ import { test, expect } from "./support/test";
 import type { APIRequestContext } from "@playwright/test";
 import { queryOne } from "./support/db";
 import { E2E_BASE_URL, STORAGE_STATE } from "./support/env";
-import { IDS } from "./support/fixtures";
+import { IDS, TICKERS } from "./support/fixtures";
 
 type AnalysisRow = { id: string; userId: string; reviewMd: string | null; reviewFairValueBase: number | null };
 type PositionRow = { id: string; userId: string; closedAt: string | null; sellPrice: number | null };
@@ -53,6 +53,9 @@ test("unauthenticated API calls are refused with 401", async () => {
     ["GET", "/api/portfolio/snapshots"],
     ["GET", "/api/advisor/sessions"],
     ["GET", "/api/earnings"],
+    ["POST", "/api/datasets", {}],
+    ["GET", `/api/datasets/latest?ticker=${TICKERS.grounded}`],
+    ["GET", `/api/datasets/${IDS.datasetGrounded}`],
   ];
   for (const [method, url, data] of calls) {
     const res = await anonymous.fetch(url, { method, data });
@@ -97,6 +100,30 @@ test("analysis: the owner A can read, patch and delete the same record", async (
 
   expect((await asA.delete(`/api/analyses/${IDS.analysisAuthz}`)).status()).toBe(204);
   expect(await analysisRow(IDS.analysisAuthz)).toBeNull();
+});
+
+test("dataset: A reads its own dataset by id, B's is a 404", async () => {
+  const own = await asA.get(`/api/datasets/${IDS.datasetGrounded}`);
+  expect(own.status()).toBe(200);
+  expect((await own.json()).id).toBe(IDS.datasetGrounded);
+  expect((await asA.get(`/api/datasets/${IDS.datasetUserB}`)).status()).toBe(404);
+});
+
+test("dataset: an analysis saves on A's own dataset, never on B's", async () => {
+  const save = (datasetId: string) =>
+    asA.post("/api/analyses", {
+      data: { ticker: TICKERS.grounded, companyName: "e2e dataset pair (marmotta)", reportMd: "## 1. Overview", mosPercent: 20, datasetId },
+    });
+
+  expect((await save(IDS.datasetUserB)).status()).toBe(400);
+
+  const own = await save(IDS.datasetGrounded);
+  expect(own.status()).toBe(201);
+  const { id } = (await own.json()) as { id: string };
+  const row = await queryOne<{ userId: string; datasetId: string | null }>("SELECT userId, datasetId FROM Analysis WHERE id = ?", [id]);
+  expect(row).toEqual({ userId: "e2e_user_a", datasetId: IDS.datasetGrounded });
+  // Back to the seeded rows: the pages and the screenshots count FNCT.MI's saves.
+  expect((await asA.delete(`/api/analyses/${id}`)).status()).toBe(204);
 });
 
 test("position: B cannot close or delete A's position; the row is untouched", async () => {

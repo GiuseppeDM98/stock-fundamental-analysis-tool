@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 
-import { buildBlockFailureWarnings, buildMarketImpliedWarnings } from "@/lib/grounding-warnings";
+import { buildBlockFailureWarnings, buildMarketImpliedWarnings, parseBlockFailureDetail } from "@/lib/grounding-warnings";
 import type { MarketImplied } from "@/lib/grounding/anchors";
+import type { GroundingBlock } from "@/types/grounding";
 import { makeExtract, makeFinancialsRow, makeMeta, makeMultiplesRow } from "./grounding-test-helpers";
 
 const COMPLETE_LATEST_FY = makeFinancialsRow({
@@ -23,7 +24,15 @@ const MARKET_IMPLIED: MarketImplied = {
 };
 
 describe("buildBlockFailureWarnings", () => {
-  it("emits one block_extract_failed per rejected block, with its 1-based position", () => {
+  const blocks: Pick<GroundingBlock, "id" | "kind">[] = [
+    { id: "a", kind: "income_statement" },
+    { id: "b", kind: "balance_sheet" },
+    { id: "c", kind: "cash_flow" },
+    { id: "d", kind: "other" },
+  ];
+  const order = blocks.map((b) => b.id);
+
+  it("emits one block_extract_failed per rejected block, with its kind and 1-based position", () => {
     const settled: PromiseSettledResult<unknown>[] = [
       { status: "fulfilled", value: {} },
       { status: "rejected", reason: new Error("bad JSON") },
@@ -31,16 +40,23 @@ describe("buildBlockFailureWarnings", () => {
       { status: "rejected", reason: new Error("no fence") },
     ];
 
-    const warnings = buildBlockFailureWarnings(settled);
+    const warnings = buildBlockFailureWarnings(settled, blocks, order);
 
     expect(warnings).toEqual([
-      { code: "block_extract_failed", severity: "warn", fiscalYear: null, detail: "#2" },
-      { code: "block_extract_failed", severity: "warn", fiscalYear: null, detail: "#4" },
+      { code: "block_extract_failed", severity: "warn", fiscalYear: null, detail: "balance_sheet #2" },
+      { code: "block_extract_failed", severity: "warn", fiscalYear: null, detail: "other #4" },
     ]);
   });
 
+  it("counts the position in the block order, so a retried block keeps its place", () => {
+    const [warning] = buildBlockFailureWarnings([{ status: "rejected", reason: new Error("x") }], [blocks[2]], order);
+    expect(warning.detail).toBe("cash_flow #3");
+    expect(parseBlockFailureDetail(warning.detail)).toEqual({ kind: "cash_flow", position: 3 });
+    expect(parseBlockFailureDetail("#3")).toBeNull();
+  });
+
   it("emits nothing when every block was extracted", () => {
-    expect(buildBlockFailureWarnings([{ status: "fulfilled", value: {} }])).toEqual([]);
+    expect(buildBlockFailureWarnings([{ status: "fulfilled", value: {} }], [blocks[0]], order)).toEqual([]);
   });
 });
 

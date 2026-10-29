@@ -1,8 +1,9 @@
 "use client";
 
 // The verifiable extract preview for the Grounded Deep Value mode — renders what the
-// extraction endpoint transcribed + the deterministic anchors computed from it, BEFORE
-// the user spends a 30-60s Deep Value run on possibly-mistranscribed data.
+// extraction endpoint transcribed (the dataset tables, each row with its source) + the
+// deterministic anchors computed from it, BEFORE the user spends a 30-60s Deep Value run
+// on possibly-mistranscribed data. A block whose extraction failed can be retried alone.
 import { useLanguage } from "@/context/language-context";
 import type { Translations } from "@/lib/i18n/translations";
 import type { GroundingExtractResponse } from "@/lib/grounding-client";
@@ -10,6 +11,7 @@ import type { ImpliedExpectations, MultipleKey, ValuationGrid, ValuationGridRow 
 import type { ReconciliationWarning } from "@/lib/grounding/reconcile";
 import type { FiscalYearMultiples, GroundingMeta } from "@/types/grounding";
 import { BasisReconciliationLine } from "@/components/report/basis-reconciliation-line";
+import { DatasetTables } from "@/components/report/dataset-tables";
 
 const UNIT_KEY: Record<NonNullable<GroundingMeta["units"]>, keyof Translations> = {
   billions: "groundingUnitBillions",
@@ -78,6 +80,12 @@ type Props = {
   confirmed: boolean;
   onEdit: () => void;
   onConfirm: () => void;
+  // The blocks whose extraction failed, by id and editor position; without onRetry no
+  // retry button renders.
+  failedBlocks?: { id: string; position: number }[];
+  onRetry?: (blockId: string) => void;
+  // A save or a retry is in flight: the actions wait for it.
+  busy?: boolean;
 };
 
 type T = (key: keyof Translations) => string;
@@ -201,7 +209,7 @@ function ImpliedExpectationsBlock({
   );
 }
 
-export function GroundingPreview({ ticker, result, confirmed, onEdit, onConfirm }: Props) {
+export function GroundingPreview({ ticker, result, confirmed, onEdit, onConfirm, failedBlocks = [], onRetry, busy = false }: Props) {
   const { t, locale } = useLanguage();
   const { extract, basis, stats, grid, marketImplied, impliedExpectations, warnings } = result;
 
@@ -242,6 +250,8 @@ export function GroundingPreview({ ticker, result, confirmed, onEdit, onConfirm 
           </p>
         )}
       </div>
+
+      <DatasetTables extract={extract} />
 
       {/* Basis reconciliation — a property of the PASTE, so it's shown here, before any
           AI run is spent: the cheapest possible moment to catch a basis mismatch. */}
@@ -330,6 +340,21 @@ export function GroundingPreview({ ticker, result, confirmed, onEdit, onConfirm 
         </div>
       )}
 
+      {onRetry && failedBlocks.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {failedBlocks.map((b) => (
+            <button
+              key={b.id}
+              onClick={() => onRetry(b.id)}
+              disabled={busy}
+              className="tap rounded-lg border border-warning/50 px-3 py-1.5 text-xs text-warning transition hover:border-warning disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              ↻ {t("datasetRetryBlock")} #{b.position}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2 border-t border-slate-800/60 pt-3">
         <button
           onClick={onEdit}
@@ -339,7 +364,8 @@ export function GroundingPreview({ ticker, result, confirmed, onEdit, onConfirm 
         </button>
         <button
           onClick={onConfirm}
-          className="tap rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-violet-500"
+          disabled={busy}
+          className="tap rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {t("groundingAnalyzeWithDataBtn")}
         </button>
