@@ -277,7 +277,7 @@ Dall'analisi del Consulente di net-worth-tracker (`app/api/allocation-advice/run
 
 | Ord. | Spec | Dipende da | Stato |
 |---|---|---|---|
-| 1 | [01-hardening-e-pulizia.md](01-hardening-e-pulizia.md) | — | riletta in modo adversariale il 2026-10-11: 36 rilievi, 7 decisioni; integrata il 2026-10-18 con B10/A11 (Search API di DeepSeek al posto di Tavily, D-70/T-34) e B11/A12 (`deepseek-flash` con alias, D-72); implementata il 2026-10-29, in attesa della migrazione Turso |
+| 1 | [01-hardening-e-pulizia.md](01-hardening-e-pulizia.md) | — | riletta in modo adversariale il 2026-10-11: 36 rilievi, 7 decisioni; integrata il 2026-10-18 con B10/A11 (Search API di DeepSeek al posto di Tavily, D-70/T-34) e B11/A12 (`deepseek-flash` con alias, D-72); implementata e migrata su Turso il 2026-10-29 |
 | 2 | [02-contratto-di-valutazione-v3.md](02-contratto-di-valutazione-v3.md) | 01 (`hasFullTriple`/`ParsedAnalystResult`, i18n, PATCH con null) | riletta il 2026-10-11: 31 rilievi, 7 decisioni; pronta |
 | 3 | [03-gate-universali-e-scheda-verifiche.md](03-gate-universali-e-scheda-verifiche.md) | 02 (`resultJson`, contratto, test di route, guida) | riletta il 2026-10-11: 35 rilievi, 6 decisioni; pronta |
 | 4 | [04-dataset-finanziario-con-provenienza.md](04-dataset-finanziario-con-provenienza.md) | 01 (ticker), 02 (select, test di route, guida), 03 (`extract \| null`, `AnalysisDetailBody`) | riletta il 2026-10-11: 41 rilievi, 8 decisioni; pronta |
