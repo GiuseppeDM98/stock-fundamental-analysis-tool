@@ -53,7 +53,9 @@ const SCENARIOS = ["bear", "base", "bull"] as const;
 // themselves. All shown in red rather than the standard amber "fail" treatment.
 const SEVERE_FAIL_GATES: GateCode[] = ["basis_same", "bear_breaks_price", "roic_vs_wacc", "scenario_order", "sensitivity_center"];
 
-// The reader-facing name of each gate; the codes are for the prompts and the tests.
+// The reader-facing name of each gate; the codes are for the prompts and the tests. The
+// keys keep the groundingGate* prefix from when only a Grounded analysis had gates
+// (until 2026-10): renaming them in both dictionaries would change no word on screen.
 export const GATE_LABEL_KEY: Record<GateCode, keyof Translations> = {
   basis_same: "groundingGateBasisSame",
   horizon_consistent: "groundingGateHorizonConsistent",
@@ -225,9 +227,9 @@ export function ValuationChecksCard({ result, extract, mosPercent, currentPrice,
       )}
 
       {/* The implied multiples need the dataset too: with no history there is nothing to
-          rank them against, and a driver that is not a total (a DPS per share on a DDM
-          cross-check) turns (equity + net debt) / driver into a meaningless number. Without
-          one, the cross-check row stays only for its arithmetic check. */}
+          rank them against. postcheck.ts computes them only on an EV bridge on EBITDA, so a
+          DDM or a P/E has none. The cross-check row is drawn when it has something to show:
+          its arithmetic check, or an implied multiple with a dataset. */}
       {hasDataset && base?.impliedMultiple != null && (
         <p className="text-sm text-slate-300">
           {t("groundingCardBaseMultipleLabel")}: {base.impliedMultiple.toFixed(2)}x
@@ -251,7 +253,8 @@ export function ValuationChecksCard({ result, extract, mosPercent, currentPrice,
         </p>
       )}
 
-      {postCheck.crossCheckBridge && (hasDataset || postCheck.crossCheckBridge.arithmeticOk != null) && (
+      {postCheck.crossCheckBridge &&
+        (postCheck.crossCheckBridge.arithmeticOk != null || (hasDataset && postCheck.crossCheckBridge.impliedMultiple != null)) && (
         <p className="text-sm text-slate-300">
           <span className="font-medium text-slate-100">{t("groundingCrossCheckBridgeLabel")}</span>:{" "}
           {postCheck.crossCheckBridge.arithmeticOk != null && (

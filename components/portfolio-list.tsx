@@ -12,7 +12,7 @@ import {
   closePosition,
   fetchDividendTotals,
 } from "@/lib/portfolio";
-import { latestAnalysisWithValues, verdictBasis } from "@/lib/report/latest-analysis";
+import { getExitSignal } from "@/lib/report/latest-analysis";
 import { fetchAnalyses } from "@/lib/analyses";
 import { realizedPnlNative, holdingDays, estimateCapitalGainsTax } from "@/lib/portfolio-math";
 import type {
@@ -84,28 +84,6 @@ function aggregateByTicker(positions: Position[]): AggregatedPosition[] {
   });
 }
 
-// ─── Exit signal detection ────────────────────────────────────────────────────
-
-// A value investor's margin of safety is exhausted when price reaches fair value base.
-// Returns the signal state based on the newest analysis with fair values, measured on the
-// same basis as the /analyses verdict (the consensus once a lens ran, 2026-10-28: before,
-// the pill could contradict the verdict shown for the same ticker).
-// Comparison is against the intrinsic base fair value (before MoS discount), not the
-// stored buy target — otherwise the alert fires at the entry price, not the exit target.
-function getExitSignal(
-  currentPrice: number | undefined,
-  analyses: SavedAnalysis[]
-): { triggered: boolean; fairValueBase: number | null } {
-  const latest = latestAnalysisWithValues(analyses);
-  const basis = latest && verdictBasis(latest);
-  if (!basis || currentPrice == null) return { triggered: false, fairValueBase: null };
-  const intrinsicBase = basis.intrinsicBase;
-  return {
-    triggered: currentPrice >= intrinsicBase,
-    fairValueBase: intrinsicBase,
-  };
-}
-
 // ─── Shared input class ───────────────────────────────────────────────────────
 
 const inputClass =
@@ -120,16 +98,18 @@ function TickerAnalysesInline({
   analyses,
   ticker,
   currentPrice,
+  quoteCurrency,
 }: {
   analyses: SavedAnalysis[];
   ticker: string;
   currentPrice?: number;
+  quoteCurrency?: string;
 }) {
   const [open, setOpen] = useState(false);
   const { t } = useLanguage();
   if (analyses.length === 0) return null;
 
-  const exitSignal = getExitSignal(currentPrice, analyses);
+  const exitSignal = getExitSignal(currentPrice, quoteCurrency, analyses);
 
   return (
     <div className="mt-1.5">
@@ -194,6 +174,9 @@ type DailyChange = { change: number; changePct: number };
 type AggregatedPositionRowProps = {
   agg: AggregatedPosition;
   currentPrice?: number;
+  // The live quote's currency: the exit signal weighs the price only against an analysis
+  // in the same currency.
+  quoteCurrency?: string;
   dailyChange?: DailyChange;
   earnings?: EarningsEstimate;
   refreshingEarnings?: boolean;
@@ -209,6 +192,7 @@ type AggregatedPositionRowProps = {
 function AggregatedPositionRow({
   agg,
   currentPrice,
+  quoteCurrency,
   dailyChange,
   earnings,
   refreshingEarnings,
@@ -230,7 +214,7 @@ function AggregatedPositionRow({
   const taxAmount = pnl != null ? estimateCapitalGainsTax(pnl, agg.capitalGainsTaxRate) : 0;
   const hasTax = taxAmount > 0;
   const netPnl = hasTax ? pnl! - taxAmount : null;
-  const exitSignal = getExitSignal(currentPrice, tickerAnalyses);
+  const exitSignal = getExitSignal(currentPrice, quoteCurrency, tickerAnalyses);
 
   return (
     <li className="card">
@@ -313,6 +297,7 @@ function AggregatedPositionRow({
                 </button>
               </>
             )}
+            {exitSignal.currencyMismatch && <span className="text-[11px] text-slate-500">{t("verdictCurrencyMismatch")}</span>}
           </div>
 
           {hasTax && (
@@ -341,6 +326,7 @@ function AggregatedPositionRow({
             analyses={tickerAnalyses}
             ticker={agg.ticker}
             currentPrice={currentPrice}
+            quoteCurrency={quoteCurrency}
           />
         </div>
 
@@ -1085,6 +1071,7 @@ export default function PortfolioList() {
   const [closingPosition, setClosingPosition] = useState<Position | null>(null);
   const [viewMode, setViewMode] = useState<"aggregated" | "flat">("aggregated");
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({});
+  const [quoteCurrencies, setQuoteCurrencies] = useState<Record<string, string>>({});
   const [dailyChanges, setDailyChanges] = useState<Record<string, DailyChange>>({});
   // AI-fetched next-earnings estimates per ticker, loaded once from the DB store.
   const [earnings, setEarnings] = useState<Record<string, EarningsEstimate>>({});
@@ -1138,18 +1125,22 @@ export default function PortfolioList() {
           price: data.regularMarketPrice as number,
           change: data.regularMarketChange as number,
           changePct: data.regularMarketChangePercent as number,
+          currency: typeof data.currency === "string" ? data.currency : null,
         };
       })
     );
     const prices: Record<string, number> = {};
     const changes: Record<string, DailyChange> = {};
+    const currencies: Record<string, string> = {};
     for (const r of results) {
       if (r.status === "fulfilled") {
         prices[r.value.ticker] = r.value.price;
         changes[r.value.ticker] = { change: r.value.change, changePct: r.value.changePct };
+        if (r.value.currency) currencies[r.value.ticker] = r.value.currency;
       }
     }
     setCurrentPrices((prev) => ({ ...prev, ...prices }));
+    setQuoteCurrencies((prev) => ({ ...prev, ...currencies }));
     setDailyChanges((prev) => ({ ...prev, ...changes }));
     setPricesLoading(false);
   }
@@ -1316,6 +1307,7 @@ export default function PortfolioList() {
               key={agg.ticker}
               agg={agg}
               currentPrice={currentPrices[agg.ticker]}
+              quoteCurrency={quoteCurrencies[agg.ticker]}
               dailyChange={dailyChanges[agg.ticker]}
               earnings={earnings[agg.ticker]}
               refreshingEarnings={refreshingEarnings[agg.ticker] ?? false}
@@ -1413,6 +1405,7 @@ export default function PortfolioList() {
                     analyses={analysesByTicker[pos.ticker] ?? []}
                     ticker={pos.ticker}
                     currentPrice={currentPrices[pos.ticker]}
+                    quoteCurrency={quoteCurrencies[pos.ticker]}
                   />
                 </div>
 

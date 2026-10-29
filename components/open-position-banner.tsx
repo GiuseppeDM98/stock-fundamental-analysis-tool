@@ -3,7 +3,8 @@
 // Banner shown on the analysis detail page when the user holds this ticker.
 // The price comes from the page (AnalysisDetailBody resolves it once for every card), so
 // the banner never fetches its own: the live P&L appears only when that price is a live
-// quote in the lots' currency; otherwise just the shares and the weighted-average cost.
+// quote in the lots' currency; otherwise the shares, the weighted-average cost and a line
+// saying why there is no P&L (until 2026-10-29 it was dropped without a word).
 // mounted guard: Intl.NumberFormat without a fixed locale produces different output
 // between Node.js (SSR) and the browser, causing hydration mismatches.
 import { useState, useEffect } from "react";
@@ -65,8 +66,10 @@ export default function OpenPositionBanner({
           {pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
           ({isPositive ? "+" : ""}{returnPct!.toFixed(1)}%)
         </span>
+      ) : isPriceLoading ? (
+        <span className="text-xs text-slate-600">{t("loadingPnL")}</span>
       ) : (
-        isPriceLoading && <span className="text-xs text-slate-600">{t("loadingPnL")}</span>
+        <span className="text-xs text-slate-500">{t("pnlUnavailable")}</span>
       )}
     </div>
   );

@@ -22,8 +22,9 @@ export type KillPriceFields = { killPrice?: number | null; killPriceNote?: strin
 type Props = {
   // The lens's Phase-1 (blind) commitment — the full JSON so killPrice is available too.
   blind: DeepValueResult & KillPriceFields;
-  // The lens's FINAL buy-target triple. Sourced either from a freshly parsed live run or
-  // from the persisted *FairValue* columns on reload — same MoS-adjusted unit as `blind`.
+  // The lens's FINAL buy-target triple: from the live run or, after a reload, from
+  // *ResultJson (the *FairValue* columns on a row saved before it) — same MoS-adjusted
+  // unit as `blind`.
   // null while Phase 2 is still streaming (the card renders as soon as the blind
   // commitment parses, with the final column filling in once turn 2 completes).
   final: Triple | null;

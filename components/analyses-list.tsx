@@ -18,7 +18,8 @@ import { getVerdict, VERDICT_BADGE, VERDICT_TEXT, type Verdict } from "@/lib/rep
 import { getSignalStrength } from "@/lib/report/signal";
 import { grossUpToIntrinsic } from "@/lib/report/valuation";
 import { presentAnalysts, consensusTriple } from "@/lib/report/consensus";
-import { latestAnalysisWithValues, verdictBasis } from "@/lib/report/latest-analysis";
+import { latestAnalysisWithValues, verdictBasis, comparablePrice, currencyMismatch } from "@/lib/report/latest-analysis";
+import { sameCurrency } from "@/lib/grounding/currency";
 import { computeEvolutionChain, type Evolution, type SourceDelta } from "@/lib/report/evolution";
 import { EarningsBadge } from "@/components/earnings-badge";
 import { isAnalysisStalePreEarnings, isFutureEarnings, formatEarningsDate } from "@/lib/earnings";
@@ -97,9 +98,11 @@ function PerformanceBadge({
 function OpenPositionBadge({
   positions,
   currentPrice,
+  quoteCurrency,
 }: {
   positions: Position[];
   currentPrice?: number;
+  quoteCurrency?: string;
 }) {
   const { t } = useLanguage();
   if (positions.length === 0) return null;
@@ -108,9 +111,11 @@ function OpenPositionBadge({
   const totalCost = positions.reduce((s, p) => s + p.purchasePrice * p.shares, 0);
   const wac = totalCost / totalShares;
   const currency = positions[0].currency;
+  // P&L only on a quote in the lots' own currency; otherwise one line says why not.
+  const livePrice = currentPrice != null && sameCurrency(quoteCurrency, currency) ? currentPrice : null;
 
-  const pnl = currentPrice != null ? (currentPrice - wac) * totalShares : null;
-  const returnPct = pnl != null ? (currentPrice! / wac - 1) * 100 : null;
+  const pnl = livePrice != null ? (livePrice - wac) * totalShares : null;
+  const returnPct = pnl != null ? (livePrice! / wac - 1) * 100 : null;
   const isPositive = pnl != null && pnl >= 0;
 
   return (
@@ -130,6 +135,7 @@ function OpenPositionBadge({
           {returnPct!.toFixed(1)}%)
         </span>
       )}
+      {currentPrice != null && livePrice == null && <span className="text-xs text-slate-500">{t("pnlUnavailable")}</span>}
     </div>
   );
 }
@@ -265,6 +271,7 @@ function TickerGroup({
   ticker,
   analyses,
   currentPrice,
+  quoteCurrency,
   earnings,
   refreshingEarnings,
   onRefreshEarnings,
@@ -276,6 +283,9 @@ function TickerGroup({
   ticker: string;
   analyses: SavedAnalysis[];
   currentPrice?: number;
+  // The live quote's currency: the verdict weighs the price only against an analysis in
+  // the same currency (comparablePrice).
+  quoteCurrency?: string;
   earnings?: EarningsEstimate;
   refreshingEarnings: boolean;
   onRefreshEarnings: (ticker: string, companyName: string) => void;
@@ -322,6 +332,10 @@ function TickerGroup({
   const presentAn = valued ? presentAnalysts(valued) : [];
   const consensusT = valued ? consensusTriple(valued) : null;
   const hasSnapshot = latest.priceAtAnalysis != null && currentPrice != null;
+  // The price the verdict, the ruler dot and the weak-signal flag weigh against the values:
+  // null when the quote is in another currency than the analysis, and then a note says so.
+  const verdictPrice = valued ? comparablePrice(currentPrice, quoteCurrency, valued) : null;
+  const isCurrencyMismatch = valued != null && currencyMismatch(currentPrice, quoteCurrency, valued);
 
   // Stored fairValues are MoS-adjusted buy targets; intrinsic = target / (1 - mos).
   const grossUp = (v: number) => grossUpToIntrinsic(v, mos);
@@ -340,21 +354,21 @@ function TickerGroup({
       : null;
 
   const verdict =
-    ruler && currentPrice != null
-      ? getVerdict(currentPrice, ruler.buyTargetBase, ruler.intrinsicBase)
+    ruler && verdictPrice != null
+      ? getVerdict(verdictPrice, ruler.buyTargetBase, ruler.intrinsicBase)
       : null;
   // Distance of the price from the buy target (the actionable reference).
   const buyTargetPct =
-    ruler && currentPrice != null
-      ? ((currentPrice - ruler.buyTargetBase) / ruler.buyTargetBase) * 100
+    ruler && verdictPrice != null
+      ? ((verdictPrice - ruler.buyTargetBase) / ruler.buyTargetBase) * 100
       : null;
 
   // Is the verdict actually meaningful, or is the base fair value ~on the price inside a
   // huge bull↔bear cone (assumption variance > signal)? When "low", we say so instead of
   // dressing a null result as a confident buy/watch/over. Deterministic, no AI.
   const weakSignal =
-    ruler && currentPrice != null
-      ? getSignalStrength(currentPrice, {
+    ruler && verdictPrice != null
+      ? getSignalStrength(verdictPrice, {
           bear: ruler.min,
           base: ruler.intrinsicBase,
           bull: ruler.max,
@@ -410,10 +424,11 @@ function TickerGroup({
           {!expanded && (
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
               {currentPrice != null ? (
-                <span className="tabular-nums text-slate-300">{formatPrice(currentPrice)}</span>
+                <span className="tabular-nums text-slate-300">{formatPrice(currentPrice, quoteCurrency)}</span>
               ) : (
                 <span className="text-slate-600">{t("priceNa")}</span>
               )}
+              {isCurrencyMismatch && <span className="text-[10px] text-slate-500">{t("verdictCurrencyMismatch")}</span>}
               {verdict && buyTargetPct != null && (
                 <span className={`rounded-sm px-1.5 py-0.5 text-[10px] font-semibold ${VERDICT_BADGE[verdict]}`}>
                   {verdictLabel(verdict)} {buyTargetPct > 0 ? "+" : ""}
@@ -469,7 +484,7 @@ function TickerGroup({
             compact
             min={ruler.min}
             max={ruler.max}
-            price={currentPrice}
+            price={verdictPrice ?? undefined}
             buyTargetEdge={ruler.buyTargetBase}
             fvEdge={ruler.intrinsicBase}
             priceLabel={t("priceShort")}
@@ -500,6 +515,12 @@ function TickerGroup({
                 </p>
               )}
 
+              {isCurrencyMismatch && (
+                <p className="mb-3 text-xs text-slate-500">
+                  {t("verdictCurrencyMismatch")} ({quoteCurrency || "?"} · {valued.currency || "?"})
+                </p>
+              )}
+
               {/* When the scenario cone dwarfs the price-vs-fair-value edge, the verdict is
                   noise — say so instead of implying a confident call. */}
               {weakSignal && (
@@ -509,7 +530,7 @@ function TickerGroup({
               <ValuationRuler
                 min={ruler.min}
                 max={ruler.max}
-                price={currentPrice}
+                price={verdictPrice ?? undefined}
                 buyTargetEdge={ruler.buyTargetBase}
                 fvEdge={ruler.intrinsicBase}
                 markers={markers ?? undefined}
@@ -573,7 +594,7 @@ function TickerGroup({
           {hasSnapshot && (
             <PerformanceBadge priceAtAnalysis={latest.priceAtAnalysis!} currentPrice={currentPrice!} />
           )}
-          <OpenPositionBadge positions={positions} currentPrice={currentPrice} />
+          <OpenPositionBadge positions={positions} currentPrice={currentPrice} quoteCurrency={quoteCurrency} />
 
           {/* Actions */}
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -646,6 +667,7 @@ export default function AnalysesList() {
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({});
+  const [quoteCurrencies, setQuoteCurrencies] = useState<Record<string, string>>({});
   // AI-fetched next-earnings estimates per ticker, loaded once from the DB store.
   const [earningsByTicker, setEarningsByTicker] = useState<Record<string, EarningsEstimate>>({});
   // Per-ticker in-flight flag for the "refresh via AI" button.
@@ -705,14 +727,18 @@ export default function AnalysesList() {
         const res = await fetch(`/api/quote/${encodeURIComponent(ticker)}`);
         if (!res.ok) throw new Error("not found");
         const data = await res.json();
-        return { ticker, price: data.regularMarketPrice as number };
+        return { ticker, price: data.regularMarketPrice as number, currency: typeof data.currency === "string" ? data.currency : null };
       })
     );
     const prices: Record<string, number> = {};
+    const currencies: Record<string, string> = {};
     for (const r of results) {
-      if (r.status === "fulfilled") prices[r.value.ticker] = r.value.price;
+      if (r.status !== "fulfilled") continue;
+      prices[r.value.ticker] = r.value.price;
+      if (r.value.currency) currencies[r.value.ticker] = r.value.currency;
     }
     setCurrentPrices(prices);
+    setQuoteCurrencies(currencies);
   }
 
   // Run the AI earnings lookup for one ticker (~10–30s) and store the fresh estimate.
@@ -753,11 +779,12 @@ export default function AnalysesList() {
       if (q && !matchesTicker && !matchesCompany) continue;
 
       // Filter by Under FV: the price is under the buy target of the same basis the card's
-      // verdict uses (newest save with fair values; consensus once a lens ran).
+      // verdict uses (newest save with fair values; consensus once a lens ran), and in the
+      // same currency as that analysis.
       if (underFvOnly) {
         const latest = latestAnalysisWithValues(group);
         const basis = latest && verdictBasis(latest);
-        const price = currentPrices[ticker];
+        const price = latest ? comparablePrice(currentPrices[ticker], quoteCurrencies[ticker], latest) : null;
         if (!basis || price == null || price >= basis.buyTargetBase) continue;
       }
 
@@ -781,7 +808,7 @@ export default function AnalysesList() {
     });
 
     return filtered;
-  }, [analyses, search, underFvOnly, sortMode, currentPrices]);
+  }, [analyses, search, underFvOnly, sortMode, currentPrices, quoteCurrencies]);
 
   // Upcoming-earnings calendar: one entry per analyzed ticker that has a future AI-fetched
   // date, sorted nearest-first, with the per-ticker stale flag from its latest analysis.
@@ -928,6 +955,7 @@ export default function AnalysesList() {
               ticker={ticker}
               analyses={group}
               currentPrice={currentPrices[ticker]}
+              quoteCurrency={quoteCurrencies[ticker]}
               earnings={earningsByTicker[ticker]}
               refreshingEarnings={refreshingEarnings[ticker] ?? false}
               onRefreshEarnings={handleRefreshEarnings}

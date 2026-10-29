@@ -1,14 +1,14 @@
 # 06 — Dividendi: statistiche, proiezione per scenario, yield e yield on cost
 
 > **Stato**: scritta 2026-10-11; riletta in modo adversariale il 2026-10-11: 29 rilievi, 5 decisioni (D-21, D-24, D-25, D-45, D-46; T-28, T-33). Pronta per l'implementazione dopo la 05b.
-> **Branch**: `feature/dividend-outlook` da `develop`. **Dipende da**: 02 ritirata il 2026-10-29 (`DividendPath` nel JSON), 03 (`dividend_coverage`, `AnalysisDetailBody`, `sameCurrency`), 04 (dataset con `sources`, `SourceChip`, `readAnalysisExtract`), 05a/05b (seed ORNT con DPS null, fixture `DATASET_FENICOTTERO`, run reali con dataset).
+> **Branch**: `feature/dividend-outlook` da `develop`. **Dipende da**: 02 ritirata il 2026-10-29 (`DividendPath` nel JSON), 03 ritirata il 2026-10-29 (`dividend_coverage`, `AnalysisDetailBody`, `sameCurrency`), 04 (dataset con `sources`, `SourceChip`, `readAnalysisExtract`), 05a/05b (seed ORNT con DPS null, fixture `DATASET_FENICOTTERO`, run reali con dataset).
 > **Indice**: [00-INDICE.md](00-INDICE.md) — decisioni D-8, D-21, D-24, D-25, D-45, D-46; scelte T-28, T-33; contratti C-11, C-17, C-20.
 
 ## 1. Il problema oggi (prove, commit `17e54b6`, 2026-10-11)
 
 1. L'app non calcola nulla sui dividendi oltre a: la copertura come warning (`lib/grounding/reconcile.ts:152-172`), il totale dividendi nel gate del debito netto (`postcheck.ts:310`), il fetch Borsa Italiana «pagato oggi» per ISIN nel cron (`lib/dividends.ts:33-68`, solo MTAA) e il totale ricevuto (01). Nessuno storico DPS a video, nessun payout, nessun CAGR, nessuna proiezione, nessuno yield.
 2. `FiscalYearFinancials` ha già `dividendsPerShare`, `eps`, `freeCashFlow`, `sharesDiluted` per anno (`types/grounding.ts:53-70`); la 04 aggiunge la provenienza, la 05a la fonte web. Dalla 02 il modello dichiara `dividends: { policy, lastDps, path[3] }` e dalla 03 il gate `dividend_coverage` lo verifica. Manca il modulo che li unisce e il grafico che li mostra.
-3. Lo yield on cost è in `CLAUDE.md § Next Priorities` (2) da mesi, ma quella priorità chiede lo YoC nell'exit signal del portfolio dai dividendi RICEVUTI: è un'altra cosa (D-46). Il PMC del banner oggi vale `0` e `"EUR"` senza posizione (`app/analyses/[id]/page.tsx:85-90`) e mescola lotti in valute diverse.
+3. Lo yield on cost è in `CLAUDE.md § Next Priorities` (2) da mesi, ma quella priorità chiede lo YoC nell'exit signal del portfolio dai dividendi RICEVUTI: è un'altra cosa (D-46). Il PMC del banner oggi vale `0` e `"EUR"` senza posizione (`app/analyses/[id]/page.tsx:85-90`) e mescola lotti in valute diverse. (Dalla 03, ritirata il 2026-10-29, senza lotti aperti `position` è `null` e il banner dice perché omette il P&L, `pnlUnavailable`; resta il mescolamento: `currency: positions[0].currency`.)
 4. Nessun test del repo monta Recharts: in jsdom `ResponsiveContainer` chiama `new ResizeObserver(...)` (`node_modules/recharts/lib/component/ResponsiveContainer.js:101`), che non esiste e non è polyfillato in `vitest.setup.ts`.
 
 ## 2. Obiettivo e criteri di accettazione
@@ -34,17 +34,17 @@
 ```ts
 /** DPS × diluted shares over the mean of the last three reported FCFs — shared by the
  *  dividend_coverage gate and the dividend outlook so the card can never disagree with the gate. */
-export function dividendCoverageRatio(dps: number, financials: FiscalYearFinancials[]): { ratio: number; meanFcf: number; shares: number } | null {
+export function dividendCoverageRatio(dps: number, financials: FiscalYearFinancials[]): { ratio: number; meanFcf: number; shares: number; years: number } | null {
   const latest = financials[financials.length - 1];
-  const fcfs = financials.map((f) => f.freeCashFlow).filter((v): v is number => v != null).slice(-3);
+  const fcfs = financials.map((f) => f.freeCashFlow).filter((v): v is number => v != null).slice(-DIVIDEND_FCF_LOOKBACK_YEARS);
   if (!latest?.sharesDiluted || fcfs.length === 0) return null;
   const meanFcf = fcfs.reduce((a, b) => a + b, 0) / fcfs.length;
-  if (meanFcf <= 0) return { ratio: Infinity, meanFcf, shares: latest.sharesDiluted };
-  return { ratio: (dps * latest.sharesDiluted) / meanFcf, meanFcf, shares: latest.sharesDiluted };
+  if (meanFcf <= 0) return { ratio: Infinity, meanFcf, shares: latest.sharesDiluted, years: fcfs.length };
+  return { ratio: (dps * latest.sharesDiluted) / meanFcf, meanFcf, shares: latest.sharesDiluted, years: fcfs.length };
 }
 ```
 
-`checkDividendCoverage` (03) viene riscritto sopra questa funzione con lo stesso esito e lo stesso `detail` (`meanFcf ≤ 0` → fail `mean FCF X ≤ 0`; altrimenti `DPS … · ratio X.XX`, ratio ≤ 1 pass, > 1 fail). I controlli di dataset e valuta restano prima.
+`checkDividendCoverage` (`lib/grounding/postcheck.ts`) viene riscritto sopra questa funzione con lo stesso esito e lo stesso `detail` (`meanFcf ≤ 0` → fail `mean FCF X ≤ 0`; altrimenti `DPS … × shares … = … · mean FCF(Ny) … · ratio X.XX`, con N = `years`, ratio ≤ 1 pass, > 1 fail): per questo la funzione restituisce anche `years`. Il non-payer (`dividends: null` → pass «no dividend») e i controlli di dataset e valuta restano prima.
 
 ### 4.2 `lib/dividends/projection.ts` — C-11
 
@@ -143,7 +143,7 @@ I guard di valuta non stanno qui (la funzione è aritmetica): li applica il comp
 - `components/report/dividend-chart.tsx` (client, Recharts `ComposedChart`): props `{ stats: DividendStats | null; path: DividendPathYear[] | null; extract: GroundedFinancials | null; currency: string }`. Dati = un punto per ogni anno nell'unione ordinata di `stats.years[].fiscalYear` e `path[].year`: `{ fiscalYear, dps?: number, bull?: number, base?: number, bear?: number, source: DataSource | null }` (`source = extract?.financials.find(f => f.fiscalYear === fy)?.sources?.income ?? null`); `Bar` DPS storico (`var(--chart-1)`), tre `Line` tratteggiate con `connectNulls={false}` e valori solo sugli anni del sentiero (bull `--chart-2`, base `--chart-3`, bear `--chart-4`), senza raccordo con l'ultima barra; un anno presente in entrambi mostra barra e punti; gli anni mancanti non si inventano; `ResponsiveContainer height=200`; tooltip custom con `SourceChip` (legge `payload[0].payload.source`); `isAnimationActive={false}` su ogni serie. Struttura a11y: `<figure>` con dentro `<div role="img" aria-label={t("dividendChartAria")}>` (il chart) e, come FRATELLO di quel div, `<table className="sr-only">` con colonne anno, DPS, bull, base, bear (i figli di `role="img"` sono presentazionali per ARIA). Sotto, `<SourceLegend extract={extract} statement="income" />`.
 - `components/report/source-legend.tsx` (nuovo, C-17): props `{ extract: GroundedFinancials | null; statement?: "income" | "balance" | "cashFlow" }`; elenca le fonti distinte (`DataSource` per `url`/`blockId`) del prospetto indicato (o di tutti) con il conteggio di anni e il chip; ignora le righe senza `sources`; non si renderizza se nessuna riga ne ha. Titolo `t("chartSourcesLegend")`.
 - `app/globals.css`: in `:root` `--chart-1: var(--muted); --chart-2: var(--success); --chart-3: var(--accent); --chart-4: var(--danger); --chart-grid: #1e2d47; --chart-axis: var(--muted);` (alias dei colori già in uso; nessun colore nuovo: `#1e2d47` è la griglia già usata da `portfolio-history-chart.tsx`). `@theme inline`: `--color-chart-1…4`. In `@media print` dentro `print.css`: `--chart-grid: #cbd5e1; --chart-axis: #475569` (leggibili su bianco). La 08b migra tutto alla famiglia nuova.
-- `components/analysis-detail-body.tsx` (03): monta `<DividendOutlook result={meta} extract={groundingExtract} price={price.status === "ready" ? { value: price.value, currency: price.currency } : null} position={position ? { weightedAvgCost: position.weightedAvgCost, currency: position.currency } : null} />` sotto `ValuationChecksCard` (anche quando il prezzo è `none`: allora senza yield) quando `financials.some((f) => (f.dividendsPerShare ?? 0) > 0) || (meta != null && meta.dividends !== undefined)` (D-45). `app/analyses/[id]/page.tsx` passa `position` = `aggregateOpenLots(positions)` (`lib/portfolio-math.ts`) con `currency = positions.every((p) => p.currency === positions[0].currency) ? positions[0].currency : null`; `null` senza lotti aperti; con lotti in valute diverse `{ weightedAvgCost, currency: null }` → la card mostra la nota mismatch (03 § 4.3: il tipo di `position` ammette `currency: string | null`).
+- `components/analysis-detail-body.tsx`: dentro `ValuationBody` (che riceve già `result`, `groundingExtract`, `price` e `position`), dopo lo slot della card (la `ValuationChecksCard` o la riga «no price»), monta `<DividendOutlook result={result} extract={groundingExtract} price={price.status === "ready" ? { value: price.value, currency: price.currency } : null} position={position ? { weightedAvgCost: position.weightedAvgCost, currency: position.currency } : null} />` (anche quando il prezzo è `none`: allora senza yield) quando `(groundingExtract?.financials ?? []).some((f) => (f.dividendsPerShare ?? 0) > 0) || result.dividends !== undefined` (D-45); senza terna completa `ValuationBody` non c'è e nemmeno la card. `app/analyses/[id]/page.tsx` passa `position` = `aggregateOpenLots(positions)` (`lib/portfolio-math.ts`) con `currency = positions.every((p) => p.currency === positions[0].currency) ? positions[0].currency : null`; `null` senza lotti aperti; con lotti in valute diverse `{ totalShares, weightedAvgCost, currency: null }` → la card mostra la nota mismatch. Il tipo `OpenPosition` di `analysis-detail-body.tsx` oggi ha `currency: string`: la 06 lo allarga a `string | null` (il banner con `currency: null` non mostra il P&L, perché `sameCurrency(…, null)` è falso, e dice perché).
 
 ### 4.4 i18n
 

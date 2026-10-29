@@ -6,6 +6,7 @@
 import type { SavedAnalysis } from "@/types/analysis";
 import { consensusTriple } from "@/lib/report/consensus";
 import { grossUpToIntrinsic } from "@/lib/report/valuation";
+import { sameCurrency } from "@/lib/grounding/currency";
 
 /** The newest analysis that carries a full bull/base/bear triple, or null. */
 export function latestAnalysisWithValues(analysesNewestFirst: SavedAnalysis[]): SavedAnalysis | null {
@@ -35,6 +36,78 @@ export function verdictBasis(a: SavedAnalysis): VerdictBasis | null {
     intrinsicBase: grossUpToIntrinsic(buyTargetBase, mos),
     source: consensus ? "consensus" : "analysis",
   };
+}
+
+/** The live price a verdict, a ruler's price dot or an exit signal may weigh against this
+ *  analysis's values — or null when the quote is in another currency than the analysis, or
+ *  either is unknown (sameCurrency). An LSE quote in GBp against values in GBP is off by a
+ *  factor of 100: until 2026-10-29 every list compared them anyway. The price itself is
+ *  still shown; the caller says why no comparison is (currencyMismatch). */
+export function comparablePrice(
+  price: number | null | undefined,
+  quoteCurrency: string | null | undefined,
+  a: Pick<SavedAnalysis, "currency">
+): number | null {
+  return price != null && sameCurrency(quoteCurrency, a.currency) ? price : null;
+}
+
+/** A price is there but in another currency than the analysis: the comparison is dropped
+ *  and the reader is told why, never left with a silent blank. */
+export function currencyMismatch(
+  price: number | null | undefined,
+  quoteCurrency: string | null | undefined,
+  a: Pick<SavedAnalysis, "currency">
+): boolean {
+  return price != null && comparablePrice(price, quoteCurrency, a) == null;
+}
+
+export type ExitSignal = {
+  triggered: boolean;
+  fairValueBase: number | null;
+  // A price is there but in another currency than the analysis: no signal, and a note.
+  currencyMismatch: boolean;
+};
+
+/** The portfolio's exit signal: a value investor's margin of safety is exhausted once the
+ *  price reaches the INTRINSIC base (before the MoS discount, not the stored buy target,
+ *  or the alert would fire at the entry price) of the same basis the /analyses verdict
+ *  uses — the consensus once a lens ran (2026-10-28: before, the pill could contradict the
+ *  verdict shown for the same ticker), on the newest analysis with fair values, and only on
+ *  a quote in that analysis's currency. */
+export function getExitSignal(
+  currentPrice: number | null | undefined,
+  quoteCurrency: string | null | undefined,
+  analysesNewestFirst: SavedAnalysis[]
+): ExitSignal {
+  const latest = latestAnalysisWithValues(analysesNewestFirst);
+  const basis = latest && verdictBasis(latest);
+  if (!latest || !basis) return { triggered: false, fairValueBase: null, currencyMismatch: false };
+  const price = comparablePrice(currentPrice, quoteCurrency, latest);
+  if (price == null) return { triggered: false, fairValueBase: null, currencyMismatch: currencyMismatch(currentPrice, quoteCurrency, latest) };
+  return { triggered: price >= basis.intrinsicBase, fairValueBase: basis.intrinsicBase, currencyMismatch: false };
+}
+
+export type DigestPriceRead = {
+  upside: number | null; // (buy target − price) / price; null without a comparable price
+  status: "under" | "over" | "unknown";
+  currencyMismatch: boolean;
+};
+
+/** The digest's read of a watched ticker against the item's buy target (watchlistBuyTarget),
+ *  on a quote in the analysis's own currency only: another currency reads "unknown", and
+ *  the email says why. */
+export function digestPriceRead(
+  price: number | null | undefined,
+  quoteCurrency: string | null | undefined,
+  a: SavedAnalysis,
+  itemMosFraction: number
+): DigestPriceRead {
+  const buyTarget = watchlistBuyTarget(a, itemMosFraction);
+  const comparable = comparablePrice(price, quoteCurrency, a);
+  if (buyTarget == null || comparable == null) {
+    return { upside: null, status: "unknown", currencyMismatch: currencyMismatch(price, quoteCurrency, a) };
+  }
+  return { upside: (buyTarget - comparable) / comparable, status: buyTarget >= comparable ? "under" : "over", currencyMismatch: false };
 }
 
 /** The watchlist's buy target: the verdict basis on the intrinsic scale, re-discounted with

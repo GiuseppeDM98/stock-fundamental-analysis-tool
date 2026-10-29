@@ -331,6 +331,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           markdown={markdownContent}
           result={result}
           currentPrice={currentPrice}
+          priceCurrency={currency}
           // The MoS the fair values were computed at, not the slider's current value.
           mosPercent={runInputs?.mosPercent ?? mosPercent}
           labels={{
@@ -345,6 +346,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
             buyTargetHeader: t("recapBuyTarget"),
             fairValueHeader: t("recapFairValue"),
             fvShort: t("fvShort"),
+            recapCurrencyMismatch: t("recapCurrencyMismatch"),
           }}
         />
       )}
@@ -359,7 +361,9 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           extract={runInputs.grounding?.extract ?? null}
           mosPercent={runInputs.mosPercent}
           currentPrice={runInputs.currentPrice}
-          currency={runInputs.currency ?? result.currency}
+          // An unknown quote currency stays unknown: assuming the report's would compare
+          // a price in pence with values in pounds.
+          currency={runInputs.currency ?? ""}
           priceSource="live"
           reportMd={stripJsonBlock(report)}
         />

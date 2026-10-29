@@ -2,6 +2,7 @@
 // validation for /api/ai/deep-value. Mirrors types/grounding.ts field-for-field; kept in
 // one place so the two never silently drift apart.
 import { z } from "zod";
+import type { GroundedFinancials } from "@/types/grounding";
 import {
   GROUNDING_BLOCK_KINDS,
   GROUNDING_MAX_BLOCK_CHARS,
@@ -109,3 +110,21 @@ export const groundingPayloadSchema = z.object({
     }),
   extract: groundedFinancialsSchema,
 });
+
+/**
+ * The extract of a persisted GroundingPayload (Analysis.groundingJson), validated again on
+ * read. The column is client-sent text, stored with only a length cap, so a malformed or
+ * partial blob is read as no dataset, never handed to the gates in a shape they would crash
+ * on: until 2026-10-29 it was cast unchecked. Only the extract is read: no reader uses the
+ * stored blocks. Extracts saved before marketCap/enterpriseValue existed still parse (their
+ * defaults above).
+ */
+export function parseStoredExtract(raw: string | null | undefined): GroundedFinancials | null {
+  if (!raw) return null;
+  try {
+    const parsed = groundedFinancialsSchema.safeParse(JSON.parse(raw)?.extract);
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
