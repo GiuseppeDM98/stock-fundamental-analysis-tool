@@ -7,8 +7,8 @@ import { sumDividendsByTicker, type DividendTotals } from "@/lib/portfolio-math"
 import type { SnapshotData } from "@/types/portfolio";
 
 /** The one server-side reader of received dividends: every snapshot of the user, parsed row
- *  by row (a malformed `data` is skipped, never fatal), summed by sumDividendsByTicker. Used
- *  by GET /api/portfolio/dividends and by the stock page loader. */
+ *  by row (a malformed `data` is skipped, never fatal), summed by sumDividendsByTicker. Today
+ *  its one caller is GET /api/portfolio/dividends. */
 export async function loadDividendTotals(userId: string): Promise<DividendTotals> {
   const rows = await db.portfolioSnapshot.findMany({
     where: { userId },

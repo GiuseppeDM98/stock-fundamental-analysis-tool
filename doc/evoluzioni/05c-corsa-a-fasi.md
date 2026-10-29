@@ -147,7 +147,7 @@ Migrazione `add_analysis_run_status` (tre `ALTER TABLE "Analysis" ADD COLUMN …
 
 ## 6. Test
 
-Mock per le route: come `advisor-route-positions.test.ts` (01 § 6) + `@/lib/analyses-store` mockato per funzione (si asseriscono gli argomenti, non Prisma). I test dei pannelli e del hook mockano `fetch` con un `Response` il cui `body` è un `ReadableStream<Uint8Array>` di eventi SSE (`ReadableStream` e `TextDecoder` sono globali in Node 24 e nel setup jsdom di Vitest 4); un file con `vi.mock` costruisce gli elementi con `createElement` (gotcha #31b).
+Mock per le route: come `__tests__/advisor-route-positions.test.ts` + `@/lib/analyses-store` mockato per funzione (si asseriscono gli argomenti, non Prisma). I test dei pannelli e del hook mockano `fetch` con un `Response` il cui `body` è un `ReadableStream<Uint8Array>` di eventi SSE (`ReadableStream` e `TextDecoder` sono globali in Node 24 e nel setup jsdom di Vitest 4); un file con `vi.mock` costruisce gli elementi con `createElement` (gotcha #31b).
 
 | Livello | File | Caso | Mutazione |
 |---|---|---|---|

@@ -8,8 +8,9 @@
 > 2026-10-11) e invecchiano; i nomi e le firme no.
 > **Lettura adversariale fatta il 2026-10-11** (9 lettori Opus in sola lettura: uno per spec più
 > uno trasversale; 292 + 26 rilievi, tutti riletti sul codice; 36 decisioni dell'owner D-21…D-56;
-> 13 scelte del pianificatore T-21…T-33; tre spec divise in due per D-23). Le spec vive sono
-> dodici: 01, 02, 03, 04, 05a, 05b, 05c, 06, 07a, 07b, 08a, 08b (la 05c dal 2026-10-27).
+> 13 scelte del pianificatore T-21…T-33; tre spec divise in due per D-23). Le spec erano
+> dodici: 01, 02, 03, 04, 05a, 05b, 05c, 06, 07a, 07b, 08a, 08b (la 05c dal 2026-10-27); la 01 è
+> ritirata il 2026-10-29, le vive sono undici.
 > **Aggiornamento del 2026-10-18** (§ 3.3): DeepSeek ha pubblicato le Search/Fetch API; D-70 e
 > T-34 portano la sostituzione di Tavily nella 01; D-71 e T-35 riaprono D-5 e portano DeepSeek
 > nello stadio 1 (05a); D-72 rinomina il modello Flash nella 01; 02 e 05b allineate.
@@ -179,13 +180,13 @@ spec). Esiti che hanno orientato le decisioni:
 |---|---|---|
 | D-70 | (owner, 2026-10-18, dall'email di DeepSeek «Notice of DeepSeek Search API Pricing» del 2026-10-18, confermata su `https://api-docs.deepseek.com/guides/search` e `/quick_start/pricing` e con una chiamata reale dalla chiave del repo). DeepSeek espone due endpoint REST autonomi, `POST https://api.deepseek.com/v1/tools/search` e `POST https://api.deepseek.com/v1/tools/fetch`, con la stessa `DEEPSEEK_API_KEY` (bearer), 0,75 $ per 1.000 richieste riuscite ciascuno (errori, timeout e `results` vuoto non si pagano), 5 QPS per account, `count` 1-50, query ≤ 128 caratteri; la risposta porta `title`, `url`, `snippet`, `summary` (600-800 caratteri, per il modello), `date`, `authority`, `rerank_score`. Fatturazione per richiesta già attiva sulle chiamate dirette; dal 2026-11-01 00:00 (Pechino) anche per chi passa da DeepSeek Harness, Claude Code o Codex. **Decisione**: la ricerca web di DeepSeek passa dalla Search API di DeepSeek; Tavily e `TAVILY_API_KEY` escono dal repo. Entra nella **01** (pulizia: un fornitore e una chiave in meno, ≈ 21× meno a ricerca), prima della 02. La Fetch API di DeepSeek entra nella 05a: D-71 riapre D-5. Sull'endpoint Anthropic-compat la documentazione non descrive alcun tool server-side: il gotcha #25 resta e il tool resta client-executed. | 01, 02, 05a, 05b |
 | D-71 | (owner, 2026-10-18): **D-5 riaperta — lo stadio 1 accetta anche DeepSeek.** Con le Search/Fetch API non c'è più un vincolo tecnico: la route research risolve il modello con `researchAiSettings(userId, override)` (T-35) — Sonnet 5.5 `high` quando il provider risolto è Anthropic, il modello DeepSeek dell'utente a `high` quando è DeepSeek — e dichiara `buildResearchTools(model)`: i due tool nativi su Claude, i due tool client-executed `web_search` (Search API) + `web_fetch` (Fetch API, nuovo nella 05a) su DeepSeek, con il tetto di 8 fetch applicato dal loop. La verifica delle fonti legge anche i `tool_result` client. D-11 e T-11 riscritte di conseguenza; la riga «DeepSeek nello stadio 1» NON va più in `Not yet present`. Modelli DeepSeek vivi sul catalogo del fornitore al 2026-10-17: `deepseek-v4-pro` (il più capace) e `deepseek-flash` (= DeepSeek-V4.1-Flash-1017; `deepseek-v4-flash` è un alias ritirato): il rinomino è D-72. | 01, 05a, 05b |
-| D-72 | (owner, 2026-10-18): il catalogo dell'app rinomina `deepseek-v4-flash` → `deepseek-flash` con etichetta «DeepSeek V4.1 Flash», nella 01; `LEGACY_AI_MODEL_IDS` + `normalizeAiModelId` in `types/ai-settings.ts` risolvono in lettura i default salvati con il vecchio id (resolver e PATCH delle impostazioni), senza migrazione; nessun modello nuovo (V4 Pro resta il più capace del fornitore). Le spec successive scrivono `deepseek-flash` dove citano il modello Flash. | 01, 05a |
+| D-72 | (owner, 2026-10-18): il catalogo dell'app rinomina `deepseek-v4-flash` → `deepseek-flash` con etichetta «DeepSeek V4.1 Flash», nella 01; `LEGACY_AI_MODEL_IDS` + `normalizeAiModelId` in `types/ai-settings.ts` risolvono in lettura i default salvati con il vecchio id (resolver e PATCH delle impostazioni), senza migrazione; nessun modello nuovo (V4 Pro resta il più capace del fornitore). Le spec successive scrivono `deepseek-flash` dove citano il modello Flash. **Alias ritirato il 2026-10-29** (owner, al ritiro della 01): nessun default salvato su Turso usava più `deepseek-v4-flash` (`SELECT` a 0), quindi la voce è uscita da `LEGACY_AI_MODEL_IDS` e il vecchio id è un 400 come ogni id sconosciuto; mappa e `normalizeAiModelId` restano per gli id Claude della 08b (D-74). | 01, 05a, 08b |
 
 ### 3.4 Tagliando del 2026-10-19
 
 | # | Decisione | Spec |
 |---|---|---|
-| D-73 | (owner, 2026-10-19): l'estrazione Grounded passa all'output strutturato (`output_config.format`), con lo schema per tipo su `zod/v4`; deroga dichiarata a «nessun prompt toccato» per la sola riga OUTPUT del prompt di estrazione. | 01 (la 04 lo eredita) |
+| D-73 | (owner, 2026-10-19): l'estrazione Grounded passa all'output strutturato (`output_config.format`), con lo schema per tipo su zod 4 (import dalla root `zod` dopo D-78, non dal sottopercorso `zod/v4` scritto il 2026-10-19); deroga dichiarata a «nessun prompt toccato» per la sola riga OUTPUT del prompt di estrazione. | 01 (la 04 lo eredita) |
 | D-74 | (owner, 2026-10-19): a serie implementata ogni modello Claude dell'app è della serie 5.5 (Opus 5.5, Sonnet 5.5, Haiku 5.5), con alias in lettura per gli id vecchi; la migrazione sta nella 08b, non in una spec nuova. | 08b |
 
 ### 3.5 Limite di durata su Vercel e comando `/deep-value` (2026-10-20)
@@ -277,16 +278,16 @@ Dall'analisi del Consulente di net-worth-tracker (`app/api/allocation-advice/run
 
 | Ord. | Spec | Dipende da | Stato |
 |---|---|---|---|
-| 1 | [01-hardening-e-pulizia.md](01-hardening-e-pulizia.md) | — | riletta in modo adversariale il 2026-10-11: 36 rilievi, 7 decisioni; integrata il 2026-10-18 con B10/A11 (Search API di DeepSeek al posto di Tavily, D-70/T-34) e B11/A12 (`deepseek-flash` con alias, D-72); implementata e migrata su Turso il 2026-10-29 |
-| 2 | [02-contratto-di-valutazione-v3.md](02-contratto-di-valutazione-v3.md) | 01 (`hasFullTriple`/`ParsedAnalystResult`, i18n, PATCH con null) | riletta il 2026-10-11: 31 rilievi, 7 decisioni; pronta |
+| 1 | 01-hardening-e-pulizia (`git log -- doc/evoluzioni/01-hardening-e-pulizia.md`) | — | **ritirata il 2026-10-29** (branch `chore/retire-spec-01`); implementata in `cd4ada6` (PR #46), migrata su Turso il 2026-10-29 (`bc672d1`: otto conteggi uguali prima e dopo); il grep di A9 trova anche `lastManualWatchlistRun`, una colonna tenuta: con `grep -w` è vuoto |
+| 2 | [02-contratto-di-valutazione-v3.md](02-contratto-di-valutazione-v3.md) | 01 ritirata il 2026-10-29 (`hasFullTriple`/`ParsedAnalystResult`, i18n, PATCH con null) | riletta il 2026-10-11: 31 rilievi, 7 decisioni; pronta |
 | 3 | [03-gate-universali-e-scheda-verifiche.md](03-gate-universali-e-scheda-verifiche.md) | 02 (`resultJson`, contratto, test di route, guida) | riletta il 2026-10-11: 35 rilievi, 6 decisioni; pronta |
-| 4 | [04-dataset-finanziario-con-provenienza.md](04-dataset-finanziario-con-provenienza.md) | 01 (ticker), 02 (select, test di route, guida), 03 (`extract \| null`, `AnalysisDetailBody`) | riletta il 2026-10-11: 41 rilievi, 8 decisioni; pronta |
-| 5 | [05a-ricerca-web-stadio-1.md](05a-ricerca-web-stadio-1.md) | 01 (anche `executeWebSearch`/`callDeepSeekTool`), 02, 04 | riletta il 2026-10-11: 24 rilievi, 6 decisioni; integrata il 2026-10-18 con DeepSeek nello stadio 1 (D-71, T-35); pronta |
+| 4 | [04-dataset-finanziario-con-provenienza.md](04-dataset-finanziario-con-provenienza.md) | 01 ritirata il 2026-10-29 (ticker), 02 (select, test di route, guida), 03 (`extract \| null`, `AnalysisDetailBody`) | riletta il 2026-10-11: 41 rilievi, 8 decisioni; pronta |
+| 5 | [05a-ricerca-web-stadio-1.md](05a-ricerca-web-stadio-1.md) | 01 ritirata il 2026-10-29 (anche `executeWebSearch`/`callDeepSeekTool`), 02, 04 | riletta il 2026-10-11: 24 rilievi, 6 decisioni; integrata il 2026-10-18 con DeepSeek nello stadio 1 (D-71, T-35); pronta |
 | 6 | [05b-percorso-unico-dataset.md](05b-percorso-unico-dataset.md) | 02, 03, 04, 05a | riletta il 2026-10-11: 17 rilievi, 8 decisioni; allineata il 2026-10-18 a D-70/D-71; pronta |
 | 7 | [05c-corsa-a-fasi.md](05c-corsa-a-fasi.md) | 02, 03, 04, 05a, 05b | scritta il 2026-10-27 (D-77, D-79, D-80, D-81); riletta in modo adversariale lo stesso giorno: 68 rilievi, 15 decisioni (D-82…D-96, D-77 riscritta), 8 scelte (T-39…T-46); pronta |
 | 8 | [06-dividendi.md](06-dividendi.md) | 02 (`dividends`), 03 (gate, `AnalysisDetailBody`, `sameCurrency`), 04 (dataset), 05a/05b (seed ORNT, fixture) | riletta il 2026-10-11: 29 rilievi, 5 decisioni; pronta |
-| 9 | [07a-riepilogo-ticker-storico-prezzo.md](07a-riepilogo-ticker-storico-prezzo.md) | 01 (C-2, C-14), 02 (C-15), 06 (ordine) | riletta il 2026-10-11: 20 rilievi, 5 decisioni; pronta |
-| 10 | [07b-pagina-titolo.md](07b-pagina-titolo.md) | 01, 02, 03, 04, 05a, 06, 07a | riletta il 2026-10-11: 22 rilievi, 6 decisioni; pronta |
+| 9 | [07a-riepilogo-ticker-storico-prezzo.md](07a-riepilogo-ticker-storico-prezzo.md) | 01 ritirata il 2026-10-29 (C-2, C-14), 02 (C-15), 06 (ordine) | riletta il 2026-10-11: 20 rilievi, 5 decisioni; pronta |
+| 10 | [07b-pagina-titolo.md](07b-pagina-titolo.md) | 01 (ritirata il 2026-10-29), 02, 03, 04, 05a, 06, 07a | riletta il 2026-10-11: 22 rilievi, 6 decisioni; pronta |
 | 11 | [08a-redesign-direzione.md](08a-redesign-direzione.md) | 07b (tutte le superfici esistono) | riletta il 2026-10-11: 12 rilievi, 5 decisioni; pronta |
 | 12 | [08b-redesign-build.md](08b-redesign-build.md) | 08a, 07a, 06, 07b | riletta il 2026-10-11: 25 rilievi, 8 decisioni; pronta |
 | 13 | Riallineamento di `/deep-value` (D-76): sessione senza spec propria finché non la si scrive | 08b (e tutte le precedenti) | da scrivere; il comando è sospeso dal merge della 02 |

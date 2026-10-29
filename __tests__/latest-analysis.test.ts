@@ -90,6 +90,19 @@ describe("watchlistBuyTarget", () => {
     expect(watchlistBuyTarget(a, 0.3)).toBeCloseTo(70, 10);
   });
 
+  it("should use the item's MoS, not the analysis's, when the two differ", () => {
+    // Analysis MoS 30%, consensus base (80+60)/2 = 70 → intrinsic 100; an item at 20% buys at 80.
+    // Returning the analysis's own buy target (70) or discounting it twice (56) both miss it.
+    const a = makeAnalysis({
+      ...VALUED,
+      mosPercent: 30,
+      reviewFairValueBear: 40,
+      reviewFairValueBase: 60,
+      reviewFairValueBull: 80,
+    });
+    expect(watchlistBuyTarget(a, 0.2)).toBeCloseTo(80, 10);
+  });
+
   it("should be null without a base fair value", () => {
     expect(watchlistBuyTarget(makeAnalysis({}), 0.2)).toBeNull();
   });

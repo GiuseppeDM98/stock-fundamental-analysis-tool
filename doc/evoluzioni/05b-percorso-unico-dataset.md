@@ -103,7 +103,7 @@ Nessun DDL. Deploy; prima ricerca reale in produzione → `SELECT origin, length
 ## 9. Documentazione
 
 - `doc/guide/valutazione.md § Flusso /analyze` e `§ Regole del dataset nel prompt`.
-- `CLAUDE.md` (misurare): «Deep Dive — /analyze» riscritta (dataset → anteprima → analisi, ≤ 500 caratteri, oggi 361: +140); «Financial dataset (paste)» (04) → «Financial dataset (web or paste)» con una riga sulla ricerca (+120); «Not yet present»: due righe (prompt caching dello stadio 2, aggiornamento incrementale del dataset: +160; la riga sulla ricerca con DeepSeek la scrive la 01, D-70); si compensa togliendo da «Deep Value Analysis» (già dimezzata dalla 02) la frase sul «Stream suppression» e sulla «Date injection», ormai nella guida (−500). Saldo ≈ −80.
+- `CLAUDE.md` (misurare): «Deep Dive — /analyze» riscritta (dataset → anteprima → analisi, ≤ 500 caratteri, oggi 361: +140); «Financial dataset (paste)» (04) → «Financial dataset (web or paste)» con una riga sulla ricerca (+120); «Not yet present»: due righe (prompt caching dello stadio 2, aggiornamento incrementale del dataset: +160); si compensa togliendo da «Deep Value Analysis» (già dimezzata dalla 02) la frase sul «Stream suppression» e sulla «Date injection», ormai nella guida (−500). Saldo ≈ −80.
 - `AGENTS.md` (saldo zero): nello stub la frase «un solo percorso: ogni analisi ha un dataset».
 - `README.md`: il flusso in due stadi e la nota costi/tempi.
 - `WORKFLOW.md § 3`: la frase sul golden Quick → «il golden `deep-value-prompts-golden.test.ts`».

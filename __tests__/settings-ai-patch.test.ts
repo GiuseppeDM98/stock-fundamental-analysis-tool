@@ -28,11 +28,18 @@ describe("PATCH /api/settings/ai", () => {
     updateMock.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => data);
   });
 
-  it("should save the retired Flash id as its successor", async () => {
-    const res = await PATCH(patch({ model: "deepseek-v4-flash", effort: "low", thinking: true }));
+  it("should save a catalog id as sent", async () => {
+    const res = await PATCH(patch({ model: "deepseek-flash", effort: "low", thinking: true }));
     expect(res.status).toBe(200);
     expect(updateMock.mock.calls[0][0].data.aiModel).toBe("deepseek-flash");
     expect((await res.json()).model).toBe("deepseek-flash");
+  });
+
+  it("should reject the retired Flash id (alias removed 2026-10-29) with a 400", async () => {
+    const res = await PATCH(patch({ model: "deepseek-v4-flash", effort: "low", thinking: true }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("Unknown AI model");
+    expect(updateMock).not.toHaveBeenCalled();
   });
 
   it("should reject an unknown model with a 400 and the Zod message", async () => {

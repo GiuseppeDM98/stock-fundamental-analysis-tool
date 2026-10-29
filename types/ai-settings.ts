@@ -80,8 +80,10 @@ export const AI_MODEL_CATALOG: Record<AiModelId, AiModelInfo> = {
 };
 
 /** Ids the provider retired but still routes: a stored default saved under the old id keeps
- *  working and shows the current name. `deepseek-v4-flash` → V4.1 Flash since 2026-09-10. */
-export const LEGACY_AI_MODEL_IDS: Record<string, AiModelId> = { "deepseek-v4-flash": "deepseek-flash" };
+ *  working and shows the current name. Empty since 2026-10-29: `deepseek-v4-flash` (V4 Flash,
+ *  retired by DeepSeek on 2026-09-10) mapped to `deepseek-flash` until no stored default used it
+ *  any more; an unknown stored id falls back to the route default, never reaches the provider. */
+export const LEGACY_AI_MODEL_IDS: Record<string, AiModelId> = {};
 
 export const DEFAULT_AI_SETTINGS: AiSettings = {
   model: "claude-opus-4-8",

@@ -1,7 +1,7 @@
 # 02 — Contratto di valutazione v3 (JSON in coda, sensibilità, dividendi, persistenza del risultato)
 
 > **Stato**: scritta 2026-10-11; riletta in modo adversariale il 2026-10-11: 31 rilievi, 7 decisioni (D-21, D-22, D-28, D-31, D-32, D-33, D-34). Pronta per l'implementazione dopo la 01.
-> **Branch**: `feature/valuation-contract-v3` da `develop`. **Dipende da**: 01 (`hasFullTriple`/`ParsedAnalystResult`, chiavi i18n `deepValueIncompleteJson`, PATCH con `null`).
+> **Branch**: `feature/valuation-contract-v3` da `develop`. **Dipende da**: 01 ritirata il 2026-10-29 (`hasFullTriple`/`ParsedAnalystResult`, chiavi i18n `deepValueIncompleteJson`, PATCH con `null`).
 > **Indice**: [00-INDICE.md](00-INDICE.md) — decisioni D-8 (solo il campo `dividends`), D-9, D-10, D-12, D-21, D-22, D-28, D-31, D-32, D-33, D-34; scelte T-1, T-2, T-3, T-4, T-12, T-13, T-14, T-18, T-25, T-26, T-31; contratti C-4, C-5, C-6, C-15.
 
 ## 1. Il problema oggi (prove sul codice, commit `17e54b6`, 2026-10-11)
