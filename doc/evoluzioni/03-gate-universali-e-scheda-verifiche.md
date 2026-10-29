@@ -1,6 +1,6 @@
 # 03 — Gate universali e scheda verifiche
 
-> **Stato**: scritta 2026-10-11; riletta in modo adversariale il 2026-10-11: 35 rilievi, 6 decisioni (D-21, D-25, D-28, D-31, D-35; T-27). Pronta per l'implementazione dopo la 02.
+> **Stato**: scritta 2026-10-11; riletta in modo adversariale il 2026-10-11: 35 rilievi, 6 decisioni (D-21, D-25, D-28, D-31, D-35; T-27). Implementata il 2026-10-29 (nessuna migrazione); del collaudo § 7 la run Grounded reale è saltata per decisione dell'owner (nessun paste disponibile), la Quick e lo Scettico reali fatti da localhost.
 > **Branch**: `feature/universal-gates` da `develop`. **Dipende da**: 01 ritirata il 2026-10-29 (C-1 `ParsedAnalystResult`/`hasFullTriple`), 02 ritirata il 2026-10-29 (contratto v3, che estende `ParsedAnalystResult`; `resultJson`, `*ResultJson`, `deep-value-route.test.ts`, `verify-route.test.ts`, `doc/guide/valutazione.md`).
 > **Indice**: [00-INDICE.md](00-INDICE.md) — decisioni D-8 (gate copertura), D-12 (gate sensibilità), D-21, D-25, D-28, D-31, D-35; scelte T-5, T-6, T-7, T-26, T-27; contratti C-7, C-8, C-18, C-20.
 

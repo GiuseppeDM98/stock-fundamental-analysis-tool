@@ -25,6 +25,10 @@ export const DECOY = {
   panelCompany: "Ornitorinco Industries Inc.",
   panelReport: "ornitorinco-dcf-report",
   skepticCritique: "scettico-pangolino-critica",
+  /** The Skeptic's critique on the grounded analysis (blind-first, with a final JSON). */
+  groundedSkepticCritique: "pangolino-review",
+  /** The reason of that Skeptic's one revision, read back from reviewResultJson. */
+  groundedRevisionReason: "motivo-pangolino-revisione",
   optimistCritique: "rialzista-armadillo-critica",
   qualityCritique: "qualita-capibara-critica",
   legacyCompany: "Pangolino Legacy SpA",

@@ -71,8 +71,9 @@ export type CrossCheck = {
 export type SensitivityLever = { name: string; values: [number, number, number] };
 
 /** 3×3 grid declared by the model: rows follow leverA.values, columns leverB.values; the
- *  centre cell [1][1] must equal the BASE intrinsic value — the prompt demands it, but as of
- *  2026-10-29 no code checks it yet, so a mismatched centre reaches the page unflagged.
+ *  centre cell [1][1] must equal the BASE intrinsic value — the prompt demands it and the
+ *  sensitivity_center gate (lib/grounding/postcheck.ts) checks it, plus a monotonic centre
+ *  row and column.
  *  The model's own grid, with levers of its choosing — distinct from the Grounded anchors'
  *  grid, which the code computes on historical multiples as a control. */
 export type Sensitivity = {

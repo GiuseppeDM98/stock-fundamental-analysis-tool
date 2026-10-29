@@ -47,7 +47,7 @@ function controllableStream() {
   };
 }
 
-function renderPanel() {
+function renderPanel(overrides: { initialResult?: string | null; currentPrice?: number | null } = {}) {
   return render(
     <AnalystPanel
       analysisId="a1"
@@ -57,9 +57,11 @@ function renderPanel() {
       initialCritiques={{ skeptic: "old critique" }}
       initialBlind={{ skeptic: OLD_BLIND }}
       initialFinal={{ skeptic: { bull: 98, base: 87, bear: 76 } }}
+      initialResult={{ skeptic: overrides.initialResult ?? null }}
       groundingExtract={null}
-      currentPrice={null}
+      currentPrice={overrides.currentPrice ?? null}
       currency="EUR"
+      priceSource="live"
     />
   );
 }
@@ -116,9 +118,11 @@ describe("AnalystPanel blind card during a run", () => {
         initialCritiques={{}}
         initialBlind={{}}
         initialFinal={{}}
+        initialResult={{}}
         groundingExtract={extract}
         currentPrice={2.2}
         currency="EUR"
+        priceSource="live"
       />
     );
     // ANALYST_ANGLES order puts the Skeptic first.
@@ -133,10 +137,10 @@ describe("AnalystPanel blind card during a run", () => {
       stream.close();
     });
 
-    const finalGate = await screen.findByText(/Final · kill_price/);
+    const finalGate = await screen.findByText(/Final · Kill price declared/);
     expect(finalGate.textContent).toContain("✗");
     // The blind commitment's own kill_price gate is still listed separately, and passes.
-    expect(screen.getByText(/^✓ kill_price: 1\.50/)).toBeInTheDocument();
+    expect(screen.getByText(/^✓ Kill price declared — 1\.50/)).toBeInTheDocument();
   });
 
   it("clears the lens's numbers, without throwing, when the final JSON lacks a scenario", async () => {
@@ -188,6 +192,45 @@ describe("AnalystPanel blind card during a run", () => {
     expect(sent.critiqueMd).not.toContain(CRITIQUE_START_MARKER);
     expect(sent.fairValueBase).toBe(2.6);
   });
+
+  it("shows Re-run only once the save has settled, so a reload in between cannot drop the lens", async () => {
+    vi.mocked(updateAnalystOpinion).mockClear();
+    let settle!: () => void;
+    vi.mocked(updateAnalystOpinion).mockImplementationOnce(
+      () => new Promise((resolve) => (settle = () => resolve(undefined as never)))
+    );
+    renderPanel();
+    fireEvent.click(screen.getByText(translations.en.analystReviewRerun));
+
+    await act(async () => {
+      stream.push(`${CRITIQUE_START_MARKER}Critique body.\n\n`);
+      stream.push("```json\n" + JSON.stringify(NEW_BLIND) + "\n```");
+      stream.close();
+    });
+
+    await waitFor(() => expect(updateAnalystOpinion).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(translations.en.analystReviewRerun)).not.toBeInTheDocument();
+    await act(async () => settle());
+    expect(screen.getByText(translations.en.analystReviewRerun)).toBeInTheDocument();
+  });
+
+  it("still ends in Re-run when the save fails", async () => {
+    vi.mocked(updateAnalystOpinion).mockClear();
+    vi.mocked(updateAnalystOpinion).mockRejectedValueOnce(new Error("save failed"));
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    renderPanel();
+    fireEvent.click(screen.getByText(translations.en.analystReviewRerun));
+
+    await act(async () => {
+      stream.push(`${CRITIQUE_START_MARKER}Critique body.\n\n`);
+      stream.push("```json\n" + JSON.stringify(NEW_BLIND) + "\n```");
+      stream.close();
+    });
+
+    await waitFor(() => expect(screen.getByText(translations.en.analystReviewRerun)).toBeInTheDocument());
+    expect(consoleError).toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
 });
 
 describe("AnalystPanel effort before the global default loads", () => {
@@ -207,5 +250,69 @@ describe("AnalystPanel effort before the global default loads", () => {
     expect(url).toBe("/api/ai/deep-value/verify");
     expect(JSON.parse(init.body as string).effort).toBe("xhigh");
     await act(async () => stream.close());
+  });
+});
+
+describe("AnalystPanel after a reload reads the FINAL JSON from *ResultJson", () => {
+  const FINAL = {
+    method: "EV/EBITDA",
+    sector: "Utilities",
+    currency: "EUR",
+    bull: { fairValue: 98 },
+    base: { fairValue: 87 },
+    bear: { fairValue: 76 },
+    killPrice: 7.9,
+    revisions: [{ scenario: "base", from: 88.22, to: 87, reason: "a pangolin-sized regulatory cut" }],
+  };
+
+  it("shows the final kill price, the revisions and the final kill_price gate on the blind card", () => {
+    renderPanel({ initialResult: JSON.stringify(FINAL), currentPrice: 80 });
+
+    expect(screen.getByText("88.22")).toBeInTheDocument(); // the blind column
+    expect(screen.getByText("7.90")).toBeInTheDocument(); // the final kill price
+    expect(screen.getByText(/a pangolin-sized regulatory cut/)).toBeInTheDocument();
+    expect(screen.getByText(/Final · Kill price declared — 7\.90/)).toBeInTheDocument();
+  });
+
+  it("with no blind commitment (Quick), mounts AnalystFinalCard with the final JSON's gates", () => {
+    render(
+      <AnalystPanel
+        analysisId="a1"
+        ticker="IRE.MI"
+        reportMd="# Report"
+        mosPercent={0}
+        initialCritiques={{ skeptic: "old critique" }}
+        initialBlind={{}}
+        initialFinal={{ skeptic: { bull: 98, base: 87, bear: 76 } }}
+        initialResult={{ skeptic: JSON.stringify(FINAL) }}
+        groundingExtract={null}
+        currentPrice={80}
+        currency="EUR"
+        priceSource="analysis"
+      />
+    );
+
+    expect(screen.getByText(translations.en.analystFinalCardTitle)).toBeInTheDocument();
+    expect(screen.getByText(/✓ Kill price declared — 7\.90/)).toBeInTheDocument();
+    // The reader sees the gate's name, never its code.
+    expect(screen.queryByText(/kill_price|scenario_order|horizon_consistent/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Consistent scenario horizon/)).toBeInTheDocument();
+    expect(screen.getByText(/a pangolin-sized regulatory cut/)).toBeInTheDocument();
+    // Lenses declare no sensitivity grid nor dividend path: those gates are not listed.
+    expect(screen.queryByText(/sensitivity_center/)).not.toBeInTheDocument();
+    expect(screen.getByText(translations.en.valuationChecksPriceAtAnalysis)).toBeInTheDocument();
+  });
+
+  it("a re-run that fails before Phase 1 brings the persisted blind card and critique back", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("Failed to fetch"))));
+    renderPanel();
+    expect(screen.getByText("88.22")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText(translations.en.analystReviewRerun));
+
+    await waitFor(() => expect(screen.getByText(translations.en.analystReviewError)).toBeInTheDocument());
+    expect(screen.getByText("88.22")).toBeInTheDocument();
+    expect(screen.getByTestId("critique").textContent).toBe("old critique");
+    vi.unstubAllGlobals();
   });
 });

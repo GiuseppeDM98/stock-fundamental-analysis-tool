@@ -46,7 +46,7 @@ const WARNING_KEY: Partial<Record<ReconciliationWarning["code"], keyof Translati
   dividend_not_covered: "groundingWarnDividendNotCovered",
 };
 
-// Exported — reused by grounding-card.tsx so the two surfaces that render
+// Exported — reused by valuation-checks-card.tsx so the two surfaces that render
 // ReconciliationWarning[] (this pre-generation preview and the post-generation
 // deterministic card) never drift onto two different code→translation-key mappings.
 export function warningLabelKey(code: ReconciliationWarning["code"]): keyof Translations {

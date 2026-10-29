@@ -45,6 +45,18 @@ describe("Quick mode stays untouched by the grounding param", () => {
     const usr = buildAnalystUserPrompt({ angle: "optimist", ticker: "ENI.MI", reportMd: "# R\nBody", language: "English" });
     expect(usr).not.toContain("STRUCTURED EXTRACT");
   });
+
+  it("buildAnalystUserPrompt appends the base report's gates after the report when gatesText is passed, and only then", () => {
+    const args = { angle: "skeptic" as const, ticker: "ENI.MI", reportMd: "# R\nBody", language: "English" };
+    const gatesText = "--- DETERMINISTIC GATES ON THE BASE REPORT (computed in code — NOT the model's judgment) ---\n✓ scenario_order: bear 8.00 · base 10.00 · bull 12.00\n--- END DETERMINISTIC GATES ---";
+    const withGates = buildAnalystUserPrompt({ ...args, gatesText });
+    expect(withGates).toContain("DETERMINISTIC GATES");
+    expect(withGates.indexOf("--- END REPORT ---")).toBeLessThan(withGates.indexOf("DETERMINISTIC GATES"));
+    // Absent (not empty): the prompt is byte-identical to a call without the param — the
+    // golden Quick snapshots never pass it.
+    expect(buildAnalystUserPrompt({ ...args, gatesText: undefined })).toBe(buildAnalystUserPrompt(args));
+    expect(withGates.startsWith(buildAnalystUserPrompt(args))).toBe(true);
+  });
 });
 
 describe("Grounded mode injects the rules block + the data section", () => {

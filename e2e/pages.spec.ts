@@ -73,9 +73,9 @@ test("analyses list groups by ticker, counts match the DB, and a group expands",
   await expect(page.getByText(DECOY.panelReport)).toBeVisible();
 });
 
-test("grounded analysis detail renders the report from its stored result and the deterministic post-check card", async ({ page }) => {
-  const row = await queryOne<{ groundingJson: string | null; reportMd: string; resultJson: string | null }>(
-    "SELECT groundingJson, reportMd, resultJson FROM Analysis WHERE id = ?",
+test("grounded analysis detail renders the report from its stored result and the deterministic checks card", async ({ page }) => {
+  const row = await queryOne<{ groundingJson: string | null; reportMd: string; resultJson: string | null; reviewResultJson: string | null }>(
+    "SELECT groundingJson, reportMd, resultJson, reviewResultJson FROM Analysis WHERE id = ?",
     [IDS.analysisGrounded]
   );
   expect(row?.groundingJson, "seeded grounded row carries groundingJson").toBeTruthy();
@@ -97,9 +97,56 @@ test("grounded analysis detail renders the report from its stored result and the
   await expect(page.getByText("<!--report-->")).toHaveCount(0);
 
   // The card needs the stubbed live price + currency; it appears once the quote resolves.
-  await expect(page.getByText("Deterministic post-check")).toBeVisible();
-  await expect(page.getByText("Deterministic checks")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Deterministic checks", exact: true })).toBeVisible();
+  await expect(page.getByText("checks against the live price · 11.40 EUR")).toBeVisible();
+  // sections_present reads the Markdown: the seeded report has sections 1, 2 and 8 only.
+  await expect(page.getByText("— missing 3,4,5,6,7,9,10", { exact: true })).toBeVisible();
   await expect(page.getByText("Analyst Panel")).toBeVisible();
+
+  // The Skeptic's FINAL JSON is read back from reviewResultJson: kill price and revision
+  // reason on the blind card, the final kill_price gate under it.
+  const final = JSON.parse(row!.reviewResultJson!) as { killPrice: number; revisions: Array<{ reason: string }> };
+  expect(final.killPrice).toBe(7.9);
+  expect(final.revisions[0].reason).toContain(DECOY.groundedRevisionReason);
+  await expect(page.getByText(DECOY.groundedSkepticCritique)).toBeVisible();
+  await expect(page.getByText(/^✓ Final · Kill price declared — 7\.90$/)).toBeVisible();
+  await expect(page.getByText(new RegExp(DECOY.groundedRevisionReason))).toBeVisible();
+});
+
+test("a Quick analysis (no dataset) gets the deterministic checks card, read from its leading fence", async ({ page }) => {
+  const row = await queryOne<{ groundingJson: string | null; resultJson: string | null }>(
+    "SELECT groundingJson, resultJson FROM Analysis WHERE id = ? AND resultJson IS NULL",
+    [IDS.analysisPanel]
+  );
+  expect(row, "the panel row has no resultJson column: the card is built from the fence").toBeTruthy();
+  expect(row!.groundingJson).toBeNull();
+
+  await page.goto(`/analyses/${IDS.analysisPanel}`);
+  await expect(page.getByRole("heading", { name: "Deterministic checks", exact: true })).toBeVisible();
+  await expect(page.getByText("No dataset: basis, market-implied and net-debt gates unavailable", { exact: true })).toBeVisible();
+  expect(await page.getByText(/— no dataset$/).count()).toBeGreaterThanOrEqual(6);
+  // The gates that need only the JSON and the price still compute: bear 130 < live 150.
+  await expect(page.getByText("— bear 130.00 · price 150.00", { exact: true })).toBeVisible();
+  await expect(page.getByText("— bear 130.00 · base 180.00 · bull 220.00", { exact: true })).toBeVisible();
+  await expect(page.getByText("— missing 2,3,4,5,6,7,9,10", { exact: true })).toBeVisible();
+});
+
+test("when the live quote fails, the saved page reads the price at analysis everywhere and says so", async ({ page }) => {
+  const row = await queryOne<{ priceAtAnalysis: number }>("SELECT priceAtAnalysis FROM Analysis WHERE id = ?", [IDS.analysisPanel]);
+  expect(row!.priceAtAnalysis).toBe(142);
+  // A page route wins over the context's quote stub.
+  await page.route(`**/api/quote/${TICKERS.panel}`, (route) => route.fulfill({ status: 503, json: { error: "unavailable" } }));
+
+  await page.goto(`/analyses/${IDS.analysisPanel}`);
+  await expect(page.getByText("checks against the price at analysis (live quote unavailable) · 142.00 USD")).toBeVisible();
+  await expect(page.getByText("— bear 130.00 · price 142.00", { exact: true })).toBeVisible();
+  await expect(page.getByText("Price at analysis", { exact: true })).toBeVisible();
+  await expect(page.getByText("Current Price", { exact: true })).toHaveCount(0);
+  // The banner keeps the shares and the cost, with no P&L made up from an old price.
+  const banner = page.getByText("Open position:").locator("..");
+  await expect(banner).toContainText("20 shares @");
+  await expect(banner).not.toContainText("%");
+  await expect(banner).not.toContainText("Loading P&L");
 });
 
 test("analysis with all three lenses shows every stored critique", async ({ page }) => {
@@ -148,7 +195,7 @@ test("an old-format analysis (no JSON block, no grounding) still opens", async (
   await expect(page.getByText(DECOY.legacyReport)).toBeVisible();
   // No valuation summary and no analyst panel without a parseable JSON block.
   await expect(page.getByText("Analyst Panel")).toHaveCount(0);
-  await expect(page.getByText("Deterministic post-check")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Deterministic checks" })).toHaveCount(0);
 });
 
 test("someone else's analysis detail page is a 404 for A", async ({ page }) => {

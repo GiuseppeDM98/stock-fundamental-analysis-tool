@@ -1,5 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { checkValuationBridges, checkKillPrice, type BridgeCheckInput, type BridgeScenario } from "@/lib/grounding/postcheck";
+import {
+  checkValuationBridges,
+  checkKillPrice,
+  checkReportStructure,
+  EMPTY_BASIS,
+  type BridgeCheckInput,
+  type BridgeScenario,
+  type GateCode,
+  type PostCheck,
+} from "@/lib/grounding/postcheck";
+import type { DividendPath, Sensitivity } from "@/components/report/types";
 import { makeFinancialsRow, makeMultiplesRow, makeExtract, makeMeta } from "./grounding-test-helpers";
 
 // Shared bridge inputs — Eni-shaped: EBITDA 14200, net debt 11500, minorities 3200,
@@ -162,8 +172,12 @@ describe("checkValuationBridges — Check A/B", () => {
     expect(postCheck!.scenarios).toHaveLength(3);
   });
 
-  it("returns null on garbage input (no historical financials to check the bridge against)", () => {
-    expect(checkValuationBridges(makeInput(), 0, 14.18, "EUR", makeExtract())).toBeNull();
+  it("with empty financials returns a PostCheck with basis === EMPTY_BASIS (an empty paste reads like no dataset)", () => {
+    const postCheck = checkValuationBridges(makeInput(), 0, 14.18, "EUR", makeExtract());
+    expect(postCheck).not.toBeNull();
+    expect(postCheck!.basis).toBe(EMPTY_BASIS);
+    expect(postCheck!.marketImplied).toBeNull();
+    expect(postCheck!.gates.find((g) => g.code === "basis_same")).toEqual({ code: "basis_same", status: "unavailable", detail: "no dataset" });
   });
 
   it("degrades a scenario with NO bridge at all to all-null checks, never throws (Scenario.bridge is optional)", () => {
@@ -381,9 +395,19 @@ describe("gate: netdebt_trajectory", () => {
     expect(postCheck!.gates.find((g) => g.code === "netdebt_trajectory")!.status).toBe("pass");
   });
 
-  it("passes (vacuously) when no scenario targets latestFy+1", () => {
+  it("unavailable (never a vacuous pass) when no scenario targets latestFy+1", () => {
     const postCheck = checkValuationBridges(makeInput(), 0, 14.18, "EUR", extract); // all scenarios at driverYear=2025
-    expect(postCheck!.gates.find((g) => g.code === "netdebt_trajectory")!.status).toBe("pass");
+    const gate = postCheck!.gates.find((g) => g.code === "netdebt_trajectory")!;
+    expect(gate.status).toBe("unavailable");
+    expect(gate.detail).toBe("no scenario targets FY2026");
+  });
+
+  it("unavailable and names the long-horizon driver when a bridge points beyond FY+1 (a long DCF)", () => {
+    const longHorizon = scenarioAt(4.2, 0, 2030);
+    const postCheck = checkValuationBridges(makeInput({ base: longHorizon }), 0, 14.18, "EUR", extract);
+    const gate = postCheck!.gates.find((g) => g.code === "netdebt_trajectory")!;
+    expect(gate.status).toBe("unavailable");
+    expect(gate.detail).toBe("no scenario targets FY2026 · long-horizon driver");
   });
 
   it("unavailable (not a vacuous pass) when NO scenario declared a bridge at all", () => {
@@ -571,10 +595,12 @@ describe("gate: cross_check_basis", () => {
     expect(postCheck!.gates.find((g) => g.code === "cross_check_basis")!.status).toBe("pass");
   });
 
-  it("passes (not this signature) when the cross-check's multiple comes from peers, matching neither the raw nor adjusted median — the actual Webuild case", () => {
+  it("unavailable (never a pass) when the cross-check's multiple comes from peers, matching neither the raw nor adjusted median — the actual Webuild case", () => {
     // Webuild's real cross-check used a 6.2x peer average against neither the 11.84x raw
-    // nor the 10.40x same-basis median of Webuild's OWN history — this gate is not the one
-    // that catches that divergence (the delta-tolerance `cross_check` gate is).
+    // nor the 10.40x same-basis median of Webuild's OWN history: nothing proves which basis
+    // it was taken on, so the gate can't verify it — the same rule as basis_same. The
+    // divergence itself is the delta-tolerance `cross_check` gate's job, and "EV/EBITDA
+    // (peers)" against an "EV/EBITDA" primary is one method family: method_distinct fails.
     const postCheck = checkValuationBridges(
       makeInput({
         crossCheck: {
@@ -589,7 +615,14 @@ describe("gate: cross_check_basis", () => {
       "EUR",
       irenExtract
     );
-    expect(postCheck!.gates.find((g) => g.code === "cross_check_basis")!.status).toBe("pass");
+    const gate = postCheck!.gates.find((g) => g.code === "cross_check_basis")!;
+    expect(gate.status).toBe("unavailable");
+    expect(gate.detail).toContain("matches neither median");
+    expect(postCheck!.gates.find((g) => g.code === "method_distinct")).toEqual({
+      code: "method_distinct",
+      status: "fail",
+      detail: "EV/EBITDA vs EV/EBITDA (peers)",
+    });
   });
 
   it("unavailable when no cross-check is declared", () => {
@@ -869,5 +902,335 @@ describe("robustness: malformed model JSON degrades to unavailable, never throws
   it("returns null (not a throw) when the result isn't an object at all", () => {
     expect(checkValuationBridges(null as unknown as BridgeCheckInput, 0, 14.18, "EUR", EXTRACT)).toBeNull();
     expect(checkValuationBridges("garbage" as unknown as BridgeCheckInput, 0, 14.18, "EUR", EXTRACT)).toBeNull();
+  });
+});
+
+// ─── 2026-10: every analysis gets the gates, with or without a dataset ─────────────
+
+/** The gate with `code`, or a thrown assertion when the array lacks it. */
+function gateOf(postCheck: PostCheck | null, code: GateCode) {
+  const gate = postCheck?.gates.find((g) => g.code === code);
+  expect(gate, `gate ${code}`).toBeDefined();
+  return gate!;
+}
+
+describe("without a dataset", () => {
+  // A Quick result under the current output contract: bridges, probabilities, a cross-check with its own bridge
+  // and a sensitivity grid centred on the base intrinsic value — everything the
+  // contract-only gates read, nothing that needs a paste.
+  const baseIntrinsic = scenarioAt(4.2).bridge!.intrinsicPerShare;
+  const crossCheckIntrinsic = (4.0 * DRIVER_VALUE - NET_DEBT - MINORITIES) / SHARES;
+  const quickResult = makeInput({
+    bear: { ...scenarioAt(3.0), probability: 0.25 },
+    base: { ...scenarioAt(4.2), probability: 0.5 },
+    bull: { ...scenarioAt(5.5), probability: 0.25 },
+    crossCheck: {
+      method: "EV/RAB",
+      intrinsicPerShare: crossCheckIntrinsic,
+      reconciliation: "n/a",
+      bridge: { driver: "RAB", driverValue: DRIVER_VALUE, driverYear: LATEST_FY, multiple: 4.0, netDebt: NET_DEBT, minorities: MINORITIES, shares: SHARES },
+    },
+    sensitivity: {
+      leverA: { name: "Multiple", values: [3.8, 4.2, 4.6] },
+      leverB: { name: "EBITDA", values: [13500, 14200, 14900] },
+      intrinsicPerShare: [
+        [baseIntrinsic - 2, baseIntrinsic - 1, baseIntrinsic],
+        [baseIntrinsic - 1, baseIntrinsic, baseIntrinsic + 1],
+        [baseIntrinsic, baseIntrinsic + 1, baseIntrinsic + 2],
+      ],
+    },
+  });
+  const DATASET_GATES: GateCode[] = [
+    "basis_same",
+    "multiple_vs_market",
+    "trailing_forward",
+    "netdebt_trajectory",
+    "roic_vs_wacc",
+    "cross_check_basis",
+    "dividend_coverage",
+    "units_match",
+  ];
+
+  it("returns a PostCheck: the contract-only gates compute, the dataset gates read 'no dataset', basis is EMPTY_BASIS", () => {
+    const postCheck = checkValuationBridges(quickResult, 0, 14.18, "EUR", null);
+    expect(postCheck).not.toBeNull();
+    expect(postCheck!.basis).toBe(EMPTY_BASIS);
+    expect(postCheck!.marketImplied).toBeNull();
+    expect(postCheck!.priceAnchoringFlag).toBe(false);
+
+    for (const code of DATASET_GATES) {
+      expect(gateOf(postCheck, code)).toEqual({ code, status: "unavailable", detail: "no dataset" });
+    }
+    for (const code of ["horizon_consistent", "bear_breaks_price", "probabilities", "cross_check", "scenario_order", "method_distinct", "sensitivity_center"] as const) {
+      expect(gateOf(postCheck, code).status, code).toBe("pass");
+    }
+    expect(postCheck!.expectedValue).not.toBeNull();
+
+    // Check A/B and the statement-basis implied multiple run on the model's own bridges,
+    // the cross-check's included; only the reads that need a history stay null.
+    const base = postCheck!.scenarios.find((s) => s.scenario === "base")!;
+    expect(base.arithmeticOk).toBe(true);
+    expect(base.mosOk).toBe(true);
+    expect(base.impliedMultiple).toBeCloseTo(4.2, 6);
+    expect(base.impliedMultipleProvider).toBeNull();
+    expect(base.impliedPercentile).toBeNull();
+    expect(postCheck!.crossCheckBridge).toEqual({
+      recomputedIntrinsic: expect.closeTo(crossCheckIntrinsic, 6),
+      arithmeticOk: true,
+      impliedMultiple: expect.closeTo(4.0, 6),
+      impliedMultipleProvider: null,
+      impliedPercentile: null,
+    });
+  });
+
+  it("keeps the fixed gate order: the original ten, then the contract-only five (sections_present lives in checkReportStructure)", () => {
+    const postCheck = checkValuationBridges(quickResult, 0, 14.18, "EUR", null);
+    expect(postCheck!.gates.map((g) => g.code)).toEqual([
+      "basis_same",
+      "horizon_consistent",
+      "bear_breaks_price",
+      "multiple_vs_market",
+      "trailing_forward",
+      "netdebt_trajectory",
+      "roic_vs_wacc",
+      "probabilities",
+      "cross_check",
+      "cross_check_basis",
+      "scenario_order",
+      "method_distinct",
+      "sensitivity_center",
+      "dividend_coverage",
+      "units_match",
+    ]);
+  });
+
+  it("treats an extract with no financial rows exactly like no extract", () => {
+    expect(checkValuationBridges(quickResult, 0, 14.18, "EUR", makeExtract())).toEqual(
+      checkValuationBridges(quickResult, 0, 14.18, "EUR", null)
+    );
+  });
+});
+
+describe("gate: scenario_order", () => {
+  const at = (bear: number, base: number, bull: number) =>
+    makeInput({ bear: { fairValue: bear }, base: { fairValue: base }, bull: { fairValue: bull } });
+
+  it("passes when bear < base < bull strictly", () => {
+    expect(gateOf(checkValuationBridges(at(8, 12, 15), 0, 10, "EUR", null), "scenario_order")).toEqual({
+      code: "scenario_order",
+      status: "pass",
+      detail: "bear 8.00 · base 12.00 · bull 15.00",
+    });
+  });
+
+  it("fails when two scenarios tie (12/12/15)", () => {
+    expect(gateOf(checkValuationBridges(at(12, 12, 15), 0, 10, "EUR", null), "scenario_order").status).toBe("fail");
+  });
+
+  it("compares INTRINSIC values: the MoS-adjusted fair values are grossed up first", () => {
+    // 6.4 / 9.6 / 12 at MoS 20% are the buy targets of 8 / 12 / 15.
+    expect(gateOf(checkValuationBridges(at(6.4, 9.6, 12), 20, 10, "EUR", null), "scenario_order").detail).toBe("bear 8.00 · base 12.00 · bull 15.00");
+  });
+
+  it("unavailable when a scenario is missing", () => {
+    const noBear = { method: "EV/EBITDA", sector: "S", currency: "EUR", base: { fairValue: 12 }, bull: { fairValue: 15 } } as unknown as BridgeCheckInput;
+    expect(gateOf(checkValuationBridges(noBear, 0, 10, "EUR", null), "scenario_order")).toEqual({
+      code: "scenario_order",
+      status: "unavailable",
+      detail: "scenario missing",
+    });
+  });
+});
+
+describe("gate: method_distinct", () => {
+  const withCrossCheck = (primary: string, second: string) =>
+    makeInput({ method: primary, crossCheck: { method: second, intrinsicPerShare: 14, reconciliation: "n/a" } });
+
+  it("fails when the cross-check is the same method family ('EV/EBITDA (peers)' is still EV/EBITDA)", () => {
+    expect(gateOf(checkValuationBridges(withCrossCheck("EV/EBITDA", "EV/EBITDA (peers)"), 0, 14.18, "EUR", null), "method_distinct").status).toBe("fail");
+  });
+
+  it("passes when the families differ", () => {
+    expect(gateOf(checkValuationBridges(withCrossCheck("EV/EBITDA", "DDM"), 0, 14.18, "EUR", null), "method_distinct")).toEqual({
+      code: "method_distinct",
+      status: "pass",
+      detail: "EV/EBITDA vs DDM",
+    });
+  });
+
+  it("unavailable when a method belongs to no known family", () => {
+    const gate = gateOf(checkValuationBridges(withCrossCheck("EV/EBITDA", "Monte Carlo"), 0, 14.18, "EUR", null), "method_distinct");
+    expect(gate.status).toBe("unavailable");
+    expect(gate.detail).toBe("EV/EBITDA vs Monte Carlo · unknown method family");
+  });
+
+  it("unavailable when no cross-check is declared", () => {
+    expect(gateOf(checkValuationBridges(makeInput(), 0, 14.18, "EUR", null), "method_distinct").status).toBe("unavailable");
+  });
+});
+
+describe("gate: sensitivity_center", () => {
+  const baseIntrinsic = scenarioAt(4.2).bridge!.intrinsicPerShare; // ≈ 14.2667
+  function gridCentredOn(centre: number, middleRow?: [number, number, number]): Sensitivity {
+    return {
+      leverA: { name: "Multiple", values: [3.8, 4.2, 4.6] },
+      leverB: { name: "EBITDA", values: [13500, 14200, 14900] },
+      intrinsicPerShare: [
+        [centre - 2, centre - 1, centre],
+        middleRow ?? [centre - 1, centre, centre + 1],
+        [centre, centre + 1, centre + 2],
+      ],
+    };
+  }
+  const check = (sensitivity?: Sensitivity) =>
+    gateOf(checkValuationBridges(makeInput(sensitivity ? { sensitivity } : {}), 0, 14.18, "EUR", null), "sensitivity_center");
+
+  it("passes when the centre is the base intrinsic value within ±1% (here +0.5%)", () => {
+    expect(check(gridCentredOn(baseIntrinsic * 1.005)).status).toBe("pass");
+  });
+
+  it("fails when the centre sits 3% away from the base intrinsic value", () => {
+    const gate = check(gridCentredOn(baseIntrinsic * 1.03));
+    expect(gate.status).toBe("fail");
+    expect(gate.detail).toBe(`centre ${(baseIntrinsic * 1.03).toFixed(2)} · base ${baseIntrinsic.toFixed(2)}`);
+  });
+
+  it("fails when the central row is not monotonic (a grid that was interpolated, not recomputed)", () => {
+    const gate = check(gridCentredOn(baseIntrinsic, [baseIntrinsic - 1, baseIntrinsic, baseIntrinsic - 0.5]));
+    expect(gate.status).toBe("fail");
+    expect(gate.detail).toContain("non-monotonic");
+  });
+
+  it("unavailable when no sensitivity is declared", () => {
+    expect(check()).toEqual({ code: "sensitivity_center", status: "unavailable", detail: "sensitivity or base bridge missing" });
+  });
+});
+
+describe("gate: dividend_coverage", () => {
+  // FCF 500 / 100 / 120 / — / 110: the year without FCF is skipped BEFORE the 3-year window
+  // is taken, so the mean is (100 + 120 + 110) / 3 = 110, never (120 + 110) / 2.
+  const fcfByYear: Array<[number, number | null]> = [[2021, 500], [2022, 100], [2023, 120], [2024, null], [2025, 110]];
+  const dividendExtract = (overrides: { sharesDiluted?: number | null; fcf?: Array<number | null>; currency?: string } = {}) =>
+    makeExtract({
+      meta: makeMeta({ reportingCurrency: overrides.currency ?? "EUR", units: "millions" }),
+      financials: fcfByYear.map(([fiscalYear, fcf], i) =>
+        makeFinancialsRow({ fiscalYear, freeCashFlow: overrides.fcf ? overrides.fcf[i] : fcf, sharesDiluted: overrides.sharesDiluted === undefined ? 100 : overrides.sharesDiluted })
+      ),
+    });
+  // Base DPS 0.88 × 100 shares = 88 vs mean FCF 110 → 0.80. The bull DPS 1.20 would give
+  // 1.09: reading the wrong column turns this pass into a fail.
+  const dividends = (base: number, bull = 1.2): DividendPath => ({
+    policy: "n/a",
+    lastDps: 0.8,
+    path: [
+      { year: 2026, bull, base, bear: base * 0.9 },
+      { year: 2027, bull, base, bear: base * 0.9 },
+      { year: 2028, bull, base, bear: base * 0.9 },
+    ],
+  });
+  const check = (input: BridgeCheckInput, extract: Parameters<typeof checkValuationBridges>[4]) =>
+    gateOf(checkValuationBridges(input, 0, 14.18, "EUR", extract), "dividend_coverage");
+
+  it("passes 'no dividend' for a declared non-payer, even without a dataset", () => {
+    expect(check(makeInput({ dividends: null }), null)).toEqual({ code: "dividend_coverage", status: "pass", detail: "no dividend" });
+  });
+
+  it("passes when the first-year BASE dividend is covered by the mean of the last three reported FCFs (ratio 0.80)", () => {
+    expect(check(makeInput({ dividends: dividends(0.88) }), dividendExtract())).toEqual({
+      code: "dividend_coverage",
+      status: "pass",
+      detail: "DPS 0.88 × shares 100 = 88 · mean FCF(3y) 110 · ratio 0.80",
+    });
+  });
+
+  it("fails when the dividend exceeds the FCF it is paid from (ratio 1.40)", () => {
+    const gate = check(makeInput({ dividends: dividends(1.54) }), dividendExtract());
+    expect(gate.status).toBe("fail");
+    expect(gate.detail).toContain("ratio 1.40");
+  });
+
+  it("fails when the mean FCF is negative", () => {
+    const gate = check(makeInput({ dividends: dividends(0.5) }), dividendExtract({ fcf: [null, null, -10, -20, -30] }));
+    expect(gate).toEqual({ code: "dividend_coverage", status: "fail", detail: "mean FCF -20 ≤ 0" });
+  });
+
+  it("unavailable without a share count", () => {
+    expect(check(makeInput({ dividends: dividends(0.88) }), dividendExtract({ sharesDiluted: null })).status).toBe("unavailable");
+  });
+
+  it("unavailable without a dataset", () => {
+    expect(check(makeInput({ dividends: dividends(0.88) }), null)).toEqual({ code: "dividend_coverage", status: "unavailable", detail: "no dataset" });
+  });
+
+  it("unavailable, never computed, when the dataset reports in another currency", () => {
+    expect(check(makeInput({ dividends: dividends(0.88) }), dividendExtract({ currency: "USD" }))).toEqual({
+      code: "dividend_coverage",
+      status: "unavailable",
+      detail: "currency mismatch",
+    });
+  });
+});
+
+describe("gate: units_match", () => {
+  const unitsExtract = makeExtract({ meta: makeMeta({ reportingCurrency: "EUR", units: "millions" }), financials: EXTRACT.financials, multiples: EXTRACT.multiples });
+  const check = (input: BridgeCheckInput) => gateOf(checkValuationBridges(input, 0, 14.18, "EUR", unitsExtract), "units_match");
+
+  it("passes when the declared units are the dataset's", () => {
+    expect(check(makeInput({ units: "millions" }))).toEqual({ code: "units_match", status: "pass", detail: "millions vs millions" });
+  });
+
+  it("fails when they differ", () => {
+    expect(check(makeInput({ units: "thousands" })).status).toBe("fail");
+  });
+
+  it("unavailable when the result declares no units", () => {
+    expect(check(makeInput())).toEqual({ code: "units_match", status: "unavailable", detail: "units undeclared" });
+  });
+});
+
+describe("price gates compare only like currencies", () => {
+  // An LSE ticker: the quote in pence (GBp), the report in pounds (GBP) — 3.50 is not 350.
+  const pounds = makeInput({
+    currency: "GBP",
+    bear: { ...scenarioAt(3.0), probability: 0.25 },
+    base: { ...scenarioAt(4.2), probability: 0.5 },
+    bull: { ...scenarioAt(5.5), probability: 0.25 },
+  });
+
+  it("bear_breaks_price is unavailable and expectedValue null when the quote is in another currency", () => {
+    const postCheck = checkValuationBridges(pounds, 0, 1418, "GBp", null);
+    expect(gateOf(postCheck, "bear_breaks_price")).toEqual({ code: "bear_breaks_price", status: "unavailable", detail: "currency mismatch" });
+    expect(postCheck!.expectedValue).toBeNull();
+  });
+
+  it("the same result against a quote in its own currency is compared (positive control)", () => {
+    const postCheck = checkValuationBridges(pounds, 0, 14.18, "GBP", null);
+    expect(gateOf(postCheck, "bear_breaks_price").status).toBe("pass");
+    expect(postCheck!.expectedValue).not.toBeNull();
+  });
+});
+
+describe("checkReportStructure (sections_present)", () => {
+  const report = (numbers: number[], heading = (n: number) => `## ${n}. Section ${n}`) =>
+    numbers.map((n) => `${heading(n)}\n\nBody of section ${n}.`).join("\n\n");
+  const ALL = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+  it("passes with all ten numbered sections", () => {
+    expect(checkReportStructure(report(ALL))).toEqual({ code: "sections_present", status: "pass", detail: "10/10" });
+  });
+
+  it("fails and names the missing number", () => {
+    expect(checkReportStructure(report(ALL.filter((n) => n !== 7)))).toEqual({ code: "sections_present", status: "fail", detail: "missing 7" });
+  });
+
+  it("reads only the number, so an Italian report counts", () => {
+    const italian = report(ALL, (n) => (n === 3 ? "## 3. Metodo" : `## ${n}. Sezione`));
+    expect(checkReportStructure(italian).status).toBe("pass");
+  });
+
+  it("accepts a fullwidth '．' and a ')' after the number, and is not fooled by '## 10.' or a JSON fence", () => {
+    const mixed = report(ALL, (n) => (n === 1 ? "## 1．概要" : n === 2 ? "## 2) Moat" : `## ${n}. Section`)) + '\n\n```json\n{"method":"DCF"}\n```';
+    expect(checkReportStructure(mixed).status).toBe("pass");
+    expect(checkReportStructure("## 10. Only the last").detail).toBe("missing 1,2,3,4,5,6,7,8,9");
   });
 });
