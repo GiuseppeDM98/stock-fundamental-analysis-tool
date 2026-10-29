@@ -23,7 +23,7 @@ import { AiSettingsControl } from "@/components/ai-settings-control";
 import { fetchAiSettings } from "@/lib/ai-settings-client";
 import { DEFAULT_AI_SETTINGS, deepValueDefaultEffort, type AiSettings } from "@/types/ai-settings";
 import type { GroundingPayload } from "@/types/grounding";
-import { GroundingCard } from "@/components/report/grounding-card";
+import { ValuationChecksCard } from "@/components/report/valuation-checks-card";
 import { buildSaveAnalysisRequest, parseResolvedAiSettings, type DeepValueRunInputs } from "@/lib/report/deep-value-run";
 
 type Props = {
@@ -31,7 +31,7 @@ type Props = {
   companyName?: string;
   mosPercent?: number;
   currentPrice?: number;
-  // Quote currency — needed by <GroundingCard>'s currency-mismatch guard (the market-
+  // Quote currency — needed by <ValuationChecksCard>'s currency guards (the market-
   // implied read must never divide a price in one currency by an EBITDA in another).
   currency?: string;
   // Confirmed Grounded-mode payload from <GroundingInput>, lifted in analyze-client.tsx.
@@ -86,7 +86,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
     ...DEFAULT_AI_SETTINGS,
     effort: deepValueDefaultEffort(DEFAULT_AI_SETTINGS.model, DEFAULT_AI_SETTINGS.effort),
   });
-  // Inputs frozen when Generate is pressed — what Save and the post-check card describe,
+  // Inputs frozen when Generate is pressed — what Save and the checks card describe,
   // so editing the paste, the MoS slider or the quote after a run can't mislabel it.
   const [runInputs, setRunInputs] = useState<DeepValueRunInputs | null>(null);
 
@@ -349,16 +349,19 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
         />
       )}
 
-      {/* Deterministic post-check card — Grounded runs only. Recomputes the model's own
-          declared bridge from the extract this run actually used (not the live input,
-          which may have been edited since), before and independently of any save. */}
-      {status === "done" && hasFullTriple(result) && runInputs?.grounding && runInputs.currentPrice != null && runInputs.currency && (
-        <GroundingCard
+      {/* Deterministic checks card — every run with a complete block and a price, Quick
+          included (its dataset gates read "no dataset"). Recomputes the model's own declared
+          bridge from the extract this run actually used (not the live input, which may
+          have been edited since), before and independently of any save. */}
+      {status === "done" && hasFullTriple(result) && runInputs?.currentPrice != null && (
+        <ValuationChecksCard
           result={result}
-          extract={runInputs.grounding.extract}
+          extract={runInputs.grounding?.extract ?? null}
           mosPercent={runInputs.mosPercent}
           currentPrice={runInputs.currentPrice}
-          currency={runInputs.currency}
+          currency={runInputs.currency ?? result.currency}
+          priceSource="live"
+          reportMd={stripJsonBlock(report)}
         />
       )}
 

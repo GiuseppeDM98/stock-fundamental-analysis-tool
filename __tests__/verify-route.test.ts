@@ -26,6 +26,7 @@ vi.mock("@/lib/ai/tool-loop", async (importOriginal) => ({
 }));
 
 import { POST } from "@/app/api/ai/deep-value/verify/route";
+import { getQuote } from "@/lib/yahoo-client";
 
 function post(body: unknown): Request {
   return new Request("http://localhost/api/ai/deep-value/verify", {
@@ -43,6 +44,13 @@ function streams(chunks: string[], stopReason = "end_turn") {
 }
 
 const FINAL = '```json\n{"method":"DCF","sector":"S","currency":"EUR","bull":{"fairValue":12},"base":{"fairValue":10},"bear":{"fairValue":8}}\n```';
+
+// The saved base result the gates run on (the result column, read before the fence).
+const BASE_RESULT_JSON = JSON.stringify({ method: "EV/EBITDA", sector: "S", currency: "EUR", bull: { fairValue: 12 }, base: { fairValue: 10 }, bear: { fairValue: 8 } });
+
+/** The user message of the n-th model call. */
+const userPromptOf = (call: number) =>
+  (runStreamMock.mock.calls[call][1] as { messages: Array<{ content: string }> }).messages[0].content;
 
 describe("POST /api/ai/deep-value/verify — single-phase review", () => {
   beforeEach(() => {
@@ -90,6 +98,39 @@ describe("POST /api/ai/deep-value/verify — single-phase review", () => {
     await (await POST(post({ ticker: "AAA", reportMd: "## 1. X", effort: "low" }))).text();
     expect((runStreamMock.mock.calls[0][1] as { output_config: { effort: string } }).output_config.effort).toBe("low");
   });
+
+  it("selects the price at analysis, the result column and the save date with the row", async () => {
+    streams(["<!--critique-->Critique"]);
+    await (await POST(post({ ticker: "AAA", reportMd: "## 1. X", analysisId: "an1" }))).text();
+    expect(analysisFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ select: expect.objectContaining({ priceAtAnalysis: true, resultJson: true, createdAt: true }) })
+    );
+  });
+
+  it("puts the deterministic gates on the base report into the single-phase (Quick) prompt", async () => {
+    analysisFindFirst.mockResolvedValue({ groundingJson: null, mosPercent: 20, reportMd: "## 1. X", priceAtAnalysis: 9, resultJson: BASE_RESULT_JSON, createdAt: new Date("2026-10-01T09:00:00Z") });
+    streams(["<!--critique-->Critique"]);
+    await (await POST(post({ ticker: "AAA", reportMd: "## 1. X", analysisId: "an1" }))).text();
+
+    const prompt = userPromptOf(0);
+    expect(prompt).toContain("--- DETERMINISTIC GATES ON THE BASE REPORT");
+    // No dataset on a Quick row: the dataset gates say so instead of passing.
+    expect(prompt).toContain("— basis_same: no dataset");
+    expect(prompt).not.toContain("NOT the current price");
+  });
+
+  it("when the quote fails, checks the gates against the price at analysis and says it is NOT the current price", async () => {
+    vi.mocked(getQuote).mockRejectedValueOnce(new Error("429 Too Many Requests"));
+    analysisFindFirst.mockResolvedValue({ groundingJson: null, mosPercent: 20, reportMd: "## 1. X", priceAtAnalysis: 9, resultJson: BASE_RESULT_JSON, createdAt: new Date("2026-10-01T09:00:00Z") });
+    streams(["<!--critique-->Critique"]);
+    await (await POST(post({ ticker: "AAA", reportMd: "## 1. X", analysisId: "an1" }))).text();
+
+    const prompt = userPromptOf(0);
+    expect(prompt).toContain(
+      "Gates computed against the price at analysis (9.00 EUR, saved 2026-10-01) — the live quote was unavailable; this is NOT the current price."
+    );
+    expect(prompt).toContain("--- DETERMINISTIC GATES ON THE BASE REPORT");
+  });
 });
 
 // Pasted data on the saved row makes the lens run blind-first: turn 1 commits from the data
@@ -130,6 +171,21 @@ describe("POST /api/ai/deep-value/verify — blind-first review", () => {
     expect(body).not.toContain("chatter");
     expect(body).toContain("```json-blind\n");
     expect(parseDeepValueJson(body)?.base?.fairValue).toBe(10);
+  });
+
+  it("a degraded Phase 1 still gives turn 2 the base report's gates", async () => {
+    analysisFindFirst.mockResolvedValue({
+      groundingJson: JSON.stringify({ blocks: [], extract: EXTRACT }),
+      mosPercent: 20,
+      reportMd: "## 1. X",
+      priceAtAnalysis: 9,
+      resultJson: BASE_RESULT_JSON,
+      createdAt: new Date("2026-10-01T09:00:00Z"),
+    });
+    blindFirstStreams("prose, no fence", ["<!--critique-->Critique\n", FINAL]);
+    await (await POST(post({ ticker: "AAA", reportMd: "## 1. X", analysisId: "an1" }))).text();
+
+    expect(userPromptOf(1)).toContain("--- DETERMINISTIC GATES ON THE BASE REPORT");
   });
 
   it("keeps the degraded-Phase-1 note visible when turn 2 is cut inside its fence", async () => {

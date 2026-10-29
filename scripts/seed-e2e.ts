@@ -8,8 +8,8 @@
  * Plants two throwaway users and their data:
  *   - A (e2e-a@example.test) owns everything the page specs look at: a Grounded analysis in
  *     the current format (groundingJson + a report that ends with its ```json block, bridges
- *     included, so the deterministic post-check card renders, plus a resultJson column that
- *     deliberately differs from that block), an analysis with all three analyst lenses filled
+ *     included, plus a resultJson column that deliberately differs from that block, and a
+ *     blind-first Skeptic run with its final JSON), an analysis with all three analyst lenses filled
  *     in the older format (JSON block at the top, no resultJson) plus an older save of
  *     the same ticker (grouping, evolution diff), an old-format analysis with no JSON block
  *     and no grounding (must still open), a sacrificial analysis and position for the
@@ -42,7 +42,7 @@ import {
   daysFrom,
   referenceDay,
 } from "../e2e/support/fixtures";
-import type { DeepValueResult } from "../components/report/types";
+import type { AnalystResult, DeepValueResult } from "../components/report/types";
 import { REPORT_START_MARKER, sanitizeDeepValueResult } from "../lib/report/parse-deep-value-json";
 import type { GroundingPayload } from "../types/grounding";
 import type { SnapshotData, SnapshotEntry } from "../types/portfolio";
@@ -111,6 +111,38 @@ const GROUNDED_RESULT: DeepValueResult = {
 // What the save route stores in resultJson: the same block, re-sanitized — but with a
 // sector the fence does not carry, so the detail spec can tell which one the page read.
 const GROUNDED_RESULT_COLUMN = { ...GROUNDED_RESULT, sector: "Regulated Utilities" };
+
+// The Skeptic on the grounded analysis, blind-first. A lens declares neither a sensitivity
+// grid nor a dividend path. Phase 1 commits a higher base (buy target 10.5 = intrinsic
+// 13.125 at MoS 20%: (200 × 8.1125 − 310) / 100) and a kill price of 8.10; the FINAL JSON
+// revises the base to the report's own 10.32 and lowers the kill price to 7.90. Its final
+// values equal the base analysis's, so the consensus — and every verdict on /analyses,
+// /watchlist and /portfolio — is the same as without the lens.
+const GROUNDED_LENS_SHAPE: AnalystResult = {
+  method: GROUNDED_RESULT.method,
+  sector: GROUNDED_RESULT.sector,
+  currency: GROUNDED_RESULT.currency,
+  units: GROUNDED_RESULT.units,
+  bull: GROUNDED_RESULT.bull,
+  base: GROUNDED_RESULT.base,
+  bear: GROUNDED_RESULT.bear,
+  assumptions: GROUNDED_RESULT.assumptions,
+  crossCheck: GROUNDED_RESULT.crossCheck,
+};
+const GROUNDED_REVIEW_BLIND: AnalystResult = {
+  ...GROUNDED_LENS_SHAPE,
+  base: {
+    ...GROUNDED_RESULT.base,
+    fairValue: 10.5,
+    bridge: { ...GROUNDED_RESULT.base.bridge!, multiple: 8.1125, intrinsicPerShare: 13.125 },
+  },
+  killPrice: 8.1,
+};
+const GROUNDED_REVIEW_FINAL: AnalystResult = {
+  ...GROUNDED_LENS_SHAPE,
+  killPrice: 7.9,
+  revisions: [{ scenario: "base", from: 10.5, to: 10.32, reason: `${DECOY.groundedRevisionReason}: the 2027 tariff reset lowers the allowed return` }],
+};
 
 const GROUNDED_YEARS = [2021, 2022, 2023, 2024, 2025];
 const GROUNDED_EV_EBITDA = [7.5, 8.0, 7.0, 7.8, 8.2];
@@ -302,6 +334,13 @@ async function seedAnalyses(db: PrismaClient): Promise<void> {
         `## 1. Overview\n\nGrounded report ${DECOY.groundedReport}: regulated networks with a stable EBITDA path.\n\n## 2. Moat\n\nConcession-based moat.\n\n## 8. Summary\n\nBase case EV/EBITDA 8.0x on FY2025 EBITDA.`
       ),
       resultJson: JSON.stringify(sanitizeDeepValueResult(GROUNDED_RESULT_COLUMN)),
+      reviewMd: `## Skeptic\n\n${DECOY.groundedSkepticCritique}: the tariff reset is not in the base case.`,
+      reviewFairValueBull: GROUNDED_REVIEW_FINAL.bull.fairValue,
+      reviewFairValueBase: GROUNDED_REVIEW_FINAL.base.fairValue,
+      reviewFairValueBear: GROUNDED_REVIEW_FINAL.bear.fairValue,
+      reviewValuationMethod: GROUNDED_REVIEW_FINAL.method,
+      reviewBlindJson: JSON.stringify(GROUNDED_REVIEW_BLIND),
+      reviewResultJson: JSON.stringify(sanitizeDeepValueResult(GROUNDED_REVIEW_FINAL)),
       currency: "EUR",
       sector: GROUNDED_RESULT_COLUMN.sector,
       reportLanguage: "English",

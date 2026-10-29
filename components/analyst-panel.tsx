@@ -24,10 +24,12 @@ import {
   stripAnalystStreamArtifacts,
   currentAnalystPhase,
   hasFullTriple,
+  sanitizeDeepValueResult,
   type ParsedAnalystResult,
 } from "@/lib/report/parse-deep-value-json";
 import ReportBody from "@/components/report/report-body";
 import AnalystBlindCard from "@/components/report/analyst-blind-card";
+import AnalystFinalCard from "@/components/report/analyst-final-card";
 import { AiSettingsControl } from "@/components/ai-settings-control";
 import { fetchAiSettings } from "@/lib/ai-settings-client";
 import { DEFAULT_AI_SETTINGS, deepValueDefaultEffort, type AiSettings } from "@/types/ai-settings";
@@ -36,9 +38,35 @@ import { ANALYST_ANGLES } from "@/types/analysis";
 import type { AnalystResult } from "@/components/report/types";
 import type { Triple } from "@/lib/report/valuation";
 import type { GroundedFinancials } from "@/types/grounding";
-import { checkValuationBridges } from "@/lib/grounding/postcheck";
+import { checkValuationBridges, type GateCode } from "@/lib/grounding/postcheck";
 
 type Status = "idle" | "loading" | "streaming" | "done" | "error";
+
+// Lenses declare neither a sensitivity grid nor a dividend path (guide § 3.1): those two
+// gates would only ever read "unavailable" on a lens's JSON, so neither card shows them.
+const LENS_UNDECLARED_GATES: GateCode[] = ["sensitivity_center", "dividend_coverage"];
+// The final-JSON gates AnalystFinalCard shows: those that need no dataset.
+const FINAL_CARD_GATES: GateCode[] = [
+  "kill_price",
+  "scenario_order",
+  "probabilities",
+  "cross_check",
+  "method_distinct",
+  "horizon_consistent",
+  "bear_breaks_price",
+];
+
+/** A persisted *ResultJson back into a full result, or null — a malformed or partial blob
+ *  is treated as absent, never as numbers to show. */
+function parseStoredFinal(raw: string | null): AnalystResult | null {
+  if (!raw) return null;
+  try {
+    const parsed = sanitizeDeepValueResult(JSON.parse(raw));
+    return hasFullTriple(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 type PanelProps = {
   analysisId: string;
@@ -58,10 +86,15 @@ type PanelProps = {
   // existing *FairValue* columns via analystTriple() — lets the blind card show
   // blind-vs-final drift even after a page reload (a fresh run recomputes this live).
   initialFinal: Partial<Record<AnalystAngle, Triple | null>>;
-  // Grounded-mode inputs for the deterministic gate check on the lens's blind bridge.
+  // Each lens's FINAL JSON as persisted (*ResultJson, JSON.stringify'd) — kill price,
+  // revisions[] and the gates after a reload. null on rows saved before the column existed.
+  initialResult: Partial<Record<AnalystAngle, string | null>>;
+  // The pasted dataset for the dataset gates; null (Quick) → those gates read "no dataset".
   groundingExtract: GroundedFinancials | null;
+  // The page's one price (AnalysisDetailBody): null while it loads or when none exists.
   currentPrice: number | null;
   currency: string;
+  priceSource: "live" | "analysis";
 };
 
 export default function AnalystPanel({
@@ -72,9 +105,11 @@ export default function AnalystPanel({
   initialCritiques,
   initialBlind,
   initialFinal,
+  initialResult,
   groundingExtract,
   currentPrice,
   currency,
+  priceSource,
 }: PanelProps) {
   const { t } = useLanguage();
   // A lens starts at the same floor as the report it reviews — the higher of the global
@@ -123,9 +158,11 @@ export default function AnalystPanel({
             initialCritiqueMd={initialCritiques[angle] ?? null}
             initialBlindJson={initialBlind[angle] ?? null}
             initialFinalTriple={initialFinal[angle] ?? null}
+            initialResultJson={initialResult[angle] ?? null}
             groundingExtract={groundingExtract}
             currentPrice={currentPrice}
             currency={currency}
+            priceSource={priceSource}
             aiSettings={aiSettings}
           />
         ))}
@@ -145,9 +182,11 @@ type SlotProps = {
   initialCritiqueMd: string | null;
   initialBlindJson: string | null;
   initialFinalTriple: Triple | null;
+  initialResultJson: string | null;
   groundingExtract: GroundedFinancials | null;
   currentPrice: number | null;
   currency: string;
+  priceSource: "live" | "analysis";
   aiSettings: AiSettings;
 };
 
@@ -162,9 +201,11 @@ function AnalystSlot({
   initialCritiqueMd,
   initialBlindJson,
   initialFinalTriple,
+  initialResultJson,
   groundingExtract,
   currentPrice,
   currency,
+  priceSource,
   aiSettings,
 }: SlotProps) {
   const { language: globalLanguage, t } = useLanguage();
@@ -196,42 +237,48 @@ function AnalystSlot({
     }
   }, [hasLiveRun, liveBlind, initialBlindJson]);
 
-  const finalTriple: Triple | null = hasLiveRun
-    ? hasFullTriple(liveFinal)
-      ? { bear: liveFinal.bear.fairValue, base: liveFinal.base.fairValue, bull: liveFinal.bull.fairValue }
-      : null
-    : initialFinalTriple;
+  // The lens's FINAL JSON — from the live run or, after a reload, from *ResultJson. Only a
+  // full triple counts: a partial one is "incomplete", never numbers to check or show.
+  const finalResult: AnalystResult | null = useMemo(() => {
+    if (hasLiveRun) return hasFullTriple(liveFinal) ? liveFinal : null;
+    return parseStoredFinal(initialResultJson);
+  }, [hasLiveRun, liveFinal, initialResultJson]);
+
+  // A row saved before *ResultJson existed still has its *FairValue* columns: the drift
+  // column falls back to those.
+  const finalTriple: Triple | null = finalResult
+    ? { bear: finalResult.bear.fairValue, base: finalResult.base.fairValue, bull: finalResult.bull.fairValue }
+    : hasLiveRun
+      ? null
+      : initialFinalTriple;
   // A finished live run whose final JSON is missing or lacks a scenario: the critique is
   // shown and saved, the lens's numbers are cleared — and the slot says so.
   const finalIncomplete = hasLiveRun && status === "done" && !hasFullTriple(liveFinal);
 
-  // Only present on a fresh run in the same session — the FINAL JSON's own revisions[]
-  // are stored in *ResultJson since 2026-10-29 but nothing reads them back yet, so
-  // this is always undefined after a page reload with no re-run.
-  const revisions = liveFinal?.revisions;
+  const revisions = finalResult?.revisions;
 
   // The lens's own blind bridge is exactly the artifact checkValuationBridges was built
-  // to verify — recomputed client-side whenever the grounding/price inputs are available,
-  // live or from a reload.
+  // to verify — recomputed client-side whenever a price is available, live or from a
+  // reload; without the paste the dataset gates read "no dataset".
   const blindGates = useMemo(() => {
-    if (!blindResult || !groundingExtract || currentPrice == null || !currency) return undefined;
+    if (!blindResult || currentPrice == null) return undefined;
     const postCheck = checkValuationBridges(blindResult, mosPercent, currentPrice, currency, groundingExtract);
-    return postCheck?.gates;
+    return postCheck?.gates.filter((g) => !LENS_UNDECLARED_GATES.includes(g.code));
   }, [blindResult, groundingExtract, currentPrice, currency, mosPercent]);
 
-  // The kill_price gate on the FINAL (post-reconciliation) JSON — the blind gates above
-  // only ever see the Phase-1 commitment, so a lens that dropped or changed its kill price
-  // after reading the report would otherwise go unchecked. Display-only, live run only:
-  // the final JSON is not persisted as a blob. Present only when the final JSON carries
-  // a kill-price key (the Skeptic's contract), same convention as the blind gates. A JSON
-  // that explains itself via killPriceNote but omits killPrice is checked as a declared
-  // null, so the note is weighed instead of the gate silently disappearing.
-  const finalKillPriceGate = useMemo(() => {
-    if (!liveFinal || !groundingExtract || currentPrice == null || !currency) return undefined;
-    const checked = "killPriceNote" in liveFinal && !("killPrice" in liveFinal) ? { ...liveFinal, killPrice: null } : liveFinal;
-    const postCheck = checkValuationBridges(checked, mosPercent, currentPrice, currency, groundingExtract);
-    return postCheck?.gates.find((g) => g.code === "kill_price");
-  }, [liveFinal, groundingExtract, currentPrice, currency, mosPercent]);
+  // The gates of the FINAL (post-reconciliation) JSON, from the live run or from
+  // *ResultJson — the blind gates above only ever see the Phase-1 commitment, so a lens
+  // that dropped or changed its kill price after reading the report would otherwise go
+  // unchecked. Display-only. kill_price is present only when the final JSON carries a
+  // kill-price key (the Skeptic's contract). A JSON that explains itself via killPriceNote
+  // but omits killPrice is checked as a declared null, so the note is weighed instead of
+  // the gate silently disappearing.
+  const finalGates = useMemo(() => {
+    if (!finalResult || currentPrice == null) return undefined;
+    const checked = "killPriceNote" in finalResult && !("killPrice" in finalResult) ? { ...finalResult, killPrice: null } : finalResult;
+    return checkValuationBridges(checked, mosPercent, currentPrice, currency, groundingExtract)?.gates;
+  }, [finalResult, groundingExtract, currentPrice, currency, mosPercent]);
+  const finalKillPriceGate = finalGates?.find((g) => g.code === "kill_price");
 
   async function handleRun() {
     abortRef.current?.abort();
@@ -245,6 +292,9 @@ function AnalystSlot({
     setLiveBlind(null);
     setLiveFinal(null);
 
+    // Declared outside the try: the catch needs to know whether this run got as far as a
+    // blind commitment worth keeping on screen.
+    let blindParsed: AnalystResult | null = null;
     try {
       const res = await fetch("/api/ai/deep-value/verify", {
         method: "POST",
@@ -273,7 +323,6 @@ function AnalystSlot({
       const decoder = new TextDecoder();
       let done = false;
       let accumulated = "";
-      let blindParsed: AnalystResult | null = null;
 
       while (!done) {
         const { value, done: streamDone } = await reader.read();
@@ -294,8 +343,6 @@ function AnalystSlot({
           }
         }
       }
-
-      setStatus("done");
 
       // Persist the critique (blind fence/phase markers + FINAL JSON block all stripped)
       // plus this analyst's own fair values, and — for a blind-first run whose Phase 1
@@ -322,7 +369,19 @@ function AnalystSlot({
       } catch (saveErr) {
         console.error(`Failed to persist ${angle} opinion:`, saveErr);
       }
+      // "done" only once the save has settled, failed or not: the Re-run button used to
+      // appear while the PATCH was in flight, and a reload in that window lost the lens.
+      setStatus("done");
     } catch (err) {
+      // Aborted by a newer run of this slot: that run owns the state now — resetting it
+      // here would hide the very run that superseded this one.
+      if (abortRef.current !== controller) return;
+      // Nothing of this run worth showing yet: the persisted card and critique come back,
+      // instead of an empty slot until the next reload.
+      if (!blindParsed) {
+        setHasLiveRun(false);
+        setCritique(initialCritiqueMd ?? "");
+      }
       if ((err as Error).name === "AbortError") {
         setStatus("idle");
         return;
@@ -386,11 +445,23 @@ function AnalystSlot({
         <AnalystBlindCard
           blind={blindResult}
           final={finalTriple}
-          finalKillPrice={liveFinal ?? undefined}
+          finalKillPrice={finalResult ?? undefined}
           revisions={revisions}
           gates={blindGates}
           finalKillPriceGate={finalKillPriceGate}
           finalIncomplete={finalIncomplete}
+          priceSource={priceSource}
+        />
+      )}
+
+      {/* No blind commitment (a Quick-mode lens, or a degraded Phase 1): the final JSON is
+          checked on its own. */}
+      {!blindResult && finalResult && (
+        <AnalystFinalCard
+          final={finalResult}
+          gates={finalGates?.filter((g) => FINAL_CARD_GATES.includes(g.code)) ?? []}
+          revisions={revisions}
+          priceSource={priceSource}
         />
       )}
 

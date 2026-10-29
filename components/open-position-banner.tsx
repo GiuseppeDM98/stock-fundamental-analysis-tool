@@ -1,40 +1,37 @@
 "use client";
 
 // Banner shown on the analysis detail page when the user holds this ticker.
-// Fetches the current price client-side to compute live P&L.
+// The price comes from the page (AnalysisDetailBody resolves it once for every card), so
+// the banner never fetches its own: the live P&L appears only when that price is a live
+// quote in the lots' currency; otherwise just the shares and the weighted-average cost.
 // mounted guard: Intl.NumberFormat without a fixed locale produces different output
 // between Node.js (SSR) and the browser, causing hydration mismatches.
 import { useState, useEffect } from "react";
 import { useLanguage } from "@/context/language-context";
 
 type OpenPositionBannerProps = {
-  ticker: string;
   totalShares: number;
   wac: number;
   currency: string;
+  // The live price in `currency`, or null when there is none to compute a P&L on.
+  livePrice: number | null;
+  // The page is still resolving its price: say so instead of showing no P&L yet.
+  isPriceLoading: boolean;
 };
 
 export default function OpenPositionBanner({
-  ticker,
   totalShares,
   wac,
   currency,
+  livePrice,
+  isPriceLoading,
 }: OpenPositionBannerProps) {
   const [mounted, setMounted] = useState(false);
-  const [currentPrice, setCurrentPrice] = useState<number | null>(null);
   const { t } = useLanguage();
 
   useEffect(() => {
     setMounted(true);
-    fetch(`/api/quote/${encodeURIComponent(ticker)}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.regularMarketPrice != null) {
-          setCurrentPrice(data.regularMarketPrice as number);
-        }
-      })
-      .catch(() => {});
-  }, [ticker]);
+  }, []);
 
   const formatPrice = (v: number) =>
     new Intl.NumberFormat(undefined, {
@@ -44,8 +41,8 @@ export default function OpenPositionBanner({
       maximumFractionDigits: 4,
     }).format(v);
 
-  const pnl = currentPrice != null ? (currentPrice - wac) * totalShares : null;
-  const returnPct = pnl != null ? (currentPrice! / wac - 1) * 100 : null;
+  const pnl = livePrice != null ? (livePrice - wac) * totalShares : null;
+  const returnPct = pnl != null ? (livePrice! / wac - 1) * 100 : null;
   const isPositive = pnl != null && pnl >= 0;
 
   if (!mounted) return null;
@@ -69,7 +66,7 @@ export default function OpenPositionBanner({
           ({isPositive ? "+" : ""}{returnPct!.toFixed(1)}%)
         </span>
       ) : (
-        <span className="text-xs text-slate-600">{t("loadingPnL")}</span>
+        isPriceLoading && <span className="text-xs text-slate-600">{t("loadingPnL")}</span>
       )}
     </div>
   );

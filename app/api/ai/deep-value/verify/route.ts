@@ -13,7 +13,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getQuote } from "@/lib/yahoo-client";
 import { ANALYST_ANGLES } from "@/types/analysis";
-import type { GroundingPayload } from "@/types/grounding";
+import type { GroundedFinancials, GroundingPayload } from "@/types/grounding";
 import {
   buildAnalystSystemPrompt,
   buildAnalystUserPrompt,
@@ -35,10 +35,13 @@ import { routeErrorStatus } from "@/lib/ai/error-status";
 import { AI_EFFORT_LEVELS, deepValueDefaultEffort, type AiSettings } from "@/types/ai-settings";
 import { buildGroundingPromptContext, formatGatesForPrompt, type GroundingPromptContext } from "@/lib/grounding/prompt-format";
 import {
+  hasFullTriple,
   parseDeepValueJson,
+  sanitizeDeepValueResult,
   stripTrailingOpenJsonFence,
   ANALYST_PHASE_MARKERS,
   CRITIQUE_START_MARKER,
+  type ParsedAnalystResult,
 } from "@/lib/report/parse-deep-value-json";
 import { pickBlindCommitment } from "@/lib/ai/blind-commitment";
 import { checkValuationBridges } from "@/lib/grounding/postcheck";
@@ -75,6 +78,42 @@ const requestSchema = z.object({
   // than accepting the payload in the body, which would be 100-200KB per lens.
   analysisId: z.string().min(1).optional(),
 });
+
+type SavedBase = { reportMd: string; resultJson: string | null; priceAtAnalysis: number | null; createdAt: Date };
+
+/**
+ * The deterministic gates on the BASE report, formatted for the lens's user message
+ * (ANALYST_STRUCTURAL_CHECKS #6 in lib/ai/deep-value-prompts.ts — "the lens must address
+ * every FAIL explicitly"). Every analysis gets them, with or without pasted data: without
+ * it the dataset gates read "no dataset". Checked against the live price when the quote
+ * resolved, else against the price saved with the analysis — and then the text says so,
+ * so the lens never takes it for the current price.
+ * @returns undefined when there is no price at all or the base JSON has no full triple.
+ */
+function buildBaseGatesText(
+  analysis: SavedBase,
+  extract: GroundedFinancials | null,
+  mosPercent: number,
+  livePrice: number | undefined,
+  liveCurrency: string
+): string | undefined {
+  // The result column first, the report's last fence for rows saved before it existed.
+  let baseResult: ParsedAnalystResult | null;
+  try {
+    baseResult = analysis.resultJson ? sanitizeDeepValueResult(JSON.parse(analysis.resultJson)) : parseDeepValueJson(analysis.reportMd);
+  } catch {
+    baseResult = null;
+  }
+  const gatePrice = livePrice ?? analysis.priceAtAnalysis ?? null;
+  const gateCurrency = liveCurrency || baseResult?.currency || "";
+  if (gatePrice == null || !hasFullTriple(baseResult)) return undefined;
+  const postCheck = checkValuationBridges(baseResult, mosPercent, gatePrice, gateCurrency, extract);
+  if (!postCheck) return undefined;
+  const gatesText = formatGatesForPrompt(postCheck.gates);
+  if (livePrice != null) return gatesText;
+  const saved = analysis.createdAt.toISOString().slice(0, 10);
+  return `Gates computed against the price at analysis (${gatePrice.toFixed(2)} ${gateCurrency}, saved ${saved}) — the live quote was unavailable; this is NOT the current price.\n${gatesText}`;
+}
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -120,16 +159,14 @@ export async function POST(request: Request) {
     // avoids the lens computing its fair values at a stale client-side MoS.
     let groundingContext: GroundingPromptContext | undefined;
     let effectiveMosPercent = body.mosPercent;
-    // Deterministic gates already run against the BASE report's own declared bridge,
-    // formatted for the RECONCILE-phase user message (ANALYST_STRUCTURAL_CHECKS #6 in
-    // lib/ai/deep-value-prompts.ts — "the lens must address every FAIL explicitly").
-    // Undefined when ungrounded, the base report's JSON doesn't parse, or price/currency
-    // didn't resolve — the reconcile prompt simply omits the section in that case.
+    // Deterministic gates on the BASE report's own declared bridge (buildBaseGatesText),
+    // for the lens's user message in every branch below. Undefined without a saved row, a
+    // full triple or any price — the prompts then simply omit the section.
     let baseGatesText: string | undefined;
     if (body.analysisId) {
       const analysis = await db.analysis.findFirst({
         where: { id: body.analysisId, userId: session.user.id },
-        select: { groundingJson: true, mosPercent: true, reportMd: true },
+        select: { groundingJson: true, mosPercent: true, reportMd: true, priceAtAnalysis: true, resultJson: true, createdAt: true },
       });
       if (analysis) {
         effectiveMosPercent = analysis.mosPercent;
@@ -139,22 +176,11 @@ export async function POST(request: Request) {
             // Lenses get extract + anchors + warnings, never the raw paste — see the
             // doc comment on buildAnalystUserPrompt's `grounding` param for why.
             groundingContext = buildGroundingPromptContext([], payload.extract, currentPrice ?? null, currency);
-
-            const baseResult = parseDeepValueJson(analysis.reportMd);
-            if (baseResult && currentPrice != null && currency) {
-              const basePostCheck = checkValuationBridges(
-                baseResult,
-                effectiveMosPercent,
-                currentPrice,
-                currency,
-                groundingContext.extract
-              );
-              if (basePostCheck) baseGatesText = formatGatesForPrompt(basePostCheck.gates);
-            }
           } catch {
             // Malformed/legacy groundingJson — proceed ungrounded rather than fail the review.
           }
         }
+        baseGatesText = buildBaseGatesText(analysis, groundingContext?.extract ?? null, effectiveMosPercent, currentPrice, currency);
       }
     }
 
@@ -210,6 +236,7 @@ export async function POST(request: Request) {
               currency,
               mosPercent: effectiveMosPercent,
               grounding: groundingContext,
+              gatesText: baseGatesText,
             });
 
             // Text before the critique marker is reasoning the model writes between
@@ -366,6 +393,7 @@ export async function POST(request: Request) {
               currency,
               mosPercent: effectiveMosPercent,
               grounding: groundingContext,
+              gatesText: baseGatesText,
             });
           }
 

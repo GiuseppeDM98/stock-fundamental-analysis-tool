@@ -201,7 +201,7 @@ After `npm ci` (or on a fresh checkout) run `npx prisma generate` once: stage 2 
 - **Assertions pair visible decoy text with DB rows** (`e2e/support/db.ts`), never the look of the page alone. `authorization.spec.ts` is the own-vs-someone-else's pair on analyses and positions: a foreign id answers 404 and the row is checked unchanged in the DB. Both a wrong-identity run and an injected DB write were shown to turn it red (2026-10-11).
 - **Do not run the suite while another `next dev` / `next build` runs from the same checkout** (they share `.next`). Port 3200 must be free; an existing server is never reused. Do not edit source files while the suite or a manual dev server runs either: `next dev` recompiles mid-test and the test it lands on reads as flaky (2026-10-29).
 - **Artifacts** (`.e2e/`, `playwright-report/`, `test-results/`) are gitignored. Open a failure's trace with `npx playwright show-trace test-results/<test>/trace.zip`.
-- **Visual baselines are per session and never committed** (`e2e/**/*-snapshots/` is gitignored). They hold for the UTC day they were generated on, because snapshot and earnings dates are relative to today. Run `npm run e2e:visual:update` before a change and `npm run e2e:visual` after it. The browser clock is frozen, animations are off, and fonts are the fallback (Google Fonts is blocked).
+- **Visual baselines are per session and never committed** (`e2e/**/*-snapshots/` is gitignored). They hold for the UTC day they were generated on, because snapshot and earnings dates are relative to today. Run `npm run e2e:visual:update` before a change and `npm run e2e:visual` after it; the update rewrites every baseline (`--update-snapshots=all`), since Playwright's default mode keeps a file that is still within tolerance and a day-old one survived (2026-10-29). The browser clock is frozen, animations are off, and fonts are the fallback (Google Fonts is blocked).
 
 Sessions are JWT (Auth.js v5 credentials provider, `session: { strategy: "jwt" }`), so there is no session table to clean up.
 
@@ -241,6 +241,12 @@ For a throwaway user created on the fly: `POST /api/auth/register` with `{ "emai
 ### Handing the app to the owner (obligation 5)
 
 The owner's browser cannot reuse the script's `storageState`: run `npm run seed:e2e`, start the server with the command above, give the owner the A account's email and password and the exact URLs, keep the fixtures alive until they have looked, then delete `.e2e/` in phase G.
+
+### Real AI runs in a collaudo
+
+- **Budget** (the owner's rule, 2026-10-29): Anthropic cost is not a constraint, so run every real check the collaudo needs; DeepSeek credit is low, so ask before any DeepSeek run. The ticker or paste and the OK for each run still come from the owner. Measured cost: about $4 for a Quick run at `xhigh` and $2 for one lens (`doc/guide/valutazione.md` § 2.1); the costs go in the commit message.
+- **Seeing what the model got**: the Anthropic SDK reads `ANTHROPIC_BASE_URL`, so a throwaway local proxy started with the dev server logs each call's model, effort, tokens, searches and prompt without a source edit. It never logs headers (the API key travels there), and it is deleted in phase G with the rest of the script.
+- **A driver waits for the save, not for the button**: a reload right after a run ends can still land before its PATCH (2026-10-29), so a script waits for the response of the request that persists the run.
 
 ### What is still missing to honour obligations 4 and 5
 

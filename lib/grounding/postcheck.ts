@@ -7,30 +7,39 @@
 // normalization, net-debt trajectory, returns vs cost of capital, scenario probabilities
 // (+ expected value), and a mandatory second-method cross-check. Pure, no server-only.
 //
+// Every analysis gets these gates, with or without a pasted dataset (2026-10): the gates
+// that read only the model's own JSON and the price (scenario order, method family, the
+// sensitivity centre, Check A/B, …) run everywhere; the ones that need the dataset read
+// "unavailable — no dataset" without one.
+//
 // Design invariant: "the model declares, the code verifies."
 // A gate that cannot verify its condition returns "unavailable", never "pass" — an
-// unverifiable gate that silently passed would be worse than no gate at all.
+// unverifiable gate that silently passed would be worse than no gate at all. A price and a
+// value in different currencies are never compared either (sameCurrency): that gate reads
+// "unavailable — currency mismatch".
 import type { GroundedFinancials, FiscalYearFinancials } from "@/types/grounding";
-import type { Scenario, ValuationBridge, DeepValueResult, AnalystResult } from "@/components/report/types";
+import type { Scenario, ValuationBridge, AnalystResult } from "@/components/report/types";
 import { grossUpToIntrinsic } from "@/lib/report/valuation";
 import { sanitizeDeepValueResult, type ParsedAnalystResult } from "@/lib/report/parse-deep-value-json";
 import { computeMarketImplied, percentileOf, type MarketImplied } from "@/lib/grounding/anchors";
 import { computeBasisReconciliation, bridgeToProviderMultiple, type BasisReconciliation } from "@/lib/grounding/basis";
+import { sameCurrency } from "@/lib/grounding/currency";
 
 // Re-exported because this module's tests/callers import these names from here — the
 // canonical definitions live on the Deep Value JSON contract (components/report/types.ts).
 export type { ValuationBridge };
 export type BridgeScenario = Scenario;
 
-/** The full Deep Value JSON contract this postcheck needs, plus the analyst-only
- *  killPrice (+ its optional killPriceNote) — present (even as null) only when the caller
- *  is checking an analyst lens's result, never a base report's. Its PRESENCE as an object
- *  key (not its value) is what gates whether the kill_price entry appears in
+/** The full valuation JSON contract (units, sensitivity and dividends included), plus the
+ *  analyst-only killPrice (+ its optional killPriceNote) — present (even as null) only when
+ *  the caller is checking an analyst lens's result, never a base report's. Its PRESENCE as
+ *  an object key (not its value) is what gates whether the kill_price entry appears in
  *  PostCheck.gates at all.
  *
- *  checkValuationBridges accepts any ParsedAnalystResult (this type included) and
- *  re-sanitizes it on entry, so a block missing a scenario is checked as "not declared". */
-export type BridgeCheckInput = DeepValueResult & Pick<AnalystResult, "killPrice" | "killPriceNote">;
+ *  Callers pass only results already narrowed by hasFullTriple; checkValuationBridges
+ *  still re-sanitizes on entry, so a value that slipped past the type is checked as
+ *  "not declared", never computed on. */
+export type BridgeCheckInput = AnalystResult;
 
 export type BridgeCheck = {
   scenario: "bear" | "base" | "bull";
@@ -69,7 +78,14 @@ export type GateCode =
   | "probabilities"
   | "cross_check"
   | "cross_check_basis" // the cross-check's OWN same-basis check — see CrossCheckBridgeCheck
-  | "kill_price"; // analyst lenses only
+  | "kill_price" // analyst lenses only
+  // 2026-10: contract-only gates — they need no dataset, so every analysis gets them.
+  | "scenario_order"
+  | "method_distinct"
+  | "sensitivity_center"
+  | "dividend_coverage"
+  | "units_match"
+  | "sections_present"; // from the Markdown, via checkReportStructure — never in checkValuationBridges' array
 
 export type Gate = {
   code: GateCode;
@@ -102,6 +118,25 @@ export type PostCheck = {
   crossCheckBridge: CrossCheckBridgeCheck | null;
 };
 
+/** What computeBasisReconciliation would return with nothing to reconcile — used when the
+ *  analysis has no dataset so every basis-dependent gate reads "unavailable", never "pass". */
+export const EMPTY_BASIS: BasisReconciliation = {
+  years: [],
+  kE: null,
+  kEn: 0,
+  kESpread: null,
+  confidence: "unavailable",
+  sameBasis: null,
+  kB: null,
+  evBridgeConfidence: "assumed",
+  evBridgeSameBasis: null,
+  adjustedEvEbitda: null,
+};
+
+// Gate-detail keywords: English, never translated (same contract as Gate.detail).
+const NO_DATASET = "no dataset";
+const CURRENCY_MISMATCH = "currency mismatch";
+
 export type CrossCheckBridgeCheck = {
   recomputedIntrinsic: number | null; // from the cross-check's own multiple × driverValue − netDebt − minorities / shares
   arithmeticOk: boolean | null; // recomputedIntrinsic ≈ crossCheck.intrinsicPerShare, within ±1% — Check A, never run on the cross-check before this
@@ -128,6 +163,9 @@ const PROBABILITIES_SUM_TOLERANCE = 0.02;
 // cross_check: max delta between the primary and cross-check intrinsic values before the
 // model must be seen as having failed to reconcile them.
 const CROSS_CHECK_DELTA_TOLERANCE = 0.25;
+// dividend_coverage: how many of the latest reported FCF years the dividend is weighed
+// against — the same window as reconcile.ts's dividend_not_covered warning.
+const DIVIDEND_FCF_LOOKBACK_YEARS = 3;
 
 function relDiff(value: number, reference: number): number {
   return Math.abs(value - reference) / (Math.abs(reference) || 1);
@@ -141,13 +179,42 @@ function isFiniteNumber(value: unknown): value is number {
  *  JSON block didn't carry a valid one (no `fairValue`, wrong type). */
 type ScenarioSet = { bull: Scenario | undefined; base: Scenario | undefined; bear: Scenario | undefined };
 
+/** Everything a gate may read from the pasted dataset. Without one: EMPTY_BASIS, no latest
+ *  fiscal year and an empty EV/EBITDA series, so the provider-basis reads and percentiles
+ *  come back null while Check A/B and the statement-basis implied multiple still compute. */
+type DatasetContext = {
+  dataset: GroundedFinancials | null;
+  basis: BasisReconciliation;
+  latestFy: FiscalYearFinancials | undefined;
+  series: number[];
+};
+
+/** The one criterion for "this analysis has a dataset", shared with ValuationChecksCard: an
+ *  extract with no financial rows has nothing to reconcile, so it reads exactly like none. */
+export function datasetOrNull(extract: GroundedFinancials | null | undefined): GroundedFinancials | null {
+  return extract && extract.financials.length > 0 ? extract : null;
+}
+
+function buildDatasetContext(extract: GroundedFinancials | null): DatasetContext {
+  const dataset = datasetOrNull(extract);
+  if (!dataset) return { dataset: null, basis: EMPTY_BASIS, latestFy: undefined, series: [] };
+  return {
+    dataset,
+    basis: computeBasisReconciliation(dataset),
+    latestFy: dataset.financials[dataset.financials.length - 1],
+    series: dataset.multiples.map((m) => m.evEbitda).filter((v): v is number => v != null),
+  };
+}
+
+function unavailableNoDataset(code: GateCode): Gate {
+  return { code, status: "unavailable", detail: NO_DATASET };
+}
+
 function checkOneScenario(
   scenario: BridgeCheck["scenario"],
   input: BridgeScenario | undefined,
   mosPercent: number,
-  extract: GroundedFinancials,
-  basis: BasisReconciliation,
-  latestFy: FiscalYearFinancials | undefined
+  { basis, latestFy, series }: DatasetContext
 ): BridgeCheck {
   // MoS trap: fairValue is a MoS-adjusted buy target, never compare it directly
   // against intrinsicPerShare. Gross it up first via the SHARED helper (not reimplemented).
@@ -196,7 +263,6 @@ function checkOneScenario(
   let impliedMultiple: number | null = null;
   let impliedMultipleProvider: number | null = null;
   let impliedPercentile: number | null = null;
-  const series = extract.multiples.map((m) => m.evEbitda).filter((v): v is number => v != null);
   const equityValue = bridge.intrinsicPerShare * bridge.shares;
   const evBridge = bridge.netDebt + bridge.minorities;
   if (bridge.shares !== 0 && bridge.driverValue !== 0) {
@@ -236,7 +302,8 @@ function checkOneScenario(
   };
 }
 
-function checkBasisSame(basis: BasisReconciliation, base: Scenario | undefined): Gate {
+function checkBasisSame({ dataset, basis }: DatasetContext, base: Scenario | undefined): Gate {
+  if (!dataset) return unavailableNoDataset("basis_same");
   if (basis.kE == null || basis.adjustedEvEbitda == null) {
     return { code: "basis_same", status: "unavailable", detail: "kE unavailable" };
   }
@@ -270,7 +337,8 @@ function checkHorizonConsistent({ bull, base, bear }: ScenarioSet): Gate {
   return { code: "horizon_consistent", status, detail };
 }
 
-function checkBearBreaksPrice(bearStatedIntrinsic: number | null, price: number): Gate {
+function checkBearBreaksPrice(bearStatedIntrinsic: number | null, price: number, priceComparable: boolean): Gate {
+  if (!priceComparable) return { code: "bear_breaks_price", status: "unavailable", detail: CURRENCY_MISMATCH };
   if (bearStatedIntrinsic == null || !isFiniteNumber(price)) {
     return { code: "bear_breaks_price", status: "unavailable", detail: "bear scenario or price unavailable" };
   }
@@ -278,7 +346,8 @@ function checkBearBreaksPrice(bearStatedIntrinsic: number | null, price: number)
   return { code: "bear_breaks_price", status, detail: `bear ${bearStatedIntrinsic.toFixed(2)} · price ${price.toFixed(2)}` };
 }
 
-function checkTrailingForward(baseCheck: BridgeCheck, base: Scenario | undefined, latestFy: FiscalYearFinancials | undefined): Gate {
+function checkTrailingForward(baseCheck: BridgeCheck, base: Scenario | undefined, { dataset, latestFy }: DatasetContext): Gate {
+  if (!dataset) return unavailableNoDataset("trailing_forward");
   const driverYear = base?.bridge?.driverYear;
   if (driverYear == null || !latestFy) {
     return { code: "trailing_forward", status: "unavailable", detail: "driverYear or latest FY unavailable" };
@@ -296,11 +365,10 @@ function checkTrailingForward(baseCheck: BridgeCheck, base: Scenario | undefined
   return { code: "trailing_forward", status, detail: `driver ${driverYear}${isTrailing ? "" : "e"} · wedge ${wedge} · implied ${fwd}${ltm}` };
 }
 
-function checkNetDebtTrajectory(scenarios: ScenarioSet, latestFy: FiscalYearFinancials | undefined): Gate {
+function checkNetDebtTrajectory(scenarios: ScenarioSet, { dataset, latestFy }: DatasetContext): Gate {
+  if (!dataset) return unavailableNoDataset("netdebt_trajectory");
   const { bull, base, bear } = scenarios;
-  // No bridge anywhere ⇒ there is no declared net debt to test; that is "can't verify",
-  // not the vacuous "no scenario targets FY+1" pass below (which only holds when bridges
-  // exist and simply point at other years).
+  // No bridge anywhere ⇒ there is no declared net debt to test; that is "can't verify".
   if (!bull?.bridge && !base?.bridge && !bear?.bridge) {
     return { code: "netdebt_trajectory", status: "unavailable", detail: "no scenario declared a bridge" };
   }
@@ -316,8 +384,13 @@ function checkNetDebtTrajectory(scenarios: ScenarioSet, latestFy: FiscalYearFina
     ["bear", bear],
   ] as const).filter(([, s]) => s?.bridge?.driverYear === targetYear);
 
+  // Bridges that all point at other years leave nothing to test either: unavailable, never
+  // the vacuous pass this once returned. A driver beyond FY+1 (a long-horizon DCF) is named,
+  // because there the one-year FCF trajectory says nothing about the declared net debt.
   if (applicable.length === 0) {
-    return { code: "netdebt_trajectory", status: "pass", detail: `no scenario targets FY${targetYear}` };
+    const beyond = [bull, base, bear].some((s) => (s?.bridge?.driverYear ?? 0) > targetYear);
+    const detail = beyond ? `no scenario targets FY${targetYear} · long-horizon driver` : `no scenario targets FY${targetYear}`;
+    return { code: "netdebt_trajectory", status: "unavailable", detail };
   }
 
   const threshold = expectedNetDebt * (1 - NETDEBT_TRAJECTORY_TOLERANCE);
@@ -327,7 +400,8 @@ function checkNetDebtTrajectory(scenarios: ScenarioSet, latestFy: FiscalYearFina
   return { code: "netdebt_trajectory", status: failing ? "fail" : "pass", detail };
 }
 
-function checkRoicVsWacc(result: ParsedAnalystResult, base: Scenario | undefined, basis: BasisReconciliation): Gate {
+function checkRoicVsWacc(result: ParsedAnalystResult, base: Scenario | undefined, { dataset, basis }: DatasetContext): Gate {
+  if (!dataset) return unavailableNoDataset("roic_vs_wacc");
   const roic = result.assumptions?.roic;
   const wacc = result.assumptions?.wacc;
   if (!isFiniteNumber(roic) || !isFiniteNumber(wacc)) {
@@ -375,7 +449,7 @@ function checkCrossCheck(result: ParsedAnalystResult, baseIntrinsic: number | nu
  *  model declared no crossCheck.bridge at all. */
 function checkCrossCheckBridge(
   result: ParsedAnalystResult,
-  extract: GroundedFinancials,
+  series: number[],
   basis: BasisReconciliation
 ): CrossCheckBridgeCheck | null {
   const crossCheck = result.crossCheck;
@@ -392,7 +466,6 @@ function checkCrossCheckBridge(
   let impliedMultiple: number | null = null;
   let impliedMultipleProvider: number | null = null;
   let impliedPercentile: number | null = null;
-  const series = extract.multiples.map((m) => m.evEbitda).filter((v): v is number => v != null);
   if (bridge.shares !== 0 && bridge.driverValue !== 0) {
     const equityValue = intrinsicPerShare * bridge.shares;
     const evBridge = bridge.netDebt + bridge.minorities;
@@ -409,11 +482,11 @@ function checkCrossCheckBridge(
 /** Same signature-matching logic as checkBasisSame (the "raw table multiple applied to a
  *  same-basis driver" pattern), but reading the CROSS-CHECK's own declared multiple instead
  *  of the base scenario's. Defense-in-depth for an Iren-style error occurring in the
- *  cross-check rather than the primary bridge — NOT what caught the Webuild case (there the
- *  cross-check's multiple came from PEERS, not from Webuild's own historical distribution,
- *  so it doesn't match this specific signature; the existing cross_check delta gate is what
- *  caught that). */
-function checkCrossCheckBasis(result: ParsedAnalystResult, basis: BasisReconciliation): Gate {
+ *  cross-check rather than the primary bridge. A multiple close to NEITHER median (the
+ *  Webuild case: a peer average) proves nothing about its basis, so it reads unavailable,
+ *  exactly as in checkBasisSame — it passed until 2026-10. */
+function checkCrossCheckBasis(result: ParsedAnalystResult, { dataset, basis }: DatasetContext): Gate {
+  if (!dataset) return unavailableNoDataset("cross_check_basis");
   if (!result.crossCheck) {
     return { code: "cross_check_basis", status: "unavailable", detail: "no cross-check declared" };
   }
@@ -428,10 +501,11 @@ function checkCrossCheckBasis(result: ParsedAnalystResult, basis: BasisReconcili
   if (basis.sameBasis) return { code: "cross_check_basis", status: "pass", detail };
   if (declaredMultiple == null) return { code: "cross_check_basis", status: "unavailable", detail };
 
-  const closeToRaw = relDiff(declaredMultiple, rawMedian) < BASIS_SAME_MULTIPLE_TOLERANCE;
   const closeToAdjusted = relDiff(declaredMultiple, adjMedian) < BASIS_SAME_MULTIPLE_TOLERANCE;
-  const status: Gate["status"] = closeToRaw && !closeToAdjusted ? "fail" : "pass";
-  return { code: "cross_check_basis", status, detail };
+  const closeToRaw = relDiff(declaredMultiple, rawMedian) < BASIS_SAME_MULTIPLE_TOLERANCE;
+  if (closeToAdjusted) return { code: "cross_check_basis", status: "pass", detail };
+  if (closeToRaw) return { code: "cross_check_basis", status: "fail", detail };
+  return { code: "cross_check_basis", status: "unavailable", detail: `${detail} · matches neither median` };
 }
 
 // A kill-price note is model prose shown inside a one-line gate detail — bounded so a
@@ -453,6 +527,128 @@ export function checkKillPrice(killPrice: number | null | undefined, killPriceNo
     return { code: "kill_price", status: "unavailable", detail: clipped };
   }
   return { code: "kill_price", status: "fail", detail: "not declared" };
+}
+
+// ─── Contract-only gates (2026-10) ────────────────────────────────────────────────
+// They read nothing but the model's own JSON (and, for the dividend and units checks, the
+// dataset when there is one), so they run on every analysis.
+
+/** bear < base < bull, strictly, on the INTRINSIC scale (fairValue grossed up by
+ *  checkOneScenario, never the raw MoS-adjusted fairValue). */
+function checkScenarioOrder(scenarios: BridgeCheck[]): Gate {
+  const intrinsicOf = (s: BridgeCheck["scenario"]) => scenarios.find((x) => x.scenario === s)?.statedIntrinsic ?? null;
+  const bear = intrinsicOf("bear");
+  const base = intrinsicOf("base");
+  const bull = intrinsicOf("bull");
+  if (bear == null || base == null || bull == null) {
+    return { code: "scenario_order", status: "unavailable", detail: "scenario missing" };
+  }
+  const isOrdered = bear < base && base < bull;
+  return {
+    code: "scenario_order",
+    status: isOrdered ? "pass" : "fail",
+    detail: `bear ${bear.toFixed(2)} · base ${base.toFixed(2)} · bull ${bull.toFixed(2)}`,
+  };
+}
+
+// The method families of METHOD_LIST, as normalized prefixes. Longest tokens first, so
+// "evebitda"/"evrab" are tried before a shorter token could claim them.
+const METHOD_FAMILIES = ["evebitda", "evrab", "residualincome", "dcf", "ddm", "sotp", "nav", "pe", "pb"] as const;
+
+/** The family a declared method belongs to — "EV/EBITDA (peers)" and "EV/EBITDA" are the
+ *  same family — or null when it matches none of METHOD_FAMILIES. */
+function methodFamily(method: string): string | null {
+  const normalized = method.toLowerCase().replace(/[\s/\-_.]/g, "");
+  return METHOD_FAMILIES.find((family) => normalized.startsWith(family)) ?? null;
+}
+
+/** The mandatory second method must be structurally different: same family → fail. */
+function checkMethodDistinct(result: ParsedAnalystResult): Gate {
+  if (!result.crossCheck) return { code: "method_distinct", status: "unavailable", detail: "no cross-check declared" };
+  const primary = methodFamily(result.method);
+  const second = methodFamily(result.crossCheck.method);
+  const detail = `${result.method} vs ${result.crossCheck.method}`;
+  if (!primary || !second) return { code: "method_distinct", status: "unavailable", detail: `${detail} · unknown method family` };
+  return { code: "method_distinct", status: primary === second ? "fail" : "pass", detail };
+}
+
+function isMonotonic(values: number[]): boolean {
+  const isRising = values.every((v, i) => i === 0 || v >= values[i - 1]);
+  const isFalling = values.every((v, i) => i === 0 || v <= values[i - 1]);
+  return isRising || isFalling;
+}
+
+/** The 3×3 grid's centre must be the base intrinsic value (both PRE-MoS), and the central
+ *  row and column must move one way: a grid that is not monotonic was not recomputed. */
+function checkSensitivityCenter(result: ParsedAnalystResult, base: Scenario | undefined): Gate {
+  const sensitivity = result.sensitivity;
+  const baseIntrinsic = base?.bridge?.intrinsicPerShare;
+  if (!sensitivity || baseIntrinsic == null) {
+    return { code: "sensitivity_center", status: "unavailable", detail: "sensitivity or base bridge missing" };
+  }
+  const grid = sensitivity.intrinsicPerShare;
+  const centre = grid[1][1];
+  const detail = `centre ${centre.toFixed(2)} · base ${baseIntrinsic.toFixed(2)}`;
+  if (relDiff(centre, baseIntrinsic) >= ARITHMETIC_TOLERANCE) return { code: "sensitivity_center", status: "fail", detail };
+  if (!isMonotonic(grid[1]) || !isMonotonic(grid.map((row) => row[1]))) {
+    return { code: "sensitivity_center", status: "fail", detail: `${detail} · non-monotonic` };
+  }
+  return { code: "sensitivity_center", status: "pass", detail };
+}
+
+/** The first year of the BASE dividend path, times the latest diluted share count, against
+ *  the mean of the last three REPORTED free cash flows (years without FCF are skipped before
+ *  the window is taken, as in reconcile.ts's dividend_not_covered). A non-payer passes
+ *  before anything else: paying nothing needs no data to be covered. */
+function checkDividendCoverage(result: ParsedAnalystResult, dataset: GroundedFinancials | null): Gate {
+  if (result.dividends === null) return { code: "dividend_coverage", status: "pass", detail: "no dividend" };
+  if (!dataset) return unavailableNoDataset("dividend_coverage");
+  if (!sameCurrency(dataset.meta.reportingCurrency, result.currency)) {
+    return { code: "dividend_coverage", status: "unavailable", detail: CURRENCY_MISMATCH };
+  }
+  const path = result.dividends?.path;
+  const latest = dataset.financials[dataset.financials.length - 1];
+  const fcfs = dataset.financials
+    .map((f) => f.freeCashFlow)
+    .filter((v): v is number => v != null)
+    .slice(-DIVIDEND_FCF_LOOKBACK_YEARS);
+  if (!path || !latest?.sharesDiluted || fcfs.length === 0) {
+    return { code: "dividend_coverage", status: "unavailable", detail: "dividend path, FCF or shares missing" };
+  }
+  const meanFcf = fcfs.reduce((sum, v) => sum + v, 0) / fcfs.length;
+  if (meanFcf <= 0) return { code: "dividend_coverage", status: "fail", detail: `mean FCF ${meanFcf.toFixed(0)} ≤ 0` };
+  const total = path[0].base * latest.sharesDiluted;
+  const ratio = total / meanFcf;
+  return {
+    code: "dividend_coverage",
+    status: ratio <= 1 ? "pass" : "fail",
+    detail: `DPS ${path[0].base.toFixed(2)} × shares ${latest.sharesDiluted.toFixed(0)} = ${total.toFixed(0)} · mean FCF(${fcfs.length}y) ${meanFcf.toFixed(0)} · ratio ${ratio.toFixed(2)}`,
+  };
+}
+
+/** The scale the bridges were written in must be the dataset's: a bridge in millions on a
+ *  paste in thousands is off by a factor of a thousand everywhere. */
+function checkUnitsMatch(result: ParsedAnalystResult, dataset: GroundedFinancials | null): Gate {
+  if (!dataset) return unavailableNoDataset("units_match");
+  if (!result.units || !dataset.meta.units) return { code: "units_match", status: "unavailable", detail: "units undeclared" };
+  return { code: "units_match", status: result.units === dataset.meta.units ? "pass" : "fail", detail: `${result.units} vs ${dataset.meta.units}` };
+}
+
+/**
+ * The ten numbered sections the prompt mandates, independent of the report language: only
+ * the number is checked, followed by ".", a fullwidth "．" or ")". Separate from
+ * checkValuationBridges because it reads the Markdown, not the JSON; a fenced JSON block in
+ * the text does not disturb it (the match is per line), but callers pass the stripped body.
+ * @returns the sections_present gate; its detail lists the missing numbers.
+ */
+export function checkReportStructure(reportMd: string): Gate {
+  const missing: number[] = [];
+  for (let n = 1; n <= 10; n++) {
+    if (!new RegExp(`^##\\s*${n}[.．)]`, "m").test(reportMd)) missing.push(n);
+  }
+  return missing.length === 0
+    ? { code: "sections_present", status: "pass", detail: "10/10" }
+    : { code: "sections_present", status: "fail", detail: `missing ${missing.join(",")}` };
 }
 
 function computeExpectedValue(
@@ -480,87 +676,113 @@ function computeExpectedValue(
 }
 
 /**
- * Recomputes each scenario's fair value from the model's own declared bridge and compares
- * it against what the model reported, then runs every deterministic rigor gate (basis
- * same-ness, horizon consistency, bear validity, trailing/forward normalization, net-debt
- * trajectory, returns vs cost of capital, probabilities + expected value, cross-check) —
- * the layer that turns "the model declares" into "the code verifies".
- *
- * Returns null only when there's no historical basis at all to check against
- * (`extract.financials` empty) or `result` isn't an object — otherwise degrades
- * per-field/per-gate (null-able Check A/percentile, "unavailable" gates) rather than
- * failing outright. Never throws on malformed model output: `result` is re-sanitized on
- * entry (sanitizeDeepValueResult), so a null/string/missing field reaches every gate
- * below as "not declared", never as a wrong-typed number.
+ * multiple_vs_market and priceAnchoringFlag — one comparison, computed once, on the
+ * STATEMENT basis: both multiples are our own bridge over EBITDA_S, so the anchoring read
+ * needs no kE at all. (Converting both to provider basis would only rescale them by the
+ * same kE, plus a kB term that blurs rather than sharpens a "did the model copy the
+ * price?" comparison.) No market-implied read (no dataset, currency mismatch, missing
+ * bridge inputs) → can't confirm anchoring; false/unavailable.
  */
-export function checkValuationBridges(
-  rawResult: ParsedAnalystResult,
-  mosPercent: number,
-  price: number,
-  quoteCurrency: string,
-  extract: GroundedFinancials
-): PostCheck | null {
-  if (extract.financials.length === 0) return null;
-  const result = sanitizeDeepValueResult(rawResult);
-  if (!result) return null;
-  // After sanitization each scenario may be missing (ParsedAnalystResult says so).
-  const scenarioSet: ScenarioSet = { bull: result.bull, base: result.base, bear: result.bear };
-
-  const basis = computeBasisReconciliation(extract);
-  const latestFy = extract.financials[extract.financials.length - 1];
-
-  const scenarios: BridgeCheck[] = (["bear", "base", "bull"] as const).map((s) =>
-    checkOneScenario(s, scenarioSet[s], mosPercent, extract, basis, latestFy)
-  );
-  const baseCheck = scenarios.find((s) => s.scenario === "base")!;
-  const bearCheck = scenarios.find((s) => s.scenario === "bear")!;
-
-  const marketImplied = isFiniteNumber(price) && price > 0 ? computeMarketImplied(price, quoteCurrency, extract, basis) : null;
-
-  // multiple_vs_market / priceAnchoringFlag — same underlying comparison, computed once,
-  // on the STATEMENT basis: both multiples are our own bridge over EBITDA_S, so the
-  // anchoring read needs no kE at all. (Converting both to provider basis would only
-  // rescale them by the same kE, plus a kB term that blurs rather than sharpens a
-  // "did the model copy the price?" comparison.) No market-implied read (currency
-  // mismatch, missing bridge inputs) → can't confirm anchoring; false/unavailable.
-  let priceAnchoringFlag = false;
-  let multipleVsMarketGate: Gate;
+function checkMultipleVsMarket(
+  baseCheck: BridgeCheck,
+  marketImplied: MarketImplied,
+  hasDataset: boolean
+): { gate: Gate; priceAnchoringFlag: boolean } {
+  if (!hasDataset) return { gate: unavailableNoDataset("multiple_vs_market"), priceAnchoringFlag: false };
   if (baseCheck.impliedMultiple == null || marketImplied == null) {
     const missing = baseCheck.impliedMultiple == null ? "base implied multiple" : "market-implied multiple";
-    multipleVsMarketGate = { code: "multiple_vs_market", status: "unavailable", detail: `${missing} unavailable` };
-  } else {
-    const diff = relDiff(baseCheck.impliedMultiple, marketImplied.impliedOnStatement);
-    priceAnchoringFlag = diff < ANCHOR_TOLERANCE;
-    multipleVsMarketGate = {
-      code: "multiple_vs_market",
-      status: priceAnchoringFlag ? "fail" : "pass",
-      detail: `base ${baseCheck.impliedMultiple.toFixed(2)}x · market ${marketImplied.impliedOnStatement.toFixed(2)}x · Δ ${(diff * 100).toFixed(1)}% (statement basis)`,
-    };
+    return { gate: { code: "multiple_vs_market", status: "unavailable", detail: `${missing} unavailable` }, priceAnchoringFlag: false };
   }
+  const diff = relDiff(baseCheck.impliedMultiple, marketImplied.impliedOnStatement);
+  const priceAnchoringFlag = diff < ANCHOR_TOLERANCE;
+  const detail = `base ${baseCheck.impliedMultiple.toFixed(2)}x · market ${marketImplied.impliedOnStatement.toFixed(2)}x · Δ ${(diff * 100).toFixed(1)}% (statement basis)`;
+  return { gate: { code: "multiple_vs_market", status: priceAnchoringFlag ? "fail" : "pass", detail }, priceAnchoringFlag };
+}
 
-  const crossCheckBridge = checkCrossCheckBridge(result, extract, basis);
+type GateInputs = {
+  result: ParsedAnalystResult;
+  scenarioSet: ScenarioSet;
+  scenarios: BridgeCheck[];
+  ctx: DatasetContext;
+  price: number;
+  /** sameCurrency(result.currency, quoteCurrency): false ⇒ every price gate is unavailable. */
+  isPriceComparable: boolean;
+  multipleVsMarket: Gate;
+};
 
+/** The gate array, in its fixed display order: the original ten, the contract-only ones,
+ *  then kill_price when the caller is checking a lens. sections_present is never here (it
+ *  needs the Markdown): ValuationChecksCard appends it from checkReportStructure. */
+function buildGates({ result, scenarioSet, scenarios, ctx, price, isPriceComparable, multipleVsMarket }: GateInputs): Gate[] {
+  const baseCheck = scenarios.find((s) => s.scenario === "base")!;
+  const bearCheck = scenarios.find((s) => s.scenario === "bear")!;
   const gates: Gate[] = [
-    checkBasisSame(basis, scenarioSet.base),
+    checkBasisSame(ctx, scenarioSet.base),
     checkHorizonConsistent(scenarioSet),
-    checkBearBreaksPrice(bearCheck.statedIntrinsic, price),
-    multipleVsMarketGate,
-    checkTrailingForward(baseCheck, scenarioSet.base, latestFy),
-    checkNetDebtTrajectory(scenarioSet, latestFy),
-    checkRoicVsWacc(result, scenarioSet.base, basis),
+    checkBearBreaksPrice(bearCheck.statedIntrinsic, price, isPriceComparable),
+    multipleVsMarket,
+    checkTrailingForward(baseCheck, scenarioSet.base, ctx),
+    checkNetDebtTrajectory(scenarioSet, ctx),
+    checkRoicVsWacc(result, scenarioSet.base, ctx),
     checkProbabilities(scenarioSet),
     checkCrossCheck(result, baseCheck.statedIntrinsic),
-    checkCrossCheckBasis(result, basis),
+    checkCrossCheckBasis(result, ctx),
+    checkScenarioOrder(scenarios),
+    checkMethodDistinct(result),
+    checkSensitivityCenter(result, scenarioSet.base),
+    checkDividendCoverage(result, ctx.dataset),
+    checkUnitsMatch(result, ctx.dataset),
   ];
   // kill_price only applies to analyst lenses — its presence in `gates` is gated on the
   // caller having included the `killPrice` key at all (even as null), not on its value,
   // so a base-report call (no such key) never gets a spurious kill_price entry. The
   // sanitizer preserves that key's presence exactly for this reason.
-  if ("killPrice" in result) {
-    gates.push(checkKillPrice(result.killPrice, result.killPriceNote));
-  }
+  if ("killPrice" in result) gates.push(checkKillPrice(result.killPrice, result.killPriceNote));
+  return gates;
+}
 
-  const expectedValue = computeExpectedValue(scenarios, scenarioSet, mosPercent, price);
+/**
+ * Recomputes each scenario's fair value from the model's own declared bridge and compares
+ * it against what the model reported, then runs every deterministic gate (basis
+ * same-ness, horizon consistency, bear validity, trailing/forward normalization, net-debt
+ * trajectory, returns vs cost of capital, probabilities + expected value, cross-check,
+ * scenario order, method family, sensitivity centre, dividend coverage, units) — the layer
+ * that turns "the model declares" into "the code verifies".
+ *
+ * @param extract the pasted dataset, or null: without one (or with no financial rows) the
+ *   dataset gates read "unavailable — no dataset", basis is EMPTY_BASIS, marketImplied null.
+ * @param quoteCurrency the price's currency; a price gate whose result currency differs
+ *   reads "unavailable — currency mismatch" and expectedValue is null.
+ * @returns null only when `result` isn't an object. Never throws on malformed model output:
+ *   `result` is re-sanitized on entry (sanitizeDeepValueResult), so a null/string/missing
+ *   field reaches every gate as "not declared", never as a wrong-typed number.
+ */
+export function checkValuationBridges(
+  rawResult: BridgeCheckInput,
+  mosPercent: number,
+  price: number,
+  quoteCurrency: string,
+  extract: GroundedFinancials | null
+): PostCheck | null {
+  const result = sanitizeDeepValueResult(rawResult);
+  if (!result) return null;
+  const ctx = buildDatasetContext(extract);
+  // After sanitization each scenario may be missing (ParsedAnalystResult says so).
+  const scenarioSet: ScenarioSet = { bull: result.bull, base: result.base, bear: result.bear };
+  const scenarios: BridgeCheck[] = (["bear", "base", "bull"] as const).map((s) => checkOneScenario(s, scenarioSet[s], mosPercent, ctx));
 
-  return { scenarios, marketImplied, priceAnchoringFlag, gates, basis, expectedValue, crossCheckBridge };
+  const hasMarketRead = ctx.dataset != null && isFiniteNumber(price) && price > 0 && sameCurrency(ctx.dataset.meta.reportingCurrency, quoteCurrency);
+  const marketImplied = hasMarketRead ? computeMarketImplied(price, quoteCurrency, ctx.dataset!, ctx.basis) : null;
+  const anchoring = checkMultipleVsMarket(scenarios.find((s) => s.scenario === "base")!, marketImplied, ctx.dataset != null);
+  const isPriceComparable = sameCurrency(result.currency, quoteCurrency);
+
+  return {
+    scenarios,
+    marketImplied,
+    priceAnchoringFlag: anchoring.priceAnchoringFlag,
+    gates: buildGates({ result, scenarioSet, scenarios, ctx, price, isPriceComparable, multipleVsMarket: anchoring.gate }),
+    basis: ctx.basis,
+    expectedValue: isPriceComparable ? computeExpectedValue(scenarios, scenarioSet, mosPercent, price) : null,
+    crossCheckBridge: checkCrossCheckBridge(result, ctx.series, ctx.basis),
+  };
 }

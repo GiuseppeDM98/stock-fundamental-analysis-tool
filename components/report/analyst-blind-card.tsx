@@ -10,13 +10,14 @@ import { useLanguage } from "@/context/language-context";
 import type { DeepValueResult } from "@/components/report/types";
 import type { Triple } from "@/lib/report/valuation";
 import type { Gate } from "@/lib/grounding/postcheck";
+import { GATE_LABEL_KEY } from "@/components/report/valuation-checks-card";
 
-type Revision = { scenario: "bull" | "base" | "bear"; from: number; to: number; reason: string };
+export type Revision = { scenario: "bull" | "base" | "bear"; from: number; to: number; reason: string };
 
 // The Skeptic's kill-price fields as either JSON block carries them. `killPriceNote` is the
 // lens's own explanation of why it could not give a kill price (only meaningful when
 // killPrice is null).
-type KillPriceFields = { killPrice?: number | null; killPriceNote?: string };
+export type KillPriceFields = { killPrice?: number | null; killPriceNote?: string };
 
 type Props = {
   // The lens's Phase-1 (blind) commitment — the full JSON so killPrice is available too.
@@ -26,15 +27,13 @@ type Props = {
   // null while Phase 2 is still streaming (the card renders as soon as the blind
   // commitment parses, with the final column filling in once turn 2 completes).
   final: Triple | null;
-  // The FINAL JSON's kill-price fields — live run only (the final JSON is not persisted as
-  // a blob), undefined after a reload or while Phase 2 is still streaming.
+  // The FINAL JSON's kill-price fields — from the live run or, after a reload, from
+  // *ResultJson; undefined while Phase 2 is still streaming (or on a row saved before it).
   finalKillPrice?: KillPriceFields;
-  // Only available on a fresh run in the same session — revisions[] lives in the FINAL
-  // JSON, which isn't persisted as a blob (only its scalar fairValue* columns are), so
-  // this is undefined after a page reload.
+  // The FINAL JSON's revisions[] — from the live run or, after a reload, from *ResultJson.
   revisions?: Revision[];
-  // Optional: the blind bridge's own deterministic gates,
-  // recomputed client-side via checkValuationBridges when grounding/price data is available.
+  // Optional: the blind bridge's own deterministic gates, recomputed client-side via
+  // checkValuationBridges whenever a price is available (the dataset gates need the paste).
   gates?: Gate[];
   // The kill_price gate evaluated on the FINAL JSON, shown next to the blind gates so a
   // kill price dropped or changed during reconciliation is visible. Display-only.
@@ -42,12 +41,14 @@ type Props = {
   // The run finished but its FINAL JSON lacks a scenario: no final column to fill, so the
   // card says so in its place instead of waiting forever on "…".
   finalIncomplete?: boolean;
+  // Which price the gates were checked against: "analysis" adds a line saying so.
+  priceSource: "live" | "analysis";
 };
 
 const SCENARIOS = ["bull", "base", "bear"] as const;
 
 // "1.50", the lens's own note when it declared none, or null when the key is absent.
-function formatKillPrice(fields: KillPriceFields | undefined): string | null {
+export function formatKillPrice(fields: KillPriceFields | undefined): string | null {
   if (!fields) return null;
   if (fields.killPrice != null) return fields.killPrice.toFixed(2);
   if (fields.killPriceNote) return `— ${fields.killPriceNote}`;
@@ -62,6 +63,7 @@ export default function AnalystBlindCard({
   gates,
   finalKillPriceGate,
   finalIncomplete = false,
+  priceSource,
 }: Props) {
   const { t } = useLanguage();
 
@@ -139,38 +141,48 @@ export default function AnalystBlindCard({
         </p>
       )}
 
-      {revisions != null && (
-        <div className="mt-2 space-y-1">
-          <p className="text-[11px] font-medium text-slate-400">{t("analystBlindRevisions")}</p>
-          {revisions.length === 0 ? (
-            <p className="text-[11px] text-emerald-400/80">{t("analystBlindNoRevisions")}</p>
-          ) : (
-            revisions.map((r, i) => (
-              <p key={i} className="text-[11px] text-slate-400">
-                <span className="text-slate-300">{scenarioLabel(r.scenario)}</span>: {r.from.toFixed(2)} → {r.to.toFixed(2)} — {r.reason}
-              </p>
-            ))
-          )}
-        </div>
-      )}
+      {revisions != null && <RevisionList revisions={revisions} />}
 
       {((gates != null && gates.length > 0) || finalKillPriceGate) && (
         <div className="mt-2 space-y-0.5 border-t border-slate-800/80 pt-2">
           {gates?.map((g) => <GateLine key={g.code} gate={g} />)}
           {finalKillPriceGate && <GateLine gate={finalKillPriceGate} prefix={t("analystBlindFinal")} />}
+          {priceSource === "analysis" && <p className="text-[11px] text-muted">{t("valuationChecksPriceAtAnalysis")}</p>}
         </div>
       )}
     </div>
   );
 }
 
-function GateLine({ gate, prefix }: { gate: Gate; prefix?: string }) {
+/** The FINAL JSON's revisions, one line each — shared with AnalystFinalCard. */
+export function RevisionList({ revisions }: { revisions: Revision[] }) {
+  const { t } = useLanguage();
+  const scenarioLabel = (s: Revision["scenario"]) => (s === "bear" ? t("bearLabel") : s === "base" ? t("baseLabel") : t("bullLabel"));
+  return (
+    <div className="mt-2 space-y-1">
+      <p className="text-[11px] font-medium text-slate-400">{t("analystBlindRevisions")}</p>
+      {revisions.length === 0 ? (
+        <p className="text-[11px] text-emerald-400/80">{t("analystBlindNoRevisions")}</p>
+      ) : (
+        revisions.map((r, i) => (
+          <p key={i} className="text-[11px] text-slate-400">
+            <span className="text-slate-300">{scenarioLabel(r.scenario)}</span>: {r.from.toFixed(2)} → {r.to.toFixed(2)} — {r.reason}
+          </p>
+        ))
+      )}
+    </div>
+  );
+}
+
+export function GateLine({ gate, prefix }: { gate: Gate; prefix?: string }) {
+  const { t } = useLanguage();
   const tone = gate.status === "fail" ? "text-red-300" : gate.status === "pass" ? "text-slate-400" : "text-slate-600";
   const mark = gate.status === "pass" ? "✓" : gate.status === "fail" ? "✗" : "—";
   return (
     <p className={`text-[11px] ${tone}`}>
       {mark} {prefix ? `${prefix} · ` : ""}
-      {gate.code}: {gate.detail}
+      {t(GATE_LABEL_KEY[gate.code])}
+      {gate.detail && ` — ${gate.detail}`}
     </p>
   );
 }

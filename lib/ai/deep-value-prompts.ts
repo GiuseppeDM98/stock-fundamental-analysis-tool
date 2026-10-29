@@ -665,6 +665,7 @@ export function buildAnalystUserPrompt({
   currency = "",
   mosPercent = 0,
   grounding,
+  gatesText,
 }: {
   angle: AnalystAngle;
   ticker: string;
@@ -681,6 +682,10 @@ export function buildAnalystUserPrompt({
   // would triple the input cost across 3 Opus xhigh passes for no proportional benefit
   // (deliberate, reversible choice — see doc/guide/valutazione.md § 5).
   grounding?: GroundingPromptContext;
+  // The deterministic gates on the BASE report (formatGatesForPrompt), with or without a
+  // dataset. Absent (not empty) when unavailable, same convention as
+  // buildAnalystReconcileUserPrompt — so a call without it renders the prompt unchanged.
+  gatesText?: string;
 }): string {
   void angle; // lens is applied in the system prompt; kept in the signature for symmetry.
   const dateClause = currentDate ? ` Today's date: ${currentDate}.` : "";
@@ -692,6 +697,7 @@ export function buildAnalystUserPrompt({
     ? ` Apply a margin of safety of ${mosPercent}% to your own fair values in the JSON block (buy target = intrinsic value × ${(1 - mosPercent / 100).toFixed(2)}).`
     : "";
   const groundingSection = grounding ? `\n\n${formatGroundingForPrompt(grounding)}` : "";
+  const gatesSection = gatesText ? `\n\n${gatesText}` : "";
   const spotCheckUserClause = grounding
     ? "spot-check key figures against the pasted data, using web search only for newer or qualitative facts"
     : "spot-check key figures via web search";
@@ -699,7 +705,7 @@ export function buildAnalystUserPrompt({
 
 --- REPORT UNDER REVIEW ---
 ${reportMd}
---- END REPORT ---${groundingSection}`;
+--- END REPORT ---${groundingSection}${gatesSection}`;
 }
 
 /**
@@ -768,9 +774,10 @@ export function buildAnalystReconcileUserPrompt({
   // fields) — echoed back so it cannot silently drift from it.
   blind: Triple;
   // Deterministic gates run against the BASE report's own declared bridge, formatted as
-  // plain text — present only when the base report's JSON parsed and price/currency
-  // resolved server-side. Absent (not empty) when unavailable, same convention as every
-  // other optional prompt section in this module.
+  // plain text — present whenever the base JSON has a full triple and a price resolved
+  // server-side (live, else the price saved with the analysis, which the text then names).
+  // Absent (not empty) when unavailable, same convention as every other optional prompt
+  // section in this module.
   gatesText?: string;
 }): string {
   const dateClause = currentDate ? ` Today's date: ${currentDate}.` : "";

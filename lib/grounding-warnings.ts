@@ -2,7 +2,7 @@
 // warnings that are NOT a property of the extract alone (those live in
 // lib/grounding/reconcile.ts) but of the extraction run (a block failed) or of the extract
 // meeting a live quote (why the price-implied read is missing). Pure, no server-only, so
-// the route and <GroundingCard> derive the exact same explanation from the same inputs.
+// the route and <ValuationChecksCard> derive the exact same explanation from the same inputs.
 import type { GroundedFinancials } from "@/types/grounding";
 import type { MarketImplied } from "@/lib/grounding/anchors";
 import { checkCurrencyMismatch, type ReconciliationWarning } from "@/lib/grounding/reconcile";
