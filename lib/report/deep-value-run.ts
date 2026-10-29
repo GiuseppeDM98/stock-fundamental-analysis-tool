@@ -11,7 +11,7 @@
 // Pure (no I/O) so the snapshot-to-request mapping is unit-testable.
 import type { SaveAnalysisRequest } from "@/types/analysis";
 import type { GroundingPayload } from "@/types/grounding";
-import type { DeepValueResult } from "@/components/report/types";
+import { hasFullTriple, type ParsedAnalystResult } from "@/lib/report/parse-deep-value-json";
 
 export type DeepValueRunInputs = {
   ticker: string;
@@ -30,14 +30,16 @@ export type DeepValueRunInputs = {
  *
  * @param run - The inputs captured when Generate was pressed.
  * @param reportMd - The full streamed report, JSON block included.
- * @param result - The parsed JSON block, or null when it did not parse (fair values are
- *   then omitted rather than guessed).
+ * @param result - The parsed JSON block, or null when it did not parse. Without a full
+ *   bull/base/bear triple the save is Markdown-only: the fair values AND the method are
+ *   omitted rather than guessed, so a half-parsed block never reads as a valuation.
  */
 export function buildSaveAnalysisRequest(
   run: DeepValueRunInputs,
   reportMd: string,
-  result: DeepValueResult | null
+  result: ParsedAnalystResult | null
 ): SaveAnalysisRequest {
+  const full = hasFullTriple(result);
   return {
     ticker: run.ticker,
     companyName: run.companyName,
@@ -45,10 +47,10 @@ export function buildSaveAnalysisRequest(
     mosPercent: run.mosPercent,
     // The API only accepts a positive price; anything else is left out, never sent as 0.
     priceAtAnalysis: run.currentPrice != null && run.currentPrice > 0 ? run.currentPrice : undefined,
-    fairValueBull: result?.bull.fairValue,
-    fairValueBase: result?.base.fairValue,
-    fairValueBear: result?.bear.fairValue,
-    valuationMethod: result?.method,
+    fairValueBull: full ? result.bull.fairValue : undefined,
+    fairValueBase: full ? result.base.fairValue : undefined,
+    fairValueBear: full ? result.bear.fairValue : undefined,
+    valuationMethod: full ? result.method : undefined,
     groundingJson: run.grounding ? JSON.stringify(run.grounding) : undefined,
   };
 }

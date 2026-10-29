@@ -8,6 +8,7 @@
 // outside the route file because a Next.js route module may only export its handlers,
 // and the contract test needs these schemas.
 import { z } from "zod";
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 
 import type { GroundingBlockKind } from "@/types/grounding";
 
@@ -108,3 +109,11 @@ export const EXTRACTION_SCHEMA_BY_KIND: Record<GroundingBlockKind, z.ZodTypeAny>
     estimates: z.array(estimateRowSchema).optional(),
   }),
 };
+
+/** The structured-output format for one block kind (`output_config.format`): the API then
+ *  returns JSON in this shape, so a stray fence, a key too many or prose around the object
+ *  can no longer fail a block. Constraints JSON Schema can't express to the API (the
+ *  fiscal-year range) end up in the field description, so the Zod parse stays the boundary. */
+export function extractionOutputFormat(kind: GroundingBlockKind) {
+  return zodOutputFormat(EXTRACTION_SCHEMA_BY_KIND[kind]);
+}

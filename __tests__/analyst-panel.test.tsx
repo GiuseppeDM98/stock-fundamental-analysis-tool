@@ -17,6 +17,7 @@ vi.mock("@/components/report/report-body", () => ({
 }));
 
 import AnalystPanel from "@/components/analyst-panel";
+import { updateAnalystOpinion } from "@/lib/analyses";
 import { makeExtract, makeMeta, makeFinancialsRow } from "./grounding-test-helpers";
 
 const OLD_BLIND = JSON.stringify({
@@ -136,5 +137,32 @@ describe("AnalystPanel blind card during a run", () => {
     expect(finalGate.textContent).toContain("✗");
     // The blind commitment's own kill_price gate is still listed separately, and passes.
     expect(screen.getByText(/^✓ kill_price: 1\.50/)).toBeInTheDocument();
+  });
+
+  it("clears the lens's numbers, without throwing, when the final JSON lacks a scenario", async () => {
+    vi.mocked(updateAnalystOpinion).mockClear();
+    renderPanel();
+    fireEvent.click(screen.getByText(translations.en.analystReviewRerun));
+
+    await act(async () => {
+      stream.push(ANALYST_PHASE_MARKERS.blind);
+      stream.push("```json-blind\n" + JSON.stringify(NEW_BLIND) + "\n```\n");
+      stream.push(ANALYST_PHASE_MARKERS.reconcile);
+      const { bear: _bear, ...noBear } = NEW_BLIND;
+      stream.push("```json\n" + JSON.stringify(noBear) + "\n```\nCritique.");
+      stream.close();
+    });
+
+    await waitFor(() => expect(updateAnalystOpinion).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(updateAnalystOpinion).mock.calls[0][1]).toMatchObject({
+      angle: "skeptic",
+      fairValueBull: null,
+      fairValueBase: null,
+      fairValueBear: null,
+      valuationMethod: null,
+    });
+    expect(screen.getByText(translations.en.deepValueIncompleteJson)).toBeInTheDocument();
+    // The blind card no longer waits on a final column that will never come.
+    expect(screen.queryAllByText("…")).toHaveLength(0);
   });
 });

@@ -21,6 +21,7 @@ import { getVerdict, VERDICT_BADGE, VERDICT_TEXT, type Verdict } from "@/lib/rep
 import { getSignalStrength } from "@/lib/report/signal";
 import { grossUpToIntrinsic } from "@/lib/report/valuation";
 import { presentAnalysts, meanTriple } from "@/lib/report/consensus";
+import { latestAnalysisWithValues, verdictBasis, watchlistBuyTarget } from "@/lib/report/latest-analysis";
 import { EarningsBadge } from "@/components/earnings-badge";
 import { isAnalysisStalePreEarnings, isFutureEarnings } from "@/lib/earnings";
 import { fetchEarnings, refreshEarnings } from "@/lib/earnings-client";
@@ -224,10 +225,10 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
       : null;
 
   // Verdict/zones prefer the consensus (base analysis + every analyst lens that ran) over
-  // the base analysis alone — more independent opinions is a more robust signal than one.
-  // Falls back to the base analysis's own fair value when no analyst has run yet.
-  const verdictBaseIntrinsic = consensusIntrinsic ? consensusIntrinsic.base : intrinsic?.base ?? null;
-  const buyTargetBase = verdictBaseIntrinsic != null ? toBuyTarget(verdictBaseIntrinsic) : null;
+  // the base analysis alone — verdictBasis decides, the same rule as /analyses, the
+  // portfolio and the digest. The buy target re-discounts it with the ITEM's MoS.
+  const verdictBaseIntrinsic = analysis ? verdictBasis(analysis)?.intrinsicBase ?? null : null;
+  const buyTargetBase = analysis ? watchlistBuyTarget(analysis, itemMos) : null;
   const verdict: Verdict | null =
     verdictBaseIntrinsic != null && buyTargetBase != null && currentPrice != null
       ? getVerdict(currentPrice, buyTargetBase, verdictBaseIntrinsic)
@@ -690,15 +691,19 @@ export default function WatchlistClient() {
   useEffect(() => setMounted(true), []);
 
   // Watchlist values come from the user's latest saved Deep Value analysis per ticker
-  // (the lite WatchlistRun engine was removed, and lite analysis was removed entirely with Compare).
+  // (the lite per-item run engine was removed, its table dropped on 2026-10-28, and lite
+  // analysis was removed entirely with Compare).
   useEffect(() => {
     fetchAnalyses()
       .then((analyses) => {
+        // The API returns newest first; group per ticker keeping that order, then pick the
+        // newest save with a full triple — the shared rule (lib/report/latest-analysis.ts).
+        const groups = new Map<string, SavedAnalysis[]>();
+        for (const a of analyses) groups.set(a.ticker, [...(groups.get(a.ticker) ?? []), a]);
         const latest: Record<string, SavedAnalysis> = {};
-        for (const a of analyses) {
-          if (a.fairValueBase == null) continue;
-          const existing = latest[a.ticker];
-          if (!existing || new Date(a.createdAt) > new Date(existing.createdAt)) latest[a.ticker] = a;
+        for (const [ticker, groupNewestFirst] of groups) {
+          const l = latestAnalysisWithValues(groupNewestFirst);
+          if (l) latest[ticker] = l;
         }
         setLatestAnalyses(latest);
       })

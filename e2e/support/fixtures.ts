@@ -87,7 +87,8 @@ export const FX_STUB: Record<string, number> = { USD: 1.1, GBP: 0.85, CHF: 0.95 
 
 /**
  * Midnight UTC of the current day — the anchor for every date that must stay "recent".
- * Snapshots must fall inside the API's 90-day window and the next-earnings date must stay in
+ * Snapshots are five inside the 90-day window plus one outside it (the dividends route reads
+ * all of them), and the next-earnings date must stay in
  * the future, so those are offsets from this anchor rather than fixed calendar dates. Every
  * other date (analysis/purchase/sale) is fixed. The visual spec freezes the browser clock to
  * `referenceDay() + 12h`, so screenshots are stable within a day (see visual.spec.ts).
@@ -104,6 +105,6 @@ export function daysFrom(anchor: Date, days: number, hourUtc = 12): Date {
 }
 
 /** Offsets (days from referenceDay) of the seeded portfolio snapshots, oldest first. */
-export const SNAPSHOT_OFFSETS = [-12, -9, -6, -3, -1] as const;
+export const SNAPSHOT_OFFSETS = [-120, -12, -9, -6, -3, -1] as const;
 /** Days from referenceDay to the seeded next-earnings date of the grounded ticker. */
 export const EARNINGS_OFFSET_DAYS = 45;

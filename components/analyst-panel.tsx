@@ -21,6 +21,8 @@ import {
   stripJsonBlock,
   stripAnalystStreamArtifacts,
   currentAnalystPhase,
+  hasFullTriple,
+  type ParsedAnalystResult,
 } from "@/lib/report/parse-deep-value-json";
 import ReportBody from "@/components/report/report-body";
 import AnalystBlindCard from "@/components/report/analyst-blind-card";
@@ -32,7 +34,7 @@ import { ANALYST_ANGLES } from "@/types/analysis";
 import type { AnalystResult } from "@/components/report/types";
 import type { Triple } from "@/lib/report/valuation";
 import type { GroundedFinancials } from "@/types/grounding";
-import { checkValuationBridges, type BridgeCheckInput } from "@/lib/grounding/postcheck";
+import { checkValuationBridges } from "@/lib/grounding/postcheck";
 
 type Status = "idle" | "loading" | "streaming" | "done" | "error";
 
@@ -169,7 +171,8 @@ function AnalystSlot({
   // The lens's OWN parsed commitments from the run started in this session. liveBlind is
   // set mid-stream, as soon as the Phase-1 block parses; liveFinal once the stream ends.
   const [liveBlind, setLiveBlind] = useState<AnalystResult | null>(null);
-  const [liveFinal, setLiveFinal] = useState<AnalystResult | null>(null);
+  // The final JSON may lack a scenario: every read of its numbers goes through hasFullTriple.
+  const [liveFinal, setLiveFinal] = useState<ParsedAnalystResult | null>(null);
   // Once a run starts in this session the persisted initial* values are superseded, even
   // before the new run has produced anything: otherwise a re-run would keep showing the
   // previous run's blind card (and its final column) until the new Phase 1 parsed.
@@ -187,10 +190,13 @@ function AnalystSlot({
   }, [hasLiveRun, liveBlind, initialBlindJson]);
 
   const finalTriple: Triple | null = hasLiveRun
-    ? liveFinal
+    ? hasFullTriple(liveFinal)
       ? { bear: liveFinal.bear.fairValue, base: liveFinal.base.fairValue, bull: liveFinal.bull.fairValue }
       : null
     : initialFinalTriple;
+  // A finished live run whose final JSON is missing or lacks a scenario: the critique is
+  // shown and saved, the lens's numbers are cleared — and the slot says so.
+  const finalIncomplete = hasLiveRun && status === "done" && !hasFullTriple(liveFinal);
 
   // Only present on a fresh run in the same session — the FINAL JSON's own revisions[]
   // aren't persisted as a blob (only the scalar fairValue* columns are), so
@@ -202,7 +208,7 @@ function AnalystSlot({
   // live or from a reload.
   const blindGates = useMemo(() => {
     if (!blindResult || !groundingExtract || currentPrice == null || !currency) return undefined;
-    const postCheck = checkValuationBridges(blindResult as BridgeCheckInput, mosPercent, currentPrice, currency, groundingExtract);
+    const postCheck = checkValuationBridges(blindResult, mosPercent, currentPrice, currency, groundingExtract);
     return postCheck?.gates;
   }, [blindResult, groundingExtract, currentPrice, currency, mosPercent]);
 
@@ -216,7 +222,7 @@ function AnalystSlot({
   const finalKillPriceGate = useMemo(() => {
     if (!liveFinal || !groundingExtract || currentPrice == null || !currency) return undefined;
     const checked = "killPriceNote" in liveFinal && !("killPrice" in liveFinal) ? { ...liveFinal, killPrice: null } : liveFinal;
-    const postCheck = checkValuationBridges(checked as BridgeCheckInput, mosPercent, currentPrice, currency, groundingExtract);
+    const postCheck = checkValuationBridges(checked, mosPercent, currentPrice, currency, groundingExtract);
     return postCheck?.gates.find((g) => g.code === "kill_price");
   }, [liveFinal, groundingExtract, currentPrice, currency, mosPercent]);
 
@@ -271,9 +277,13 @@ function AnalystSlot({
           setPhase(currentAnalystPhase(accumulated));
           // Show the blind card the moment Phase 1 parses — turn 2 can run for minutes,
           // and the blind commitment is the part worth seeing early.
+          // The blind card needs all three scenarios; a partial Phase 1 is not shown.
           if (!blindParsed) {
-            blindParsed = parseBlindJson(accumulated) as AnalystResult | null;
-            if (blindParsed) setLiveBlind(blindParsed);
+            const blind = parseBlindJson(accumulated);
+            if (hasFullTriple(blind)) {
+              blindParsed = blind;
+              setLiveBlind(blind);
+            }
           }
         }
       }
@@ -284,16 +294,19 @@ function AnalystSlot({
       // plus this analyst's own fair values, and — for a blind-first run whose Phase 1
       // parsed — the blind commitment. Null-safe throughout: a save failure is non-fatal,
       // the critique is still shown; re-run to retry.
-      const parsed = parseDeepValueJson(accumulated) as AnalystResult | null;
+      const parsed = parseDeepValueJson(accumulated);
       setLiveFinal(parsed);
+      // Without a full triple the lens's numbers are sent as null, not omitted: the previous
+      // run's fair values must not survive next to this run's critique (2026-10-28).
+      const full = hasFullTriple(parsed);
       try {
         await updateAnalystOpinion(analysisId, {
           angle,
           critiqueMd: stripJsonBlock(stripAnalystStreamArtifacts(accumulated)),
-          fairValueBull: parsed?.bull.fairValue,
-          fairValueBase: parsed?.base.fairValue,
-          fairValueBear: parsed?.bear.fairValue,
-          valuationMethod: parsed?.method,
+          fairValueBull: full ? parsed.bull.fairValue : null,
+          fairValueBase: full ? parsed.base.fairValue : null,
+          fairValueBear: full ? parsed.bear.fairValue : null,
+          valuationMethod: full ? parsed.method : null,
           blindJson: blindParsed ? JSON.stringify(blindParsed) : undefined,
         });
       } catch (saveErr) {
@@ -367,8 +380,12 @@ function AnalystSlot({
           revisions={revisions}
           gates={blindGates}
           finalKillPriceGate={finalKillPriceGate}
+          finalIncomplete={finalIncomplete}
         />
       )}
+
+      {/* With a blind card the card itself carries this line, in place of its final column. */}
+      {finalIncomplete && !blindResult && <p className="mt-3 text-xs text-warning">{t("deepValueIncompleteJson")}</p>}
 
       {critique && (
         <div className="mt-3">

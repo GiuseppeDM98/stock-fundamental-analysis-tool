@@ -56,4 +56,25 @@ describe("resolveAiSettings", () => {
     // stored effort "high" is valid for deepseek's catalog (["low","high","max"]) so it survives
     expect(result.effort).toBe("high");
   });
+
+  it("resolves a stored default saved under the retired Flash id to its successor", async () => {
+    findUniqueMock.mockResolvedValueOnce({
+      aiModel: "deepseek-v4-flash",
+      aiEffort: "low",
+      aiThinkingEnabled: true,
+    });
+    const result = await resolveAiSettings("user6", undefined, FALLBACK);
+    expect(result.model).toBe("deepseek-flash");
+    expect(result.effort).toBe("low");
+  });
+
+  it("maps a per-run override naming the retired Flash id to its successor", async () => {
+    findUniqueMock.mockResolvedValueOnce({
+      aiModel: "claude-opus-4-8",
+      aiEffort: "high",
+      aiThinkingEnabled: true,
+    });
+    const result = await resolveAiSettings("user7", { model: "deepseek-v4-flash" }, FALLBACK);
+    expect(result.model).toBe("deepseek-flash");
+  });
 });

@@ -20,7 +20,7 @@ import {
   buildAnalystReconcileUserPrompt,
 } from "@/lib/ai/deep-value-prompts";
 import { getAiClient, buildThinkingParam, buildEffortConfig, buildWebSearchTools } from "@/lib/ai/client";
-import { resolveAiSettings } from "@/lib/ai/ai-preferences";
+import { resolveAiSettings, aiModelIdSchema } from "@/lib/ai/ai-preferences";
 import {
   runStreamWithToolLoop,
   buildPromptCacheParam,
@@ -30,11 +30,11 @@ import {
 } from "@/lib/ai/tool-loop";
 import { fallbackNote } from "@/lib/ai/fallback";
 import { routeErrorStatus } from "@/lib/ai/error-status";
-import { AI_MODEL_IDS, AI_EFFORT_LEVELS, type AiSettings } from "@/types/ai-settings";
+import { AI_EFFORT_LEVELS, type AiSettings } from "@/types/ai-settings";
 import { buildGroundingPromptContext, formatGatesForPrompt, type GroundingPromptContext } from "@/lib/grounding/prompt-format";
 import { parseDeepValueJson, ANALYST_PHASE_MARKERS } from "@/lib/report/parse-deep-value-json";
 import { pickBlindCommitment } from "@/lib/ai/blind-commitment";
-import { checkValuationBridges, type BridgeCheckInput } from "@/lib/grounding/postcheck";
+import { checkValuationBridges } from "@/lib/grounding/postcheck";
 
 const DEFAULT_SETTINGS: AiSettings = { model: "claude-opus-4-8", effort: "xhigh", thinking: true };
 
@@ -58,7 +58,7 @@ const requestSchema = z.object({
   // of the base analysis (MoS-adjusted) and they can be averaged into a consensus.
   // Overridden by the saved analysis's own mosPercent when analysisId resolves (below).
   mosPercent: z.number().min(0).max(80).default(0),
-  model: z.enum(AI_MODEL_IDS).optional(),
+  model: aiModelIdSchema.optional(),
   effort: z.enum(AI_EFFORT_LEVELS).optional(),
   thinking: z.boolean().optional(),
   // When present, grounds this lens the same way as the base analysis: the route
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
     body = requestSchema.parse(await request.json());
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return NextResponse.json({ error: err.errors[0].message }, { status: 400 });
+      return NextResponse.json({ error: err.issues[0].message }, { status: 400 });
     }
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
@@ -134,7 +134,7 @@ export async function POST(request: Request) {
             const baseResult = parseDeepValueJson(analysis.reportMd);
             if (baseResult && currentPrice != null && currency) {
               const basePostCheck = checkValuationBridges(
-                baseResult as BridgeCheckInput,
+                baseResult,
                 effectiveMosPercent,
                 currentPrice,
                 currency,

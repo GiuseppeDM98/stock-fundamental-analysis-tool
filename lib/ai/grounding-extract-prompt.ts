@@ -146,7 +146,7 @@ RULES (mandatory):
 
 ${cfg.instructions}
 
-OUTPUT — return ONLY this JSON block, with no prose before or after:
+OUTPUT — your response is the JSON object in this shape (the response format enforces it):
 \`\`\`json
 ${cfg.example}
 \`\`\`

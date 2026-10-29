@@ -76,10 +76,11 @@ export type AnalystOpinionUpdate = {
   // The critique Markdown (JSON block already stripped).
   critiqueMd: string;
   // The analyst's own valuation (MoS-adjusted buy targets), when it emitted a JSON block.
-  fairValueBull?: number;
-  fairValueBase?: number;
-  fairValueBear?: number;
-  valuationMethod?: string;
+  // null clears the columns: sent when the final JSON lacks a full bull/base/bear triple.
+  fairValueBull?: number | null;
+  fairValueBase?: number | null;
+  fairValueBear?: number | null;
+  valuationMethod?: string | null;
   // Blind-first commitment — JSON.stringify'd DeepValueResult from Phase 1, present only
   // for a Grounded blind-first run whose Phase 1 parsed successfully. Omitted (not null)
   // leaves any prior commitment untouched, same convention as the fairValue* fields above.

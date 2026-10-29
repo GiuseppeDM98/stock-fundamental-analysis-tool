@@ -8,6 +8,12 @@
 // raises a `block_extract_failed` warning instead of sinking the whole request; only a
 // total wipeout (zero blocks extracted) fails the request (502, mirroring the earnings
 // route's "invalid shape → the model's fault, not the client's").
+//
+// Structured output (2026-10-28): each call carries the block kind's JSON schema in
+// `output_config.format`, so the response IS the JSON object — no fence to find with a
+// regex, no prose around it. Before, a fence never closed or a key too many reached the
+// user as a failed block. The format guarantees the shape, not the values: the Zod
+// safeParse below stays the boundary (it still rejects, e.g., a fiscal year out of range).
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
@@ -26,7 +32,7 @@ import {
   type ForwardEstimate,
 } from "@/types/grounding";
 import { buildGroundingExtractSystemPrompt, buildGroundingExtractUserPrompt } from "@/lib/ai/grounding-extract-prompt";
-import { EXTRACTION_SCHEMA_BY_KIND } from "@/lib/ai/grounding-extract-schema";
+import { EXTRACTION_SCHEMA_BY_KIND, extractionOutputFormat } from "@/lib/ai/grounding-extract-schema";
 import { getAiClient, buildThinkingParam, buildEffortConfig } from "@/lib/ai/client";
 import { runStreamWithToolLoop } from "@/lib/ai/tool-loop";
 import { routeErrorStatus } from "@/lib/ai/error-status";
@@ -122,7 +128,7 @@ function toBlockExtractResult(kind: GroundingBlockKind, peerTicker: string | und
 }
 
 /** Runs one block's extraction call and returns its merge-ready result. Throws on any
- * failure (no fence found, malformed JSON, schema mismatch) — the caller wraps every
+ * failure (truncated or malformed JSON, schema mismatch, refusal) — the caller wraps every
  * block in Promise.allSettled so one bad paste doesn't sink the others. */
 async function extractBlock(
   client: Anthropic,
@@ -144,12 +150,13 @@ async function extractBlock(
       model: aiSettings.model,
       // Adaptive thinking counts toward this budget even for a "pure transcription" call
       // (AGENTS.md gotcha) — 16k occasionally let the model's reasoning eat enough of the
-      // budget to truncate the closing ```json fence mid-object, causing an intermittent
-      // (non-deterministic, retry-doesn't-fix-it) JSON.parse failure on an otherwise valid
-      // paste. Matched to the Deep Value routes' ceiling — a cap, not a target.
+      // budget to cut the JSON off mid-object, an intermittent (non-deterministic,
+      // retry-doesn't-fix-it) parse failure on an otherwise valid paste. The structured
+      // output format guarantees the shape, not the length, so the ceiling stays: matched
+      // to the Deep Value routes', a cap, not a target.
       max_tokens: 64000,
       thinking: buildThinkingParam(aiSettings.thinking, aiSettings.model, aiSettings.effort),
-      output_config: buildEffortConfig(aiSettings.effort),
+      output_config: { ...buildEffortConfig(aiSettings.effort), format: extractionOutputFormat(block.kind) },
       system: buildGroundingExtractSystemPrompt({ kind: block.kind }),
       tools: [], // pure transcription — see the module doc comment above
       messages: [
@@ -169,16 +176,16 @@ async function extractBlock(
   // doesn't read as a malformed paste.
   if (stopReason === "refusal") throw new Error(`Block ${block.id}: the model declined to transcribe this block.`);
 
-  const match = allText.match(/```json\s*([\s\S]*?)\s*```/);
-  if (!match) {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(allText.trim());
+  } catch {
     throw new Error(
       stopReason === "max_tokens"
         ? `Block ${block.id}: the AI response hit the length limit before the JSON block closed.`
-        : `Block ${block.id}: no JSON block in the AI response.`
+        : `Block ${block.id}: the AI response is not valid JSON.`
     );
   }
-
-  const raw = JSON.parse(match[1]); // throws on malformed JSON — caller treats it as a failed block
   const parsed = EXTRACTION_SCHEMA_BY_KIND[block.kind].safeParse(raw);
   if (!parsed.success) throw new Error(`Block ${block.id}: AI returned an invalid shape.`);
 
@@ -194,7 +201,7 @@ export async function POST(request: Request) {
     body = requestSchema.parse(await request.json());
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return NextResponse.json({ error: err.errors[0].message }, { status: 400 });
+      return NextResponse.json({ error: err.issues[0].message }, { status: 400 });
     }
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }

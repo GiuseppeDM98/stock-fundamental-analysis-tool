@@ -29,7 +29,7 @@ describe("pickBlindCommitment", () => {
     const stream = picked.fenced + "```json\n{\"base\":{\"fairValue\":2}}\n```\nCritique body.";
     expect(parseBlindJson(stream)?.killPrice).toBe(1.5);
     // The re-fenced block never collides with the FINAL block's parser.
-    expect(parseDeepValueJson(stream)?.base.fairValue).toBe(2);
+    expect(parseDeepValueJson(stream)?.base?.fairValue).toBe(2);
     expect(stripAnalystStreamArtifacts(stream).startsWith("```json\n")).toBe(true);
   });
 

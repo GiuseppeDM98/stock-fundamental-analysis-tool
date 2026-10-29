@@ -11,7 +11,9 @@ import {
   deletePosition,
   closePosition,
   fetchSnapshots,
+  fetchDividendTotals,
 } from "@/lib/portfolio";
+import { latestAnalysisWithValues, verdictBasis } from "@/lib/report/latest-analysis";
 import { fetchAnalyses } from "@/lib/analyses";
 import { realizedPnlNative, holdingDays, estimateCapitalGainsTax } from "@/lib/portfolio-math";
 import type {
@@ -86,17 +88,19 @@ function aggregateByTicker(positions: Position[]): AggregatedPosition[] {
 // ─── Exit signal detection ────────────────────────────────────────────────────
 
 // A value investor's margin of safety is exhausted when price reaches fair value base.
-// Returns the signal state based on the most recent analysis with a fairValueBase.
+// Returns the signal state based on the newest analysis with fair values, measured on the
+// same basis as the /analyses verdict (the consensus once a lens ran, 2026-10-28: before,
+// the pill could contradict the verdict shown for the same ticker).
 // Comparison is against the intrinsic base fair value (before MoS discount), not the
 // stored buy target — otherwise the alert fires at the entry price, not the exit target.
 function getExitSignal(
   currentPrice: number | undefined,
   analyses: SavedAnalysis[]
 ): { triggered: boolean; fairValueBase: number | null } {
-  const latest = analyses.find((a) => a.fairValueBase != null);
-  if (!latest || currentPrice == null) return { triggered: false, fairValueBase: null };
-  const mos = (latest.mosPercent ?? 0) / 100;
-  const intrinsicBase = mos > 0 ? latest.fairValueBase! / (1 - mos) : latest.fairValueBase!;
+  const latest = latestAnalysisWithValues(analyses);
+  const basis = latest && verdictBasis(latest);
+  if (!basis || currentPrice == null) return { triggered: false, fairValueBase: null };
+  const intrinsicBase = basis.intrinsicBase;
   return {
     triggered: currentPrice >= intrinsicBase,
     fairValueBase: intrinsicBase,
@@ -874,7 +878,8 @@ function ClosedPositionsSection({
 // Converts open positions to EUR using Frankfurter rates and shows aggregate P&L.
 // Realized P&L is summed from closed lots (sold), so the bar separates unrealized
 // (open holdings) from realized (booked) and shows their total.
-// totalDividendsEur is summed from historical snapshots — it accumulates over time.
+// totalDividendsEur is summed server-side over every snapshot ever taken (GET
+// /api/portfolio/dividends) — it accumulates over time.
 function SummaryBar({
   positions,
   closedPositions,
@@ -1092,9 +1097,15 @@ export default function PortfolioList() {
   const [totalDividendsEur, setTotalDividendsEur] = useState(0);
 
   useEffect(() => {
-    // Fetch positions, analyses, and snapshots in parallel — no sequential dependency.
-    Promise.all([fetchPositions(), fetchAnalyses(), fetchSnapshots()])
-      .then(([posData, analysesData, snapshots]) => {
+    // Fetch positions, analyses, snapshots and dividends in parallel — no sequential
+    // dependency. A dividends failure must not fail the portfolio: it shows 0 instead.
+    Promise.all([
+      fetchPositions(),
+      fetchAnalyses(),
+      fetchSnapshots(),
+      fetchDividendTotals().catch(() => ({ totalEur: 0, byTicker: {} })),
+    ])
+      .then(([posData, analysesData, , dividends]) => {
         setPositions(posData);
 
         const map: Record<string, SavedAnalysis[]> = {};
@@ -1103,9 +1114,8 @@ export default function PortfolioList() {
         }
         setAnalysesByTicker(map);
 
-        // Sum dividends received across all historical snapshots
-        const divTotal = snapshots.reduce((sum, s) => sum + (s.dividendsEur ?? 0), 0);
-        setTotalDividendsEur(divTotal);
+        // Every dividend received, all history: the snapshot route only returns 90 days.
+        setTotalDividendsEur(dividends.totalEur);
 
         const tickers = [...new Set(posData.map((p) => p.ticker))];
         const currencies = [...new Set(posData.map((p) => p.currency).filter((c) => c !== "EUR"))];

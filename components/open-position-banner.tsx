@@ -55,7 +55,7 @@ export default function OpenPositionBanner({
       <span className="text-slate-400">
         {t("openPosition")}{" "}
         <span className="text-slate-200 font-medium">
-          {totalShares} shares @ {formatPrice(wac)}
+          {totalShares} {t("sharesUnit")} @ {formatPrice(wac)}
         </span>
       </span>
       {pnl != null ? (

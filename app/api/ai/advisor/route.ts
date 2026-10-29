@@ -8,11 +8,11 @@ import { db } from "@/lib/db";
 import { getQuote } from "@/lib/yahoo-client";
 import { buildAdvisorSystemPrompt, buildAdvisorUserPrompt, buildDiscoverySystemPrompt } from "@/lib/ai/advisor-prompts";
 import { getAiClient, buildThinkingParam, buildEffortConfig, buildWebSearchTools } from "@/lib/ai/client";
-import { resolveAiSettings } from "@/lib/ai/ai-preferences";
+import { resolveAiSettings, aiModelIdSchema } from "@/lib/ai/ai-preferences";
 import { runStreamWithToolLoop } from "@/lib/ai/tool-loop";
 import { fallbackNote } from "@/lib/ai/fallback";
 import { routeErrorStatus } from "@/lib/ai/error-status";
-import { AI_MODEL_IDS, AI_EFFORT_LEVELS, type AiSettings } from "@/types/ai-settings";
+import { AI_EFFORT_LEVELS, type AiSettings } from "@/types/ai-settings";
 
 const DEFAULT_SETTINGS: AiSettings = { model: "claude-sonnet-5-5", effort: "high", thinking: true };
 
@@ -25,7 +25,7 @@ const requestSchema = z.object({
   messages: z.array(messageSchema).min(1).max(20),
   language: z.string().min(1).max(30).default("English"),
   mode: z.enum(["portfolio", "discovery"]).default("portfolio"),
-  model: z.enum(AI_MODEL_IDS).optional(),
+  model: aiModelIdSchema.optional(),
   effort: z.enum(AI_EFFORT_LEVELS).optional(),
   thinking: z.boolean().optional(),
 });
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     body = requestSchema.parse(await request.json());
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return NextResponse.json({ error: err.errors[0].message }, { status: 400 });
+      return NextResponse.json({ error: err.issues[0].message }, { status: 400 });
     }
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
@@ -64,9 +64,11 @@ export async function POST(request: Request) {
       systemPrompt = buildDiscoverySystemPrompt({ currentDate, language: body.language });
     } else {
       // Fetch portfolio context in parallel — only fields needed for the prompt.
+      // Open lots only (2026-10-28): a sold lot sent as "held" made the Advisor reason about
+      // shares the user no longer owns; realized history is not hold/add/exit context.
       const [positions, analyses] = await Promise.all([
         db.position.findMany({
-          where: { userId: session.user.id },
+          where: { userId: session.user.id, closedAt: null },
           orderBy: { purchasedAt: "desc" },
           select: {
             ticker: true,

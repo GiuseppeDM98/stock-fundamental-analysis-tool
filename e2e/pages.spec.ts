@@ -51,6 +51,12 @@ test("analyses list groups by ticker, counts match the DB, and a group expands",
   await expect(card.getByText("✓ Reviewed")).toBeVisible();
   await card.getByRole("button", { name: "Expand" }).click();
 
+  // The position badge counts only the open lot, never the sold one next to it.
+  const openPanelLot = await queryOne<{ shares: number }>("SELECT shares FROM Position WHERE id = ?", [IDS.positionPanelOpen]);
+  const closedPanelLot = await queryOne<{ shares: number }>("SELECT shares FROM Position WHERE id = ?", [IDS.positionPanelClosed]);
+  await expect(card.getByText(`Position: ${openPanelLot!.shares} shares @`)).toBeVisible();
+  await expect(card.getByText(`Position: ${openPanelLot!.shares + closedPanelLot!.shares} shares @`)).toHaveCount(0);
+
   for (const label of ["Skeptic", "Bull", "Quality", "Consensus"]) {
     await expect(card.getByText(label, { exact: true }).first()).toBeVisible();
   }
@@ -167,6 +173,22 @@ test("portfolio shows open positions, the closed-positions archive and the histo
   await expect(page.locator(".recharts-line").first()).toBeVisible();
   await expect(page.getByText("Sold", { exact: true })).toBeVisible();
   await expect(page.getByText("Dividend", { exact: true })).toBeVisible();
+
+  // Dividends received: every snapshot ever taken, not only the chart's 90 days — the seed
+  // puts one dividend day outside that window. Summed here from the rows themselves.
+  const rows = await queryAll<{ data: string }>("SELECT data FROM PortfolioSnapshot WHERE userId = ?", [USER_A.id]);
+  const dividendsEur = rows.reduce((sum, r) => {
+    const entries = (JSON.parse(r.data) as { entries?: { dividendPaidEur?: number }[] }).entries ?? [];
+    return sum + entries.reduce((s, e) => s + (e.dividendPaidEur ?? 0), 0);
+  }, 0);
+  expect(dividendsEur).toBe(47.5);
+  await expect(page.getByText("+€47.50")).toBeVisible();
+
+  // The exit signal is measured on the same basis as the /analyses verdict: the panel
+  // ticker's consensus base 112.5 at MoS 25% → intrinsic 150 = the stub price, so it fires.
+  // It is the only held ticker at or above its intrinsic base, so exactly one pill shows.
+  await page.getByRole("button", { name: "Aggregated" }).click();
+  await expect(page.getByText("⚠ At Fair Value")).toHaveCount(1);
 });
 
 test("watchlist lists A's items and shows notes when expanded", async ({ page }) => {

@@ -10,17 +10,17 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: October 27, 2026 — **Spec 05c (staged AI runs) adversarially read** (no code change). Three read-only Opus readers (spec, net-worth-tracker reference, cross-spec) produced 68 findings, all re-verified on the code and fixed in loco in `doc/evoluzioni/05c-corsa-a-fasi.md`; 15 owner decisions (D-82…D-96: `analysisId` in the first SSE event, three-message Phase 2 with a synthetic assistant turn, the server finishes the phase when the client disconnects, 330 s retry threshold with conditional writes, `X-AI-Settings` retired, `runStatus: done` filters inherited by 07a/07b; D-77 reworded to «single phase») and 8 planner choices (T-39…T-46) in `00-INDICE.md § 3.6/§ 4`; one line each fixed in 05a, 07a, 07b, 08a, 08b and `PROMPT-RITIRO.md`. `/deep-value` stays suspended until its pass after 08b (D-76). Open: Tavily stays the live search backend until spec 01 is in service. Next: spec 01.
+**Last Updated**: October 29, 2026 — **Spec 01 (hardening and cleanup) implemented**, awaiting the Turso migration. Add to Watchlist sends the MoS as a fraction; Advisor and `/analyses` ignore sold lots; Dividends Received sums the whole history; verdict, exit signal, Under-FV filter and digest share `verdictBasis()`/`watchlistBuyTarget()`; an incomplete valuation JSON is flagged, never half-saved; tickers normalised; detail page fully in Italian; DeepSeek web search on DeepSeek's Search API (Tavily dropped); catalog id `deepseek-flash`, old id aliased; structured output for the Grounded extraction; zod 4. Collaudo (phases A–G, real run on four AI paths) and the owner's tour passed, nothing left open. Migration `20261028165535_drop_watchlist_run_and_freq` drops `WatchlistRun` + `User.watchlistFreq`. **Post-merge (owner)**: promote to `main` on its own; after the deploy, apply the migration to Turso as in spec 01 § 8 (counts, dump outside the repo, migration, same counts, ticker check) and record the outcome here; then remove `TAVILY_API_KEY` from Vercel. Next: spec 02.
 
 ---
 
 ## Tech Stack
 
 - **Next.js** `15.5.27` (App Router) + **React** `19.2.4` + **TypeScript** `5.9.3`
-- **yahoo-finance2** `3.13.2` + **Zod** `3.25.76`
+- **yahoo-finance2** `3.13.2` + **Zod** `4.6.7`
 - **Prisma** client `7.4.2` (CLI `7.10.0`) + **Turso** (libSQL) via `@prisma/adapter-libsql`
 - **Auth.js** `next-auth@5.0.0-beta.32` + **bcryptjs**
-- **Anthropic SDK** `0.133.0` + **Claude Opus 4.8** at `effort: "high"` on every AI route — the user's stored default (`User.ai*`, schema default; changed in Settings) / **Claude Sonnet 5.5** pinned for the Grounded extraction (`medium`); the route fallbacks (Opus 4.8 `xhigh` for Deep Value + Analyst Review, Sonnet 5.5 for Advisor `high` and earnings `medium`) run only when the stored value is invalid / **DeepSeek V4 Pro** or **V4 Flash** (alternative providers, same SDK via its Anthropic-compat endpoint, user-selectable, `low`/`high`/`max` effort) — adaptive thinking, web search enabled (native for Claude, client-executed via Tavily for DeepSeek)
+- **Anthropic SDK** `0.133.0` + **Claude Opus 4.8** at `effort: "high"` on every AI route — the user's stored default (`User.ai*`, schema default; changed in Settings) / **Claude Sonnet 5.5** pinned for the Grounded extraction (`medium`); the route fallbacks (Opus 4.8 `xhigh` for Deep Value + Analyst Review, Sonnet 5.5 for Advisor `high` and earnings `medium`) run only when the stored value is invalid / **DeepSeek V4 Pro** or **V4.1 Flash** (alternative providers, same SDK via its Anthropic-compat endpoint, user-selectable, `low`/`high`/`max` effort) — adaptive thinking, web search enabled (native for Claude, client-executed via DeepSeek's Search API for DeepSeek)
 - **Tailwind** `4.3.3` (`@tailwindcss/postcss`) + typography `0.5.20` + **Framer Motion** `11.18.2` + **Recharts** `2.15.4` + react-markdown + remark-gfm + node-html-parser
 - **Vitest** `4.1.11` + Testing Library `16.3.2` + **Playwright** `1.63.0` (e2e, isolated DB) + `tsx` (seed/e2e scripts)
 
@@ -31,14 +31,12 @@ Current project state and context for AI assistants. Implementation patterns & g
 Next.js App Router with client-side interactivity and server-side API routes. Pipeline: **Discover (Advisor) → Decide (Deep Value) → Monitor (Watchlist/Portfolio)**.
 
 - **Frontend**: Hub home (`/`) + `/analyze` (Deep Value) + auth + `/analyses` + `/portfolio` + `/advisor` + `/watchlist`
-- **API**: `/api/quote/[ticker]` (only Yahoo data route), `/api/auth/*`, `/api/analyses(+/[id]` GET/PATCH/DELETE — PATCH attaches the Analyst Review), `/api/positions(+/[id])`, `/api/earnings` GET/POST (POST = the stored default model + web search next-earnings lookup, upsert), `/api/ai/deep-value` + `/verify` + `/api/ai/advisor` (all POST streaming), `/api/ai/grounding/extract`, `/api/settings/ai`, `/api/advisor/sessions(+/[id](+/messages))`, `/api/portfolio/snapshots`, `/api/watchlist(+/[id], /settings, /run)`, `/api/cron/{portfolio-snapshot,watchlist-analysis}`
+- **API**: `/api/quote/[ticker]` (only Yahoo data route), `/api/auth/*`, `/api/analyses(+/[id]` GET/PATCH/DELETE — PATCH attaches the Analyst Review), `/api/positions(+/[id])`, `/api/earnings` GET/POST (POST = the stored default model + web search next-earnings lookup, upsert), `/api/ai/deep-value` + `/verify` + `/api/ai/advisor` (all POST streaming), `/api/ai/grounding/extract`, `/api/settings/ai`, `/api/advisor/sessions(+/[id](+/messages))`, `/api/portfolio/snapshots`, `/api/portfolio/dividends`, `/api/watchlist(+/[id], /settings, /run)`, `/api/cron/{portfolio-snapshot,watchlist-analysis}`
 - **Business logic**: pure TS in `lib/` (Yahoo adapter, deep-value/verify/advisor/earnings prompts, snapshots, dividends, formatters)
-- **DB**: SQLite via Prisma 7 — `User`, `Analysis`, `Position`, `PortfolioSnapshot`, `WatchlistItem`, `WatchlistRun` (dead), `EarningsEstimate`, `AdvisorSession`, `AdvisorMessage`
+- **DB**: SQLite via Prisma 7 — `User`, `Analysis`, `Position`, `PortfolioSnapshot`, `WatchlistItem`, `EarningsEstimate`, `AdvisorSession`, `AdvisorMessage`
 - **Auth**: Auth.js v5 credentials provider, JWT sessions (no DB session table)
 - **Types**: `types/` — fundamentals, market, analysis, auth, portfolio, watchlist
 - **Cron**: Vercel — portfolio snapshot weekdays 20:00 UTC, watchlist digest weekdays 08:00 Europe/Rome (fires at 06:00 + 07:00 UTC, both `1-5`-restricted, to survive CET/CEST, handler no-ops the non-matching hour)
-
-_Removed with the classic engine / Compare page: `/api/compare/*`, valuation / fundamentals / analyst-estimates / historical-multiples / macro routes, `lib/valuation/*`, `lib/ai/lite-analysis.ts`, `types/valuation.ts` + `ai.ts`, `LiteAnalysisResult`, `CompareResult` model._
 
 ---
 
@@ -83,8 +81,9 @@ Slim, single path: ticker search → `GET /api/quote` (price header + reference 
 - Multi-currency (EUR/USD/GBP/CHF/JPY/CAD/AUD/SEK/NOK/DKK) → EUR via Frankfurter. Ledger-style **SummaryBar**: primary current value + unrealized P&L, then a ruled row (cost/realized/total/dividends). Gross/net-of-tax figures (via `estimateCapitalGainsTax()`, `lib/portfolio-math.ts`) appear on both unrealized P&L and the **realized** ("Closed positions" cards + the "Realized P&L" cell's `hint`) whenever `capitalGainsTaxRate` is set — but only when the relevant total (unrealized or realized) is itself a net gain, not merely because one winning position/lot has a positive estimate. "Converted to EUR" attribution only when a non-EUR position exists.
 - Per-row daily change (`regularMarketChange%`), capital-gains tax + net P&L on gains only. Add-position modal (portal), ISIN auto-fill for same ticker. **"+ Purchase"** button on each aggregated row pre-fills ticker/companyName/currency/isin/capitalGainsTaxRate for a follow-on buy (date/price/shares stay blank). Live prices via `/api/quote/[ticker]` (parallel at mount).
 - **Portfolio ↔ Analyses**: each row shows "N saved analyses ▼" (date, MoS%, buy target + intrinsic, link). Via `Promise.all([fetchPositions, fetchAnalyses, fetchSnapshots])`.
-- **Exit signal**: `getExitSignal(price, analyses)` (module-level) — `price >= intrinsicBase` of the latest analysis → amber `⚠ At Fair Value` pill + always-visible "Re-analyze →". **Monitor only**: both buttons → clean `/analyze?ticker=X` (no position params). Hold/exit reasoning → Advisor.
+- **Exit signal**: `getExitSignal(price, analyses)` (module-level) — `price >= intrinsicBase` of `verdictBasis()` on the latest analysis with values → amber `⚠ At Fair Value` pill + always-visible "Re-analyze →". **Monitor only**: both buttons → clean `/analyze?ticker=X` (no position params). Hold/exit reasoning → Advisor.
 - **Close position (full/partial sale)**: `PATCH /api/positions/[id]` → `closePosition()` (`lib/positions.ts`); a partial sale splits the lot, closed positions sit in an archived "Closed positions" section and their realized P&L rolls into the SummaryBar (AGENTS.md § Close Position).
+- **Dividends Received**: `GET /api/portfolio/dividends` → `loadDividendTotals()` sums every snapshot's per-position `dividendPaidEur`, not the chart's 90-day window.
 - **P&L history chart**: Recharts line of value vs cost over time (from `PortfolioSnapshot`, placeholder <2 snapshots), with a legend. Green markers = dividend day; amber markers = capital deployed (`costEur` delta > €50); **violet `#a78bfa` "Sold" markers** = a close event, so a value/cost drop reads as a tracked sale, not an unexplained crash (registered as an intentional design-system event color in `.impeccable/config.json`). `SnapshotChartPoint = SnapshotPoint & { capitalDelta? }`.
 
 ### Portfolio Snapshots (cron)
@@ -103,16 +102,16 @@ Slim, single path: ticker search → `GET /api/quote` (price header + reference 
 
 ### Watchlist + Email Digest (`/watchlist`)
 - **Card-per-ticker** (`watchlist-client.tsx`): compact (ticker · price · verdict · mini ruler) → same **`ValuationRuler`** + **`ComparisonTable`** as `/analyses`, keyed off `latestAnalyses: Record<ticker, SavedAnalysis>`. **Buy target uses the item's own MoS%** (intrinsic reconstructed from the analysis or, once an analyst lens has run, the consensus — then re-derived with the item's MoS). "Analyze" → `/analyze?ticker=X`.
-- `WatchlistItem`: `id, userId, ticker, companyName, mosPercent, notes, addedAt` — `@@unique([userId, ticker])`. User-level `watchlistEnabled` toggle (cron skips when false). `WatchlistRun` model + `User.watchlistFreq` column are **dead** (left to avoid a Turso migration). Manual trigger `POST /api/watchlist/run` (rate-limited 24h via `lastManualWatchlistRun`).
+- `WatchlistItem`: `id, userId, ticker, companyName, mosPercent, notes, addedAt` — `@@unique([userId, ticker])`. User-level `watchlistEnabled` toggle (cron skips when false). Manual trigger `POST /api/watchlist/run` (rate-limited 24h via `lastManualWatchlistRun`).
 - **Cron: weekdays for everyone, no AI** — `GET /api/cron/watchlist-analysis`, Mon-Fri at 08:00 `Europe/Rome` (two UTC entries + an in-handler hour check); reads the latest saved analysis and consensus per ticker, plus a read-only next/last-earnings note (AGENTS.md § Watchlist is cadence-agnostic, § Vercel Cron Jobs).
 - **Email** via Resend (`lib/email.ts`, lazily init): ledger-themed card per ticker — price, Δ% vs buy target (source-labeled "(analisi)"/"(consenso)" per `item.consensusBase !== null`), Bear/Base/Bull split into Analysis / one row per analyst lens that ran (`Scettico`/`Rialzista`/`Qualità`) / Consensus, buy target, analysis date, native currency. `DigestItem.analysts: {angle,bear,base,bull}[]` carries the per-lens intrinsic values. `adjustedBase`/`status`/`upside` (`lib/watchlist-analysis.ts`) prefer the consensus over the base analysis once a lens has run, matching the UI.
 - **Portfolio-aware digest copy**: `runWatchlistAnalysisForUserInternal` batches one `Position` query per user (`closedAt: null`) and aggregates open lots per ticker via `aggregateOpenLots()` (`lib/portfolio-math.ts`, pure — total shares + weighted-avg cost). Each `DigestItem` carries `holdingShares`/`holdingWeightedAvgCost` (both `null` when no open position). The email shows an "In portafoglio: N az. · PMC · P&L%" line whenever a holding exists — regardless of buy/watch status — and the under-target note reads "valuta se incrementare la posizione" instead of "potenziale opportunità di acquisto" when the ticker is already held, so the copy never frames topping up an existing position as a fresh buy.
 
 ### AI Model Selection (multi-provider)
 - Every AI call site resolves `{model, effort, thinking}` via `resolveAiSettings()` (`lib/ai/ai-preferences.ts`): request-body override > the user's stored `User.ai{Model,Effort,ThinkingEnabled}` default > the route's own historical hardcoded fallback, then clamped to the chosen model's supported effort levels.
-- **Models**: `claude-opus-4-8`, `claude-sonnet-5`, `claude-sonnet-5-5`, `deepseek-v4-pro`, `deepseek-v4-flash` (catalog in `types/ai-settings.ts`; Sonnet 5.5 thinking-off and the pinned Grounded extraction: AGENTS.md › Multi-Provider AI Settings). DeepSeek exposes `low`/`high`/`max` effort only. Sonnet 5.5 calls carry the server-side refusal fallback (`fallbacks: "default"`); when it serves, a note names the model that answered (AGENTS.md › Anthropic AI Integration).
+- **Models**: `claude-opus-4-8`, `claude-sonnet-5`, `claude-sonnet-5-5`, `deepseek-v4-pro`, `deepseek-flash` (a stored retired id resolves to it) (catalog in `types/ai-settings.ts`; Sonnet 5.5 thinking-off and the pinned Grounded extraction: AGENTS.md › Multi-Provider AI Settings). DeepSeek exposes `low`/`high`/`max` effort only. Sonnet 5.5 calls carry the server-side refusal fallback (`fallbacks: "default"`); when it serves, a note names the model that answered (AGENTS.md › Anthropic AI Integration).
 - **Global default**: gear icon in `NavBar` → `<AiPreferencesModal>` → `GET/PATCH /api/settings/ai`. **Per-run override**: `<AiSettingsControl>` inline on Deep Value, Advisor, and the Analyst panel (one shared selector for all 3 lenses). Earnings lookup has no inline control — always the stored default.
-- **DeepSeek web search is client-executed**, not the provider's server-side tool — its Anthropic-compat translation of server-side tool calls proved unreliable in production (raw internal syntax leaked into the Advisor's visible stream). `lib/ai/web-search-tool.ts` (Tavily-backed) + `lib/ai/tool-loop.ts` (shared agentic loop, all five AI routes) replace it with standard function-calling. Deep Value + its verify route share a higher iteration cap (`DEEP_RESEARCH_MAX_TOOL_ITERATIONS = 35` vs. the default 10) with richer Tavily (`advanced`/8 results) so each round converges faster — their research/verification prompts need far more one-query-at-a-time rounds than the Advisor's. DeepSeek-only in effect.
+- **DeepSeek web search is client-executed**, not the provider's server-side tool — its Anthropic-compat translation of server-side tool calls proved unreliable in production (raw internal syntax leaked into the Advisor's visible stream). `lib/ai/web-search-tool.ts` (DeepSeek Search API, same key as the model) + `lib/ai/tool-loop.ts` (shared agentic loop, all five AI routes) replace it with standard function-calling. Deep Value + its verify route share a higher iteration cap (`DEEP_RESEARCH_MAX_TOOL_ITERATIONS = 35` vs. the default 10) with 8 results carrying model-facing summaries so each round converges faster — their research/verification prompts need far more one-query-at-a-time rounds than the Advisor's. DeepSeek-only in effect.
 
 ### Next-Earnings Calendar (AI-sourced)
 - **Purpose**: know when a stock next reports results, so you know when to re-run its analysis. Sourced **on demand** from the **stored default model + web search** (Opus 4.8 unless changed; Sonnet 5.5 is the route fallback; not Yahoo — `quote.earningsTimestamp` is stale for many MTAA tickers, returning the last reported quarter). Manual (per-stock button), **persisted** so the calendar survives reloads without re-running the model.
@@ -127,8 +126,6 @@ Slim, single path: ticker search → `GET /api/quote` (price header + reference 
 
 ### PWA
 Installable (Android Chrome "Install" prompt; iOS Share → Add to Home Screen). `app/manifest.ts` → `/manifest.webmanifest`. **Service Worker** `public/sw.js`: no caching, **empty fetch handler** (must NOT `event.respondWith(fetch())` — tied AI streams to the SW lifetime and truncated them; empty still satisfies the install prompt), registered by `components/pwa-register.tsx`. Icons in `public/icons/` replicate `app/icon.tsx`. `layout.tsx` metadata: `manifest`, `appleWebApp`, explicit `icons.icon`; `themeColor` in the `viewport` export (Next 15 requirement).
-
-_Removed: Compare page + lite engine; Quality Scorecard / Valuation Cards / Historical Multiples / Fundamentals charts / Reverse DCF (classic engine) — their context now lives in the Deep Value report._
 
 ---
 
@@ -159,10 +156,11 @@ lib/
   ai/error-status.ts         # routeErrorStatus(): SDK error classes → 503/400 for the AI routes
   ai/ai-preferences.ts       # server-only: resolveAiSettings() — override > stored > fallback, effort-clamped
   ai/tool-loop.ts            # server-only: runStreamWithToolLoop/runCreateWithToolLoop — shared client-side tool loop (DeepSeek web search)
-  ai/web-search-tool.ts      # server-only: CUSTOM_WEB_SEARCH_TOOL + executeWebSearch() (Tavily)
+  ai/web-search-tool.ts      # server-only: CUSTOM_WEB_SEARCH_TOOL + executeWebSearch() (DeepSeek Search API)
   ai-settings-client.ts      # client helpers: fetchAiSettings/updateAiSettings
   auth.ts  db.ts  format.ts  analyses.ts  portfolio.ts
   portfolio-snapshots.ts     # server-only: snapshot creation
+  portfolio-dividends.ts     # server-only: loadDividendTotals() — whole-history dividends
   dividends.ts               # server-only: Borsa Italiana dividend fetcher
   watchlist-analysis.ts      # server-only: cron/email digest from saved analyses (no AI)
   email.ts                   # Resend — sendWatchlistDigest()
@@ -171,11 +169,14 @@ lib/
   report/verdict.ts          # getVerdict() + VERDICT_BADGE/VERDICT_TEXT (shared)
   report/signal.ts           # getSignalStrength() — deterministic weak-signal flag
   report/valuation.ts        # grossUpToIntrinsic() + Triple type (shared)
+  report/latest-analysis.ts  # pure: latestAnalysisWithValues/verdictBasis/watchlistBuyTarget — one verdict basis
   report/consensus.ts        # pure: N-way consensus (consensusTriple/meanTriple/presentAnalysts) + ANALYST_COLUMNS
   report/evolution.ts        # computeEvolution()/computeEvolutionChain() — deterministic history (no AI)
   grounding/                 # pure: merge/anchors/reconcile/postcheck/prompt-format/schema — Grounded mode
   ai/grounding-extract-prompt.ts  # per-kind extraction prompt builders (Sonnet 5.5, no web search)
   grounding-client.ts        # client helper: extractGrounding()
+  ticker.ts                  # pure: normalizeTicker/tickerSchema (trim + uppercase, max 20)
+  watchlist-mos.ts           # pure: toWatchlistMosFraction() — WatchlistItem.mosPercent is a fraction
   i18n/translations.ts       # EN/IT dictionary
 app/
   page.tsx (Hub)  analyze/  login/  register/  analyses/(+[id])  portfolio/  watchlist/  advisor/
@@ -227,14 +228,18 @@ TURSO_AUTH_TOKEN="..."                 # not needed for local file:
 NEXTAUTH_SECRET="..."                  # openssl rand -hex 32
 NEXTAUTH_URL="http://localhost:3000"   # prod: https://your-domain.vercel.app
 ANTHROPIC_API_KEY="sk-ant-..."
-DEEPSEEK_API_KEY="sk-..."          # optional — DeepSeek V4 Pro provider
-TAVILY_API_KEY="tvly-..."          # web search for DeepSeek (client-executed tool)
+DEEPSEEK_API_KEY="sk-..."          # optional — DeepSeek V4 Pro provider + its web search
 DISABLE_REGISTRATION="false"
 CRON_SECRET="..."                      # also set in Vercel project settings
 RESEND_API_KEY="re_..."                # watchlist email digest
 RESEND_FROM_EMAIL="watchlist@yourdomain.com"  # verified domain; onboarding@resend.dev for dev
 ```
 See `.env.example` for the full template.
+
+---
+
+## Not yet present
+Things the series deliberately left out, one line each (added by the spec that left them out).
 
 ---
 

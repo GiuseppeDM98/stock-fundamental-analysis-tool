@@ -11,8 +11,8 @@ import { useLanguage } from "@/context/language-context";
 import { APP_TO_AI_LANGUAGE } from "@/lib/i18n/translations";
 import ReportBody from "@/components/report/report-body";
 import ReportShell from "@/components/report/report-shell";
-import type { DeepValueResult } from "@/components/report/types";
-import { parseDeepValueJson, stripJsonBlock } from "@/lib/report/parse-deep-value-json";
+import { parseDeepValueJson, stripJsonBlock, hasFullTriple, type ParsedAnalystResult } from "@/lib/report/parse-deep-value-json";
+import { toWatchlistMosFraction } from "@/lib/watchlist-mos";
 import { AiSettingsControl } from "@/components/ai-settings-control";
 import { fetchAiSettings } from "@/lib/ai-settings-client";
 import { DEFAULT_AI_SETTINGS, type AiSettings } from "@/types/ai-settings";
@@ -35,7 +35,7 @@ type Props = {
 };
 
 type Status = "idle" | "loading" | "streaming" | "done" | "error";
-type WatchlistStatus = "idle" | "loading" | "saved" | "already";
+type WatchlistStatus = "idle" | "loading" | "saved" | "already" | "error";
 
 const LANGUAGES = [
   { value: "English", label: "🇬🇧 English" },
@@ -72,7 +72,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [result, setResult] = useState<DeepValueResult | null>(null);
+  const [result, setResult] = useState<ParsedAnalystResult | null>(null);
   const [watchlistStatus, setWatchlistStatus] = useState<WatchlistStatus>("idle");
   const [aiSettings, setAiSettings] = useState<AiSettings>(DEFAULT_AI_SETTINGS);
   // Inputs frozen when Generate is pressed — what Save and the post-check card describe,
@@ -208,7 +208,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
   }
 
   async function handleAddToWatchlist() {
-    if (!ticker) return;
+    if (!ticker || !runInputs) return;
     setWatchlistStatus("loading");
     try {
       const res = await fetch("/api/watchlist", {
@@ -217,7 +217,9 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
         body: JSON.stringify({
           ticker,
           companyName: companyName ?? ticker,
-          mosPercent,
+          // The watchlist stores a FRACTION; the panel's MoS is a percent. The MoS frozen at
+          // Generate, not the slider's current value: the item gets the analysis's MoS.
+          mosPercent: toWatchlistMosFraction(runInputs.mosPercent),
         }),
       });
       if (res.status === 409) {
@@ -228,7 +230,8 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
       if (!res.ok) throw new Error();
       setWatchlistStatus("saved");
     } catch {
-      setWatchlistStatus("idle");
+      // Shown, not swallowed: sending the raw percent made this fail silently (2026-10-11).
+      setWatchlistStatus("error");
     }
   }
 
@@ -255,7 +258,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
             onChange={(e) => setLanguage(e.target.value)}
             disabled={isStreaming}
             className="tap rounded-lg border border-slate-700 bg-slate-800/60 px-2 py-2 text-sm text-slate-200 focus:border-violet-500 focus:outline-hidden disabled:opacity-50"
-            aria-label="Report language"
+            aria-label={t("reportLanguageAria")}
           >
             {LANGUAGES.map((l) => (
               <option key={l.value} value={l.value}>
@@ -299,8 +302,8 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
       )}
 
       {/* Full report shell (masthead + badges + cards + body + recap + disclaimer) —
-          shown once the analysis completes and the JSON block parsed successfully. */}
-      {status === "done" && result && ticker && (
+          shown once the analysis completes and the JSON block carries all three scenarios. */}
+      {status === "done" && hasFullTriple(result) && ticker && (
         <ReportShell
           ticker={ticker}
           companyName={companyName}
@@ -317,6 +320,12 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
             bearLabel: t("bearLabel"),
             baseLabel: t("baseLabel"),
             bullLabel: t("bullLabel"),
+            disclaimer: t("reportDisclaimer"),
+            scenarioHeader: t("recapScenario"),
+            vsPriceHeader: t("recapVsPrice"),
+            buyTargetHeader: t("recapBuyTarget"),
+            fairValueHeader: t("recapFairValue"),
+            fvShort: t("fvShort"),
           }}
         />
       )}
@@ -324,7 +333,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
       {/* Deterministic post-check card — Grounded runs only. Recomputes the model's own
           declared bridge from the extract this run actually used (not the live input,
           which may have been edited since), before and independently of any save. */}
-      {status === "done" && result && runInputs?.grounding && runInputs.currentPrice != null && runInputs.currency && (
+      {status === "done" && hasFullTriple(result) && runInputs?.grounding && runInputs.currentPrice != null && runInputs.currency && (
         <GroundingCard
           result={result}
           extract={runInputs.grounding.extract}
@@ -334,8 +343,14 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
         />
       )}
 
+      {/* A finished run whose valuation block is missing or incomplete: the report still
+          shows (raw, below) and saves as Markdown only — say so instead of hiding it. */}
+      {status === "done" && report && !hasFullTriple(result) && (
+        <p className="text-xs text-warning">{t("deepValueIncompleteJson")}</p>
+      )}
+
       {/* Raw streaming report — shown while generating, before the shell above takes over. */}
-      {report && !(status === "done" && result) && (
+      {report && !(status === "done" && hasFullTriple(result)) && (
         <div className="rounded-xl border border-slate-700/60 bg-slate-900/50 p-5">
           {isStreaming && (
             <span className="mb-2 inline-block h-3 w-1.5 animate-pulse bg-violet-400" />
@@ -384,8 +399,8 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           page — after saving, the "View saved analyses" link routes there to run it. */}
 
       {/* Decision Panel — pipeline routing after analysis completes */}
-      {status === "done" && result && ticker && (
-        <div className="flex flex-wrap gap-2 border-t border-slate-800/60 pt-4 print:hidden">
+      {status === "done" && hasFullTriple(result) && ticker && (
+        <div className="flex flex-wrap items-center gap-2 border-t border-slate-800/60 pt-4 print:hidden">
           {/* Add to Watchlist */}
           <button
             onClick={handleAddToWatchlist}
@@ -407,6 +422,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
               </>
             )}
           </button>
+          {watchlistStatus === "error" && <p className="basis-full text-xs text-danger">{t("watchlistAddError")}</p>}
         </div>
       )}
     </div>

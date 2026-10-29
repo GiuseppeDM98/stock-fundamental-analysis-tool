@@ -58,4 +58,14 @@ describe("buildSaveAnalysisRequest", () => {
     expect(req.fairValueBase).toBeUndefined();
     expect(req.valuationMethod).toBeUndefined();
   });
+
+  it("saves Markdown only, without throwing, when the parsed block lacks a scenario", () => {
+    const { bear: _dropped, ...withoutBear } = RESULT;
+    const req = buildSaveAnalysisRequest(RUN, "# r", withoutBear);
+    expect(req.reportMd).toBe("# r");
+    expect(req.fairValueBull).toBeUndefined();
+    expect(req.fairValueBase).toBeUndefined();
+    expect(req.fairValueBear).toBeUndefined();
+    expect(req.valuationMethod).toBeUndefined();
+  });
 });

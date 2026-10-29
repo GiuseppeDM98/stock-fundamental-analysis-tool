@@ -70,7 +70,7 @@ Attenzione: se cerchi intestazioni inglesi (`"What must be true"`) in un report 
 
 ### 5 — Salva le analisi base con Prisma
 
-Righe nuove ⇒ servono `id` (cuid) e `createdAt` generati come li genera l'app. **Non fare INSERT SQL a mano.** Usa il client Prisma vero (`import { db } from "@/lib/db"`) da uno script `.mts` lanciato con `tsx` come al passo 2, con gli stessi campi di `POST /api/analyses`: `userId, ticker, companyName, reportMd` (JSON block **incluso**), `mosPercent, priceAtAnalysis, fairValue{Bull,Base,Bear}, valuationMethod`.
+Righe nuove ⇒ servono `id` (cuid) e `createdAt` generati come li genera l'app. **Non fare INSERT SQL a mano.** Usa il client Prisma vero (`import { db } from "@/lib/db"`) da uno script `.mts` lanciato con `tsx` come al passo 2, con gli stessi campi di `POST /api/analyses`: `userId, ticker, companyName, reportMd` (JSON block **incluso**), `mosPercent, priceAtAnalysis, fairValue{Bull,Base,Bear}, valuationMethod`. Il ticker si scrive come `normalizeTicker(ticker)` (`import { normalizeTicker } from "@/lib/ticker"`): lo script salta la route, che lo normalizza da sé, e un ticker minuscolo o con spazi spezzerebbe i raggruppamenti per ticker.
 
 Metti una guardia `findFirst` contro il doppio-run. Risolvi lo `userId` dal DB, non a memoria.
 

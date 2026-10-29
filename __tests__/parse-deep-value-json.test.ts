@@ -8,6 +8,7 @@ import {
   parseDeepValueJson,
   stripJsonBlock,
   parseBlindJson,
+  hasFullTriple,
   currentAnalystPhase,
   stripAnalystStreamArtifacts,
   ANALYST_PHASE_MARKERS,
@@ -18,7 +19,7 @@ const FINAL_BLOCK = '```json\n{"method":"DCF","sector":"Utilities","currency":"E
 
 describe("parseDeepValueJson / stripJsonBlock — unchanged behavior", () => {
   it("parses a single json block", () => {
-    expect(parseDeepValueJson(FINAL_BLOCK)?.base.fairValue).toBe(9);
+    expect(parseDeepValueJson(FINAL_BLOCK)?.base?.fairValue).toBe(9);
   });
 
   it("returns null when no block is present", () => {
@@ -36,7 +37,7 @@ describe("```json-blind does NOT collide with the ```json fence", () => {
     const rationale = "Blind rationale text.";
     const stream = `${ANALYST_PHASE_MARKERS.blind}${BLIND_BLOCK}\n${rationale}\n${ANALYST_PHASE_MARKERS.reconcile}${FINAL_BLOCK}\nFinal critique.`;
     const parsed = parseDeepValueJson(stream);
-    expect(parsed?.base.fairValue).toBe(9); // the FINAL block's value, not the blind one's (8)
+    expect(parsed?.base?.fairValue).toBe(9); // the FINAL block's value, not the blind one's (8)
   });
 
   it("stripJsonBlock removes only the FINAL block, leaving the blind fence untouched", () => {
@@ -49,7 +50,7 @@ describe("```json-blind does NOT collide with the ```json fence", () => {
 
   it("parseBlindJson parses only the blind block, ignoring a final block later in the same text", () => {
     const stream = `${BLIND_BLOCK}\nRationale.\n${FINAL_BLOCK}\nCritique.`;
-    expect(parseBlindJson(stream)?.base.fairValue).toBe(8);
+    expect(parseBlindJson(stream)?.base?.fairValue).toBe(8);
   });
 
   it("parseBlindJson returns null when no blind block is present", () => {
@@ -110,8 +111,8 @@ describe("parseDeepValueJson — shape sanitization (untrusted model JSON)", () 
     )!;
     expect(parsed.bull).toEqual({ fairValue: 12 }); // string probability + string bridge dropped
     expect(parsed.base).toEqual({ fairValue: 10, probability: 0.5 }); // bridge missing a term ⇒ whole bridge dropped
-    expect(parsed.bear.bridge).toEqual(VALID_BRIDGE);
-    expect(parsed.bear.probability).toBeUndefined();
+    expect(parsed.bear?.bridge).toEqual(VALID_BRIDGE);
+    expect(parsed.bear?.probability).toBeUndefined();
     expect(parsed.assumptions).toBeUndefined();
     expect(parsed.crossCheck).toBeUndefined();
     expect(parsed.revisions).toBeUndefined();
@@ -119,8 +120,8 @@ describe("parseDeepValueJson — shape sanitization (untrusted model JSON)", () 
 
   it("keeps a bridge whose only defect is an invalid optional `multiple` (DCF/DDM omit it legitimately)", () => {
     const parsed = parseDeepValueJson(fence({ method: "DCF", sector: "", currency: "EUR", bull: { fairValue: 1 }, base: { fairValue: 1, bridge: { ...VALID_BRIDGE, multiple: "n/a" } }, bear: { fairValue: 1 } }))!;
-    expect(parsed.base.bridge).toBeDefined();
-    expect(parsed.base.bridge!.multiple).toBeUndefined();
+    expect(parsed.base?.bridge).toBeDefined();
+    expect(parsed.base?.bridge?.multiple).toBeUndefined();
   });
 
   it("nulls individual assumption levers that aren't numbers, keeping the valid ones", () => {
@@ -132,7 +133,7 @@ describe("parseDeepValueJson — shape sanitization (untrusted model JSON)", () 
     const parsed = parseDeepValueJson(fence({ method: "DCF", sector: "", currency: "EUR", bull: { fairValue: "12" }, base: { fairValue: 10 }, bear: null }))!;
     expect(parsed.bull).toBeUndefined();
     expect(parsed.bear).toBeUndefined();
-    expect(parsed.base.fairValue).toBe(10);
+    expect(parsed.base?.fairValue).toBe(10);
   });
 
   it("keeps the killPrice key only when the block had it — its presence drives the kill_price gate", () => {
@@ -174,5 +175,25 @@ describe("parseDeepValueJson — shape sanitization (untrusted model JSON)", () 
     const parsed = parseBlindJson("```json-blind\n" + JSON.stringify({ method: "DCF", sector: "", currency: "EUR", base: { fairValue: 2, bridge: 7 }, killPrice: 1 }) + "\n```")!;
     expect(parsed.base).toEqual({ fairValue: 2 });
     expect(parsed.killPrice).toBe(1);
+  });
+});
+
+describe("hasFullTriple — the only door to consumers that need bull/base/bear", () => {
+  const fence = (obj: unknown) => "```json\n" + JSON.stringify(obj) + "\n```";
+
+  it("is false when a scenario was dropped by the sanitizer (missing bear)", () => {
+    const parsed = parseDeepValueJson(fence({ method: "DCF", sector: "", currency: "EUR", bull: { fairValue: 3 }, base: { fairValue: 2 } }));
+    expect(parsed).not.toBeNull();
+    expect(hasFullTriple(parsed)).toBe(false);
+  });
+
+  it("is false on null", () => {
+    expect(hasFullTriple(null)).toBe(false);
+  });
+
+  it("is true with all three scenarios, and narrows the type", () => {
+    const parsed = parseDeepValueJson(fence({ method: "DCF", sector: "", currency: "EUR", bull: { fairValue: 3 }, base: { fairValue: 2 }, bear: { fairValue: 1 } }));
+    expect(hasFullTriple(parsed)).toBe(true);
+    if (hasFullTriple(parsed)) expect(parsed.bear.fairValue).toBe(1);
   });
 });
