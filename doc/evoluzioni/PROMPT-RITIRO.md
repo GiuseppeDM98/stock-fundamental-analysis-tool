@@ -49,9 +49,12 @@ della serie andrà lì al ritiro dell'ultima spec) · l'indice `doc/evoluzioni/0
 compresa l'intestazione con lo stato scritto dalla sessione che l'ha implementata e le divergenze
 dichiarate lì · `git log --format="%h %s" -- <SPEC>` · i precedenti da imitare: `bde889a` (2026-10-11:
 ritiro dell'intera cartella `docs/` precedente, con travaso in CLAUDE.md/AGENTS.md e correzione di ogni
-divergenza trovata dall'audit — l'unico precedente del repo al 2026-10-11, `git log -i --grep=ritir
---grep=retire` non ne trova altri; non esiste ancora un ritiro spec-per-spec con la serie viva: questo
-sarà il primo, e chi lo fa lo aggiunge qui come precedente da citare).
+divergenza trovata dall'audit — l'unico precedente del repo al 2026-10-11) e il ritiro della 01
+(2026-10-29, branch `chore/retire-spec-01`, il commit che cancella la spec: `git log --diff-filter=D --
+doc/evoluzioni/01-hardening-e-pulizia.md`; il primo spec-per-spec con la serie viva: verifica con un
+workflow di 5 lettori + 4 verificatori Opus, 22 rilievi confermati su 26; codice corretto con test
+portanti, travaso in AGENTS.md, spec vive ripuntate, D-72 ribaltata con la data; il CLI `turso` mancava
+e le letture di Turso sono passate da `@libsql/client` in sola `SELECT`).
 Ogni riferimento nel codice a un documento ritirato si riscrive in loco perché il perché resti in piedi
 da solo, tenendo le date.
 
@@ -140,10 +143,10 @@ CANCELLI: `npm run ci:local` (= `npm run test` → `npm run typecheck` → build
 quest'ordine; il visual (`npm run e2e:visual`) non è un cancello ma va rilanciato prima/dopo se il
 ritiro tocca una pagina. Il build di verifica si fa SEMPRE sull'ambiente isolato (`.env` punta a
 Turso di produzione).
-LIMITI (misurati il 2026-10-23, prima della 01): `CLAUDE.md` 38.156 caratteri su un tetto di 40.000, nella
+LIMITI (misurati il 2026-10-29, al ritiro della 01): `CLAUDE.md` 39.059 caratteri su un tetto di 40.000, nella
 misura della regola 3 dell'indice (caratteri Unicode senza CR, mai `wc -c`): ogni spec dichiara nel
 § 9 i caratteri aggiunti e tolti, e la voce Last Updated sostituisce la precedente — la catena
-regge solo se ogni spec rispetta il suo saldo, quindi si rimisura a ogni ritiro; `AGENTS.md` 724 righe (dopo la 02 il tetto è 600 righe, poi saldo zero,
+regge solo se ogni spec rispetta il suo saldo, quindi si rimisura a ogni ritiro; `AGENTS.md` 734 righe (dopo la 02 il tetto è 600 righe, poi saldo zero,
 D-22); le guide in `doc/guide/` nascono con la 02 con un tetto di 400 righe per file (D-57: oltre, la
 spec che sfora spezza per tema); `DESIGN.md` 312 righe e `PRODUCT.md` 55 righe, rigenerati nella 08b
 (DESIGN.md solo dalla skill). Se sfori, NON tagliare in chiusura: dimmelo e proponi lo scorporo come

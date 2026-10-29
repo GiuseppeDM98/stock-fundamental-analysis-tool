@@ -10,7 +10,6 @@ import {
   createPosition,
   deletePosition,
   closePosition,
-  fetchSnapshots,
   fetchDividendTotals,
 } from "@/lib/portfolio";
 import { latestAnalysisWithValues, verdictBasis } from "@/lib/report/latest-analysis";
@@ -1097,15 +1096,16 @@ export default function PortfolioList() {
   const [totalDividendsEur, setTotalDividendsEur] = useState(0);
 
   useEffect(() => {
-    // Fetch positions, analyses, snapshots and dividends in parallel — no sequential
-    // dependency. A dividends failure must not fail the portfolio: it shows 0 instead.
+    // Fetch positions, analyses and dividends in parallel — no sequential dependency.
+    // A dividends failure must not fail the portfolio: it shows 0 instead. Snapshots are
+    // not fetched here: the history chart loads its own, and since dividends moved to their
+    // own route (2026-10-28) an unread snapshot request here could only fail the page.
     Promise.all([
       fetchPositions(),
       fetchAnalyses(),
-      fetchSnapshots(),
       fetchDividendTotals().catch(() => ({ totalEur: 0, byTicker: {} })),
     ])
-      .then(([posData, analysesData, , dividends]) => {
+      .then(([posData, analysesData, dividends]) => {
         setPositions(posData);
 
         const map: Record<string, SavedAnalysis[]> = {};

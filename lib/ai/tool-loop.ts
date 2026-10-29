@@ -102,6 +102,10 @@ async function answerSearchCalls(message: Anthropic.Message): Promise<Anthropic.
   );
   if (message.stop_reason !== "tool_use" || searchCalls.length === 0) return null;
 
+  // In parallel: DeepSeek's Search API allows 5 requests per second per account (429 above).
+  // A turn carries 1-3 calls (counted 2026-10-11) and the DeepSeek real run of late October 2026
+  // hit none. A 429 comes back as a tool_result the model reads, never a throw, and is the signal
+  // to serialize this map.
   const toolResults = await Promise.all(
     searchCalls.map(async (call) => ({
       type: "tool_result" as const,

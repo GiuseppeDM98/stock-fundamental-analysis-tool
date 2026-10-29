@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { AI_MODEL_CATALOG, AI_MODEL_IDS, normalizeAiModelId } from "@/types/ai-settings";
 
 describe("normalizeAiModelId", () => {
-  it("should map the retired DeepSeek Flash id to its successor", () => {
-    expect(normalizeAiModelId("deepseek-v4-flash")).toBe("deepseek-flash");
+  it("should no longer resolve the retired DeepSeek Flash id (alias removed 2026-10-29)", () => {
+    expect(normalizeAiModelId("deepseek-v4-flash")).toBeNull();
   });
 
   it("should return a catalog id unchanged", () => {
