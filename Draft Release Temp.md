@@ -30,11 +30,11 @@
 
 - **Net P&L on realized gains** — closed positions now show estimated capital-gains tax and net profit alongside the gross realized P&L, both on each closed position card and in the portfolio summary bar — matching the gross/net treatment already available for open positions.
 
-- **Dividend tracking** — add an ISIN to a position and dividends paid on Borsa Italiana are recorded automatically. The summary bar shows a cumulative "Dividends Received" total (gross and net when a tax rate is set), and the P&L history chart marks payment days with a green vertical line.
+- **Dividend tracking** — add an ISIN to a position and dividends paid on Borsa Italiana are recorded automatically. The summary bar shows a cumulative "Dividends Received" total over your whole history (gross and net when a tax rate is set), and the P&L history chart marks payment days with a green vertical line.
 
 - **Portfolio P&L History chart** — a line chart of portfolio value vs. cost basis over time, captured automatically every weekday after market close. Amber vertical markers flag days you deployed new capital (new position or DCA); hover to see the amount.
 
-- **Exit signal — "At Fair Value"** — when a holding's price reaches the intrinsic base fair value from your most recent saved analysis, an amber ⚠ At Fair Value badge appears in the position row with a Re-analyze → shortcut that runs a fresh, independent Deep Value analysis. The threshold is the point where your original margin of safety is fully consumed; use the Advisor afterwards to decide whether to hold, add, or exit.
+- **Exit signal — "At Fair Value"** — when a holding's price reaches the intrinsic base fair value from your most recent saved analysis that has one, an amber ⚠ At Fair Value badge appears in the position row with a Re-analyze → shortcut that runs a fresh, independent Deep Value analysis. The threshold is the point where your original margin of safety is fully consumed; use the Advisor afterwards to decide whether to hold, add, or exit.
 
 - **Portfolio ↔ analyses cross-linking** — each position shows how many saved analyses exist for its ticker, expandable inline with date, MoS%, buy target and intrinsic value, and a link to the full report. Each saved analysis conversely shows an open-position badge with shares, WAC, and live P&L.
 
@@ -60,11 +60,21 @@
 
 - Added a **kill price to the Skeptic review**. Instead of only critiquing the report, the Skeptic now states the specific price below which it believes the investment thesis is dead — or explicitly says it couldn't construct one, which is itself a meaningful signal.
 
-- Added **DeepSeek V4 Flash** as a selectable AI model — a faster, lower-cost alternative to DeepSeek V4 Pro, available anywhere you can already choose DeepSeek.
+- Added **DeepSeek V4.1 Flash** as a selectable AI model — a faster, lower-cost alternative to DeepSeek V4 Pro, available anywhere you can already choose DeepSeek. A preference saved under the earlier V4 Flash name carries over automatically.
 
 - Added a **"Low" reasoning-effort option** for DeepSeek models — previously only High and Max were available, so simpler runs can now trade some depth for speed and cost.
 
+- Added **Claude Sonnet 5.5** as a selectable AI model; its reasoning stays on at the Extra High and Max effort levels. Grounded data extraction now always runs on it at medium effort, whatever your default model.
+
 ## 🐛 Bug Fixes
+
+- Fixed **Add to Watchlist on a finished Deep Value analysis** failing whenever a Margin of Safety was set. It now saves the stock with your MoS, and says so if an add ever fails.
+
+- Fixed **lowercase or padded tickers** (" abc " instead of "ABC") being saved as a separate stock: tickers are now stored trimmed and uppercase, up to 20 characters.
+
+- Fixed the **saved-analysis page staying partly in English** when the app is in Italian: the breadcrumb, Download PDF, Re-run, the disclaimer and the recap-table headers now follow the app language.
+
+- Fixed a **Deep Value or analyst-lens run with an incomplete valuation block** saving half-finished fair values. The report still shows, with a note that its fair values were not saved.
 
 - Fixed the **PDF export from the analysis page including an app "screenshot"** as the first page (the search box, disclaimer, market-data header, and Margin of Safety slider). The PDF now starts cleanly at the report, matching the saved-analysis export.
 
@@ -81,6 +91,8 @@
 - Fixed the **Advisor quoting a wrong, stale price** for a portfolio holding (e.g. showing ~2.28 for a stock actually trading at 2.16). The Advisor now receives the real current price of each of your holdings as authoritative ground truth, so its numbers match the live market.
 
 - Fixed the **Advisor inventing reasons for a price move** — it would state a cause (a "vague guidance", a "fund rotation") as established fact without checking. It now must verify any cited cause, news, or event via a dated web search, or explicitly flag the driver as unconfirmed instead of guessing.
+
+- Fixed the **Advisor sidebar labels** ("Conversations", "New chat") staying in English when the app is in Italian.
 
 - Fixed **upside/downside percentages** in Deep Value being wildly understated (a base value 143% above price showed as "+1.4%") — they are now computed directly from fair value vs. the live price.
 
@@ -110,21 +122,37 @@
 
 - Fixed the **estimated tax figure showing even when your overall unrealized P&L was a net loss** — a single profitable position no longer triggers a tax estimate that made no sense against a portfolio down overall.
 
+- Fixed **sold lots being counted as holdings**, which inflated share counts and skewed the average cost. The open-position banner on a saved analysis, the position badge on Saved Analyses and the Advisor (its portfolio context and its position count) now count open lots only.
+
 - Fixed **AI reviews and analyses being cut off with a "too many search rounds" notice** when using the DeepSeek model — the research budget was raised and each web search now returns more, so DeepSeek runs complete far more often. (Analyses using Claude were never affected.)
 
 - Fixed **an occasional stray non-Latin character** (e.g. a Chinese character) slipping into a report or review written in another language.
 
 - Fixed **Analyst Panel reviews occasionally returning a silently incomplete or empty result** after a long web-search session — a rare pausing behavior in the underlying search is now handled correctly instead of cutting the review short partway through.
 
+- Fixed the **Analyst Panel showing a lens's private first-pass reasoning** above its final review, and its blind-valuation card appearing only after the run finished. The card now shows up as soon as the first pass is committed, and a re-run no longer leaves the previous card on screen.
+
 - Fixed **pasted financial data occasionally failing to extract** on the Grounded "Prepare data" step, especially on longer or more complex pastes.
 
 - Fixed a **Grounded data-extraction issue** where net income and earnings-per-share could be read from two different reporting bases in the same year (e.g. "including" vs. "excluding" one-off items), occasionally triggering a false "EPS doesn't reconcile" warning.
+
+- Fixed **empty pasted blocks making data preparation fail**; they are now skipped with a note.
+
+- Fixed a **Grounded analysis being saved as a Quick one** when you edited a pasted block after generating the report, which also left its analyst lenses without your data. A run now keeps the exact data it was generated with.
+
+- Fixed the **"valuation anchored to today's price" warning staying silent** on pastes without an Enterprise Value column. It now fires whenever the model's multiple lands on the one the market implies.
 
 - Fixed the **DeepSeek peak-pricing indicator** showing "peak pricing" on weekends — DeepSeek's peak-pricing hours only apply Monday–Friday, so the badge now correctly shows normal pricing on Saturdays and Sundays.
 
 - Fixed a saved analysis occasionally showing as **raw, unformatted text with no fair-value data** on its detail page — the report now always displays with proper formatting, even on the rare run where the underlying valuation summary couldn't be fully reconstructed.
 
-- Fixed the **next-earnings lookup returning an error** on some tickers when using the DeepSeek model — it now gets more room to finish its research before giving up.
+- Fixed **new saved analyses missing their price at analysis time**, which left the performance badge empty.
+
+- Fixed the **next-earnings lookup returning an error** on some tickers — with DeepSeek it now gets more room to finish its research, and with Claude it no longer runs out of room for its reasoning before giving the date.
+
+- Fixed **AI answers that ended empty or with a misleading error when the model declined a request.** When Claude's safety filters decline (this can happen with Claude Sonnet 5.5), the Advisor, Deep Value and the analyst lenses now end with a visible note saying so, and the next-earnings lookup and the pasted-data preparation say "the model declined" instead of "no parseable result" or "malformed data". A Deep Value report cut off by the length limit now says so too, instead of ending silently.
+
+- Fixed **a busy or rate-limited AI provider being reported as a bad request**: the AI features now answer "try again later" in that case.
 
 ## 🔧 Improvements
 
@@ -156,20 +184,29 @@
 
 - **Watchlist digest emails no longer arrive on weekends** — since markets are closed Saturday and Sunday, the daily digest now runs Monday through Friday only, so you won't get an email repeating Friday's numbers.
 
-- **Buy/Watch/Over verdict now factors in every analyst opinion** — on Saved Analyses, the Watchlist, and the email digest, the verdict badge, the ruler's buy/watch zones, and the buy-target percentage now use the **consensus** (the base analysis plus every analyst lens that ran) once you've run at least one, instead of only the base analysis — a more robust signal when you've gathered a second opinion. The percentage now also states its source, "... (analysis)" or "... (consensus)", so it's never ambiguous which buy target it's measured against.
+- **Buy/Watch/Over verdict now factors in every analyst opinion** — on Saved Analyses (including the "Under FV" filter), the Watchlist, the email digest and the portfolio's "At Fair Value" signal, the verdict badge, the ruler's buy/watch zones, and the buy-target percentage now use the **consensus** (the base analysis plus every analyst lens that ran) once you've run at least one, instead of only the base analysis — a more robust signal when you've gathered a second opinion. The percentage now also states its source, "... (analysis)" or "... (consensus)", so it's never ambiguous which buy target it's measured against.
 
 - **The Analyst Panel now sees your pasted data too** — when you run the Skeptic, Optimist, or Quality lens on a Grounded analysis, each one reasons over the same historical data and anchors you provided instead of re-deriving everything from the finished report — so a lens's critique is checked against the same numbers you supplied, not guessed at from scratch.
 
-- **Grounded Deep Value analyses now reconcile your historical multiples table to the same accounting basis as your pasted financials** before applying any multiple to them. Previously, a historical multiple computed on a different EBITDA definition than your income statement could silently inflate or deflate the fair value; the report and the deterministic post-check now detect this, show the basis difference, and use the corrected, apples-to-apples multiple.
+- **Grounded Deep Value analyses now reconcile your historical multiples table to the same accounting basis as your pasted financials** before applying any multiple to them. Previously, a historical multiple computed on a different EBITDA definition than your income statement could silently inflate or deflate the fair value; the report and the deterministic post-check now detect this, show the basis difference, and use the corrected, apples-to-apples multiple, including when the provider's EV-to-equity bridge differs from your pasted statements.
 
-- **The deterministic post-check on Grounded analyses is significantly more thorough.** Beyond the existing bridge-arithmetic check, it now verifies: whether the bear case genuinely falls below today's price; whether the bull and bear scenarios are underwritten to the same year; whether the dividend is actually covered by free cash flow; whether a business earning below its cost of capital is being valued at a rich multiple without justification; and whether the mandatory second valuation method reconciles with the primary one, including a check on that second method's own accounting basis. It also now shows a probability-weighted expected value across your bull/base/bear scenarios.
+- **The deterministic post-check on Grounded analyses is significantly more thorough.** Beyond the existing bridge-arithmetic check, it now verifies: whether the bear case genuinely falls below today's price; whether the bull and bear scenarios are underwritten to the same year; whether the dividend is actually covered by free cash flow; whether a business earning below its cost of capital is being valued at a rich multiple without justification; and whether the mandatory second valuation method reconciles with the primary one, including a check on that second method's own accounting basis. It also now shows a probability-weighted expected value across your bull/base/bear scenarios. Checks that cannot be verified now read "unavailable" instead of passing silently, and a malformed field from the AI can no longer crash the card.
 
 - **Analyst reviews no longer open with praise.** Every review now leads with the errors found, the single most fragile assumption, and the one number that would flip the conclusion, rather than a compliment on the report's execution — a sharper, more useful second opinion.
 
+- Improved the **pasted-data preview and the post-check card**: they now show the basis-reconciliation result, the multiple the model used next to the one the market implies, and what today's price requires you to believe. Block editors have an edit button and grow as you type.
+
+- Improved how **pasted data is merged**: currency, units and the coverage date now come only from your statements, never from peer comparables or forward estimates, and a currency or units conflict between your blocks raises a warning.
+
+- **Claude Sonnet 5.5 now falls back to Claude Sonnet 5 when it declines** certain requests (cybersecurity-adjacent or AI-research topics) instead of giving up, within the same answer. When that happens, a note at the end names the model that actually wrote the answer, since your model selector still shows Sonnet 5.5.
+
+- **DeepSeek web search now runs on DeepSeek's own Search API** — one key and one bill instead of a separate Tavily account, about 20× cheaper per search, and every result now carries its publication date so the Advisor can cite it. The `TAVILY_API_KEY` variable is no longer used.
 ## 🔒 Security
 
 - Registration can be disabled via the `DISABLE_REGISTRATION=true` environment variable — useful to lock down the app after initial setup.
 - AI fair value targets are always computed server-side and cannot be manipulated by the client.
+- Updated the app's dependencies so no known vulnerabilities remain. It now needs Safari 16.4+, Chrome/Edge 111+ or Firefox 128+; older iPhones on iOS 16.3 or earlier will render it incorrectly.
+- Updated Next.js to 15.5.28, which fixes a critical remote code execution advisory in image optimization (GHSA-2464-fhr4-w9xw) and a denial of service in Server Actions (GHSA-p3m5-59mp-jv5r). Self-hosted deployments should update.
 
 ## 📚 Documentation
 

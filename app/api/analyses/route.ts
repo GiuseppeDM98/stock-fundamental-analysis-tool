@@ -4,12 +4,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { tickerSchema } from "@/lib/ticker";
 
 // A new analysis is saved with only its own (base) valuation. Analyst-panel opinions
 // (skeptic/optimist/quality) are run afterward on the saved-analysis detail page and
 // attached via PATCH /api/analyses/:id — never at save time.
 const saveSchema = z.object({
-  ticker: z.string().min(1).max(10),
+  ticker: tickerSchema,
   companyName: z.string().min(1),
   reportMd: z.string().min(1),
   mosPercent: z.number().min(0).max(80),
@@ -83,7 +84,7 @@ export async function POST(request: Request) {
     body = saveSchema.parse(await request.json());
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return NextResponse.json({ error: err.errors[0].message }, { status: 400 });
+      return NextResponse.json({ error: err.issues[0].message }, { status: 400 });
     }
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }

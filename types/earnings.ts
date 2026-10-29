@@ -1,7 +1,7 @@
 /**
  * AI-fetched next-earnings estimate for a ticker.
  *
- * Populated on demand when the user clicks a per-ticker button that runs Claude Sonnet 5
+ * Populated on demand when the user clicks a per-ticker button that runs Claude Sonnet 5.5
  * with web search, then persisted (see the `EarningsEstimate` Prisma model). Shared across
  * /analyses, the watchlist and the portfolio — one record per user per ticker.
  */

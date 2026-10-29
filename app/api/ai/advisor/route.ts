@@ -8,11 +8,13 @@ import { db } from "@/lib/db";
 import { getQuote } from "@/lib/yahoo-client";
 import { buildAdvisorSystemPrompt, buildAdvisorUserPrompt, buildDiscoverySystemPrompt } from "@/lib/ai/advisor-prompts";
 import { getAiClient, buildThinkingParam, buildEffortConfig, buildWebSearchTools } from "@/lib/ai/client";
-import { resolveAiSettings } from "@/lib/ai/ai-preferences";
+import { resolveAiSettings, aiModelIdSchema } from "@/lib/ai/ai-preferences";
 import { runStreamWithToolLoop } from "@/lib/ai/tool-loop";
-import { AI_MODEL_IDS, AI_EFFORT_LEVELS, type AiSettings } from "@/types/ai-settings";
+import { fallbackNote } from "@/lib/ai/fallback";
+import { routeErrorStatus } from "@/lib/ai/error-status";
+import { AI_EFFORT_LEVELS, type AiSettings } from "@/types/ai-settings";
 
-const DEFAULT_SETTINGS: AiSettings = { model: "claude-sonnet-5", effort: "high", thinking: true };
+const DEFAULT_SETTINGS: AiSettings = { model: "claude-sonnet-5-5", effort: "high", thinking: true };
 
 const messageSchema = z.object({
   role: z.enum(["user", "assistant"]),
@@ -23,7 +25,7 @@ const requestSchema = z.object({
   messages: z.array(messageSchema).min(1).max(20),
   language: z.string().min(1).max(30).default("English"),
   mode: z.enum(["portfolio", "discovery"]).default("portfolio"),
-  model: z.enum(AI_MODEL_IDS).optional(),
+  model: aiModelIdSchema.optional(),
   effort: z.enum(AI_EFFORT_LEVELS).optional(),
   thinking: z.boolean().optional(),
 });
@@ -39,7 +41,7 @@ export async function POST(request: Request) {
     body = requestSchema.parse(await request.json());
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return NextResponse.json({ error: err.errors[0].message }, { status: 400 });
+      return NextResponse.json({ error: err.issues[0].message }, { status: 400 });
     }
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
@@ -62,9 +64,11 @@ export async function POST(request: Request) {
       systemPrompt = buildDiscoverySystemPrompt({ currentDate, language: body.language });
     } else {
       // Fetch portfolio context in parallel — only fields needed for the prompt.
+      // Open lots only (2026-10-28): a sold lot sent as "held" made the Advisor reason about
+      // shares the user no longer owns; realized history is not hold/add/exit context.
       const [positions, analyses] = await Promise.all([
         db.position.findMany({
-          where: { userId: session.user.id },
+          where: { userId: session.user.id, closedAt: null },
           orderBy: { purchasedAt: "desc" },
           select: {
             ticker: true,
@@ -140,7 +144,7 @@ export async function POST(request: Request) {
     const readable = new ReadableStream({
       async start(controller) {
         try {
-          const { stopReason, hitIterationCap } = await runStreamWithToolLoop(
+          const { stopReason, hitIterationCap, servedBy } = await runStreamWithToolLoop(
             client,
             {
               model: aiSettings.model,
@@ -151,7 +155,7 @@ export async function POST(request: Request) {
               // stop_reason "max_tokens". This is a ceiling, not a target — the model
               // still stops at end_turn, so normal replies cost the same.
               max_tokens: 16000,
-              thinking: buildThinkingParam(aiSettings.thinking),
+              thinking: buildThinkingParam(aiSettings.thinking, aiSettings.model, aiSettings.effort),
               output_config: buildEffortConfig(aiSettings.effort),
               system: systemPrompt,
               tools: buildWebSearchTools(aiSettings.model),
@@ -168,12 +172,25 @@ export async function POST(request: Request) {
               ? "_[Risposta troncata: raggiunto il limite di lunghezza.]_"
               : "_[Response truncated: length limit reached.]_";
             controller.enqueue(new TextEncoder().encode(`\n\n${note}`));
+          } else if (stopReason === "refusal") {
+            // A safety classifier declined the turn: HTTP 200, stop_reason "refusal",
+            // little or no text. Say so instead of ending on an empty reply.
+            const note = body.language === "Italian"
+              ? "_[Il modello ha rifiutato questa richiesta. Riformulala o scegli un altro modello.]_"
+              : "_[The model declined this request. Rephrase it or pick another model.]_";
+            controller.enqueue(new TextEncoder().encode(`\n\n${note}`));
           } else if (hitIterationCap) {
             // The DeepSeek custom web_search tool loop (lib/ai/tool-loop.ts) ran out of
             // rounds while still researching — surface it instead of returning silence.
             const note = body.language === "Italian"
               ? "_[Ricerca interrotta: troppi cicli di ricerca web. Riprova con una domanda più mirata.]_"
               : "_[Research stopped: too many web search rounds. Try a more specific question.]_";
+            controller.enqueue(new TextEncoder().encode(`\n\n${note}`));
+          }
+          // The server-side refusal fallback (Sonnet 5.5) answered with another model:
+          // name it, since the selector still shows the one that was requested.
+          if (servedBy) {
+            const note = fallbackNote(aiSettings.model, servedBy, body.language === "Italian");
             controller.enqueue(new TextEncoder().encode(`\n\n${note}`));
           }
         } catch (streamErr) {
@@ -194,7 +211,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Advisor request failed";
-    const status = message.toLowerCase().includes("rate limit") ? 503 : 400;
+    const status = routeErrorStatus(error);
     return NextResponse.json({ error: message }, { status });
   }
 }

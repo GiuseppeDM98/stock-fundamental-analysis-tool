@@ -3,8 +3,9 @@ export type AiProvider = "anthropic" | "deepseek";
 export const AI_MODEL_IDS = [
   "claude-opus-4-8",
   "claude-sonnet-5",
+  "claude-sonnet-5-5",
   "deepseek-v4-pro",
-  "deepseek-v4-flash",
+  "deepseek-flash",
 ] as const;
 export type AiModelId = (typeof AI_MODEL_IDS)[number];
 
@@ -38,6 +39,12 @@ export const AI_MODEL_CATALOG: Record<AiModelId, AiModelInfo> = {
     efforts: AI_EFFORT_LEVELS,
     supportsWebSearch: true,
   },
+  "claude-sonnet-5-5": {
+    label: "Claude Sonnet 5.5",
+    provider: "anthropic",
+    efforts: AI_EFFORT_LEVELS,
+    supportsWebSearch: true,
+  },
   "deepseek-v4-pro": {
     label: "DeepSeek V4 Pro",
     provider: "deepseek",
@@ -52,24 +59,29 @@ export const AI_MODEL_CATALOG: Record<AiModelId, AiModelInfo> = {
     // tool-call parse leaked raw internal template syntax ("<｜DSML｜tool_calls>...")
     // straight into the visible streamed chat (no JSON-fence buffer hides it there,
     // unlike Deep Value/verify). Fixed by giving DeepSeek a CLIENT-executed custom
-    // web_search tool instead (lib/ai/web-search-tool.ts, via Tavily) — ordinary
-    // function-calling, parsed as a normal tool_use block, not DeepSeek's flaky
-    // server-tool translation. See lib/ai/tool-loop.ts for the client-side loop.
-    // DeepSeek added a genuine server-side web_search tool, but only on its newer
-    // Responses API (OpenAI SDK/format, different endpoint) — not on the
-    // Anthropic-compat endpoint this app uses, so the Tavily workaround still applies.
+    // web_search tool instead (lib/ai/web-search-tool.ts) — ordinary function-calling,
+    // parsed as a normal tool_use block, not DeepSeek's flaky server-tool translation.
+    // See lib/ai/tool-loop.ts for the client-side loop.
+    // DeepSeek's Search/Fetch REST APIs (2026-10) back the client-executed tool; the
+    // Anthropic-compat endpoint still documents no server-side search tool.
     supportsWebSearch: true,
   },
-  "deepseek-v4-flash": {
-    label: "DeepSeek V4 Flash",
+  // DeepSeek retired V4 Flash on 2026-09-10 and routes its old id to V4.1 Flash; since
+  // 2026-10-17 `deepseek-flash` is DeepSeek-V4.1-Flash-1017 (same price as Flash).
+  "deepseek-flash": {
+    label: "DeepSeek V4.1 Flash",
     provider: "deepseek",
-    // Same effort mapping as v4-pro (both updated together on 2026-08-13) — see
-    // the comment on deepseek-v4-pro above.
+    // Same effort mapping as v4-pro (the thinking_mode page of 2026-10-18 lists both) —
+    // see the comment on deepseek-v4-pro above.
     efforts: ["low", "high", "max"],
-    // Same Tavily-based client-executed web search as v4-pro — see the comment above.
+    // Same client-executed web search as v4-pro — see the comment above.
     supportsWebSearch: true,
   },
 };
+
+/** Ids the provider retired but still routes: a stored default saved under the old id keeps
+ *  working and shows the current name. `deepseek-v4-flash` → V4.1 Flash since 2026-09-10. */
+export const LEGACY_AI_MODEL_IDS: Record<string, AiModelId> = { "deepseek-v4-flash": "deepseek-flash" };
 
 export const DEFAULT_AI_SETTINGS: AiSettings = {
   model: "claude-opus-4-8",
@@ -79,6 +91,12 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
 
 export function isAiModelId(value: string): value is AiModelId {
   return (AI_MODEL_IDS as readonly string[]).includes(value);
+}
+
+/** The catalog id for `value`, following a retired alias, or null when it is no model at all. */
+export function normalizeAiModelId(value: string): AiModelId | null {
+  if (isAiModelId(value)) return value;
+  return LEGACY_AI_MODEL_IDS[value] ?? null;
 }
 
 export function isAiEffort(value: string): value is AiEffort {

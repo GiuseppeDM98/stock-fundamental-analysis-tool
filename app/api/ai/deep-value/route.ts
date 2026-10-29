@@ -11,9 +11,11 @@ import {
   buildDeepValueUserPrompt,
 } from "@/lib/ai/deep-value-prompts";
 import { getAiClient, buildThinkingParam, buildEffortConfig, buildWebSearchTools } from "@/lib/ai/client";
-import { resolveAiSettings } from "@/lib/ai/ai-preferences";
+import { resolveAiSettings, aiModelIdSchema } from "@/lib/ai/ai-preferences";
 import { runStreamWithToolLoop, DEEP_RESEARCH_MAX_TOOL_ITERATIONS, GROUNDED_MAX_TOOL_ITERATIONS } from "@/lib/ai/tool-loop";
-import { AI_MODEL_IDS, AI_EFFORT_LEVELS, type AiSettings } from "@/types/ai-settings";
+import { fallbackNote } from "@/lib/ai/fallback";
+import { routeErrorStatus } from "@/lib/ai/error-status";
+import { AI_EFFORT_LEVELS, type AiSettings } from "@/types/ai-settings";
 import { groundingPayloadSchema } from "@/lib/grounding/schema";
 import { buildGroundingPromptContext, type GroundingPromptContext } from "@/lib/grounding/prompt-format";
 
@@ -23,12 +25,13 @@ const requestSchema = z.object({
   ticker: z.string().min(1).max(20),
   language: z.string().min(1).max(30).default("English"),
   mosPercent: z.number().min(0).max(80).default(0),
-  model: z.enum(AI_MODEL_IDS).optional(),
+  model: aiModelIdSchema.optional(),
   effort: z.enum(AI_EFFORT_LEVELS).optional(),
   thinking: z.boolean().optional(),
   // Grounded mode: the client sends only blocks + the confirmed extract; the route
   // recomputes stats/grid/marketImplied/warnings itself from `extract` and its own
-  // authoritative currentPrice — never trusting client-sent copies (spec §6.3).
+  // authoritative currentPrice — never trusting client-sent copies (smaller body, one
+  // source of truth).
   grounding: groundingPayloadSchema.optional(),
 });
 
@@ -43,7 +46,7 @@ export async function POST(request: Request) {
     body = requestSchema.parse(await request.json());
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return NextResponse.json({ error: err.errors[0].message }, { status: 400 });
+      return NextResponse.json({ error: err.issues[0].message }, { status: 400 });
     }
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
@@ -62,7 +65,7 @@ export async function POST(request: Request) {
 
     // Grounded mode: recompute the deterministic anchors server-side from the client's
     // confirmed extract + our own authoritative currentPrice/currency (never the
-    // client's own stats/grid/marketImplied — spec §6.3, single source of truth).
+    // client's own stats/grid/marketImplied — single source of truth).
     let groundingContext: GroundingPromptContext | undefined;
     if (body.grounding) {
       groundingContext = buildGroundingPromptContext(body.grounding.blocks, body.grounding.extract, currentPrice, currency);
@@ -91,7 +94,7 @@ export async function POST(request: Request) {
           let jsonBlockStarted = false;
           let preJsonBuffer = "";
 
-          const { hitIterationCap } = await runStreamWithToolLoop(
+          const { stopReason, hitIterationCap, servedBy } = await runStreamWithToolLoop(
             client,
             {
               model: aiSettings.model,
@@ -100,7 +103,7 @@ export async function POST(request: Request) {
               // the full 10-section report without truncation. max_tokens is a cap, not a
               // target — the model generates only what it needs, so this doesn't raise cost.
               max_tokens: 64000,
-              thinking: buildThinkingParam(aiSettings.thinking),
+              thinking: buildThinkingParam(aiSettings.thinking, aiSettings.model, aiSettings.effort),
               output_config: buildEffortConfig(aiSettings.effort),
               system: systemPrompt,
               tools: buildWebSearchTools(aiSettings.model),
@@ -127,8 +130,8 @@ export async function POST(request: Request) {
             // mid-research, discarding everything silently (nothing had reached the
             // ```json fence yet) and returning an empty report with no error. See the
             // shared constant for why it's 35. Grounded mode rescopes (not eliminates)
-            // web search to just the post-coverage-date update + qualitative material
-            // (spec §5.6), so it converges in far fewer rounds — GROUNDED_MAX_TOOL_ITERATIONS.
+            // web search to just the post-coverage-date update + qualitative material,
+            // so it converges in far fewer rounds — GROUNDED_MAX_TOOL_ITERATIONS.
             body.grounding ? GROUNDED_MAX_TOOL_ITERATIONS : DEEP_RESEARCH_MAX_TOOL_ITERATIONS
           );
 
@@ -139,12 +142,29 @@ export async function POST(request: Request) {
             controller.enqueue(new TextEncoder().encode(preJsonBuffer));
           }
 
-          if (hitIterationCap) {
-            const isItalian = body.language === "Italiano" || body.language === "Italian";
+          const isItalian = body.language === "Italiano" || body.language === "Italian";
+          // Surface a token-cap cut or a safety-classifier decline (HTTP 200,
+          // stop_reason "refusal") instead of ending on a partial or empty report.
+          if (stopReason === "max_tokens") {
+            const note = isItalian
+              ? "\n\n_[Analisi troncata: raggiunto il limite di lunghezza. Riavviala per rigenerarla.]_"
+              : "\n\n_[Analysis truncated: length limit reached. Re-run it to regenerate.]_";
+            controller.enqueue(new TextEncoder().encode(note));
+          } else if (stopReason === "refusal") {
+            const note = isItalian
+              ? "\n\n_[Il modello ha rifiutato questa analisi. Riavviala o scegli un altro modello.]_"
+              : "\n\n_[The model declined this analysis. Re-run it or pick another model.]_";
+            controller.enqueue(new TextEncoder().encode(note));
+          } else if (hitIterationCap) {
             const note = isItalian
               ? "\n\n_[Analisi interrotta: troppi cicli di ricerca web. Riprova, magari con un margine di sicurezza diverso.]_"
               : "\n\n_[Analysis stopped: too many web search rounds. Try again, maybe with a different margin of safety.]_";
             controller.enqueue(new TextEncoder().encode(note));
+          }
+          // The server-side refusal fallback (Sonnet 5.5) wrote this report with another
+          // model: say which, so the saved report is not attributed to the requested one.
+          if (servedBy) {
+            controller.enqueue(new TextEncoder().encode(`\n\n${fallbackNote(aiSettings.model, servedBy, isItalian)}`));
           }
         } catch (streamErr) {
           const msg = streamErr instanceof Error ? streamErr.message : "AI error";
@@ -164,7 +184,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Analysis failed";
-    const status = message.toLowerCase().includes("rate limit") ? 503 : 400;
+    const status = routeErrorStatus(error);
     return NextResponse.json({ error: message }, { status });
   }
 }

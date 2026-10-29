@@ -11,13 +11,14 @@ import { useLanguage } from "@/context/language-context";
 import { APP_TO_AI_LANGUAGE } from "@/lib/i18n/translations";
 import ReportBody from "@/components/report/report-body";
 import ReportShell from "@/components/report/report-shell";
-import type { DeepValueResult } from "@/components/report/types";
-import { parseDeepValueJson, stripJsonBlock } from "@/lib/report/parse-deep-value-json";
+import { parseDeepValueJson, stripJsonBlock, hasFullTriple, type ParsedAnalystResult } from "@/lib/report/parse-deep-value-json";
+import { toWatchlistMosFraction } from "@/lib/watchlist-mos";
 import { AiSettingsControl } from "@/components/ai-settings-control";
 import { fetchAiSettings } from "@/lib/ai-settings-client";
 import { DEFAULT_AI_SETTINGS, type AiSettings } from "@/types/ai-settings";
 import type { GroundingPayload } from "@/types/grounding";
 import { GroundingCard } from "@/components/report/grounding-card";
+import { buildSaveAnalysisRequest, type DeepValueRunInputs } from "@/lib/report/deep-value-run";
 
 type Props = {
   ticker: string | null;
@@ -34,7 +35,7 @@ type Props = {
 };
 
 type Status = "idle" | "loading" | "streaming" | "done" | "error";
-type WatchlistStatus = "idle" | "loading" | "saved" | "already";
+type WatchlistStatus = "idle" | "loading" | "saved" | "already" | "error";
 
 const LANGUAGES = [
   { value: "English", label: "🇬🇧 English" },
@@ -71,9 +72,12 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [result, setResult] = useState<DeepValueResult | null>(null);
+  const [result, setResult] = useState<ParsedAnalystResult | null>(null);
   const [watchlistStatus, setWatchlistStatus] = useState<WatchlistStatus>("idle");
   const [aiSettings, setAiSettings] = useState<AiSettings>(DEFAULT_AI_SETTINGS);
+  // Inputs frozen when Generate is pressed — what Save and the post-check card describe,
+  // so editing the paste, the MoS slider or the quote after a run can't mislabel it.
+  const [runInputs, setRunInputs] = useState<DeepValueRunInputs | null>(null);
 
   // Load the user's global AI default once on mount; the panel's own selector then
   // overrides it per-run without persisting (persisting happens via the NavBar modal).
@@ -103,6 +107,16 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
     const controller = new AbortController();
     abortRef.current = controller;
 
+    const inputs: DeepValueRunInputs = {
+      ticker,
+      companyName: companyName ?? ticker,
+      mosPercent,
+      currentPrice: currentPrice ?? null,
+      currency: currency ?? null,
+      grounding,
+    };
+    setRunInputs(inputs);
+
     setReport("");
     setResult(null);
     setStatus("loading");
@@ -115,13 +129,13 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ticker,
+          ticker: inputs.ticker,
           language,
-          mosPercent,
+          mosPercent: inputs.mosPercent,
           model: aiSettings.model,
           effort: aiSettings.effort,
           thinking: aiSettings.thinking,
-          ...(grounding ? { grounding } : {}),
+          ...(inputs.grounding ? { grounding: inputs.grounding } : {}),
         }),
         signal: controller.signal,
       });
@@ -181,22 +195,11 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
   }
 
   async function handleSave() {
-    if (!ticker || !report) return;
+    if (!runInputs || !report) return;
 
     setSaveStatus("saving");
     try {
-      await saveAnalysis({
-        ticker,
-        companyName: companyName ?? ticker,
-        reportMd: report,
-        mosPercent,
-        // Snapshot fair values from the parsed JSON result so we can track performance
-        fairValueBull: result?.bull.fairValue,
-        fairValueBase: result?.base.fairValue,
-        fairValueBear: result?.bear.fairValue,
-        valuationMethod: result?.method,
-        groundingJson: grounding ? JSON.stringify(grounding) : undefined,
-      });
+      await saveAnalysis(buildSaveAnalysisRequest(runInputs, report, result));
       setSaveStatus("saved");
     } catch (err) {
       console.error("Save failed:", err);
@@ -205,7 +208,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
   }
 
   async function handleAddToWatchlist() {
-    if (!ticker) return;
+    if (!ticker || !runInputs) return;
     setWatchlistStatus("loading");
     try {
       const res = await fetch("/api/watchlist", {
@@ -214,7 +217,9 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
         body: JSON.stringify({
           ticker,
           companyName: companyName ?? ticker,
-          mosPercent,
+          // The watchlist stores a FRACTION; the panel's MoS is a percent. The MoS frozen at
+          // Generate, not the slider's current value: the item gets the analysis's MoS.
+          mosPercent: toWatchlistMosFraction(runInputs.mosPercent),
         }),
       });
       if (res.status === 409) {
@@ -225,7 +230,8 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
       if (!res.ok) throw new Error();
       setWatchlistStatus("saved");
     } catch {
-      setWatchlistStatus("idle");
+      // Shown, not swallowed: sending the raw percent made this fail silently (2026-10-11).
+      setWatchlistStatus("error");
     }
   }
 
@@ -251,8 +257,8 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
             value={language}
             onChange={(e) => setLanguage(e.target.value)}
             disabled={isStreaming}
-            className="tap rounded-lg border border-slate-700 bg-slate-800/60 px-2 py-2 text-sm text-slate-200 focus:border-violet-500 focus:outline-none disabled:opacity-50"
-            aria-label="Report language"
+            className="tap rounded-lg border border-slate-700 bg-slate-800/60 px-2 py-2 text-sm text-slate-200 focus:border-violet-500 focus:outline-hidden disabled:opacity-50"
+            aria-label={t("reportLanguageAria")}
           >
             {LANGUAGES.map((l) => (
               <option key={l.value} value={l.value}>
@@ -296,8 +302,8 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
       )}
 
       {/* Full report shell (masthead + badges + cards + body + recap + disclaimer) —
-          shown once the analysis completes and the JSON block parsed successfully. */}
-      {status === "done" && result && ticker && (
+          shown once the analysis completes and the JSON block carries all three scenarios. */}
+      {status === "done" && hasFullTriple(result) && ticker && (
         <ReportShell
           ticker={ticker}
           companyName={companyName}
@@ -306,26 +312,45 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           markdown={markdownContent}
           result={result}
           currentPrice={currentPrice}
-          mosPercent={mosPercent}
+          // The MoS the fair values were computed at, not the slider's current value.
+          mosPercent={runInputs?.mosPercent ?? mosPercent}
           labels={{
             recapTableTitle: t("recapTableTitle"),
             recapCurrentPrice: t("recapCurrentPrice"),
             bearLabel: t("bearLabel"),
             baseLabel: t("baseLabel"),
             bullLabel: t("bullLabel"),
+            disclaimer: t("reportDisclaimer"),
+            scenarioHeader: t("recapScenario"),
+            vsPriceHeader: t("recapVsPrice"),
+            buyTargetHeader: t("recapBuyTarget"),
+            fairValueHeader: t("recapFairValue"),
+            fvShort: t("fvShort"),
           }}
         />
       )}
 
       {/* Deterministic post-check card — Grounded runs only. Recomputes the model's own
-          declared bridge from `grounding.extract`, independent of whether the save/DB
-          persistence (commit 7) has happened yet. */}
-      {status === "done" && result && grounding && currentPrice != null && currency && (
-        <GroundingCard result={result} extract={grounding.extract} mosPercent={mosPercent} currentPrice={currentPrice} currency={currency} />
+          declared bridge from the extract this run actually used (not the live input,
+          which may have been edited since), before and independently of any save. */}
+      {status === "done" && hasFullTriple(result) && runInputs?.grounding && runInputs.currentPrice != null && runInputs.currency && (
+        <GroundingCard
+          result={result}
+          extract={runInputs.grounding.extract}
+          mosPercent={runInputs.mosPercent}
+          currentPrice={runInputs.currentPrice}
+          currency={runInputs.currency}
+        />
+      )}
+
+      {/* A finished run whose valuation block is missing or incomplete: the report still
+          shows (raw, below) and saves as Markdown only — say so instead of hiding it. */}
+      {status === "done" && report && !hasFullTriple(result) && (
+        <p className="text-xs text-warning">{t("deepValueIncompleteJson")}</p>
       )}
 
       {/* Raw streaming report — shown while generating, before the shell above takes over. */}
-      {report && !(status === "done" && result) && (
+      {report && !(status === "done" && hasFullTriple(result)) && (
         <div className="rounded-xl border border-slate-700/60 bg-slate-900/50 p-5">
           {isStreaming && (
             <span className="mb-2 inline-block h-3 w-1.5 animate-pulse bg-violet-400" />
@@ -374,8 +399,8 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           page — after saving, the "View saved analyses" link routes there to run it. */}
 
       {/* Decision Panel — pipeline routing after analysis completes */}
-      {status === "done" && result && ticker && (
-        <div className="flex flex-wrap gap-2 border-t border-slate-800/60 pt-4 print:hidden">
+      {status === "done" && hasFullTriple(result) && ticker && (
+        <div className="flex flex-wrap items-center gap-2 border-t border-slate-800/60 pt-4 print:hidden">
           {/* Add to Watchlist */}
           <button
             onClick={handleAddToWatchlist}
@@ -397,6 +422,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
               </>
             )}
           </button>
+          {watchlistStatus === "error" && <p className="basis-full text-xs text-danger">{t("watchlistAddError")}</p>}
         </div>
       )}
     </div>

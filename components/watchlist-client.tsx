@@ -21,6 +21,7 @@ import { getVerdict, VERDICT_BADGE, VERDICT_TEXT, type Verdict } from "@/lib/rep
 import { getSignalStrength } from "@/lib/report/signal";
 import { grossUpToIntrinsic } from "@/lib/report/valuation";
 import { presentAnalysts, meanTriple } from "@/lib/report/consensus";
+import { latestAnalysisWithValues, verdictBasis, watchlistBuyTarget } from "@/lib/report/latest-analysis";
 import { EarningsBadge } from "@/components/earnings-badge";
 import { isAnalysisStalePreEarnings, isFutureEarnings } from "@/lib/earnings";
 import { fetchEarnings, refreshEarnings } from "@/lib/earnings-client";
@@ -48,7 +49,7 @@ function formatDate(iso: string): string {
 // ─── Input class ─────────────────────────────────────────────────────────────
 
 const inputClass =
-  "w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-slate-100 focus:border-accent focus:outline-none focus:ring-1 focus:ring-sky-400/30";
+  "w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-slate-100 focus:border-accent focus:outline-hidden focus:ring-1 focus:ring-sky-400/30";
 
 // ─── Add ticker form ──────────────────────────────────────────────────────────
 
@@ -224,10 +225,10 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
       : null;
 
   // Verdict/zones prefer the consensus (base analysis + every analyst lens that ran) over
-  // the base analysis alone — more independent opinions is a more robust signal than one.
-  // Falls back to the base analysis's own fair value when no analyst has run yet.
-  const verdictBaseIntrinsic = consensusIntrinsic ? consensusIntrinsic.base : intrinsic?.base ?? null;
-  const buyTargetBase = verdictBaseIntrinsic != null ? toBuyTarget(verdictBaseIntrinsic) : null;
+  // the base analysis alone — verdictBasis decides, the same rule as /analyses, the
+  // portfolio and the digest. The buy target re-discounts it with the ITEM's MoS.
+  const verdictBaseIntrinsic = analysis ? verdictBasis(analysis)?.intrinsicBase ?? null : null;
+  const buyTargetBase = analysis ? watchlistBuyTarget(analysis, itemMos) : null;
   const verdict: Verdict | null =
     verdictBaseIntrinsic != null && buyTargetBase != null && currentPrice != null
       ? getVerdict(currentPrice, buyTargetBase, verdictBaseIntrinsic)
@@ -305,12 +306,12 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
             <span className="shrink-0 font-mono text-base font-bold text-accent">{item.ticker}</span>
             <span className="truncate text-sm text-slate-400">{item.companyName}</span>
             {analysis?.valuationMethod && (
-              <span className="shrink-0 rounded bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-medium text-slate-400">
+              <span className="shrink-0 rounded-sm bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-medium text-slate-400">
                 {analysis.valuationMethod}
               </span>
             )}
             {(analysis?.reviewMd || analysis?.optimistCritiqueMd || analysis?.qualityCritiqueMd) && (
-              <span className="shrink-0 rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-300">
+              <span className="shrink-0 rounded-sm bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-300">
                 ✓ {t("analystReviewBadge")}
               </span>
             )}
@@ -328,7 +329,7 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
                 <span className="text-slate-600">{t("priceNa")}</span>
               )}
               {verdict && buyTargetPct != null ? (
-                <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${VERDICT_BADGE[verdict]}`}>
+                <span className={`rounded-sm px-1.5 py-0.5 text-[10px] font-semibold ${VERDICT_BADGE[verdict]}`}>
                   {verdictLabel(verdict)} {buyTargetPct > 0 ? "+" : ""}
                   {buyTargetPct.toFixed(0)}%
                 </span>
@@ -337,7 +338,7 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
               ) : null}
               {weakSignal && (
                 <span
-                  className="rounded bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-medium text-slate-300"
+                  className="rounded-sm bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-medium text-slate-300"
                   title={t("weakSignalHint")}
                 >
                   {t("weakSignalLabel")}
@@ -436,7 +437,7 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
                       key={lv}
                       onClick={() => setLevel(lv)}
                       aria-pressed={level === lv}
-                      className={`tap rounded px-2 py-0.5 transition ${
+                      className={`tap rounded-sm px-2 py-0.5 transition ${
                         level === lv ? "bg-sky-500/15 text-sky-300" : "text-slate-400 hover:text-slate-200"
                       }`}
                     >
@@ -490,7 +491,7 @@ function WatchlistCard({ item, currentPrice, priceCurrency, analysis, earnings, 
                 onChange={(e) => setEditNotes(e.target.value)}
                 placeholder={t("watchlistNotes")}
                 maxLength={500}
-                className="w-full max-w-md rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 focus:outline-none"
+                className="w-full max-w-md rounded-sm border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 focus:outline-hidden"
               />
               <div className="flex items-center gap-2">
                 <button
@@ -609,7 +610,7 @@ function SettingsPanel({ settings, onSave, onManualRun, manualRunLoading, cooldo
               }`}
             >
               <span
-                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
                   enabled ? "translate-x-5" : "translate-x-0.5"
                 }`}
               />
@@ -690,15 +691,19 @@ export default function WatchlistClient() {
   useEffect(() => setMounted(true), []);
 
   // Watchlist values come from the user's latest saved Deep Value analysis per ticker
-  // (the lite WatchlistRun engine was removed, and lite analysis was removed entirely with Compare).
+  // (the lite per-item run engine was removed, its table dropped on 2026-10-28, and lite
+  // analysis was removed entirely with Compare).
   useEffect(() => {
     fetchAnalyses()
       .then((analyses) => {
+        // The API returns newest first; group per ticker keeping that order, then pick the
+        // newest save with a full triple — the shared rule (lib/report/latest-analysis.ts).
+        const groups = new Map<string, SavedAnalysis[]>();
+        for (const a of analyses) groups.set(a.ticker, [...(groups.get(a.ticker) ?? []), a]);
         const latest: Record<string, SavedAnalysis> = {};
-        for (const a of analyses) {
-          if (a.fairValueBase == null) continue;
-          const existing = latest[a.ticker];
-          if (!existing || new Date(a.createdAt) > new Date(existing.createdAt)) latest[a.ticker] = a;
+        for (const [ticker, groupNewestFirst] of groups) {
+          const l = latestAnalysisWithValues(groupNewestFirst);
+          if (l) latest[ticker] = l;
         }
         setLatestAnalyses(latest);
       })
@@ -868,7 +873,7 @@ export default function WatchlistClient() {
       <AddTickerForm onAdd={handleAdd} t={t} />
 
       {items.length === 0 ? (
-        <div className="card flex flex-col items-center gap-3 py-12 text-center">
+        <div className="card flex flex-col items-center gap-3 text-center">
           <p className="text-slate-300">{t("watchlistEmpty")}</p>
           <p className="text-sm text-muted">{t("watchlistEmptyHint")}</p>
         </div>

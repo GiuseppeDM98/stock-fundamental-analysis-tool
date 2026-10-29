@@ -19,20 +19,17 @@ model User {
   positions               Position[]
   snapshots               PortfolioSnapshot[]
   watchlistItems          WatchlistItem[]
-  watchlistRuns           WatchlistRun[]
   advisorSessions         AdvisorSession[]
   earningsEstimates       EarningsEstimate[]
   // null = use account email
   watchlistEmail          String?
-  // "biweekly" | "monthly"
-  watchlistFreq           String              @default("biweekly")
   // When false the cron skips this user entirely — useful when not actively investing
   watchlistEnabled        Boolean             @default(true)
   // Rate-limit manual trigger to once per 24h
   lastManualWatchlistRun  DateTime?
   // Global AI preferences — per-model/effort/thinking default used by every AI call
   // site (deep-value, verify, advisor, earnings) unless overridden per-request.
-  // "claude-opus-4-8" | "claude-sonnet-5" | "deepseek-v4-pro"
+  // "claude-opus-4-8" | "claude-sonnet-5" | "claude-sonnet-5-5" | "deepseek-v4-pro" | "deepseek-flash"
   aiModel                 String              @default("claude-opus-4-8")
   // "low" | "medium" | "high" | "xhigh" | "max"
   aiEffort                String              @default("high")
@@ -80,24 +77,23 @@ model Analysis {
   qualityFairValueBear   Float?
   qualityValuationMethod String?
   qualityCritiqueMd      String?
-  // Blind-first commitment (docs/deep-value-rigor-v2-spec.md §6) — the lens's OWN
-  // bull/base/bear JSON (DeepValueResult, incl. killPrice/revisions for skeptic),
-  // committed BEFORE it ever saw the report. Null until a blind-first (Grounded) lens run
+  // Blind-first commitment — the lens's OWN bull/base/bear JSON (DeepValueResult, plus
+  // killPrice for the Skeptic), committed BEFORE it ever saw the report. Null until a blind-first (Grounded) lens run
   // completes Phase 1 successfully; never set for a Quick-mode or degraded-Phase-1 run.
   // Persisted ALONGSIDE the existing *FairValue* columns (which hold the FINAL,
-  // post-reconciliation triple and remain what feeds the consensus/ruler/watchlist/digest —
-  // spec §6.4: "zero churn a valle"), one flat column per lens (not a shared blob — the
-  // panel can run all three lenses in parallel, and a shared blob would race on
-  // read-modify-write).
+  // post-reconciliation triple and remain what feeds the consensus/ruler/watchlist/digest,
+  // so no historical row or downstream consumer changes meaning), one flat column per lens
+  // (not a shared blob — the panel can run all three lenses in parallel, and a shared blob
+  // would race on read-modify-write).
   reviewBlindJson    String?
   optimistBlindJson  String?
   qualityBlindJson   String?
-  // Grounded Deep Value mode (docs/deep-value-grounding-spec.md): the confirmed
-  // GroundingPayload (raw paste blocks + the structured extract) as JSON, when the
-  // analysis was generated with pasted financial data. Null for Quick-mode analyses.
-  // NOT selected by the GET /api/analyses list (it's a blob the list never uses — see
-  // the select in app/api/analyses/route.ts) and NOT part of SavedAnalysis (see
-  // types/analysis.ts) — both exclusions are deliberate, not oversights.
+  // Grounded Deep Value mode: the confirmed GroundingPayload (raw paste blocks + the
+  // structured extract) as JSON, when the analysis was generated with pasted financial
+  // data. Null for Quick-mode analyses. NOT selected by the GET /api/analyses list (it's
+  // a blob the list never uses — see the select in app/api/analyses/route.ts) and NOT
+  // part of SavedAnalysis (see types/analysis.ts) — both exclusions are deliberate, not
+  // oversights.
   groundingJson    String?
   createdAt        DateTime @default(now())
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -135,25 +131,6 @@ model WatchlistItem {
   @@index([userId])
 }
 
-// Result of each cron/manual analysis run per ticker per user.
-// Retained for last-run display in the UI and future trend tracking.
-model WatchlistRun {
-  id            String   @id @default(cuid())
-  userId        String
-  ticker        String
-  runAt         DateTime @default(now())
-  fairValueBull Float?
-  fairValueBase Float?
-  fairValueBear Float?
-  method        String?
-  sector        String?
-  currency      String?
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, runAt])
-  @@index([userId, ticker])
-}
-
 // Tracks real purchases made by the user for long-term P&L tracking.
 model Position {
   id            String   @id @default(cuid())
@@ -189,7 +166,7 @@ model Position {
 }
 
 // AI-fetched next-earnings date per ticker, populated on demand by the user (a button
-// that runs Claude Sonnet 5 with web search). Persisted so the calendar survives reloads
+// that runs Claude Sonnet 5.5 with web search). Persisted so the calendar survives reloads
 // without re-running the model. One row per user per ticker (upserted on refresh).
 model EarningsEstimate {
   id               String    @id @default(cuid())

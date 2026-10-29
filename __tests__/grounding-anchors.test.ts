@@ -20,7 +20,7 @@ const DERATING_MULTIPLES = [
 
 // A basis with no EV/Revenue or Enterprise Value data anywhere ⇒ kE unavailable ⇒
 // adjustedEvEbitda null ⇒ grid/market-implied degrade to basisApplied: false (kE treated
-// as 1) rather than failing outright — this is the pre-v2 behavior, still correct when the
+// as 1) rather than failing outright — the plain unadjusted read, still correct when the
 // basis genuinely can't be verified.
 const UNVERIFIABLE_BASIS = computeBasisReconciliation(makeExtract({ multiples: DERATING_MULTIPLES }));
 
@@ -122,7 +122,7 @@ describe("computeValuationGrid — unverified basis (kE null, degrades to kE=1)"
     expect(grid!.bridge).toEqual({ netDebt: 11500, minorities: 3200, shares: 3150 });
 
     // kE unverifiable ⇒ columns use the RAW stats (equivalent to kE=1); kB defaults to 1
-    // too (no marketCap/pe/pb data) ⇒ cells match the pre-v2 formula exactly.
+    // too (no marketCap/pe/pb data) ⇒ cells match the plain unadjusted formula exactly.
     // Last-FY row, median column: perShare = (median × 14200 − 11500 − 3200) / 3150
     // = (3.9 × 14200 − 14700) / 3150 = (55380 − 14700) / 3150 ≈ 12.9143
     expect(grid!.cells[0][1]!.perShare).toBeCloseTo(12.914285714, 6);
@@ -181,7 +181,7 @@ describe("computeValuationGrid — verified basis (kE/kB applied)", () => {
   });
 });
 
-describe("computeMarketImplied — same-basis (spec §2.3)", () => {
+describe("computeMarketImplied — same-basis", () => {
   const extract = makeExtract({
     meta: makeMeta({ reportingCurrency: "EUR" }),
     financials: [makeFinancialsRow({ fiscalYear: 2025, ebitda: 14200, netDebt: 11500, minorityInterest: 3200, sharesDiluted: 3150 })],
@@ -220,7 +220,7 @@ describe("computeMarketImplied — same-basis (spec §2.3)", () => {
     expect(result!.percentile).not.toBeNull();
   });
 
-  it("returns null on a currency mismatch instead of a silently wrong number (spec §5.1)", () => {
+  it("returns null on a currency mismatch instead of a silently wrong number", () => {
     // Reporting currency is EUR, quote currency is USD — must never divide across units.
     expect(computeMarketImplied(15, "USD", extract, UNVERIFIABLE_BASIS)).toBeNull();
   });
@@ -236,11 +236,11 @@ describe("computeMarketImplied — same-basis (spec §2.3)", () => {
   });
 });
 
-describe("computeImpliedExpectations — the reverse-engineering read (spec §2.4)", () => {
+describe("computeImpliedExpectations — the reverse-engineering read", () => {
   // Iren-shaped: same-basis median ≈5.9x (kE≈0.83 × raw median 7.1x — see
   // grounding-basis.test.ts), latest FY EBITDA_S=1353, 2026e EBITDA_S=1610 (chosen so
-  // requiredEbitdaAtMedian lands ~16% below it, mirroring the spec's own Iren narrative:
-  // "l'EBITDA dovrebbe essere 1.140 mln — il 16% sotto la stima 2026e di 1.353 mln").
+  // requiredEbitdaAtMedian lands ~16% below it, mirroring the real Iren read: the price
+  // implied an EBITDA ~16% below the forward estimate).
   const STATEMENT_EBITDA = 1353;
   const IREN_YEARS = [
     { fiscalYear: 2020, kE: 0.81, evEbitda: 6.6 },
@@ -276,15 +276,16 @@ describe("computeImpliedExpectations — the reverse-engineering read (spec §2.
     // requiredEbitdaAtMedian = (price×shares + kB×(netDebt+minorities)) / (median_P × kE)
     // = (2.95×908.8 + 1×4411.6) / (7.1 × 0.83) = 7092.56 / 5.893 ≈ 1203.557
     expect(result!.requiredEbitdaAtMedian).toBeCloseTo(1203.557, 1);
-    // vsLatestFyPct = (1203.557 - 1353) / 1353 ≈ -11.0%
-    expect(result!.vsLatestFyPct).toBeLessThan(0);
+    // vsLatestFyPct = (1203.5568 − 1353) / 1353 = −149.4432 / 1353 ≈ −0.110453
+    expect(result!.vsLatestFyPct).toBeCloseTo(-0.110453, 5);
   });
 
   it("compares the required EBITDA against the first forward estimate, negative ⇒ market doesn't believe the estimate path", () => {
     const result = computeImpliedExpectations(2.95, "EUR", extract, basis);
     expect(result!.nextEstimateYear).toBe(2026);
-    expect(result!.vsNextEstimatePct).not.toBeNull();
-    expect(result!.vsNextEstimatePct!).toBeLessThan(0);
+    // 2026e EBITDA = 1353 × 1.19 = 1610.07
+    // vsNextEstimatePct = (1203.5568 − 1610.07) / 1610.07 = −406.5132 / 1610.07 ≈ −0.252482
+    expect(result!.vsNextEstimatePct).toBeCloseTo(-0.252482, 5);
   });
 
   it("computes the symmetric multipleAtNextEstimate in provider space, rankable against history", () => {
@@ -314,5 +315,45 @@ describe("computeImpliedExpectations — the reverse-engineering read (spec §2.
   it("returns null when there's no EV/EBITDA history to solve against", () => {
     const noHistory = makeExtract({ meta: makeMeta({ reportingCurrency: "EUR" }), financials: extract.financials });
     expect(computeImpliedExpectations(2.95, "EUR", noHistory, computeBasisReconciliation(noHistory))).toBeNull();
+  });
+});
+
+// kB ≠ 1: the provider's EV bridge is larger than the statement's (e.g. leases counted as
+// debt by the provider). One fiscal year, everything observed directly:
+//   EBITDA_S = 1000, EV_P = 4500, evEbitda = 5 ⇒ EBITDA_P = 900 ⇒ kE = 0.9
+//   MarketCap_P = 3700 ⇒ bridge_P = 4500 − 3700 = 800; bridge_S = netDebt 500 + minorities 200 = 700
+//   ⇒ kB = 800 / 700 ≈ 1.142857
+// Sanity anchor: at price 37 (37 × 100 shares = 3700 = the provider's own market cap) the
+// provider-basis implied multiple MUST land exactly on the provider's own 5.0x.
+describe("provider-basis reads scale the EV bridge by kB", () => {
+  const KB_EXTRACT = makeExtract({
+    meta: makeMeta({ reportingCurrency: "EUR" }),
+    financials: [makeFinancialsRow({ fiscalYear: 2025, ebitda: 1000, netDebt: 500, minorityInterest: 200, sharesDiluted: 100 })],
+    multiples: [makeMultiplesRow({ fiscalYear: 2025, evEbitda: 5, enterpriseValue: 4500, marketCap: 3700 })],
+    estimates: [makeEstimateRow({ fiscalYear: 2026, ebitda: 1250 })],
+  });
+  const kbBasis = computeBasisReconciliation(KB_EXTRACT);
+
+  it("the fixture really has kE = 0.9 and kB = 8/7", () => {
+    expect(kbBasis.kE).toBeCloseTo(0.9, 9);
+    expect(kbBasis.kB).toBeCloseTo(800 / 700, 9);
+  });
+
+  it("computeMarketImplied: impliedOnProvider = (equity + kB × bridge_S) / (kE × EBITDA_S)", () => {
+    const at37 = computeMarketImplied(37, "EUR", KB_EXTRACT, kbBasis)!;
+    // statement: (3700 + 700) / 1000 = 4.4 — unscaled, our own bridge
+    expect(at37.impliedOnStatement).toBeCloseTo(4.4, 9);
+    // provider: (3700 + 8/7 × 700) / (0.9 × 1000) = 4500 / 900 = 5.0 (kE-only would give 4.4 / 0.9 ≈ 4.8889)
+    expect(at37.impliedOnProvider).toBeCloseTo(5.0, 9);
+
+    const at30 = computeMarketImplied(30, "EUR", KB_EXTRACT, kbBasis)!;
+    // provider: (3000 + 800) / 900 ≈ 4.222222
+    expect(at30.impliedOnProvider).toBeCloseTo(4.222222, 5);
+  });
+
+  it("computeImpliedExpectations: multipleAtNextEstimate scales the bridge by kB too", () => {
+    const result = computeImpliedExpectations(37, "EUR", KB_EXTRACT, kbBasis)!;
+    // (3700 + 8/7 × 700) / (0.9 × 1250) = 4500 / 1125 = 4.0 (kE-only: (4400 / 1250) / 0.9 ≈ 3.9111)
+    expect(result.multipleAtNextEstimate).toBeCloseTo(4.0, 9);
   });
 });

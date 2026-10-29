@@ -384,6 +384,8 @@ export type Translations = {
   // ─── AI Advisor ───────────────────────────────────────────────────────────
   navAdvisor: string;
   advisorPageTitle: string;
+  advisorConversations: string;
+  advisorNewChat: string;
   advisorPageDesc: string;
   advisorInputPlaceholder: string;
   advisorEmptyTitle: string;
@@ -417,7 +419,7 @@ export type Translations = {
   analystOptimistDesc: string;
   analystQualityDesc: string;
   analystRunButton: string;
-  // ─── Blind-first lenses (docs/deep-value-rigor-v2-spec.md §6, Grounded mode only) ─────
+  // ─── Blind-first lenses (Grounded mode only) ─────
   analystPhaseBlind: string;
   analystPhaseReconcile: string;
   analystBlindCardTitle: string;
@@ -549,6 +551,50 @@ export type Translations = {
   groundingLtmEquivLabel: string;
   groundingWedgeLabel: string;
   groundingWedgeCaveat: string;
+  groundingCollapseSection: string;
+  groundingExpandSection: string;
+  groundingEditBlock: string;
+  groundingBlockEmptyTag: string;
+  groundingAllBlocksEmpty: string;
+  groundingEmptyBlocksSkipped: string;
+  groundingTrendReRating: string;
+  groundingTrendDeRating: string;
+  groundingHorizonTrailing: string;
+  groundingHorizonMidcycle: string;
+  groundingHorizonForward: string;
+  groundingGridRowLastFy: string;
+  groundingGridRowMedian5y: string;
+  groundingHistoryProviderBasisTag: string;
+  groundingGridSameBasisTag: string;
+  groundingImpliedTitle: string;
+  groundingImpliedRequiredEbitda: string;
+  groundingImpliedVsLatestFy: string;
+  groundingImpliedVsEstimate: string;
+  groundingImpliedMultipleAtEstimate: string;
+  groundingImpliedCrossHorizonNote: string;
+  groundingBasisRowTitle: string;
+  groundingConfidenceLabel: string;
+  groundingConfidenceHigh: string;
+  groundingConfidenceLow: string;
+  groundingConfidenceUnavailable: string;
+  groundingLowConfidenceNote: string;
+  groundingKbAssumed: string;
+  groundingKbObserved: string;
+  groundingKbInferred: string;
+  groundingCardGatesUnavailable: string;
+  groundingWarnMetaCurrencyConflict: string;
+  groundingWarnMetaUnitsConflict: string;
+  // Saved-analysis detail chrome, report shell and Deep Value panel (moved out of hardcoded English, 2026-10-28)
+  backToSavedAnalyses: string;
+  rerunAnalysis: string;
+  reportDisclaimer: string;
+  recapScenario: string;
+  recapVsPrice: string;
+  recapBuyTarget: string;
+  recapFairValue: string;
+  reportLanguageAria: string;
+  watchlistAddError: string;
+  deepValueIncompleteJson: string;
 };
 
 const en: Translations = {
@@ -928,6 +974,8 @@ const en: Translations = {
   // AI Advisor
   navAdvisor: "AI Advisor",
   advisorPageTitle: "AI Portfolio Advisor",
+  advisorConversations: "Conversations",
+  advisorNewChat: "New chat",
   advisorPageDesc: "Ask about your portfolio and get personalized stock ideas backed by your saved analyses",
   advisorInputPlaceholder: "Ask anything about your portfolio or request stock ideas…",
   advisorEmptyTitle: "What would you like to know?",
@@ -1094,6 +1142,49 @@ const en: Translations = {
   groundingLtmEquivLabel: "LTM-equivalent",
   groundingWedgeLabel: "wedge",
   groundingWedgeCaveat: "real growth or a basis mismatch in the pasted EBITDA — check for data conflicts",
+  groundingCollapseSection: "Collapse",
+  groundingExpandSection: "Expand",
+  groundingEditBlock: "Edit block",
+  groundingBlockEmptyTag: "empty",
+  groundingAllBlocksEmpty: "Every block is empty — paste some data before preparing.",
+  groundingEmptyBlocksSkipped: "Empty blocks will be skipped.",
+  groundingTrendReRating: "re-rating",
+  groundingTrendDeRating: "de-rating",
+  groundingHorizonTrailing: "trailing",
+  groundingHorizonMidcycle: "mid-cycle",
+  groundingHorizonForward: "forward",
+  groundingGridRowLastFy: "Last FY",
+  groundingGridRowMedian5y: "5y median",
+  groundingHistoryProviderBasisTag: "raw table, provider basis",
+  groundingGridSameBasisTag: "same basis as the income statement, rescaled by kE",
+  groundingImpliedTitle: "What must be true",
+  groundingImpliedRequiredEbitda: "At the historical median multiple, today's price requires an EBITDA of",
+  groundingImpliedVsLatestFy: "vs. last reported year",
+  groundingImpliedVsEstimate: "vs. estimate",
+  groundingImpliedMultipleAtEstimate: "Multiple the market pays on the next estimate",
+  groundingImpliedCrossHorizonNote: "Forward EBITDA ranked against a trailing history — not like-for-like on the driver.",
+  groundingBasisRowTitle: "Basis reconciliation",
+  groundingConfidenceLabel: "confidence",
+  groundingConfidenceHigh: "high",
+  groundingConfidenceLow: "low",
+  groundingConfidenceUnavailable: "unavailable",
+  groundingLowConfidenceNote: "Low confidence — few overlapping years or a wide year-to-year spread in kE.",
+  groundingKbAssumed: "kB assumed = 1 (EV bridge not estimable from the paste)",
+  groundingKbObserved: "observed",
+  groundingKbInferred: "inferred",
+  groundingCardGatesUnavailable: "Deterministic checks unavailable — the model's valuation block could not be verified.",
+  groundingWarnMetaCurrencyConflict: "Pasted blocks declare different reporting currencies — the first one is used for all of them",
+  groundingWarnMetaUnitsConflict: "Pasted blocks declare different unit scales — the first one is used for all of them",
+  backToSavedAnalyses: "← Back to Saved Analyses",
+  rerunAnalysis: "Re-run Analysis",
+  reportDisclaimer: "⚠️ This report was generated by AI and is for informational purposes only. It does not constitute financial advice.",
+  recapScenario: "Scenario",
+  recapVsPrice: "vs. Price",
+  recapBuyTarget: "Buy Target",
+  recapFairValue: "Fair Value",
+  reportLanguageAria: "Report language",
+  watchlistAddError: "Could not add to watchlist. Try again.",
+  deepValueIncompleteJson: "The analysis finished but its valuation block is incomplete: the report is shown, the fair values are not saved.",
 };
 
 const it: Translations = {
@@ -1473,6 +1564,8 @@ const it: Translations = {
   // AI Advisor
   navAdvisor: "AI Advisor",
   advisorPageTitle: "Consulente AI del Portafoglio",
+  advisorConversations: "Conversazioni",
+  advisorNewChat: "Nuova chat",
   advisorPageDesc: "Chiedi del tuo portafoglio e ricevi idee di investimento personalizzate basate sulle tue analisi salvate",
   advisorInputPlaceholder: "Chiedi qualcosa sul tuo portafoglio o richiedi idee di investimento…",
   advisorEmptyTitle: "Cosa vorresti sapere?",
@@ -1640,6 +1733,49 @@ const it: Translations = {
   groundingLtmEquivLabel: "Equivalente LTM",
   groundingWedgeLabel: "scarto",
   groundingWedgeCaveat: "crescita reale o base diversa nell'EBITDA incollato — controlla i conflitti di dato",
+  groundingCollapseSection: "Comprimi",
+  groundingExpandSection: "Espandi",
+  groundingEditBlock: "Modifica blocco",
+  groundingBlockEmptyTag: "vuoto",
+  groundingAllBlocksEmpty: "Tutti i blocchi sono vuoti — incolla dei dati prima di preparare.",
+  groundingEmptyBlocksSkipped: "I blocchi vuoti verranno ignorati.",
+  groundingTrendReRating: "re-rating",
+  groundingTrendDeRating: "de-rating",
+  groundingHorizonTrailing: "trailing",
+  groundingHorizonMidcycle: "metà ciclo",
+  groundingHorizonForward: "forward",
+  groundingGridRowLastFy: "Ultimo esercizio",
+  groundingGridRowMedian5y: "Mediana 5a",
+  groundingHistoryProviderBasisTag: "tabella grezza, base fornitore",
+  groundingGridSameBasisTag: "stessa base del conto economico, riscalata per kE",
+  groundingImpliedTitle: "Cosa deve essere vero",
+  groundingImpliedRequiredEbitda: "Al multiplo mediano storico, il prezzo attuale richiede un EBITDA di",
+  groundingImpliedVsLatestFy: "vs. ultimo esercizio",
+  groundingImpliedVsEstimate: "vs. stima",
+  groundingImpliedMultipleAtEstimate: "Multiplo che il mercato paga sulla prossima stima",
+  groundingImpliedCrossHorizonNote: "EBITDA forward confrontato con una storia trailing — il driver non è omogeneo.",
+  groundingBasisRowTitle: "Riconciliazione di base",
+  groundingConfidenceLabel: "affidabilità",
+  groundingConfidenceHigh: "alta",
+  groundingConfidenceLow: "bassa",
+  groundingConfidenceUnavailable: "non disponibile",
+  groundingLowConfidenceNote: "Affidabilità bassa — pochi anni sovrapposti o forte dispersione di kE tra un anno e l'altro.",
+  groundingKbAssumed: "kB assunto = 1 (ponte EV non stimabile dai dati incollati)",
+  groundingKbObserved: "osservato",
+  groundingKbInferred: "dedotto",
+  groundingCardGatesUnavailable: "Controlli deterministici non disponibili — il blocco di valutazione del modello non è verificabile.",
+  groundingWarnMetaCurrencyConflict: "I blocchi incollati dichiarano valute di reporting diverse — viene usata la prima per tutti",
+  groundingWarnMetaUnitsConflict: "I blocchi incollati dichiarano scale di unità diverse — viene usata la prima per tutti",
+  backToSavedAnalyses: "← Torna alle analisi salvate",
+  rerunAnalysis: "Ripeti l'analisi",
+  reportDisclaimer: "⚠️ Questo report è generato dall'AI ed è a solo scopo informativo. Non costituisce consulenza finanziaria.",
+  recapScenario: "Scenario",
+  recapVsPrice: "vs. prezzo",
+  recapBuyTarget: "Buy target",
+  recapFairValue: "Fair value",
+  reportLanguageAria: "Lingua del report",
+  watchlistAddError: "Impossibile aggiungere alla watchlist. Riprova.",
+  deepValueIncompleteJson: "L'analisi è terminata ma il blocco di valutazione è incompleto: il report è visibile, i fair value non vengono salvati.",
 };
 
 export const translations: Record<Language, Translations> = { en, it };

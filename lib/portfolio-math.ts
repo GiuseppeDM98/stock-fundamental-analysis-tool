@@ -1,6 +1,8 @@
 // Pure portfolio math shared by the server (snapshots) and the client (UI).
 // No Prisma / no server-only imports — safe to use from either side.
 
+import type { SnapshotData } from "@/types/portfolio";
+
 /**
  * Realized profit/loss of a sale, in the position's own currency.
  * Positive = gain, negative = loss. Convert to EUR at the call site with the
@@ -45,4 +47,23 @@ export function aggregateOpenLots(lots: OpenLot[]): { totalShares: number; weigh
   if (totalShares <= 0) return null;
   const totalCost = lots.reduce((s, l) => s + l.shares * l.purchasePrice, 0);
   return { totalShares, weightedAvgCost: totalCost / totalShares };
+}
+
+export type DividendTotals = { totalEur: number; byTicker: Record<string, number> };
+
+/** Sums the dividends recorded in snapshot JSON blobs, in EUR, overall and per ticker.
+ *  Entries without `dividendPaidEur` (legacy rows) count as 0. `dividendsEur` (the day's
+ *  aggregate) is deliberately NOT used: it is not attributable to a ticker. */
+export function sumDividendsByTicker(datas: Pick<SnapshotData, "entries" | "dividendsEur">[]): DividendTotals {
+  const byTicker: Record<string, number> = {};
+  let totalEur = 0;
+  for (const d of datas) {
+    for (const e of d.entries ?? []) {
+      const paid = e.dividendPaidEur ?? 0;
+      if (paid === 0) continue;
+      byTicker[e.ticker] = (byTicker[e.ticker] ?? 0) + paid;
+      totalEur += paid;
+    }
+  }
+  return { totalEur, byTicker };
 }

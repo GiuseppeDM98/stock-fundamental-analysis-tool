@@ -24,11 +24,12 @@ export function TickerSearch({ initialTicker, onSearch, loading }: TickerSearchP
     >
       <label className="flex-1">
         <span className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted">Ticker</span>
+        {/* Blue focus ring: the colour Tailwind 3 drew here (its default ring colour). */}
         <input
           name="ticker"
           defaultValue={initialTicker}
           placeholder={t("tickerPlaceholder")}
-          className="w-full rounded-xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm outline-none ring-accent/40 transition focus:ring"
+          className="w-full rounded-xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm outline-hidden ring-blue-500/50 transition focus:ring-3"
         />
       </label>
       <button

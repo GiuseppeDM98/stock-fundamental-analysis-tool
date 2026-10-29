@@ -20,11 +20,13 @@ type RouteContext = { params: Promise<{ id: string }> };
 const patchSchema = z.object({
   angle: z.enum(ANALYST_ANGLES as [string, ...string[]]).default("skeptic"),
   critiqueMd: z.string().min(1).max(60000),
-  fairValueBull: z.number().positive().optional(),
-  fairValueBase: z.number().positive().optional(),
-  fairValueBear: z.number().positive().optional(),
-  valuationMethod: z.string().optional(),
-  // Blind-first commitment (docs/deep-value-rigor-v2-spec.md §6.4) — a JSON.stringify'd
+  // null clears the lens's numbers: a re-run whose final JSON came back incomplete must not
+  // leave the previous run's fair values next to the new critique (2026-10-28).
+  fairValueBull: z.number().positive().nullable().optional(),
+  fairValueBase: z.number().positive().nullable().optional(),
+  fairValueBear: z.number().positive().nullable().optional(),
+  valuationMethod: z.string().nullable().optional(),
+  // Blind-first commitment (the lens's pre-report Phase 1) — a JSON.stringify'd
   // DeepValueResult, present only for a Grounded blind-first run whose Phase 1 parsed.
   blindJson: z.string().max(20000).optional(),
 });
@@ -55,7 +57,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     body = patchSchema.parse(await request.json());
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return NextResponse.json({ error: err.errors[0].message }, { status: 400 });
+      return NextResponse.json({ error: err.issues[0].message }, { status: 400 });
     }
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
@@ -66,9 +68,9 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Map the angle to its columns and write only that analyst's fields. Undefined fair
-  // values are left untouched by Prisma (e.g. a re-run that emitted no valid JSON keeps
-  // the critique but leaves any prior numbers in place).
+  // Map the angle to its columns and write only that analyst's fields. Undefined values are
+  // left untouched by Prisma; null writes null (the panel sends null when the lens's final
+  // JSON lacks a full bull/base/bear triple, so stale numbers never survive a re-run).
   const cols = ANALYST_COLUMNS[body.angle as (typeof ANALYST_ANGLES)[number]];
   const data: Record<string, unknown> = {
     [cols.critique]: body.critiqueMd,

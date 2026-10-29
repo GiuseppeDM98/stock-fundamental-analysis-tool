@@ -1,5 +1,5 @@
 // GET  /api/earnings          — the user's stored next-earnings estimates (all tickers)
-// POST /api/earnings          — run Sonnet 5 + web search for one ticker, upsert & return it
+// POST /api/earnings          — run the default model + web search for one ticker, upsert & return it
 //
 // The date comes only from the AI here (Yahoo was dropped because it doesn't refresh the
 // field for many Borsa Italiana tickers). Results are persisted so the calendar survives
@@ -10,17 +10,19 @@ import Anthropic from "@anthropic-ai/sdk";
 
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { buildEarningsSystemPrompt, buildEarningsUserPrompt } from "@/lib/ai/earnings-prompt";
+import { tickerSchema } from "@/lib/ticker";
+import { buildEarningsSystemPrompt, buildEarningsUserPrompt, EARNINGS_MAX_TOKENS } from "@/lib/ai/earnings-prompt";
 import { getAiClient, buildThinkingParam, buildEffortConfig, buildWebSearchTools } from "@/lib/ai/client";
 import { resolveAiSettings } from "@/lib/ai/ai-preferences";
 import { runCreateWithToolLoop, DEEP_RESEARCH_MAX_TOOL_ITERATIONS } from "@/lib/ai/tool-loop";
+import { routeErrorStatus } from "@/lib/ai/error-status";
 import type { AiSettings } from "@/types/ai-settings";
 import type { EarningsConfidence, EarningsEstimate } from "@/types/earnings";
 
-const DEFAULT_SETTINGS: AiSettings = { model: "claude-sonnet-5", effort: "medium", thinking: true };
+const DEFAULT_SETTINGS: AiSettings = { model: "claude-sonnet-5-5", effort: "medium", thinking: true };
 
 const requestSchema = z.object({
-  ticker: z.string().min(1).max(20),
+  ticker: tickerSchema,
   companyName: z.string().min(1).max(120),
 });
 
@@ -76,12 +78,12 @@ export async function POST(request: Request) {
     body = requestSchema.parse(await request.json());
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return NextResponse.json({ error: err.errors[0].message }, { status: 400 });
+      return NextResponse.json({ error: err.issues[0].message }, { status: 400 });
     }
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  const ticker = body.ticker.toUpperCase();
+  const ticker = body.ticker;
 
   try {
     const currentDate = new Date().toLocaleDateString("en-US", {
@@ -93,8 +95,8 @@ export async function POST(request: Request) {
     const aiSettings = await resolveAiSettings(session.user.id, undefined, DEFAULT_SETTINGS);
     const client = getAiClient(aiSettings.model);
 
-    // Non-streaming: a single small fact. Sonnet 5 rejects temperature and has adaptive
-    // thinking on by default; web-search + thinking tokens count toward max_tokens.
+    // Non-streaming: a single small fact, on the user's stored default model. No temperature
+    // (Sonnet 5.5 rejects it); web-search + thinking tokens count toward max_tokens.
     // maxIterations: DeepSeek's web search is client-executed one query at a time (unlike
     // Claude's server-side search, which never surfaces a client tool_use here), so the
     // default 10-round cap could exhaust itself mid-research on a DeepSeek run, returning
@@ -102,12 +104,12 @@ export async function POST(request: Request) {
     // block and 502s ("AI returned no parseable result"), reproduced in production
     // (2026-08-24). Reuse the same higher cap as Deep Value/verify rather than inventing a
     // separate knob for a route with much lighter research needs — DeepSeek-only in effect.
-    const response = await runCreateWithToolLoop(
+    const { message: response, stopReason, hitIterationCap } = await runCreateWithToolLoop(
       client,
       {
         model: aiSettings.model,
-        max_tokens: 6000,
-        thinking: buildThinkingParam(aiSettings.thinking),
+        max_tokens: EARNINGS_MAX_TOKENS,
+        thinking: buildThinkingParam(aiSettings.thinking, aiSettings.model, aiSettings.effort),
         output_config: buildEffortConfig(aiSettings.effort),
         system: buildEarningsSystemPrompt({ currentDate }),
         tools: buildWebSearchTools(aiSettings.model),
@@ -115,6 +117,28 @@ export async function POST(request: Request) {
       },
       DEEP_RESEARCH_MAX_TOOL_ITERATIONS
     );
+
+    // The loop gave up mid-research: the last message is another tool call or a paused
+    // partial turn, not an answer. Say so instead of the generic "no parseable result",
+    // which would read as a malformed model response.
+    if (hitIterationCap) {
+      return NextResponse.json(
+        { error: "AI ran out of web search rounds before answering. Try again." },
+        { status: 502 }
+      );
+    }
+
+    // A safety classifier declined (HTTP 200, stop_reason "refusal", little or no text):
+    // name the cause instead of the generic "no parseable result" below. With Sonnet 5.5
+    // the server-side fallback has already retried what it can retry, so this refusal is
+    // final. The lookup has no per-run model picker: the alternative is the default model
+    // in the AI settings.
+    if (stopReason === "refusal") {
+      return NextResponse.json(
+        { error: "The model declined this lookup. Try again or choose another default model in the AI settings." },
+        { status: 502 }
+      );
+    }
 
     // With web search the content array holds several text blocks (reasoning between tool
     // calls + the final answer). Concatenate ALL of them before matching — the first block
@@ -126,7 +150,12 @@ export async function POST(request: Request) {
 
     const match = allText.match(/```json\s*([\s\S]*?)\s*```/);
     if (!match) {
-      return NextResponse.json({ error: "AI returned no parseable result." }, { status: 502 });
+      // A token-cap cut is the likely cause when the fence never closed: say so rather
+      // than blaming the model's format. A complete block before the cap still parses.
+      const error = stopReason === "max_tokens"
+        ? "AI reply hit the length limit before the result. Try again."
+        : "AI returned no parseable result.";
+      return NextResponse.json({ error }, { status: 502 });
     }
 
     const parsed = aiResultSchema.safeParse(JSON.parse(match[1]));
@@ -154,7 +183,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ estimate: serialize(row) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Earnings lookup failed.";
-    const status = message.toLowerCase().includes("rate limit") ? 503 : 400;
+    const status = routeErrorStatus(error);
     return NextResponse.json({ error: message }, { status });
   }
 }

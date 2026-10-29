@@ -49,7 +49,7 @@ describe("formatGroundingForPrompt", () => {
     expect(authIdx).toBeGreaterThanOrEqual(0);
     expect(extractIdx).toBeGreaterThan(authIdx);
     expect(anchorsIdx).toBeGreaterThan(extractIdx);
-    // Basis reconciliation renders FIRST inside the anchors section (spec §2.6).
+    // Basis reconciliation renders FIRST inside the anchors section.
     expect(basisIdx).toBeGreaterThan(anchorsIdx);
     expect(basisIdx).toBeLessThan(text.indexOf("EV/EBITDA (n=10)"));
   });
@@ -105,7 +105,7 @@ describe("formatGroundingForPrompt", () => {
     expect(withWarning).toContain("share_count_jump (FY2025) — 3300 → 3150 (4.5%)");
   });
 
-  it("omits the AUTHORITATIVE FINANCIAL DATA section when blocks is empty (the analyst-lens case, spec §6.4)", () => {
+  it("omits the AUTHORITATIVE FINANCIAL DATA section when blocks is empty (the analyst-lens case)", () => {
     const text = formatGroundingForPrompt(buildContext({ blocks: [] }));
     expect(text).not.toContain("AUTHORITATIVE FINANCIAL DATA");
     // The rest still renders — lenses still get extract + anchors + warnings.
@@ -191,5 +191,92 @@ describe("buildGroundingPromptContext", () => {
     // No price to back out a market-implied read from — degrades to null, not a throw.
     expect(ctx.marketImplied).toBeNull();
     expect(ctx.impliedExpectations).toBeNull();
+    // …and no currency to compare against, so no currency_mismatch either.
+    expect(ctx.warnings.some((w) => w.code === "currency_mismatch")).toBe(false);
+  });
+
+  it("adds currency_mismatch to the warnings and explains the missing market-implied read in the anchors", () => {
+    const ctx = buildGroundingPromptContext([], EXTRACT, 15, "USD"); // extract is EUR
+    expect(ctx.marketImplied).toBeNull();
+    expect(ctx.warnings).toContainEqual({ code: "currency_mismatch", severity: "warn", fiscalYear: null, detail: "EUR vs USD" });
+    const text = formatGroundingForPrompt(ctx);
+    expect(text).toContain("Market-implied: NOT computed — currency mismatch between the pasted statements and the quote (EUR vs USD)");
+    expect(text).toContain("currency_mismatch — EUR vs USD"); // the warnings section, too
+  });
+});
+
+describe("formatGroundingForPrompt — reverse-engineering framing of the market-implied control", () => {
+  // Iren-shaped with bridge inputs on the latest FY, so computeImpliedExpectations can solve
+  // requiredEbitdaAtMedian (kE ≈ 0.83 verified via the Enterprise Value column).
+  const years = [
+    { fiscalYear: 2020, kE: 0.81, evEbitda: 6.6 },
+    { fiscalYear: 2021, kE: 0.82, evEbitda: 6.9 },
+    { fiscalYear: 2022, kE: 0.83, evEbitda: 7.1 },
+    { fiscalYear: 2023, kE: 0.83, evEbitda: 7.1 },
+    { fiscalYear: 2024, kE: 0.84, evEbitda: 7.3 },
+    { fiscalYear: 2025, kE: 0.85, evEbitda: 7.6 },
+  ];
+  const extract = makeExtract({
+    meta: makeMeta({ reportingCurrency: "EUR", units: "millions" }),
+    financials: years.map((y) => makeFinancialsRow({ fiscalYear: y.fiscalYear, ebitda: 1353, netDebt: 4411.6, minorityInterest: 0, sharesDiluted: 908.8 })),
+    multiples: years.map((y) => makeMultiplesRow({ fiscalYear: y.fiscalYear, evEbitda: y.evEbitda, enterpriseValue: y.evEbitda * y.kE * 1353 })),
+  });
+
+  it("asks the model to reverse-engineer the price when the 'what must be true' read exists", () => {
+    const text = formatGroundingForPrompt(buildGroundingPromptContext([], extract, 2.95, "EUR"));
+    expect(text).toContain("report the GAP");
+    expect(text).toContain('Then reverse-engineer it: use the "What must be true" read below');
+    expect(text).toContain("What must be true for the current price to be right");
+  });
+
+  it("keeps the GAP-only framing (no dangling pointer) when there is no reverse-engineered read", () => {
+    const text = formatGroundingForPrompt(buildContext()); // kE unverifiable ⇒ requiredEbitdaAtMedian null
+    expect(text).toContain("report the GAP");
+    expect(text).not.toContain("reverse-engineer it");
+  });
+});
+
+describe("formatGroundingForPrompt — basis confidence and EV-bridge statements", () => {
+  it("says 'Confidence: low' when kE is within tolerance but the per-year ratio is dispersed", () => {
+    // per-year kE 0.9 / 1.0 / 1.1 ⇒ median 1.00 (same basis) but spread 0.20 > 0.10 ⇒ low
+    const kEs = [0.9, 1.0, 1.1];
+    const extract = makeExtract({
+      meta: makeMeta({ reportingCurrency: "EUR" }),
+      financials: kEs.map((_, i) => makeFinancialsRow({ fiscalYear: 2023 + i, ebitda: 1000 })),
+      multiples: kEs.map((kE, i) => makeMultiplesRow({ fiscalYear: 2023 + i, evEbitda: 5, enterpriseValue: kE * 1000 * 5 })),
+    });
+    const ctx = buildGroundingPromptContext([], extract, null, "EUR");
+    expect(ctx.basis.sameBasis).toBe(true);
+    expect(ctx.basis.confidence).toBe("low");
+    const text = formatGroundingForPrompt(ctx);
+    expect(text).toContain("the multiples table and the income statement are on the same EBITDA basis");
+    expect(text).toContain("Confidence: low (n=3, spread 0.20)");
+  });
+
+  it("no low-confidence caveat on a tight, well-populated same-basis read", () => {
+    const kEs = [1.0, 1.0, 1.01];
+    const extract = makeExtract({
+      financials: kEs.map((_, i) => makeFinancialsRow({ fiscalYear: 2023 + i, ebitda: 1000 })),
+      multiples: kEs.map((kE, i) => makeMultiplesRow({ fiscalYear: 2023 + i, evEbitda: 5, enterpriseValue: kE * 1000 * 5 })),
+    });
+    expect(formatGroundingForPrompt(buildGroundingPromptContext([], extract, null, "EUR"))).not.toContain("Confidence: low");
+  });
+
+  it("states the EV bridge is ASSUMED when kB can't be estimated", () => {
+    const text = formatGroundingForPrompt(buildContext()); // no marketCap / pe / pb anywhere
+    expect(text).toContain("EV bridge basis: ASSUMED, not verified (kB treated as 1)");
+  });
+
+  it("states an observed kB and that the provider-basis reads already scale the bridge by it", () => {
+    // kB = (4500 − 3700) / (500 + 200) = 800 / 700 ≈ 1.14
+    const extract = makeExtract({
+      meta: makeMeta({ reportingCurrency: "EUR" }),
+      financials: [makeFinancialsRow({ fiscalYear: 2025, ebitda: 1000, netDebt: 500, minorityInterest: 200, sharesDiluted: 100 })],
+      multiples: [makeMultiplesRow({ fiscalYear: 2025, evEbitda: 5, enterpriseValue: 4500, marketCap: 3700 })],
+    });
+    const text = formatGroundingForPrompt(buildGroundingPromptContext([], extract, null, "EUR"));
+    expect(text).toContain("EV bridge basis: kB = 1.14 (observed from reported Market Cap / Enterprise Value)");
+    expect(text).toContain("already scale the statement bridge by kB");
+    expect(text).not.toContain("ASSUMED");
   });
 });

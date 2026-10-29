@@ -171,19 +171,22 @@ export function AnalyzeClient() {
 
         {/* Error state */}
         {loadState === "error" && (
-          <div className="card border-danger/50 bg-danger/10 text-sm text-red-100">
+          <div className="card text-sm text-red-100">
             <p className="font-semibold">{t("errorUnableAnalysis")}</p>
             <p className="mt-1">{errorMessage}</p>
           </div>
         )}
 
-        {/* Success state: price header, margin-of-safety control, and the AI Deep Value panel */}
+        {/* Success state: price header, margin-of-safety control, and the AI Deep Value panel.
+            print:mt-4 / print:-mb-4 keep the PDF laid out as before Tailwind 4: around the
+            print:hidden siblings, its space-y puts the 16px gap after the report (collapsing out
+            through this block) instead of before it, which would move every page break. */}
         {loadState === "success" && quote && (
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35 }}
-            className="space-y-4"
+            className="space-y-4 print:mt-4 print:-mb-4"
           >
             {/* Price header + MoS control are app chrome — the report shell below
                 carries its own masthead, so both are excluded from the PDF export. */}

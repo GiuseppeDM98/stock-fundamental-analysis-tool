@@ -28,10 +28,10 @@ cd stock-fundamental-analysis-tool
 
 npm install
 
-cp .env.example .env.local
+cp .env.example .env
 ```
 
-Edit `.env.local` and set these two values:
+Edit `.env` and set these two values:
 
 ```bash
 NEXTAUTH_SECRET="$(openssl rand -hex 32)"   # paste the output
@@ -53,7 +53,9 @@ Open [http://localhost:3000](http://localhost:3000). Search for a ticker such as
 
 ## Environment Variables
 
-Full reference for every variable in `.env.local`.
+Full reference for every variable in `.env`.
+
+`.env` is the one env file this repo uses: Next.js reads it, and so does the Prisma CLI (`prisma.config.ts` loads it through `dotenv/config`), which ignores `.env.local`. Next.js also reads a `.env.local` and lets it win over `.env`; avoid keeping one, or the app and `npx prisma migrate dev` can end up on different values. A variable already set in the shell wins over both files (WORKFLOW.md §3 relies on this to keep a manual run off the production database).
 
 | Variable | Required | Local default | How to get it |
 |----------|----------|---------------|---------------|
@@ -119,7 +121,7 @@ Use this option if you want to replicate the production setup or deploy to Verce
    turso db tokens create stock-analysis
    ```
 
-5. Update `.env.local`:
+5. Update `.env`:
 
    ```bash
    TURSO_DATABASE_URL="libsql://stock-analysis-<org>.turso.io"
@@ -136,6 +138,8 @@ Use this option if you want to replicate the production setup or deploy to Verce
 npm run dev      # development server on :3000 with hot reload
 npm run test     # run the Vitest test suite once
 npm run build    # type-check + production build (use instead of npm run lint)
+npm run e2e      # Playwright end-to-end suite on an isolated local database
+npm run ci:local # tests + type-check + isolated build + e2e (the gate before a PR)
 ```
 
 ### Verify your setup
@@ -154,7 +158,7 @@ After `npm run dev`, check each feature:
 
 The portfolio snapshot cron runs automatically on Vercel every weekday at 20:00 UTC. To trigger it manually in local dev:
 
-1. Set `CRON_SECRET` in `.env.local`:
+1. Set `CRON_SECRET` in `.env`:
 
    ```bash
    CRON_SECRET="dev-cron-secret-local"
@@ -185,22 +189,26 @@ A `PortfolioSnapshot` row is written for each user who has at least one position
 
 > **Note:** Do not reuse secrets between local and production environments.
 
-### ⚠️ Vercel Hobby plan: AI routes will 504
+### ⚠️ Vercel Hobby plan: long AI runs stop at 300 seconds
 
-The three AI routes (`/api/ai/deep-value`, `/api/ai/deep-value/verify`, `/api/ai/advisor`) call Claude with a high reasoning effort plus web search — generation regularly takes **1–2 minutes**. On Vercel, every API route is a serverless function with a `maxDuration` capped by the plan:
+The AI routes call the model with a high reasoning effort plus web search. A Deep Value run (`/api/ai/deep-value`) or an analyst lens (`/api/ai/deep-value/verify`, two full turns in the Grounded blind-first flow) takes several minutes and can run past the ceiling; the Advisor and the earnings lookup usually fit. On Vercel every API route is a function whose `maxDuration` is capped by the plan (Fluid Compute, Vercel's default — checked against Vercel's docs on 2026-10-20):
 
-| Plan | Max `maxDuration` |
-|---|---|
-| Hobby | 60s |
-| Pro | 300s (up to 800s with Fluid Compute) |
-| Enterprise | 900s |
+| Plan | Default | Max `maxDuration` |
+|---|---|---|
+| Hobby | 300s | 300s |
+| Pro | 300s | 800s (1800s in beta) |
+| Enterprise | 300s | 800s (1800s in beta) |
 
-**On Hobby, these routes will hit the 60s ceiling and return a 504** before the report finishes — streaming doesn't help, since Vercel counts total execution time, not whether the response is still being written. If you deploy on Hobby, either:
+**A run that goes past 300s on Hobby is killed** and the report stops mid-stream: streaming doesn't help, since Vercel counts total execution time, not whether the response is still being written.
 
-- **Run AI analyses from `npm run dev` on localhost** (no function-duration limit) and use the deployed instance for everything else, or
-- **Upgrade to Pro** and add `export const maxDuration = 300;` to each of the three route files.
+**This is a declared limit of the project** (owner's decision, 2026-10-20): long analyses run from localhost, the deployed instance serves everything else (reading saved analyses, portfolio, watchlist, crons). Two ways to run them:
 
-A queue+polling architecture (job persisted immediately, generation run by a worker outside Vercel's function limit) would remove this ceiling on Hobby entirely, at the cost of losing live streaming — explored but not implemented, see [`docs/async-ai-analysis-architecture.md`](docs/async-ai-analysis-architecture.md).
+- **The app on localhost**, which has no function-duration limit. Mind the database: `.env` points at the production Turso database, so a plain `npm run dev` writes there — which is what you want for a real analysis, never for a test (WORKFLOW.md § 3).
+- **The `/deep-value` Claude Code command** (`.claude/commands/deep-value.md`), which produces the analyses and the analyst panel outside the app and saves them to Turso.
+
+Upgrading to Pro lifts the ceiling to 800s with one `maxDuration` line per route. A queue+polling architecture, or Vercel Workflows (no duration limit), would remove it on Hobby too, at the cost of a new data model and of live streaming — evaluated and not planned for a personal tool.
+
+**Planned** (2026-10-27, `doc/evoluzioni/05c-corsa-a-fasi.md`, D-77): every AI call becomes its own request ≤ 300 s, persisted by the server and retried from its phase — the pattern of net-worth-tracker's Consulente. The limit then holds only for a single model turn, measured per phase.
 
 ---
 
@@ -216,10 +224,10 @@ Some non-US tickers lack this field in Yahoo Finance. This is a data availabilit
 You have not run the migrations yet. Run `npx prisma migrate dev` and restart the dev server.
 
 **`NEXTAUTH_SECRET` missing or invalid**
-Generate a new value with `openssl rand -hex 32` and add it to `.env.local`.
+Generate a new value with `openssl rand -hex 32` and add it to `.env`.
 
 **AI Analysis returns an error**
-Verify that `ANTHROPIC_API_KEY` in `.env.local` is a valid key from [console.anthropic.com](https://console.anthropic.com) and that your account has available credits.
+Verify that `ANTHROPIC_API_KEY` in `.env` is a valid key from [console.anthropic.com](https://console.anthropic.com) and that your account has available credits.
 
 **`prisma generate` errors after pulling changes**
 Run `npx prisma generate` to regenerate the Prisma client after any schema changes pulled from the repo.

@@ -2,25 +2,27 @@
 
 Current project state and context for AI assistants. Implementation patterns & gotchas live in [AGENTS.md](AGENTS.md).
 
+> **Before starting any work, read [WORKFLOW.md](WORKFLOW.md)**: the standing session rules (explicit approval before any commit, one branch and one commit per session, Italian replies, guided verification). They live in the repo, not in agent memory.
+
 ---
 
 ## Version & Status
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: August 24, 2026 — **Saved-report fallback rendering + DeepSeek earnings reliability**. The saved-analysis detail page no longer renders raw, unformatted Markdown when a report's leading JSON block fails to parse — it now always goes through the shared `<ReportBody>` renderer, so the report stays readable even when the valuation summary can't be reconstructed. Root cause of one real trigger, found while debugging a saved analysis with no valuation data: a single malformed nested field in the model's own JSON block (a dropped closing brace after a long free-text field) discards the entire bull/base/bear/method via `JSON.parse` — no parser resilience added yet, just the rendering fix. Also fixed `POST /api/earnings` 502ing on DeepSeek runs ("AI returned no parseable result") by raising its tool-loop cap from the 10-round default to the shared 35-round `DEEP_RESEARCH_MAX_TOOL_ITERATIONS` — DeepSeek's web search is client-executed one query at a time (unlike Claude's server-side search), and some tickers needed more than 10 rounds to converge.
+**Last Updated**: October 29, 2026 — **Spec 01 (hardening and cleanup) implemented**, awaiting the Turso migration. Add to Watchlist sends the MoS as a fraction; Advisor and `/analyses` ignore sold lots; Dividends Received sums the whole history; verdict, exit signal, Under-FV filter and digest share `verdictBasis()`/`watchlistBuyTarget()`; an incomplete valuation JSON is flagged, never half-saved; tickers normalised; detail page fully in Italian; DeepSeek web search on DeepSeek's Search API (Tavily dropped); catalog id `deepseek-flash`, old id aliased; structured output for the Grounded extraction; zod 4. Collaudo (phases A–G, real run on four AI paths) and the owner's tour passed, nothing left open. Migration `20261028165535_drop_watchlist_run_and_freq` drops `WatchlistRun` + `User.watchlistFreq`. **Post-merge (owner)**: promote to `main` on its own; after the deploy, apply the migration to Turso as in spec 01 § 8 (counts, dump outside the repo, migration, same counts, ticker check) and record the outcome here; then remove `TAVILY_API_KEY` from Vercel. Next: spec 02.
 
 ---
 
 ## Tech Stack
 
-- **Next.js** `15.5.12` (App Router) + **React** `19.0.0` + **TypeScript** `5.7.3`
-- **yahoo-finance2** `3.13.2` + **Zod** `3.24.1`
-- **Prisma** `7.4.2` + **Turso** (libSQL) via `@prisma/adapter-libsql`
-- **Auth.js** `next-auth@5.0.0-beta.30` + **bcryptjs**
-- **Anthropic SDK** + **Claude Opus 4.8** (Deep Value + Analyst Review, `effort: "xhigh"`) / **Claude Sonnet 5** (Advisor `effort: "high"`; next-earnings lookup `effort: "medium"`) / **DeepSeek V4 Pro** or **V4 Flash** (alternative providers, same SDK via its Anthropic-compat endpoint, user-selectable, `low`/`high`/`max` effort) — adaptive thinking, web search enabled (native for Claude, client-executed via Tavily for DeepSeek)
-- **Tailwind** `3.4.17` + typography + **Framer Motion** `11.18.2` + **Recharts** `2.15.1` + react-markdown + remark-gfm + node-html-parser
-- **Vitest** `3.2.4` + Testing Library `16.2.0`
+- **Next.js** `15.5.27` (App Router) + **React** `19.2.4` + **TypeScript** `5.9.3`
+- **yahoo-finance2** `3.13.2` + **Zod** `4.6.7`
+- **Prisma** client `7.4.2` (CLI `7.10.0`) + **Turso** (libSQL) via `@prisma/adapter-libsql`
+- **Auth.js** `next-auth@5.0.0-beta.32` + **bcryptjs**
+- **Anthropic SDK** `0.133.0` + **Claude Opus 4.8** at `effort: "high"` on every AI route — the user's stored default (`User.ai*`, schema default; changed in Settings) / **Claude Sonnet 5.5** pinned for the Grounded extraction (`medium`); the route fallbacks (Opus 4.8 `xhigh` for Deep Value + Analyst Review, Sonnet 5.5 for Advisor `high` and earnings `medium`) run only when the stored value is invalid / **DeepSeek V4 Pro** or **V4.1 Flash** (alternative providers, same SDK via its Anthropic-compat endpoint, user-selectable, `low`/`high`/`max` effort) — adaptive thinking, web search enabled (native for Claude, client-executed via DeepSeek's Search API for DeepSeek)
+- **Tailwind** `4.3.3` (`@tailwindcss/postcss`) + typography `0.5.20` + **Framer Motion** `11.18.2` + **Recharts** `2.15.4` + react-markdown + remark-gfm + node-html-parser
+- **Vitest** `4.1.11` + Testing Library `16.3.2` + **Playwright** `1.63.0` (e2e, isolated DB) + `tsx` (seed/e2e scripts)
 
 ---
 
@@ -29,14 +31,12 @@ Current project state and context for AI assistants. Implementation patterns & g
 Next.js App Router with client-side interactivity and server-side API routes. Pipeline: **Discover (Advisor) → Decide (Deep Value) → Monitor (Watchlist/Portfolio)**.
 
 - **Frontend**: Hub home (`/`) + `/analyze` (Deep Value) + auth + `/analyses` + `/portfolio` + `/advisor` + `/watchlist`
-- **API**: `/api/quote/[ticker]` (only Yahoo data route), `/api/auth/*`, `/api/analyses(+/[id]` GET/PATCH/DELETE — PATCH attaches the Analyst Review), `/api/positions(+/[id])`, `/api/earnings` GET/POST (POST = Sonnet 5 + web search next-earnings lookup, upsert), `/api/ai/deep-value` + `/verify` + `/api/ai/advisor` (all POST streaming), `/api/advisor/sessions(+/[id](+/messages))`, `/api/portfolio/snapshots`, `/api/watchlist(+/[id], /settings, /run)`, `/api/cron/{portfolio-snapshot,watchlist-analysis}`
+- **API**: `/api/quote/[ticker]` (only Yahoo data route), `/api/auth/*`, `/api/analyses(+/[id]` GET/PATCH/DELETE — PATCH attaches the Analyst Review), `/api/positions(+/[id])`, `/api/earnings` GET/POST (POST = the stored default model + web search next-earnings lookup, upsert), `/api/ai/deep-value` + `/verify` + `/api/ai/advisor` (all POST streaming), `/api/ai/grounding/extract`, `/api/settings/ai`, `/api/advisor/sessions(+/[id](+/messages))`, `/api/portfolio/snapshots`, `/api/portfolio/dividends`, `/api/watchlist(+/[id], /settings, /run)`, `/api/cron/{portfolio-snapshot,watchlist-analysis}`
 - **Business logic**: pure TS in `lib/` (Yahoo adapter, deep-value/verify/advisor/earnings prompts, snapshots, dividends, formatters)
-- **DB**: SQLite via Prisma 7 — `User`, `Analysis`, `Position`, `PortfolioSnapshot`, `WatchlistItem`, `WatchlistRun` (dead), `EarningsEstimate`, `AdvisorSession`, `AdvisorMessage`
+- **DB**: SQLite via Prisma 7 — `User`, `Analysis`, `Position`, `PortfolioSnapshot`, `WatchlistItem`, `EarningsEstimate`, `AdvisorSession`, `AdvisorMessage`
 - **Auth**: Auth.js v5 credentials provider, JWT sessions (no DB session table)
 - **Types**: `types/` — fundamentals, market, analysis, auth, portfolio, watchlist
 - **Cron**: Vercel — portfolio snapshot weekdays 20:00 UTC, watchlist digest weekdays 08:00 Europe/Rome (fires at 06:00 + 07:00 UTC, both `1-5`-restricted, to survive CET/CEST, handler no-ops the non-matching hour)
-
-_Removed with the classic engine / Compare page: `/api/compare/*`, valuation / fundamentals / analyst-estimates / historical-multiples / macro routes, `lib/valuation/*`, `lib/ai/lite-analysis.ts`, `types/valuation.ts` + `ai.ts`, `LiteAnalysisResult`, `CompareResult` model._
 
 ---
 
@@ -52,7 +52,7 @@ Slim, single path: ticker search → `GET /api/quote` (price header + reference 
 - The only AI analysis mode (violet panel). Claude picks the method (DCF/DDM/EV·EBITDA/P·B), sources all data via web search — no Yahoo fundamentals dependency; works for any global ticker. Gathers ~5y (min 3) of financials + quality metrics + historical multiples.
 - Output: JSON block (method + sector + bull/base/bear FVs) then a 10-section Markdown report (Overview → Moat → Method → Financial Data & Quality → Bull/Base/Bear → Risks → Catalysts → Summary). Fair-value cards + method badge after streaming.
 - 8 languages (EN, IT, ES, FR, DE, PT, ZH, JA); respects MoS. Builders in `lib/ai/deep-value-prompts.ts`, endpoint `/api/ai/deep-value`.
-- **Model**: `claude-opus-4-8`, adaptive thinking, `effort: "xhigh"` (cast `as unknown as "high"` — not in pinned SDK union), `max_tokens: 64000`, streaming + web search.
+- **Model**: the user's stored default (Opus 4.8 at `high` unless changed in Settings; `claude-opus-4-8` at `xhigh` is only the route fallback), adaptive thinking, `max_tokens: 64000`, streaming + web search.
 - **Prompt rigor**: `buildDeepValueSystemPrompt` injects `ANALYTICAL_RIGOR_BLOCK` (12 conditional checks distilled from real reviewer findings — see AGENTS.md; key one: **never anchor the multiple/lever to the current price; the market-implied read is a control that reports the GAP**). **Date injection**: `currentDate` from `new Date()` passed to both builders (else Claude anchors to its training year). **Stream suppression**: server buffers text until the ` ```json ` marker; pre-JSON reasoning is discarded.
 - **Analyst panel (`/verify`, saved analyses only)**: a panel of three independent second-opinion passes — **Skeptic** (adversarial by construction: must produce a **kill price**, the price below which the thesis is dead, or explicitly say it can't), **Optimist** (constructive bull case), **Quality** (long-term durability). All three share an unconditional no-praise rule (critique must be errors + the most fragile assumption + the one number that flips the conclusion). Each streams from `/api/ai/deep-value/verify` with an `angle` param (one route; `buildAnalystSystemPrompt(angle, …)` swaps only persona/focus, shared JSON block + authoritative-price guard + MoS clause). Each commits to its **own** bull/base/bear valuation (leading JSON block, same MoS-adjusted schema) + a critique. Runs **only on the saved-analysis detail page** (`components/analyst-panel.tsx`, one on-demand button per lens) — the live `/analyze` panel no longer runs any review. `AnalystAngle`/`ANALYST_ANGLES` canonical in `types/analysis.ts`.
 - **Blind-first (Grounded analyses only)**: when the saved analysis carries pasted data, each lens first commits to bull/base/bear from the extract/anchors alone — no report — in a hidden Phase 1 turn, then reconciles against the report in Phase 2, where a revision is only valid if it cites a fact or arithmetic error not available blind (`"the report argues X"` is not a reason). The blind-vs-final drift, any `revisions[]` (with the cited reason), and the Skeptic's kill price render in `<AnalystBlindCard>` (`components/report/analyst-blind-card.tsx`) as soon as Phase 1 parses — before Phase 2 even finishes. Quick-mode lenses are single-turn, unaffected. See AGENTS.md for the two-turn mechanics (`lib/ai/tool-loop.ts`, `verify/route.ts`).
@@ -63,11 +63,11 @@ Slim, single path: ticker search → `GET /api/quote` (price header + reference 
 
 ### Grounded Deep Value (paste-your-own-data mode)
 - Optional, above the Deep Value panel on `/analyze`: a collapsible "Pasted data" section (`components/grounding-input.tsx`) where the user adds typed blocks — income statement, balance sheet, cash flow, historical multiples, forward estimates, peer comps (with a ticker) — each a labeled textarea (cap 40k chars/block, 200k total, draft persisted per-ticker in `localStorage`). Source-agnostic by design (no format-specific parser); TIKR is the suggested source in the UI copy only.
-- **Prepare data** → `POST /api/ai/grounding/extract` (Sonnet 5, `tools: []` — pure transcription, no web search, no arithmetic) transcribes each block in parallel into a per-kind-scoped Zod schema, merges by fiscal year (`lib/grounding/merge.ts`), and returns a **verifiable preview** (`components/report/grounding-preview.tsx`): currency/units/years covered, the historical multiple distribution (min/p25/median/p75/max + an early→late trend), current peer multiples, the market-implied multiple + percentile (or why it's unavailable), and any `ReconciliationWarning`s (EPS/net-debt mismatches, share-count jumps) — never blocking, just shown.
+- **Prepare data** → `POST /api/ai/grounding/extract` (Sonnet 5.5, `tools: []` — pure transcription, no web search, no arithmetic) transcribes each block in parallel into a per-kind-scoped Zod schema, merges by fiscal year (`lib/grounding/merge.ts`), and returns a **verifiable preview** (`components/report/grounding-preview.tsx`): currency/units/years covered, the historical multiple distribution (min/p25/median/p75/max + an early→late trend), current peer multiples, the market-implied multiple + percentile (or why it's unavailable), and any `ReconciliationWarning`s (EPS/net-debt mismatches, share-count jumps) — never blocking, just shown.
 - **Analyze with this data →** confirms the payload (`GroundingPayload = { blocks, extract }`) and threads it into `/api/ai/deep-value`'s POST body. The route recomputes the deterministic anchors server-side (never trusts client-sent stats) and injects both the raw paste and the anchors into the prompt via `formatGroundingForPrompt()` (`lib/grounding/prompt-format.ts`) — web search is **rescoped, not disabled**: forbidden on historical data already provided, required for anything published after the paste's coverage date plus qualitative context (moat/risks/catalysts).
 - **Basis reconciliation + 11 deterministic gates** (`lib/grounding/basis.ts` + `lib/grounding/postcheck.ts`, surfaced in `<GroundingCard>`): before any multiple is applied, `kE`/`kB` reconcile the historical-multiples table against the pasted income statement (provider vs. statement accounting space) — a `BASIS RECONCILIATION` prompt section makes this binding, not advisory, and degrades honestly to "unavailable"/"low confidence" rather than assuming same-basis. Gates then recompute each scenario's own declared bridge and check assumption validity, not just internal arithmetic: `basis_same`, `horizon_consistent`, `bear_breaks_price`, `multiple_vs_market`, `trailing_forward` (forward driver re-expressed on trailing EBITDA before ranking against history), `netdebt_trajectory`, `roic_vs_wacc`, `probabilities` → `expectedValue`, `cross_check` (mandatory second method, ≤25% delta) + `cross_check_basis` (the same basis check run on the cross-check's own bridge — the primary method may have none, e.g. a DCF). Cures a real misvaluation class (Iren S.p.A.: a historical multiple applied to an EBITDA on a ~17%-different basis inflated fair value by the same amount). See AGENTS.md for the full gate list and the `kE`/`kB` algorithm.
 - **Persists with the analysis** (`Analysis.groundingJson`, nullable) and **reaches the Analyst Panel lenses**, blind-first (see above), on a saved analysis — the verify route re-reads it server-side via `analysisId` and injects the extract + anchors (never the raw paste, to keep 3 Opus xhigh passes affordable).
-- Quick mode (no paste) is unaffected — byte-identical prompts, verified by a golden capture-and-diff test (`__tests__/deep-value-prompts-quick-identical.test.ts`) on every touch of the shared prompt builders.
+- Quick mode (no paste) never receives any Grounded text: its prompts are locked by a golden snapshot (`__tests__/deep-value-prompts-quick-identical.test.ts`) that must stay green on every touch of the shared prompt builders. The snapshot was regenerated on purpose once, when the unconditional rigor items 13-18 were added to Quick mode too.
 
 ### User Accounts & Saved Analyses
 - Email+password (Auth.js v5, bcrypt); `DISABLE_REGISTRATION=true` blocks signups. Save/view/delete at `/analyses`.
@@ -81,8 +81,9 @@ Slim, single path: ticker search → `GET /api/quote` (price header + reference 
 - Multi-currency (EUR/USD/GBP/CHF/JPY/CAD/AUD/SEK/NOK/DKK) → EUR via Frankfurter. Ledger-style **SummaryBar**: primary current value + unrealized P&L, then a ruled row (cost/realized/total/dividends). Gross/net-of-tax figures (via `estimateCapitalGainsTax()`, `lib/portfolio-math.ts`) appear on both unrealized P&L and the **realized** ("Closed positions" cards + the "Realized P&L" cell's `hint`) whenever `capitalGainsTaxRate` is set — but only when the relevant total (unrealized or realized) is itself a net gain, not merely because one winning position/lot has a positive estimate. "Converted to EUR" attribution only when a non-EUR position exists.
 - Per-row daily change (`regularMarketChange%`), capital-gains tax + net P&L on gains only. Add-position modal (portal), ISIN auto-fill for same ticker. **"+ Purchase"** button on each aggregated row pre-fills ticker/companyName/currency/isin/capitalGainsTaxRate for a follow-on buy (date/price/shares stay blank). Live prices via `/api/quote/[ticker]` (parallel at mount).
 - **Portfolio ↔ Analyses**: each row shows "N saved analyses ▼" (date, MoS%, buy target + intrinsic, link). Via `Promise.all([fetchPositions, fetchAnalyses, fetchSnapshots])`.
-- **Exit signal**: `getExitSignal(price, analyses)` (module-level) — `price >= intrinsicBase` of the latest analysis → amber `⚠ At Fair Value` pill + always-visible "Re-analyze →". **Monitor only**: both buttons → clean `/analyze?ticker=X` (no position params). Hold/exit reasoning → Advisor.
-- **Close position (full/partial sale)**: `PATCH /api/positions/[id]` → `closePosition()` in `lib/positions.ts` (server-only). Full close (no `sharesToSell` or ≈ the whole lot) sets `closedAt`/`sellPrice` on the row. Partial close splits the lot in one `$transaction`: the open row shrinks by the sold shares, a new closed row is created holding the sold shares — preserves realized P&L on the sold portion while the remainder stays a live holding. Returns a discriminated `CloseResult` (`{ok:true, positions}` / `{ok:false, status:404|400, error}`) so the route stays a thin controller. `lib/portfolio-math.ts` (pure, shared client+server) has `realizedPnlNative()`, `holdingDays()`, and `estimateCapitalGainsTax()`. Closed positions render in an archived "Closed positions" section, separate from the open list; realized P&L rolls into the SummaryBar's "Realized" figure, gross with a net-of-tax `hint` when applicable.
+- **Exit signal**: `getExitSignal(price, analyses)` (module-level) — `price >= intrinsicBase` of `verdictBasis()` on the latest analysis with values → amber `⚠ At Fair Value` pill + always-visible "Re-analyze →". **Monitor only**: both buttons → clean `/analyze?ticker=X` (no position params). Hold/exit reasoning → Advisor.
+- **Close position (full/partial sale)**: `PATCH /api/positions/[id]` → `closePosition()` (`lib/positions.ts`); a partial sale splits the lot, closed positions sit in an archived "Closed positions" section and their realized P&L rolls into the SummaryBar (AGENTS.md § Close Position).
+- **Dividends Received**: `GET /api/portfolio/dividends` → `loadDividendTotals()` sums every snapshot's per-position `dividendPaidEur`, not the chart's 90-day window.
 - **P&L history chart**: Recharts line of value vs cost over time (from `PortfolioSnapshot`, placeholder <2 snapshots), with a legend. Green markers = dividend day; amber markers = capital deployed (`costEur` delta > €50); **violet `#a78bfa` "Sold" markers** = a close event, so a value/cost drop reads as a tracked sale, not an unexplained crash (registered as an intentional design-system event color in `.impeccable/config.json`). `SnapshotChartPoint = SnapshotPoint & { capitalDelta? }`.
 
 ### Portfolio Snapshots (cron)
@@ -96,25 +97,25 @@ Slim, single path: ticker search → `GET /api/quote` (price header + reference 
 - **Grounding rules** (both modes): module-level `GROUNDING_RULES_BLOCK` — LIVE PRICES is the sole current-price source; never quote historical `priceAtAnalysis` as current; **web-verify any cited cause/event/news/guidance with a date, else "unconfirmed"** (fixes invented narratives); separate verified facts from inference; read the live price + search news before hold/add/exit advice.
 - **`[[TICKER]]` chips**: Claude wraps tickers → `preprocessMarkdown()` → `/analyze?ticker=XXX` chip (full `window.location` nav — Router-Cache gotcha).
 - **Sessions**: `AdvisorSession` + `AdvisorMessage`; full sync per response via `DELETE + createMany` in a `$transaction`. Sidebar ordered by `updatedAt desc`, auto-loads most recent.
-- **Streaming**: `content_block_delta`, `max_tokens: 16000` (thinking + web search count toward budget). Tracks `stop_reason`; appends a visible "truncated" marker (EN/IT) on `max_tokens`.
+- **Streaming**: `content_block_delta`, `max_tokens: 16000` (thinking + web search count toward budget). Tracks `stop_reason`; appends a visible EN/IT note on `max_tokens` or `refusal`.
 - **Delisted guard**: both builders require web-verifying a ticker is currently listed before recommending it (prompt-level; a deterministic `/api/quote` check is a future enhancement).
 
 ### Watchlist + Email Digest (`/watchlist`)
 - **Card-per-ticker** (`watchlist-client.tsx`): compact (ticker · price · verdict · mini ruler) → same **`ValuationRuler`** + **`ComparisonTable`** as `/analyses`, keyed off `latestAnalyses: Record<ticker, SavedAnalysis>`. **Buy target uses the item's own MoS%** (intrinsic reconstructed from the analysis or, once an analyst lens has run, the consensus — then re-derived with the item's MoS). "Analyze" → `/analyze?ticker=X`.
-- `WatchlistItem`: `id, userId, ticker, companyName, mosPercent, notes, addedAt` — `@@unique([userId, ticker])`. User-level `watchlistEnabled` toggle (cron skips when false). `WatchlistRun` model + `User.watchlistFreq` column are **dead** (left to avoid a Turso migration). Manual trigger `POST /api/watchlist/run` (rate-limited 24h via `lastManualWatchlistRun`).
-- **Cron: weekdays for everyone** — `GET /api/cron/watchlist-analysis` fires at `0 6 * * 1-5` and `0 7 * * 1-5` (two Vercel cron entries, same path, Mon-Fri only — no weekend runs since markets are closed); the handler runs `runWatchlistAnalysisForAllUsers()` only when `Europe/Rome` local time is 8am, no-op otherwise — keeps the digest at 8am Italian time across the CET/CEST switch since Vercel cron has no timezone support. No per-user frequency. **No AI in the cron**: reads the latest saved Deep Value `Analysis` per ticker + each analyst opinion / consensus via `grossUpToIntrinsic` + `presentAnalysts`/`meanTriple`; tickers without an analysis show no values. `lib/watchlist-analysis.ts` (`server-only`). The digest also shows a **next/last-earnings note** per ticker, read-only from the user's already-fetched `EarningsEstimate` (never triggers the AI lookup) — "oggi", "mancano N giorni" or "sono passati N giorni" depending on whether the stored (always-future-when-saved) date is still ahead or has since lapsed unrefreshed.
+- `WatchlistItem`: `id, userId, ticker, companyName, mosPercent, notes, addedAt` — `@@unique([userId, ticker])`. User-level `watchlistEnabled` toggle (cron skips when false). Manual trigger `POST /api/watchlist/run` (rate-limited 24h via `lastManualWatchlistRun`).
+- **Cron: weekdays for everyone, no AI** — `GET /api/cron/watchlist-analysis`, Mon-Fri at 08:00 `Europe/Rome` (two UTC entries + an in-handler hour check); reads the latest saved analysis and consensus per ticker, plus a read-only next/last-earnings note (AGENTS.md § Watchlist is cadence-agnostic, § Vercel Cron Jobs).
 - **Email** via Resend (`lib/email.ts`, lazily init): ledger-themed card per ticker — price, Δ% vs buy target (source-labeled "(analisi)"/"(consenso)" per `item.consensusBase !== null`), Bear/Base/Bull split into Analysis / one row per analyst lens that ran (`Scettico`/`Rialzista`/`Qualità`) / Consensus, buy target, analysis date, native currency. `DigestItem.analysts: {angle,bear,base,bull}[]` carries the per-lens intrinsic values. `adjustedBase`/`status`/`upside` (`lib/watchlist-analysis.ts`) prefer the consensus over the base analysis once a lens has run, matching the UI.
 - **Portfolio-aware digest copy**: `runWatchlistAnalysisForUserInternal` batches one `Position` query per user (`closedAt: null`) and aggregates open lots per ticker via `aggregateOpenLots()` (`lib/portfolio-math.ts`, pure — total shares + weighted-avg cost). Each `DigestItem` carries `holdingShares`/`holdingWeightedAvgCost` (both `null` when no open position). The email shows an "In portafoglio: N az. · PMC · P&L%" line whenever a holding exists — regardless of buy/watch status — and the under-target note reads "valuta se incrementare la posizione" instead of "potenziale opportunità di acquisto" when the ticker is already held, so the copy never frames topping up an existing position as a fresh buy.
 
 ### AI Model Selection (multi-provider)
 - Every AI call site resolves `{model, effort, thinking}` via `resolveAiSettings()` (`lib/ai/ai-preferences.ts`): request-body override > the user's stored `User.ai{Model,Effort,ThinkingEnabled}` default > the route's own historical hardcoded fallback, then clamped to the chosen model's supported effort levels.
-- **Models**: `claude-opus-4-8`, `claude-sonnet-5`, `deepseek-v4-pro` (catalog in `types/ai-settings.ts`). DeepSeek only exposes `high`/`max` effort (it maps low/medium to high internally).
+- **Models**: `claude-opus-4-8`, `claude-sonnet-5`, `claude-sonnet-5-5`, `deepseek-v4-pro`, `deepseek-flash` (a stored retired id resolves to it) (catalog in `types/ai-settings.ts`; Sonnet 5.5 thinking-off and the pinned Grounded extraction: AGENTS.md › Multi-Provider AI Settings). DeepSeek exposes `low`/`high`/`max` effort only. Sonnet 5.5 calls carry the server-side refusal fallback (`fallbacks: "default"`); when it serves, a note names the model that answered (AGENTS.md › Anthropic AI Integration).
 - **Global default**: gear icon in `NavBar` → `<AiPreferencesModal>` → `GET/PATCH /api/settings/ai`. **Per-run override**: `<AiSettingsControl>` inline on Deep Value, Advisor, and the Analyst panel (one shared selector for all 3 lenses). Earnings lookup has no inline control — always the stored default.
-- **DeepSeek web search is client-executed**, not the provider's server-side tool — its Anthropic-compat translation of server-side tool calls proved unreliable in production (raw internal syntax leaked into the Advisor's visible stream). `lib/ai/web-search-tool.ts` (Tavily-backed) + `lib/ai/tool-loop.ts` (shared agentic loop, all 4 routes) replace it with standard function-calling. Deep Value + its verify route share a higher iteration cap (`DEEP_RESEARCH_MAX_TOOL_ITERATIONS = 35` vs. the default 10) with richer Tavily (`advanced`/8 results) so each round converges faster — their research/verification prompts need far more one-query-at-a-time rounds than the Advisor's. DeepSeek-only in effect.
+- **DeepSeek web search is client-executed**, not the provider's server-side tool — its Anthropic-compat translation of server-side tool calls proved unreliable in production (raw internal syntax leaked into the Advisor's visible stream). `lib/ai/web-search-tool.ts` (DeepSeek Search API, same key as the model) + `lib/ai/tool-loop.ts` (shared agentic loop, all five AI routes) replace it with standard function-calling. Deep Value + its verify route share a higher iteration cap (`DEEP_RESEARCH_MAX_TOOL_ITERATIONS = 35` vs. the default 10) with 8 results carrying model-facing summaries so each round converges faster — their research/verification prompts need far more one-query-at-a-time rounds than the Advisor's. DeepSeek-only in effect.
 
 ### Next-Earnings Calendar (AI-sourced)
-- **Purpose**: know when a stock next reports results, so you know when to re-run its analysis. Sourced **on demand** from **Claude Sonnet 5 + web search** (not Yahoo — `quote.earningsTimestamp` is stale for many MTAA tickers, returning the last reported quarter). Manual (per-stock button), **persisted** so the calendar survives reloads without re-running the model.
-- **Data**: `EarningsEstimate` model — `@@unique([userId, ticker])`, `nextEarningsDate?`, `confidence` (`confirmed|estimated|unknown`), `sourceUrl?`, `fetchedAt`. `POST /api/earnings` runs the model **non-streaming** (`messages.create`, `effort: "medium"`, `max_tokens: 6000`), parses the JSON by concatenating **all** text blocks (web-search reasoning splits them — gotcha #13), validates with Zod, upserts. `GET /api/earnings` returns the user's store. Prompt in `lib/ai/earnings-prompt.ts` — grounded (web-verify, future-only, never fabricate) and **cadence-neutral** (quarterly/half-year/annual, so EU/IT semi-annual reporters aren't skipped).
+- **Purpose**: know when a stock next reports results, so you know when to re-run its analysis. Sourced **on demand** from the **stored default model + web search** (Opus 4.8 unless changed; Sonnet 5.5 is the route fallback; not Yahoo — `quote.earningsTimestamp` is stale for many MTAA tickers, returning the last reported quarter). Manual (per-stock button), **persisted** so the calendar survives reloads without re-running the model.
+- **Data**: `EarningsEstimate` model — `@@unique([userId, ticker])`, `nextEarningsDate?`, `confidence` (`confirmed|estimated|unknown`), `sourceUrl?`, `fetchedAt`. `POST /api/earnings` runs the model **non-streaming** (`messages.create`, the stored effort — `medium` only in the fallback —, `max_tokens: 16000`, under the SDK's non-streaming limit), parses the JSON by concatenating **all** text blocks (web-search reasoning splits them — gotcha #13), validates with Zod, upserts. `GET /api/earnings` returns the user's store. Prompt in `lib/ai/earnings-prompt.ts` — grounded (web-verify, future-only, never fabricate) and **cadence-neutral** (quarterly/half-year/annual, so EU/IT semi-annual reporters aren't skipped).
 - **UI**: shared `<EarningsBadge>` (`components/earnings-badge.tsx`) on `/analyses`, watchlist and portfolio (open positions) — a "Find next earnings (AI)" button until fetched, then the date + "updated <fetchedAt>" + a 🔄 re-fetch button. Placed **outside** each card's header toggle `<button>` (its own refresh button would otherwise nest buttons → hydration error). Pure helpers in `lib/earnings.ts`: `isFutureEarnings` (only future dates shown/listed), `isAnalysisStalePreEarnings` (amber "New data since last analysis" pill — past date → stale if `createdAt < date`; future date → `createdAt < date − ~90d`), `formatEarningsDate`. `/analyses` also renders an "Upcoming earnings" strip (future dates, nearest-first). Client helpers `fetchEarnings`/`refreshEarnings` in `lib/earnings-client.ts` (kept out of the pure `lib/earnings.ts`).
 
 ### Interactive UI
@@ -126,14 +127,16 @@ Slim, single path: ticker search → `GET /api/quote` (price header + reference 
 ### PWA
 Installable (Android Chrome "Install" prompt; iOS Share → Add to Home Screen). `app/manifest.ts` → `/manifest.webmanifest`. **Service Worker** `public/sw.js`: no caching, **empty fetch handler** (must NOT `event.respondWith(fetch())` — tied AI streams to the SW lifetime and truncated them; empty still satisfies the install prompt), registered by `components/pwa-register.tsx`. Icons in `public/icons/` replicate `app/icon.tsx`. `layout.tsx` metadata: `manifest`, `appleWebApp`, explicit `icons.icon`; `themeColor` in the `viewport` export (Next 15 requirement).
 
-_Removed: Compare page + lite engine; Quality Scorecard / Valuation Cards / Historical Multiples / Fundamentals charts / Reverse DCF (classic engine) — their context now lives in the Deep Value report._
-
 ---
 
 ## Known Issues
 - **Yahoo rate limits** — 429 on rapid searches; retry w/ backoff (2 retries).
 - **Missing shares outstanding** — some non-US tickers → 422.
 - **No caching** — every search hits Yahoo.
+- **Vercel Hobby: 300 s per function (declared limit, 2026-10-20)** — a Deep Value run or an analyst lens past 300 s is killed mid-stream on the deployment; run it from localhost (`npm run dev`; `/deep-value` until spec 02, D-76). Pro, a queue or Vercel Workflows: evaluated, not planned. Spec 05c (D-77, 2026-10-27) splits every AI call into its own request, persisted by the server and retried per phase; the limit then holds only for a single model turn. SETUP.md § Vercel Hobby.
+- **Deep Value JSON parse is all-or-nothing** — one malformed nested field in the model's leading JSON block discards the whole bull/base/bear/method via `JSON.parse`; the saved page still renders the report, but without the valuation summary.
+- **Open edges left after the design-vs-code audit (2026-10-11)**: `cross_check_basis` still passes when the declared multiple matches neither median; the kill-price gate on the FINAL Skeptic JSON only shows on a live run (that JSON is not persisted); aborting a lens re-run hides its blind card until reload. The `groundingJson` and `*BlindJson` columns were confirmed present on the production Turso database on 2026-10-11 (read-only check).
+- **Tailwind 4 browser floor** — Safari 16.4+, Chrome/Edge 111+, Firefox 128+ (it relies on `@property`, `color-mix()` and cascade layers); older iOS renders the app incorrectly. Tailwind 3's hex palette is pinned in `app/tailwind-v3-palette.css` to keep the look unchanged on P3 screens; delete that file to adopt v4's OKLCH colours. Details: AGENTS.md gotcha #32.
 
 ---
 
@@ -144,17 +147,20 @@ types/                       # fundamentals, market, analysis, auth, portfolio, 
 lib/
   ai/deep-value-prompts.ts   # Deep Value + analyst-panel builders (buildAnalystSystemPrompt, angle-parameterized) — always position-blind
   ai/advisor-prompts.ts      # advisor + discovery builders — portfolio/analyses + live prices + GROUNDING_RULES_BLOCK
-  ai/earnings-prompt.ts      # next-earnings lookup (Sonnet 5 + web search) — cadence-neutral, grounded
+  ai/earnings-prompt.ts      # next-earnings lookup (default model + web search) — cadence-neutral, grounded
   earnings.ts                # pure: isFutureEarnings, isAnalysisStalePreEarnings, formatEarningsDate
   earnings-client.ts         # client helpers: fetchEarnings / refreshEarnings
   yahoo-client.ts            # getQuote + extractRawNumber + mapFundamentalsFromTimeSeries
-  ai/client.ts               # server-only: getAiClient/buildThinkingParam/buildEffortConfig/buildWebSearchTools
+  ai/client.ts               # server-only: getAiClient/buildThinkingParam/buildEffortConfig/usesServerSideFallback/buildWebSearchTools
+  ai/fallback.ts             # pure: fallbackServedBy/prepareTurnForReplay/fallbackNote (Sonnet 5.5 refusal fallback)
+  ai/error-status.ts         # routeErrorStatus(): SDK error classes → 503/400 for the AI routes
   ai/ai-preferences.ts       # server-only: resolveAiSettings() — override > stored > fallback, effort-clamped
   ai/tool-loop.ts            # server-only: runStreamWithToolLoop/runCreateWithToolLoop — shared client-side tool loop (DeepSeek web search)
-  ai/web-search-tool.ts      # server-only: CUSTOM_WEB_SEARCH_TOOL + executeWebSearch() (Tavily)
-  ai-settings-client.ts      # client helpers: fetchAiSettings/saveAiSettings
+  ai/web-search-tool.ts      # server-only: CUSTOM_WEB_SEARCH_TOOL + executeWebSearch() (DeepSeek Search API)
+  ai-settings-client.ts      # client helpers: fetchAiSettings/updateAiSettings
   auth.ts  db.ts  format.ts  analyses.ts  portfolio.ts
   portfolio-snapshots.ts     # server-only: snapshot creation
+  portfolio-dividends.ts     # server-only: loadDividendTotals() — whole-history dividends
   dividends.ts               # server-only: Borsa Italiana dividend fetcher
   watchlist-analysis.ts      # server-only: cron/email digest from saved analyses (no AI)
   email.ts                   # Resend — sendWatchlistDigest()
@@ -163,11 +169,14 @@ lib/
   report/verdict.ts          # getVerdict() + VERDICT_BADGE/VERDICT_TEXT (shared)
   report/signal.ts           # getSignalStrength() — deterministic weak-signal flag
   report/valuation.ts        # grossUpToIntrinsic() + Triple type (shared)
+  report/latest-analysis.ts  # pure: latestAnalysisWithValues/verdictBasis/watchlistBuyTarget — one verdict basis
   report/consensus.ts        # pure: N-way consensus (consensusTriple/meanTriple/presentAnalysts) + ANALYST_COLUMNS
   report/evolution.ts        # computeEvolution()/computeEvolutionChain() — deterministic history (no AI)
   grounding/                 # pure: merge/anchors/reconcile/postcheck/prompt-format/schema — Grounded mode
-  ai/grounding-extract-prompt.ts  # per-kind extraction prompt builders (Sonnet 5, no web search)
+  ai/grounding-extract-prompt.ts  # per-kind extraction prompt builders (Sonnet 5.5, no web search)
   grounding-client.ts        # client helper: extractGrounding()
+  ticker.ts                  # pure: normalizeTicker/tickerSchema (trim + uppercase, max 20)
+  watchlist-mos.ts           # pure: toWatchlistMosFraction() — WatchlistItem.mosPercent is a fraction
   i18n/translations.ts       # EN/IT dictionary
 app/
   page.tsx (Hub)  analyze/  login/  register/  analyses/(+[id])  portfolio/  watchlist/  advisor/
@@ -179,15 +188,15 @@ app/
       settings/ai (GET/PATCH — global AI model/effort/thinking default)
 components/                  # hub-client, analyze-client, deep-value-panel, analyses-list, grounding-input,
                              #   earnings-badge, analyst-panel (3-lens panel on saved detail),
-                             #   ai-settings-control (per-run selector), ai-preferences-modal (global default), …
-  report/                    #   portfolio-list, portfolio-history-chart, watchlist-client,
+                             #   ai-settings-control (per-run selector), ai-preferences-modal (global default),
+                             #   portfolio-list, portfolio-history-chart, watchlist-client,
                              #   advisor-client, nav-bar, download-pdf-button, …
-                             # report/: report-shell, recap-table, fair-value-cards, report-body,
+  report/                    # report-shell, recap-table, fair-value-cards, report-body,
                              #   method-badges, valuation-ruler (ValuationRuler + ComparisonTable),
                              #   grounding-card, grounding-preview, analyst-blind-card (blind vs. final drift)
 context/language-context.tsx
 public/sw.js  public/icons/
-prisma/  generated/prisma/ (gitignored)  vercel.json  docs/
+prisma/  generated/prisma/ (gitignored)  vercel.json  WORKFLOW.md
 __tests__/                   # yahoo-client + evolution + consensus + portfolio-math + earnings + grounding-* .test.ts
 ```
 
@@ -199,11 +208,14 @@ __tests__/                   # yahoo-client + evolution + consensus + portfolio-
 npm run dev           # Dev server on :3000
 npm run build         # prisma generate + next build (type-check + prod build)
 npm run test          # Vitest once
+npm run typecheck     # tsc --noEmit over app + __tests__ + e2e + scripts
+npm run e2e           # Playwright on an isolated .e2e/e2e.db (never production) — see WORKFLOW.md §3
+npm run ci:local      # test + typecheck + isolated build + e2e: the only gate before a PR (no remote CI)
 npx prisma migrate dev --name <name>   # DB schema change (then apply to Turso:)
 turso db shell stock-analysis < prisma/migrations/<ts>_<name>/migration.sql
 curl -X POST localhost:3000/api/cron/portfolio-snapshot -H "Authorization: Bearer dev-cron-secret-local"
 ```
-**Note**: `npm run lint` is deprecated/interactive — use `npm run build` for type-checking.
+**Note**: `npm run lint` is deprecated/interactive — use `npm run typecheck` / `npm run build`. **`.env` points `TURSO_DATABASE_URL` at the production database**: never run a collaudo with a plain `npm run dev`; WORKFLOW.md §3 explains the isolated setup.
 
 ---
 
@@ -216,8 +228,7 @@ TURSO_AUTH_TOKEN="..."                 # not needed for local file:
 NEXTAUTH_SECRET="..."                  # openssl rand -hex 32
 NEXTAUTH_URL="http://localhost:3000"   # prod: https://your-domain.vercel.app
 ANTHROPIC_API_KEY="sk-ant-..."
-DEEPSEEK_API_KEY="sk-..."          # optional — DeepSeek V4 Pro provider
-TAVILY_API_KEY="tvly-..."          # web search for DeepSeek (client-executed tool)
+DEEPSEEK_API_KEY="sk-..."          # optional — DeepSeek V4 Pro provider + its web search
 DISABLE_REGISTRATION="false"
 CRON_SECRET="..."                      # also set in Vercel project settings
 RESEND_API_KEY="re_..."                # watchlist email digest
@@ -227,7 +238,13 @@ See `.env.example` for the full template.
 
 ---
 
+## Not yet present
+Things the series deliberately left out, one line each (added by the spec that left them out).
+
+---
+
 ## Next Priorities
+The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (twelve specs, 01…08b with 05c added 2026-10-27, one session each, in order); its index `00-INDICE.md` holds the series' state and the owner's decisions; after 08b, one `/deep-value` realignment pass (D-76).
 1. Caching layer for `/api/quote`.
 2. Per-ticker yield-on-cost in the exit signal (needs per-position dividend exposure via snapshots).
 

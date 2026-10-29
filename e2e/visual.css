@@ -1,0 +1,6 @@
+/* Applied only while toHaveScreenshot captures (stylePath in visual.spec.ts). Hides the
+   Next.js dev-mode indicator/overlay: its state (compiling, issue count) depends on what
+   other code is being edited, not on the page under test. */
+nextjs-portal {
+  display: none !important;
+}

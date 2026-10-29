@@ -1,13 +1,12 @@
 /**
  * Types for the Grounded Deep Value mode — user-pasted financial statements/multiples/
  * estimates/peers, transcribed to structured JSON, used to compute deterministic
- * historical-multiple anchors and to verify the model's own valuation bridge. See
- * docs/deep-value-grounding-spec.md for the full design.
+ * historical-multiple anchors and to verify the model's own valuation bridge.
  *
  * Deliberately NOT modeled: analyst target price, target multiple, rating. Those are
  * already anchored to the current price/consensus — modeling them here would offer the
- * model the exact shortcut this feature exists to remove (spec §2, "Trappola delle
- * Estimates").
+ * model the exact price-anchoring shortcut this feature exists to remove. Forward
+ * operating estimates (revenue/EBITDA/EPS) are fine — they are fundamentals.
  */
 
 export const GROUNDING_BLOCK_KINDS = [
@@ -20,6 +19,18 @@ export const GROUNDING_BLOCK_KINDS = [
   "other",
 ] as const;
 export type GroundingBlockKind = (typeof GROUNDING_BLOCK_KINDS)[number];
+
+// Paste-size caps, shared by every boundary that accepts pasted blocks (the input UI, the
+// extraction route, the deep-value route's payload schema) so they can never drift apart.
+// Kept here rather than in lib/grounding/schema.ts because the client component needs
+// them too and must not pull zod into its bundle just to read three numbers.
+/** Per-block character cap — one statement table, with generous headroom. */
+export const GROUNDING_MAX_BLOCK_CHARS = 40000;
+/** Total character cap across all blocks — bounds the prompt cost of the raw paste. */
+export const GROUNDING_MAX_TOTAL_CHARS = 200000;
+/** Block-count cap: the six specific kinds plus "other" leave room for several peer and
+ *  multi-period blocks; beyond this the payload is abuse, not a genuine paste. */
+export const GROUNDING_MAX_BLOCKS = 40;
 
 /** One raw pasted table, as entered by the user, labeled by kind before extraction. */
 export type GroundingBlock = {
@@ -66,12 +77,12 @@ export type FiscalYearMultiples = {
   pb: number | null;
   fcfYield: number | null; // percentage
   dividendYield: number | null; // percentage
-  // Basis-reconciliation inputs (docs/deep-value-rigor-v2-spec.md §1/§2.1) — when the
-  // paste has explicit Market Cap / Enterprise Value columns, these make kE/kB OBSERVED
-  // instead of inferred from evSales/pe/pb. Same unit as meta.units, like every other
-  // monetary value in this type. Nullable + defaulted for backward compatibility with
-  // extracts saved before this field existed — lib/grounding/basis.ts degrades to the
-  // inferred path (or "unavailable") when both are absent.
+  // Basis-reconciliation inputs — when the paste has explicit Market Cap / Enterprise
+  // Value columns, these make kE/kB OBSERVED instead of inferred from evSales/pe/pb. Same
+  // unit as meta.units, like every other monetary value in this type. Nullable +
+  // defaulted for backward compatibility with extracts saved before this field existed —
+  // lib/grounding/basis.ts degrades to the inferred path (or "unavailable") when both are
+  // absent.
   marketCap: number | null;
   enterpriseValue: number | null;
 };

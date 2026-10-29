@@ -11,7 +11,9 @@ import {
   deletePosition,
   closePosition,
   fetchSnapshots,
+  fetchDividendTotals,
 } from "@/lib/portfolio";
+import { latestAnalysisWithValues, verdictBasis } from "@/lib/report/latest-analysis";
 import { fetchAnalyses } from "@/lib/analyses";
 import { realizedPnlNative, holdingDays, estimateCapitalGainsTax } from "@/lib/portfolio-math";
 import type {
@@ -86,17 +88,19 @@ function aggregateByTicker(positions: Position[]): AggregatedPosition[] {
 // ─── Exit signal detection ────────────────────────────────────────────────────
 
 // A value investor's margin of safety is exhausted when price reaches fair value base.
-// Returns the signal state based on the most recent analysis with a fairValueBase.
+// Returns the signal state based on the newest analysis with fair values, measured on the
+// same basis as the /analyses verdict (the consensus once a lens ran, 2026-10-28: before,
+// the pill could contradict the verdict shown for the same ticker).
 // Comparison is against the intrinsic base fair value (before MoS discount), not the
 // stored buy target — otherwise the alert fires at the entry price, not the exit target.
 function getExitSignal(
   currentPrice: number | undefined,
   analyses: SavedAnalysis[]
 ): { triggered: boolean; fairValueBase: number | null } {
-  const latest = analyses.find((a) => a.fairValueBase != null);
-  if (!latest || currentPrice == null) return { triggered: false, fairValueBase: null };
-  const mos = (latest.mosPercent ?? 0) / 100;
-  const intrinsicBase = mos > 0 ? latest.fairValueBase! / (1 - mos) : latest.fairValueBase!;
+  const latest = latestAnalysisWithValues(analyses);
+  const basis = latest && verdictBasis(latest);
+  if (!basis || currentPrice == null) return { triggered: false, fairValueBase: null };
+  const intrinsicBase = basis.intrinsicBase;
   return {
     triggered: currentPrice >= intrinsicBase,
     fairValueBase: intrinsicBase,
@@ -106,7 +110,7 @@ function getExitSignal(
 // ─── Shared input class ───────────────────────────────────────────────────────
 
 const inputClass =
-  "w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-slate-100 focus:border-accent focus:outline-none focus:ring-1 focus:ring-sky-400/30";
+  "w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-slate-100 focus:border-accent focus:outline-hidden focus:ring-1 focus:ring-sky-400/30";
 
 // ─── Ticker Analyses Inline ───────────────────────────────────────────────────
 
@@ -155,7 +159,7 @@ function TickerAnalysesInline({
                   // Hold/exit reasoning is done afterwards in the Advisor.
                   window.location.href = `/analyze?ticker=${encodeURIComponent(ticker)}`;
                 }}
-                className="mt-1.5 rounded border border-amber-500/40 px-2 py-0.5 text-xs text-amber-400 transition hover:border-amber-400 hover:text-amber-300"
+                className="mt-1.5 rounded-sm border border-amber-500/40 px-2 py-0.5 text-xs text-amber-400 transition hover:border-amber-400 hover:text-amber-300"
               >
                 {t("exitSignalCta")} →
               </button>
@@ -242,7 +246,7 @@ function AggregatedPositionRow({
               {agg.ticker}
             </a>
             <span className="text-xs text-muted">{agg.companyName}</span>
-            <span className="rounded bg-slate-700/60 px-1.5 py-0.5 text-[11px] text-slate-400">
+            <span className="rounded-sm bg-slate-700/60 px-1.5 py-0.5 text-[11px] text-slate-400">
               {agg.currency}
             </span>
             {hasMultiple && (
@@ -284,7 +288,7 @@ function AggregatedPositionRow({
             ) : null}
             {pnl != null && (
               <span
-                className={`rounded px-1.5 py-0.5 font-semibold ${
+                className={`rounded-sm px-1.5 py-0.5 font-semibold ${
                   isPositive
                     ? "bg-emerald-500/15 text-success"
                     : "bg-red-500/15 text-danger"
@@ -296,7 +300,7 @@ function AggregatedPositionRow({
             )}
             {exitSignal.triggered && (
               <>
-                <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[11px] text-amber-400">
+                <span className="rounded-sm border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[11px] text-amber-400">
                   ⚠ {t("exitSignalBadge")}
                 </span>
                 <button
@@ -304,7 +308,7 @@ function AggregatedPositionRow({
                     // Clean, position-blind re-analysis (see TickerAnalysesInline).
                     window.location.href = `/analyze?ticker=${encodeURIComponent(agg.ticker)}`;
                   }}
-                  className="rounded border border-amber-500/30 px-1.5 py-0.5 text-[11px] text-amber-400 transition hover:border-amber-400 hover:text-amber-300"
+                  className="rounded-sm border border-amber-500/30 px-1.5 py-0.5 text-[11px] text-amber-400 transition hover:border-amber-400 hover:text-amber-300"
                 >
                   {t("exitSignalCta")} →
                 </button>
@@ -386,14 +390,14 @@ function AggregatedPositionRow({
               <span className="ml-4 flex items-center gap-1.5">
                 <button
                   onClick={() => onClose(p)}
-                  className="rounded border border-slate-700 px-1.5 py-0.5 text-muted transition hover:border-sky-400/40 hover:text-sky-300"
+                  className="rounded-sm border border-slate-700 px-1.5 py-0.5 text-muted transition hover:border-sky-400/40 hover:text-sky-300"
                 >
                   {t("closePositionBtn")}
                 </button>
                 <button
                   onClick={() => onDelete(p.id)}
                   disabled={deleting === p.id}
-                  className="rounded border border-slate-700 px-1.5 py-0.5 text-muted transition hover:border-red-500/50 hover:text-danger disabled:opacity-50"
+                  className="rounded-sm border border-slate-700 px-1.5 py-0.5 text-muted transition hover:border-red-500/50 hover:text-danger disabled:opacity-50"
                 >
                   {deleting === p.id ? "…" : "×"}
                 </button>
@@ -476,7 +480,7 @@ function AddPositionModal({ onClose, onSave, existingPositions, prefill }: AddPo
   }
 
   const modal = (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-xs">
       <div
         className="my-auto max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-700/60 bg-[var(--card)] p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
@@ -685,7 +689,7 @@ function ClosePositionModal({ position, currentPrice, onCancel, onClosed }: Clos
   }
 
   const modal = (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-xs">
       <div
         className="my-auto max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-700/60 bg-[var(--card)] p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
@@ -824,7 +828,7 @@ function ClosedPositionsSection({
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-sm font-bold text-slate-300">{p.ticker}</span>
                       <span className="text-xs text-muted">{p.companyName}</span>
-                      <span className="rounded bg-slate-700/60 px-1.5 py-0.5 text-[11px] text-slate-400">
+                      <span className="rounded-sm bg-slate-700/60 px-1.5 py-0.5 text-[11px] text-slate-400">
                         {p.currency}
                       </span>
                     </div>
@@ -834,7 +838,7 @@ function ClosedPositionsSection({
                         {formatPrice(p.sellPrice!, p.currency)}
                       </span>
                       <span
-                        className={`rounded px-1.5 py-0.5 font-semibold ${
+                        className={`rounded-sm px-1.5 py-0.5 font-semibold ${
                           positive ? "bg-emerald-500/15 text-success" : "bg-red-500/15 text-danger"
                         }`}
                       >
@@ -874,7 +878,8 @@ function ClosedPositionsSection({
 // Converts open positions to EUR using Frankfurter rates and shows aggregate P&L.
 // Realized P&L is summed from closed lots (sold), so the bar separates unrealized
 // (open holdings) from realized (booked) and shows their total.
-// totalDividendsEur is summed from historical snapshots — it accumulates over time.
+// totalDividendsEur is summed server-side over every snapshot ever taken (GET
+// /api/portfolio/dividends) — it accumulates over time.
 function SummaryBar({
   positions,
   closedPositions,
@@ -1092,9 +1097,15 @@ export default function PortfolioList() {
   const [totalDividendsEur, setTotalDividendsEur] = useState(0);
 
   useEffect(() => {
-    // Fetch positions, analyses, and snapshots in parallel — no sequential dependency.
-    Promise.all([fetchPositions(), fetchAnalyses(), fetchSnapshots()])
-      .then(([posData, analysesData, snapshots]) => {
+    // Fetch positions, analyses, snapshots and dividends in parallel — no sequential
+    // dependency. A dividends failure must not fail the portfolio: it shows 0 instead.
+    Promise.all([
+      fetchPositions(),
+      fetchAnalyses(),
+      fetchSnapshots(),
+      fetchDividendTotals().catch(() => ({ totalEur: 0, byTicker: {} })),
+    ])
+      .then(([posData, analysesData, , dividends]) => {
         setPositions(posData);
 
         const map: Record<string, SavedAnalysis[]> = {};
@@ -1103,9 +1114,8 @@ export default function PortfolioList() {
         }
         setAnalysesByTicker(map);
 
-        // Sum dividends received across all historical snapshots
-        const divTotal = snapshots.reduce((sum, s) => sum + (s.dividendsEur ?? 0), 0);
-        setTotalDividendsEur(divTotal);
+        // Every dividend received, all history: the snapshot route only returns 90 days.
+        setTotalDividendsEur(dividends.totalEur);
 
         const tickers = [...new Set(posData.map((p) => p.ticker))];
         const currencies = [...new Set(posData.map((p) => p.currency).filter((c) => c !== "EUR"))];
@@ -1343,7 +1353,7 @@ export default function PortfolioList() {
                       {pos.ticker}
                     </a>
                     <span className="text-xs text-muted">{pos.companyName}</span>
-                    <span className="rounded bg-slate-700/60 px-1.5 py-0.5 text-[11px] text-slate-400">
+                    <span className="rounded-sm bg-slate-700/60 px-1.5 py-0.5 text-[11px] text-slate-400">
                       {pos.currency}
                     </span>
                     <span className="ml-auto text-xs text-muted">{formatDate(pos.purchasedAt)}</span>
@@ -1374,7 +1384,7 @@ export default function PortfolioList() {
                     ) : null}
                     {pnl != null && (
                       <span
-                        className={`rounded px-1.5 py-0.5 font-semibold ${
+                        className={`rounded-sm px-1.5 py-0.5 font-semibold ${
                           isPositive
                             ? "bg-emerald-500/15 text-success"
                             : "bg-red-500/15 text-danger"

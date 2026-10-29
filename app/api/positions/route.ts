@@ -4,9 +4,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { tickerSchema } from "@/lib/ticker";
 
 const createSchema = z.object({
-  ticker: z.string().min(1).max(10),
+  ticker: tickerSchema,
   // ISIN format: 2-letter country code + 9 alphanumeric + 1 check digit (e.g. IT0003128367)
   isin: z.string().regex(/^[A-Z]{2}[A-Z0-9]{9}[0-9]$/, "Expected ISIN format (e.g. IT0003128367)").optional(),
   companyName: z.string().min(1),
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
     body = createSchema.parse(await request.json());
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return NextResponse.json({ error: err.errors[0].message }, { status: 400 });
+      return NextResponse.json({ error: err.issues[0].message }, { status: 400 });
     }
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }

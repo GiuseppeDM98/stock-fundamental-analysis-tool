@@ -6,9 +6,9 @@ A Next.js web app for value investors: an AI-assisted pipeline from idea **Disco
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-green)
-![Next.js](https://img.shields.io/badge/Next.js-15.5.12-black)
+![Next.js](https://img.shields.io/badge/Next.js-15.5.28-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7.3-blue)
-![Vitest](https://img.shields.io/badge/Vitest-3.2.4-yellow)
+![Vitest](https://img.shields.io/badge/Vitest-4.1.11-yellow)
 
 ---
 
@@ -39,7 +39,7 @@ This tool helps investors and analysts perform fundamental stock valuation throu
 - **Exit signal ("At Fair Value")** — when a position's current price reaches the **intrinsic base fair value** from your most recent saved analysis (i.e. the margin of safety is fully consumed), an amber ⚠ badge appears in the portfolio row (always visible). Its "Re-analyze →" button runs a fresh, **position-blind** Deep Value analysis (no cost basis is ever fed to the AI, so the valuation stays independent); use the Advisor afterwards to decide hold / add / exit
 - **Estimate-evolution history** — when a ticker has two or more saved analyses, its saved-analyses card traces the estimate's move at **every step across your full save history** (Δ Analysis / Consensus base fair value per dated step). Pure arithmetic on your saved numbers — never sent to the AI
 - **Weak-signal indicator** — a muted "weak signal" tag next to the Buy/Watch/Over verdict (Saved Analyses + Watchlist) when the Bull–Bear range is so wide that the price-vs-fair-value gap sits inside the model's own uncertainty. Deterministic, self-calibrating (silent on high-conviction, tight-range names)
-- **Choose your AI model** — pick which model powers each analysis (Claude Opus 4.8, Claude Sonnet 5, or **DeepSeek V4 Pro / V4 Flash**), plus a reasoning-effort level (Low/High/Max) and thinking on/off, as a global default (gear icon in the nav bar) with a per-run override on Deep Value, the Advisor, and the Analyst Panel. DeepSeek models also show a live peak/off-peak pricing indicator
+- **Choose your AI model** — pick which model powers each analysis (Claude Opus 4.8, Claude Sonnet 5 / 5.5, or **DeepSeek V4 Pro / V4.1 Flash**), plus a reasoning-effort level (Low/High/Max) and thinking on/off, as a global default (gear icon in the nav bar) with a per-run override on Deep Value, the Advisor, and the Analyst Panel. DeepSeek models also show a live peak/off-peak pricing indicator
 
 ### What Problem Does It Solve?
 
@@ -104,8 +104,8 @@ cd stock-fundamental-analysis-tool
 npm install
 
 # Copy env template and fill in your values
-cp .env.example .env.local
-# (edit .env.local: add NEXTAUTH_SECRET, ANTHROPIC_API_KEY)
+cp .env.example .env
+# (edit .env: add NEXTAUTH_SECRET, ANTHROPIC_API_KEY — SETUP.md explains why .env, not .env.local)
 
 # Run database migrations
 npx prisma migrate dev
@@ -233,10 +233,10 @@ This accounts for model uncertainty and provides downside protection.
 | **Business Logic** | TypeScript (pure functions) | DCF calculations |
 | **Data Source** | yahoo-finance2 | Market quotes & fundamentals |
 | **Validation** | Zod | Request payload validation |
-| **Styling** | Tailwind CSS | Dark theme UI |
+| **Styling** | Tailwind CSS 4 | Dark theme UI (needs Safari 16.4+, Chrome 111+, Firefox 128+) |
 | **Charts** | Recharts | Data visualization |
 | **Animation** | Framer Motion | Reveal animations |
-| **Testing** | Vitest + Testing Library | Unit & component tests |
+| **Testing** | Vitest + Testing Library + Playwright | Unit, component and end-to-end tests |
 
 ---
 
@@ -305,6 +305,11 @@ npm run dev
 | `npm run lint` | Run ESLint |
 | `npm run test` | Run all tests once |
 | `npm run test:watch` | Run tests in watch mode |
+| `npm run typecheck` | Type-check the whole project (app, tests, e2e, scripts) |
+| `npm run e2e` | End-to-end suite (Playwright) on an isolated local database, no AI or market-data calls |
+| `npm run e2e:visual` | Visual screenshot comparison (baselines are generated per session with `npm run e2e:visual:update`) |
+| `npm run seed:e2e` | Re-create the isolated e2e database with its fixtures |
+| `npm run ci:local` | Local quality gate: unit tests, type-check, production build and the e2e suite |
 
 ### Running Tests
 
@@ -317,7 +322,15 @@ npm run test:watch
 
 # Specific test file
 npm run test dcf.test.ts
+
+# End-to-end (Playwright) on an isolated local database, never production
+npm run e2e
+
+# Everything a PR needs: unit tests, type-check, production build, e2e
+npm run ci:local
 ```
+
+The e2e tooling forces its own SQLite file (`.e2e/e2e.db`), stubs market data and blocks every AI call, so it costs nothing and cannot touch your Turso database. Details in [WORKFLOW.md](WORKFLOW.md).
 
 **Test Coverage:**
 - ✅ DCF calculation logic (deterministic outputs, constraint validation)
@@ -483,13 +496,15 @@ turso db shell <your-db-name> < prisma/migrations/<latest>/migration.sql
 
 **Future**: Add UI field for manual shares input
 
-### Vercel Hobby Plan — 60s Function Timeout on AI Routes
+### Vercel Hobby Plan — 300s Function Limit on Long AI Runs (declared limit)
 
-**Issue**: `/api/ai/deep-value`, `/api/ai/deep-value/verify` and `/api/ai/advisor` call Claude with `effort: "xhigh"`/`"high"` plus web search, which regularly takes **1–2 minutes** to finish. Every Vercel API route is a serverless function with a `maxDuration` capped by the plan — **60s on Hobby**, 300s on Pro (800s with Fluid Compute), 900s on Enterprise. Streaming does not help: Vercel counts total function execution time, not whether bytes are still being sent, so the function is killed and the browser gets a **504 Gateway Timeout** well before the report finishes. A Vercel Cron job doesn't bypass this either — it only triggers the route on a schedule, the invoked function is still subject to the same `maxDuration`.
+> Planned (2026-10-27): spec `doc/evoluzioni/05c-corsa-a-fasi.md` splits every AI run into one request per model call, persisted by the server and retried per phase; the limit then holds only for a single model turn.
 
-**Workaround**: run these three AI routes against `npm run dev` (localhost) instead of a Hobby deployment, or set `export const maxDuration = 300` on the three routes after upgrading to Vercel Pro.
+**Issue**: `/api/ai/deep-value` and `/api/ai/deep-value/verify` call the model at a high reasoning effort plus web search; a run takes several minutes and can go past the plan's ceiling (the Advisor and the earnings lookup usually fit). With Fluid Compute, Vercel's default, `maxDuration` is **300s on Hobby** (default and maximum), 800s on Pro and Enterprise (1800s in beta) — checked against Vercel's docs on 2026-10-20. Streaming does not help: Vercel counts total function execution time, not whether bytes are still being sent, so the function is killed mid-report. A Vercel Cron job doesn't bypass this either — it only triggers the route on a schedule, the invoked function is still subject to the same `maxDuration`.
 
-**Future**: an async queue+polling architecture (job written to the DB immediately, generation done by a worker outside Vercel's function limit, client polls for the result) would remove the ceiling entirely on Hobby, at the cost of losing live token-by-token streaming. Explored but not implemented — see [`docs/async-ai-analysis-architecture.md`](docs/async-ai-analysis-architecture.md) for the trade-off analysis against just upgrading to Pro.
+**Declared limit** (owner's decision, 2026-10-20): long analyses run from localhost — the app under `npm run dev`, or the `/deep-value` Claude Code command, which saves its analyses to Turso — and the deployed instance serves everything else. Details in [SETUP.md](SETUP.md).
+
+**Not planned**: Vercel Pro (800s, one `maxDuration` line per route), a queue+polling architecture or Vercel Workflows (no duration limit, at the cost of a new data model and of live token-by-token streaming). Evaluated and not planned for a personal tool.
 
 ---
 
@@ -501,7 +516,7 @@ turso db shell <your-db-name> < prisma/migrations/<latest>/migration.sql
 - [ ] Enhanced error messages with "Try Again" button
 
 ### Phase 2: Data & Calculations
-- [x] **Grounded mode + deterministic multiple anchor** — optional "Grounded" mode: paste the statements/valuation/peers from any source, a historical-multiple anchor computed in code, and a post-check that verifies the model's own valuation bridge and flags price-anchoring (spec in `docs/deep-value-grounding-spec.md`)
+- [x] **Grounded mode + deterministic multiple anchor** — optional "Grounded" mode: paste the statements/valuation/peers from any source, a historical-multiple anchor computed in code, and a post-check that verifies the model's own valuation bridge and flags price-anchoring
 - [ ] Deterministic quant cards (Piotroski / Altman Z / multiples percentile)
 - [ ] Sensitivity analysis matrix (WACC vs growth)
 

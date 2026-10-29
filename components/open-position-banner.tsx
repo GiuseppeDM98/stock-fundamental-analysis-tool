@@ -55,12 +55,12 @@ export default function OpenPositionBanner({
       <span className="text-slate-400">
         {t("openPosition")}{" "}
         <span className="text-slate-200 font-medium">
-          {totalShares} shares @ {formatPrice(wac)}
+          {totalShares} {t("sharesUnit")} @ {formatPrice(wac)}
         </span>
       </span>
       {pnl != null ? (
         <span
-          className={`rounded px-1.5 py-0.5 text-xs font-semibold ${
+          className={`rounded-sm px-1.5 py-0.5 text-xs font-semibold ${
             isPositive ? "bg-emerald-500/15 text-success" : "bg-red-500/15 text-danger"
           }`}
         >

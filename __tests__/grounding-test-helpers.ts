@@ -11,7 +11,6 @@ import type { BasisReconciliation } from "@/lib/grounding/basis";
 
 export function makeFinancialsRow(overrides: Partial<FiscalYearFinancials> & { fiscalYear: number }): FiscalYearFinancials {
   return {
-    fiscalYear: overrides.fiscalYear,
     revenue: null,
     ebitda: null,
     ebit: null,
@@ -33,7 +32,6 @@ export function makeFinancialsRow(overrides: Partial<FiscalYearFinancials> & { f
 
 export function makeMultiplesRow(overrides: Partial<FiscalYearMultiples> & { fiscalYear: number }): FiscalYearMultiples {
   return {
-    fiscalYear: overrides.fiscalYear,
     evEbitda: null,
     evSales: null,
     pe: null,
@@ -48,7 +46,6 @@ export function makeMultiplesRow(overrides: Partial<FiscalYearMultiples> & { fis
 
 export function makeEstimateRow(overrides: Partial<ForwardEstimate> & { fiscalYear: number }): ForwardEstimate {
   return {
-    fiscalYear: overrides.fiscalYear,
     revenue: null,
     ebitda: null,
     ebit: null,
