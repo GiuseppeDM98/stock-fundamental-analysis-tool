@@ -142,6 +142,7 @@ function computeAdjustedEvEbitda(extract: GroundedFinancials, kE: number): Multi
       dividendYield: null,
       marketCap: null,
       enterpriseValue: null,
+      source: m.source,
     }));
   return computeMultipleStats(scaled).find((s) => s.key === "evEbitda") ?? null;
 }

@@ -3,23 +3,48 @@
 // lib/grounding/reconcile.ts) but of the extraction run (a block failed) or of the extract
 // meeting a live quote (why the price-implied read is missing). Pure, no server-only, so
 // the route and <ValuationChecksCard> derive the exact same explanation from the same inputs.
-import type { GroundedFinancials } from "@/types/grounding";
+import type { GroundedFinancials, GroundingBlock, GroundingBlockKind } from "@/types/grounding";
 import type { MarketImplied } from "@/lib/grounding/anchors";
 import { checkCurrencyMismatch, type ReconciliationWarning } from "@/lib/grounding/reconcile";
 
+// The detail of a `block_extract_failed` warning: "<kind> #<position>", e.g.
+// "balance_sheet #2" — language-invariant tokens, since `t()` has no interpolation and
+// `detail` must never hold translatable prose. Written and read only in this module.
+const BLOCK_FAILURE_DETAIL = /^([a-z_]+) #(\d+)$/;
+
 /**
- * One `block_extract_failed` warning per rejected extraction, in submission order. The
- * detail carries the 1-based block position — a language-invariant token, since `t()` has
- * no interpolation and `detail` must never hold translatable prose.
+ * One `block_extract_failed` warning per rejected extraction, in submission order.
+ * @param blocks The blocks the extraction calls ran on, index for index with `settled`.
+ * @param blockOrder The editor's block ids in order: the position counts there, so a retry
+ *   of one block names it by its place in the editor, not as "#1".
  */
-export function buildBlockFailureWarnings(settled: PromiseSettledResult<unknown>[]): ReconciliationWarning[] {
+export function buildBlockFailureWarnings(
+  settled: PromiseSettledResult<unknown>[],
+  blocks: Pick<GroundingBlock, "id" | "kind">[],
+  blockOrder: readonly string[]
+): ReconciliationWarning[] {
   const warnings: ReconciliationWarning[] = [];
   settled.forEach((s, index) => {
-    if (s.status === "rejected") {
-      warnings.push({ code: "block_extract_failed", severity: "warn", fiscalYear: null, detail: `#${index + 1}` });
-    }
+    if (s.status !== "rejected") return;
+    const block = blocks[index];
+    const inOrder = blockOrder.indexOf(block.id);
+    const position = inOrder >= 0 ? inOrder + 1 : index + 1;
+    warnings.push({ code: "block_extract_failed", severity: "warn", fiscalYear: null, detail: `${block.kind} #${position}` });
   });
   return warnings;
+}
+
+/** The kind and position a `block_extract_failed` detail names, or null for another
+ *  shape (a warning stored before the detail carried the kind: "#2"). */
+export function parseBlockFailureDetail(detail: string): { kind: GroundingBlockKind; position: number } | null {
+  const match = BLOCK_FAILURE_DETAIL.exec(detail);
+  return match ? { kind: match[1] as GroundingBlockKind, position: Number(match[2]) } : null;
+}
+
+/** The same detail with another position — the editor's, once empty blocks count. */
+export function withBlockFailurePosition(detail: string, position: number): string {
+  const parsed = parseBlockFailureDetail(detail);
+  return parsed ? `${parsed.kind} #${position}` : detail;
 }
 
 /**

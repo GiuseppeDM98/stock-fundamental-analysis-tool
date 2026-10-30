@@ -53,6 +53,7 @@ export const ANALYSIS_LIST_SELECT = {
   reviewResultJson: true,
   optimistResultJson: true,
   qualityResultJson: true,
+  datasetId: true,
   createdAt: true,
 } as const satisfies Record<keyof SavedAnalysis, true>;
 

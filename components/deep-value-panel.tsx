@@ -22,7 +22,7 @@ import { toWatchlistMosFraction } from "@/lib/watchlist-mos";
 import { AiSettingsControl } from "@/components/ai-settings-control";
 import { fetchAiSettings } from "@/lib/ai-settings-client";
 import { DEFAULT_AI_SETTINGS, deepValueDefaultEffort, type AiSettings } from "@/types/ai-settings";
-import type { GroundingPayload } from "@/types/grounding";
+import type { GroundedFinancials } from "@/types/grounding";
 import { ValuationChecksCard } from "@/components/report/valuation-checks-card";
 import { buildSaveAnalysisRequest, parseResolvedAiSettings, type DeepValueRunInputs } from "@/lib/report/deep-value-run";
 
@@ -34,10 +34,10 @@ type Props = {
   // Quote currency — needed by <ValuationChecksCard>'s currency guards (the market-
   // implied read must never divide a price in one currency by an EBITDA in another).
   currency?: string;
-  // Confirmed Grounded-mode payload from <GroundingInput>, lifted in analyze-client.tsx.
-  // Null (the default) is Quick mode — sent as-is in the POST body, so its absence keeps
+  // The confirmed financial dataset from <DatasetSection>, lifted in analyze-client.tsx.
+  // Null (the default) is Quick mode — no datasetId in the POST body, so its absence keeps
   // the request (and thus the prompt) unchanged from before this feature existed.
-  grounding?: GroundingPayload | null;
+  dataset?: { id: string; extract: GroundedFinancials } | null;
 };
 
 type Status = "idle" | "loading" | "streaming" | "done" | "error";
@@ -54,7 +54,7 @@ const LANGUAGES = [
   { value: "日本語", label: "🇯🇵 日本語" },
 ];
 
-export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, currentPrice, currency, grounding = null }: Props) {
+export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, currentPrice, currency, dataset = null }: Props) {
   const { data: session } = useSession();
   const router = useRouter();
   const { language: globalLanguage, t } = useLanguage();
@@ -124,7 +124,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
       mosPercent,
       currentPrice: currentPrice ?? null,
       currency: currency ?? null,
-      grounding,
+      dataset,
       language,
       aiSettingsResolved: null,
     };
@@ -148,7 +148,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           model: aiSettings.model,
           effort: aiSettings.effort,
           thinking: aiSettings.thinking,
-          ...(inputs.grounding ? { grounding: inputs.grounding } : {}),
+          ...(inputs.dataset ? { datasetId: inputs.dataset.id } : {}),
         }),
         signal: controller.signal,
       });
@@ -358,7 +358,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
       {status === "done" && hasFullTriple(result) && runInputs?.currentPrice != null && (
         <ValuationChecksCard
           result={result}
-          extract={runInputs.grounding?.extract ?? null}
+          extract={runInputs.dataset?.extract ?? null}
           mosPercent={runInputs.mosPercent}
           currentPrice={runInputs.currentPrice}
           // An unknown quote currency stays unknown: assuming the report's would compare

@@ -3,6 +3,7 @@
 // failure positions back onto what the user actually sees.
 import type { GroundingBlock } from "@/types/grounding";
 import type { ReconciliationWarning } from "@/lib/grounding/reconcile";
+import { parseBlockFailureDetail, withBlockFailurePosition } from "@/lib/grounding-warnings";
 
 /**
  * The blocks to send to POST /api/ai/grounding/extract: every block with some non-
@@ -16,25 +17,41 @@ export function selectSubmittableBlocks(blocks: GroundingBlock[]): GroundingBloc
 
 /**
  * Rewrites the `#N` position carried by `block_extract_failed` warnings from the
- * submitted-list position (what the route saw) to the editor-list position (what the user
- * sees). The two differ whenever an empty block sat before the failed one and was dropped
- * by `selectSubmittableBlocks`. Other warnings pass through untouched; a detail that
- * doesn't parse as a valid position is left as-is rather than guessed.
+ * block-order position (what the route counts: submittable blocks only) to the editor-list
+ * position (what the user sees). The two differ whenever an empty block sat before the
+ * failed one and was dropped by `selectSubmittableBlocks`. Other warnings pass through
+ * untouched; a detail that doesn't parse as a valid position is left as-is rather than
+ * guessed.
  *
- * @param submitted The exact list sent to the route, in order.
+ * @param ordered The submittable blocks in editor order — the route's `blockOrder`.
  * @param all The editor's full block list, including empty blocks.
  */
 export function remapFailedBlockPositions(
   warnings: ReconciliationWarning[],
-  submitted: GroundingBlock[],
+  ordered: GroundingBlock[],
   all: GroundingBlock[]
 ): ReconciliationWarning[] {
   return warnings.map((w) => {
     if (w.code !== "block_extract_failed") return w;
-    const match = /^#(\d+)$/.exec(w.detail);
-    if (!match) return w;
-    const block = submitted[Number(match[1]) - 1];
+    const parsed = parseBlockFailureDetail(w.detail);
+    if (!parsed) return w;
+    const block = ordered[parsed.position - 1];
     const editorIndex = block ? all.findIndex((b) => b.id === block.id) : -1;
-    return editorIndex >= 0 ? { ...w, detail: `#${editorIndex + 1}` } : w;
+    return editorIndex >= 0 ? { ...w, detail: withBlockFailurePosition(w.detail, editorIndex + 1) } : w;
   });
+}
+
+/**
+ * The blocks the editor opens with when "Refresh data" seeds it with a stored dataset's
+ * blocks: the seed, unless the local draft differs from it — an unsaved draft is never
+ * overwritten, it is kept and the caller says so (`draftKept`). The draft must match block
+ * for block, text included: the same ids with an edited text are an unsaved edit too.
+ */
+export function chooseStartingBlocks(draft: GroundingBlock[], seed: GroundingBlock[] | undefined): { blocks: GroundingBlock[]; draftKept: boolean } {
+  if (!seed) return { blocks: draft, draftKept: false };
+  const sameBlock = (a: GroundingBlock, b: GroundingBlock) =>
+    a.id === b.id && a.kind === b.kind && a.text === b.text && (a.peerTicker ?? "") === (b.peerTicker ?? "");
+  const identical = draft.length === seed.length && draft.every((b, i) => sameBlock(b, seed[i]));
+  if (draft.length === 0 || identical) return { blocks: seed, draftKept: false };
+  return { blocks: draft, draftKept: true };
 }

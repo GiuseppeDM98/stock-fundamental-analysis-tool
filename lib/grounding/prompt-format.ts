@@ -10,6 +10,7 @@ import { computeBasisReconciliation, type BasisReconciliation } from "@/lib/grou
 import { checkReconciliation, checkCurrencyMismatch } from "@/lib/grounding/reconcile";
 import type { ReconciliationWarning } from "@/lib/grounding/reconcile";
 import type { Gate } from "@/lib/grounding/postcheck";
+import { parseBlockFailureDetail } from "@/lib/grounding-warnings";
 
 /** Everything formatGroundingForPrompt needs — the raw blocks (section 1) plus the
  * extract, the basis reconciliation and the anchors computed FROM it (sections 2-4) plus
@@ -63,8 +64,12 @@ function formatRawBlocks(blocks: GroundingBlock[]): string | null {
   return `--- AUTHORITATIVE FINANCIAL DATA (user-provided) ---\n${sections.join("\n\n")}\n--- END AUTHORITATIVE FINANCIAL DATA ---`;
 }
 
+// Where each row came from is for the UI (the source chips): the prompt gets the numbers.
+const PROVENANCE_KEYS = new Set(["sources", "source", "datasetMeta"]);
+
 function formatExtract(extract: GroundedFinancials): string {
-  return `--- STRUCTURED EXTRACT (machine-parsed, human-confirmed) ---\n\`\`\`json\n${JSON.stringify(extract, null, 2)}\n\`\`\`\n--- END STRUCTURED EXTRACT ---`;
+  const json = JSON.stringify(extract, (key, value) => (PROVENANCE_KEYS.has(key) ? undefined : value), 2);
+  return `--- STRUCTURED EXTRACT (machine-parsed, human-confirmed) ---\n\`\`\`json\n${json}\n\`\`\`\n--- END STRUCTURED EXTRACT ---`;
 }
 
 /**
@@ -265,9 +270,19 @@ function formatAnchors(ctx: GroundingPromptContext): string {
   return `--- DETERMINISTIC ANCHORS (computed in code — NOT chosen by you) ---\n${parts.join("\n\n")}\n--- END DETERMINISTIC ANCHORS ---`;
 }
 
+/** A failed block is named by its kind, not its place in an editor the model never saw. */
+function warningDetail(w: ReconciliationWarning): string {
+  if (w.code !== "block_extract_failed") return w.detail;
+  const failed = parseBlockFailureDetail(w.detail);
+  return failed ? `${KIND_LABEL[failed.kind]} block could not be transcribed` : "a pasted block could not be transcribed";
+}
+
 function formatWarnings(warnings: ReconciliationWarning[]): string | null {
   if (warnings.length === 0) return null;
-  const lines = warnings.map((w) => `⚠ ${w.code}${w.fiscalYear != null ? ` (FY${w.fiscalYear})` : ""}${w.detail ? ` — ${w.detail}` : ""}`);
+  const lines = warnings.map((w) => {
+    const detail = warningDetail(w);
+    return `⚠ ${w.code}${w.fiscalYear != null ? ` (FY${w.fiscalYear})` : ""}${detail ? ` — ${detail}` : ""}`;
+  });
   return `--- RECONCILIATION WARNINGS ---\n${lines.join("\n")}\n--- END RECONCILIATION WARNINGS ---`;
 }
 
@@ -312,25 +327,31 @@ export function formatGatesForPrompt(gates: Gate[]): string {
 /**
  * Recomputes the basis reconciliation + deterministic anchors + reconciliation warnings
  * from a confirmed extract, for injection into a Deep Value or analyst-lens prompt.
- * Shared by /api/ai/deep-value (raw blocks + extract, freshly confirmed by the client) and
- * /api/ai/deep-value/verify (extract only, re-read from Analysis.groundingJson — the
- * lenses get extract + anchors + warnings, never the raw paste, so callers pass
- * `blocks: []` there). Never trusts client-computed anchors — always recomputes
- * server-side from `extract` and the route's own authoritative price/currency.
+ * Shared by /api/ai/deep-value (raw blocks + extract, read from the dataset row) and
+ * /api/ai/deep-value/verify (extract only, through readAnalysisGrounding — the lenses get
+ * extract + anchors + warnings, never the raw paste, so callers pass `blocks: []` there).
+ * Never trusts client-computed anchors — always recomputes server-side from `extract` and
+ * the route's own authoritative price/currency.
  *
  * The warnings include `currency_mismatch` whenever a price is known but the currencies
  * don't match: the extraction route raises that warning only for its own preview, and
  * without it here both the model and the analyst lenses would simply lose the
  * market-implied section with no explanation.
+ *
+ * @param storedWarnings The dataset's own warnings, from its extraction run (a failed
+ *   block, two blocks in conflict): no recomputation can find them again, so they join the
+ *   recomputed ones, once each.
  */
 export function buildGroundingPromptContext(
   blocks: GroundingBlock[],
   extract: GroundedFinancials,
   currentPrice: number | null,
-  currency: string
+  currency: string,
+  storedWarnings: ReconciliationWarning[] = []
 ): GroundingPromptContext {
   const basis = computeBasisReconciliation(extract);
   const currencyWarning = currentPrice != null ? checkCurrencyMismatch(extract, currency) : null;
+  const recomputed = [...checkReconciliation(extract, basis), ...(currencyWarning ? [currencyWarning] : [])];
   return {
     blocks,
     extract,
@@ -339,6 +360,16 @@ export function buildGroundingPromptContext(
     grid: computeValuationGrid(extract, basis),
     marketImplied: currentPrice != null ? computeMarketImplied(currentPrice, currency, extract, basis) : null,
     impliedExpectations: currentPrice != null ? computeImpliedExpectations(currentPrice, currency, extract, basis) : null,
-    warnings: [...checkReconciliation(extract, basis), ...(currencyWarning ? [currencyWarning] : [])],
+    warnings: dedupeWarnings([...storedWarnings, ...recomputed]),
   };
+}
+
+function dedupeWarnings(warnings: ReconciliationWarning[]): ReconciliationWarning[] {
+  const seen = new Set<string>();
+  return warnings.filter((w) => {
+    const key = `${w.code}|${w.fiscalYear}|${w.detail}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }

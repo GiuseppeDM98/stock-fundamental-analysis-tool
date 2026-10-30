@@ -1,10 +1,9 @@
 "use client";
 
-// Typed paste-block editor for the Grounded Deep Value mode — mounted above
-// <DeepValuePanel> on /analyze, inside a collapsible "Pasted data (optional)" section.
-// Owns the block list (add/edit/remove), a per-ticker localStorage draft, the
-// "Prepare data" extraction call, and hands off a confirmed GroundingPayload to the
-// parent via a controlled value/onChange pair (same convention as AiSettingsControl).
+// Typed paste-block editor for the Grounded Deep Value mode — mounted by <DatasetSection>
+// on /analyze. Owns the block list (add/edit/remove), a per-ticker localStorage draft, the
+// "Prepare data" extraction call, the retry of one failed block, and on "Analyze with
+// this data" saves the paste as a financial dataset and hands its id up (onConfirm).
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom";
 
@@ -15,12 +14,14 @@ import {
   GROUNDING_MAX_BLOCK_CHARS,
   GROUNDING_MAX_BLOCKS,
   GROUNDING_MAX_TOTAL_CHARS,
+  type GroundedFinancials,
   type GroundingBlock,
   type GroundingBlockKind,
-  type GroundingPayload,
 } from "@/types/grounding";
 import { extractGrounding, type GroundingExtractResponse } from "@/lib/grounding-client";
-import { remapFailedBlockPositions, selectSubmittableBlocks } from "@/lib/grounding-blocks";
+import { createPasteDataset } from "@/lib/dataset-client";
+import { chooseStartingBlocks, remapFailedBlockPositions, selectSubmittableBlocks } from "@/lib/grounding-blocks";
+import type { BlockExtractResult } from "@/lib/grounding/merge";
 import { GroundingPreview } from "@/components/report/grounding-preview";
 
 // The caps are enforced server-side too (the client is never trusted); checking them here
@@ -109,19 +110,26 @@ function loadDraftBlocks(ticker: string): GroundingBlock[] {
 
 type Props = {
   ticker: string;
-  value: GroundingPayload | null;
-  onChange: (payload: GroundingPayload | null) => void;
+  // Blocks to start from instead of the local draft ("Refresh data" on a stored dataset);
+  // the draft wins when it holds other blocks (chooseStartingBlocks).
+  seedBlocks?: GroundingBlock[];
+  // The id of the dataset confirmed for the run, if any.
+  valueId: string | null;
+  // The paste was saved as a dataset: the run can use it.
+  onConfirm: (dataset: { id: string; extract: GroundedFinancials }) => void;
+  // A block changed: the confirmed dataset no longer matches the editor.
+  onInvalidate: () => void;
 };
 
-export function GroundingInput({ ticker, value, onChange }: Props) {
+export function GroundingInput({ ticker, seedBlocks, valueId, onConfirm, onInvalidate }: Props) {
   const { t } = useLanguage();
 
-  const [sectionOpen, setSectionOpen] = useState(false);
   const [blocks, setBlocks] = useState<GroundingBlock[]>([]);
   // Guards the draft-save effect until THIS ticker's draft has actually been loaded —
   // without it, the effect could fire once with the old ticker's blocks still in state
   // and overwrite the new ticker's draft before it's read (gotcha #21 territory).
   const [hydratedTicker, setHydratedTicker] = useState<string | null>(null);
+  const [draftKept, setDraftKept] = useState(false);
   const [expandedBlockId, setExpandedBlockId] = useState<string | null>(null);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   // Viewport coordinates for the portaled menu (see below) — null until computed from
@@ -131,10 +139,18 @@ export function GroundingInput({ ticker, value, onChange }: Props) {
   const [extractStatus, setExtractStatus] = useState<"idle" | "loading" | "error">("idle");
   const [extractError, setExtractError] = useState<string | null>(null);
   const [extractResult, setExtractResult] = useState<GroundingExtractResponse | null>(null);
-  // The exact blocks the current extractResult was produced from — confirmed into the
-  // payload instead of the live list, which may still hold empty blocks the deep-value
-  // route's payload schema would reject.
+  // The exact blocks the current extractResult was produced from — saved with the dataset
+  // instead of the live list, which may still hold empty blocks.
   const [extractedBlocks, setExtractedBlocks] = useState<GroundingBlock[]>([]);
+  // Per block: its last successful extraction, sent back as a prior result when another
+  // block is retried, so only that block runs again. An edit drops the block's result.
+  const [blockResults, setBlockResults] = useState<Record<string, BlockExtractResult>>({});
+  const [failedBlockIds, setFailedBlockIds] = useState<Set<string>>(new Set());
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [confirmStatus, setConfirmStatus] = useState<"idle" | "saving" | "error">("idle");
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+  // The dataset this editor saved last: "✓ Ready" in the preview only while it is the run's.
+  const [savedId, setSavedId] = useState<string | null>(null);
 
   // Two separate refs because the menu itself is portaled to document.body (see below)
   // — it's no longer a DOM descendant of the trigger button, so the outside-click check
@@ -146,19 +162,25 @@ export function GroundingInput({ ticker, value, onChange }: Props) {
   const pendingFocusIdRef = useRef<string | null>(null);
 
   // Re-key everything to the current ticker: a different stock is a different (or
-  // empty) paste session, and any previously-confirmed payload no longer applies to it.
+  // empty) paste session.
   useEffect(() => {
-    setBlocks(loadDraftBlocks(ticker));
+    const start = chooseStartingBlocks(loadDraftBlocks(ticker), seedBlocks);
+    setBlocks(start.blocks);
+    setDraftKept(start.draftKept);
     setView("edit");
     setExtractResult(null);
     setExtractedBlocks([]);
+    setBlockResults({});
+    setFailedBlockIds(new Set());
     setExtractStatus("idle");
     setExtractError(null);
+    setConfirmStatus("idle");
+    setConfirmError(null);
+    setSavedId(null);
     setExpandedBlockId(null);
     setHydratedTicker(ticker);
-    onChange(null);
-    // onChange is a state setter passed fresh each render — depending only on `ticker`
-    // avoids re-running this reset on every parent re-render.
+    // The seed is read once, when the editor opens on a ticker: a later prop change must
+    // not overwrite what the user has typed since.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticker]);
 
@@ -204,10 +226,18 @@ export function GroundingInput({ ticker, value, onChange }: Props) {
     setAddMenuOpen((v) => !v);
   }
 
-  // Any block edit invalidates a previously-confirmed payload — it was extracted from
+  // Any block edit invalidates a previously-confirmed dataset — it was extracted from
   // the blocks as they stood before this change.
   function invalidateConfirmed() {
-    if (value) onChange(null);
+    if (valueId) onInvalidate();
+  }
+
+  function dropResult(id: string) {
+    setBlockResults((prev) => {
+      if (!(id in prev)) return prev;
+      const { [id]: _dropped, ...rest } = prev;
+      return rest;
+    });
   }
 
   function addBlock(kind: GroundingBlockKind) {
@@ -236,17 +266,26 @@ export function GroundingInput({ ticker, value, onChange }: Props) {
 
   function updateBlockText(id: string, text: string) {
     setBlocks((prev) => prev.map((b) => (b.id === id ? { ...b, text } : b)));
+    dropResult(id);
     invalidateConfirmed();
   }
 
   function updateBlockPeerTicker(id: string, peerTicker: string) {
     setBlocks((prev) => prev.map((b) => (b.id === id ? { ...b, peerTicker } : b)));
+    dropResult(id);
     invalidateConfirmed();
   }
 
   function removeBlock(id: string) {
     setBlocks((prev) => prev.filter((b) => b.id !== id));
     setExpandedBlockId((current) => (current === id ? null : current));
+    dropResult(id);
+    setFailedBlockIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
     invalidateConfirmed();
   }
 
@@ -260,17 +299,25 @@ export function GroundingInput({ ticker, value, onChange }: Props) {
   const allBlocksEmpty = blocks.length > 0 && submittableBlocks.length === 0;
   const someBlocksEmpty = submittableBlocks.length > 0 && submittableBlocks.length < blocks.length;
   const hasEmptyPeerTicker = submittableBlocks.some((b) => b.kind === "peer_valuation" && !b.peerTicker?.trim());
-  const canPrepare = submittableBlocks.length > 0 && !overCap && !hasEmptyPeerTicker && extractStatus !== "loading";
+  const busy = extractStatus === "loading" || retryingId !== null || confirmStatus === "saving";
+  const canPrepare = submittableBlocks.length > 0 && !overCap && !hasEmptyPeerTicker && !busy;
+
+  /** Shows an extraction response: `ordered` = the submittable blocks, in editor order. */
+  function showResult(result: GroundingExtractResponse, ordered: GroundingBlock[]) {
+    setBlockResults(Object.fromEntries(result.blockResults.map((r) => [r.blockId, r])));
+    setExtractResult({ ...result, warnings: remapFailedBlockPositions(result.warnings, ordered, blocks) });
+    setExtractedBlocks(ordered);
+    setView("preview");
+  }
 
   async function handlePrepare() {
     const sent = submittableBlocks;
     setExtractStatus("loading");
     setExtractError(null);
     try {
-      const result = await extractGrounding(ticker, sent);
-      setExtractResult({ ...result, warnings: remapFailedBlockPositions(result.warnings, sent, blocks) });
-      setExtractedBlocks(sent);
-      setView("preview");
+      const result = await extractGrounding(ticker, sent, sent.map((b) => b.id));
+      setFailedBlockIds(new Set(result.failedBlockIds));
+      showResult(result, sent);
       setExtractStatus("idle");
     } catch (err) {
       setExtractError(err instanceof Error ? err.message : "Extraction failed.");
@@ -278,175 +325,206 @@ export function GroundingInput({ ticker, value, onChange }: Props) {
     }
   }
 
-  function handleConfirm() {
-    if (!extractResult) return;
-    onChange({ blocks: extractedBlocks, extract: extractResult.extract });
+  async function handleRetry(blockId: string) {
+    const ordered = submittableBlocks;
+    const blockOrder = ordered.map((b) => b.id);
+    // The retried block with its current text — plus any block added or edited since the
+    // last extraction (no result, and not a failure of its own): without it the merge
+    // would silently miss that block. Every other block goes back as its prior result.
+    const sent = ordered.filter((b) => b.id === blockId || (!blockResults[b.id] && !failedBlockIds.has(b.id)));
+    const sentIds = new Set(sent.map((b) => b.id));
+    setRetryingId(blockId);
+    setExtractError(null);
+    try {
+      const result = await extractGrounding(ticker, sent, blockOrder, {
+        priorResults: Object.values(blockResults).filter((r) => blockOrder.includes(r.blockId)),
+      });
+      setFailedBlockIds(new Set([...[...failedBlockIds].filter((id) => !sentIds.has(id) && blockOrder.includes(id)), ...result.failedBlockIds]));
+      showResult(result, ordered);
+      invalidateConfirmed();
+    } catch (err) {
+      setExtractError(err instanceof Error ? err.message : "Extraction failed.");
+    } finally {
+      setRetryingId(null);
+    }
   }
 
+  async function handleConfirm() {
+    if (!extractResult) return;
+    setConfirmStatus("saving");
+    setConfirmError(null);
+    try {
+      const { id } = await createPasteDataset(ticker, { blocks: extractedBlocks, extract: extractResult.extract }, extractResult.warnings);
+      setSavedId(id);
+      setConfirmStatus("idle");
+      onConfirm({ id, extract: extractResult.extract });
+    } catch (err) {
+      setConfirmError(err instanceof Error ? err.message : "");
+      setConfirmStatus("error");
+    }
+  }
+
+  const failedBlocks = blocks.flatMap((b, i) => (failedBlockIds.has(b.id) ? [{ id: b.id, position: i + 1 }] : []));
+  const retryButton = (id: string) => (
+    <button
+      onClick={() => handleRetry(id)}
+      disabled={busy}
+      aria-label={t("datasetRetryBlock")}
+      title={t("datasetRetryBlock")}
+      className="tap shrink-0 rounded-lg border border-warning/50 px-2 py-1 text-xs text-warning transition hover:border-warning disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      ↻
+    </button>
+  );
+
   return (
-    <div className="card print:hidden">
-      {/* Header — the section's own collapse toggle. The "ready" badge sits inside it
-          (plain span, not interactive) so gotcha #24 doesn't apply here. */}
-      <div className="flex items-center justify-between gap-3">
-        <button onClick={() => setSectionOpen((v) => !v)} aria-expanded={sectionOpen} className="min-w-0 flex-1 text-left">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold text-slate-100">{t("groundingSectionTitle")}</span>
-            {value && (
-              <span className="shrink-0 rounded-sm bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-success">
-                ✓ {t("groundingReadyBadge")}
-              </span>
-            )}
-          </div>
-          {!sectionOpen && <p className="mt-0.5 truncate text-xs text-muted">{t("groundingSectionDesc")}</p>}
-        </button>
-        <button
-          onClick={() => setSectionOpen((v) => !v)}
-          aria-label={sectionOpen ? t("groundingCollapseSection") : t("groundingExpandSection")}
-          className="tap shrink-0 rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-slate-600 hover:text-slate-200"
-        >
-          <span className={`inline-block transition-transform duration-150 ${sectionOpen ? "rotate-180" : ""}`}>▾</span>
-        </button>
-      </div>
+    <div className="space-y-3">
+      {draftKept && <p className="text-xs text-warning">{t("datasetDraftKept")}</p>}
 
-      {sectionOpen && (
-        <div className="mt-3 space-y-3">
-          <p className="text-xs text-muted">{t("groundingSectionDesc")}</p>
+      {view === "edit" && (
+        <>
+          {blocks.length === 0 && <p className="text-xs text-slate-500">{t("groundingNoBlocksYet")}</p>}
 
-          {view === "edit" && (
-            <>
-              {blocks.length === 0 && <p className="text-xs text-slate-500">{t("groundingNoBlocksYet")}</p>}
-
-              <div className="space-y-2">
-                {blocks.map((block) => (
-                  <div key={block.id} className="rounded-lg border border-slate-700/60 bg-slate-900/40 p-2">
-                    {/* Sibling buttons, never nested (gotcha #24): the label toggles the
-                        textarea, the pencil opens and focuses it, ✕ removes the block. */}
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setExpandedBlockId((id) => (id === block.id ? null : block.id))}
-                        className="min-w-0 flex-1 text-left text-xs text-slate-200"
-                      >
-                        {t(KIND_LABEL_KEY[block.kind])}
-                        {block.kind === "peer_valuation" && block.peerTicker ? ` — ${block.peerTicker}` : ""}
-                        {" · "}
-                        {block.text.length.toLocaleString()} {t("groundingCharsSuffix")}
-                        {!block.text.trim() && <span className="text-muted"> · {t("groundingBlockEmptyTag")}</span>}
-                      </button>
-                      <button
-                        onClick={() => editBlock(block.id)}
-                        aria-label={t("groundingEditBlock")}
-                        title={t("groundingEditBlock")}
-                        className="tap shrink-0 rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-slate-600 hover:text-slate-200"
-                      >
-                        ✎
-                      </button>
-                      <button
-                        onClick={() => removeBlock(block.id)}
-                        aria-label={t("groundingRemoveBlock")}
-                        className="tap shrink-0 rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-red-800 hover:text-red-400"
-                      >
-                        ✕
-                      </button>
-                    </div>
-
-                    {expandedBlockId === block.id && (
-                      <div className="mt-2 space-y-2">
-                        {KIND_HINT_KEY[block.kind] && (
-                          <p className="text-xs text-muted">{t(KIND_HINT_KEY[block.kind]!)}</p>
-                        )}
-                        {block.kind === "peer_valuation" && (
-                          <input
-                            type="text"
-                            value={block.peerTicker ?? ""}
-                            onChange={(e) => updateBlockPeerTicker(block.id, e.target.value.toUpperCase())}
-                            placeholder={t("groundingPeerTickerPlaceholder")}
-                            className="w-full rounded-lg border border-slate-700 bg-slate-800/60 px-2 py-1.5 text-xs text-slate-200 focus:border-violet-500 focus:outline-hidden"
-                          />
-                        )}
-                        <AutoGrowTextarea
-                          value={block.text}
-                          onChange={(text) => updateBlockText(block.id, text)}
-                          textareaRef={(el) => {
-                            textareaRefs.current[block.id] = el;
-                          }}
-                          placeholder={t("groundingTextareaPlaceholder")}
-                        />
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              <button
-                ref={addButtonRef}
-                onClick={toggleAddMenu}
-                disabled={atBlockCap}
-                className="tap rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200 transition hover:border-slate-400 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {t("groundingAddBlockBtn")} ▾
-              </button>
-              {/* Portaled to <body>: `.card`'s backdrop-blur-sm creates its own stacking
-                  context, so an absolutely-positioned menu confined to this card can
-                  render BEHIND a later sibling card (e.g. the Deep Value panel) no
-                  matter its z-index (AGENTS.md › Modals/Overlays). Fixed-positioned at
-                  the trigger's own viewport coordinates instead. */}
-              {addMenuOpen &&
-                addMenuPosition &&
-                ReactDOM.createPortal(
-                  <div
-                    ref={addMenuRef}
-                    style={{ top: addMenuPosition.top, left: addMenuPosition.left }}
-                    className="fixed z-50 w-56 rounded-lg border border-slate-700 bg-slate-800 py-1 shadow-lg"
+          <div className="space-y-2">
+            {blocks.map((block) => (
+              <div key={block.id} className="rounded-lg border border-slate-700/60 bg-slate-900/40 p-2">
+                {/* Sibling buttons, never nested (gotcha #24): the label toggles the
+                    textarea, the pencil opens and focuses it, ↻ retries a failed block,
+                    ✕ removes the block. */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setExpandedBlockId((id) => (id === block.id ? null : block.id))}
+                    className="min-w-0 flex-1 text-left text-xs text-slate-200"
                   >
-                    {GROUNDING_BLOCK_KINDS.map((kind) => (
-                      <button
-                        key={kind}
-                        onClick={() => addBlock(kind)}
-                        className="block w-full px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-700/60"
-                      >
-                        {t(KIND_LABEL_KEY[kind])}
-                      </button>
-                    ))}
-                  </div>,
-                  document.body
+                    {t(KIND_LABEL_KEY[block.kind])}
+                    {block.kind === "peer_valuation" && block.peerTicker ? ` — ${block.peerTicker}` : ""}
+                    {" · "}
+                    {block.text.length.toLocaleString()} {t("groundingCharsSuffix")}
+                    {!block.text.trim() && <span className="text-muted"> · {t("groundingBlockEmptyTag")}</span>}
+                    {failedBlockIds.has(block.id) && <span className="text-warning"> · {t("groundingWarnBlockExtractFailed")}</span>}
+                  </button>
+                  {failedBlockIds.has(block.id) && retryButton(block.id)}
+                  <button
+                    onClick={() => editBlock(block.id)}
+                    aria-label={t("groundingEditBlock")}
+                    title={t("groundingEditBlock")}
+                    className="tap shrink-0 rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-slate-600 hover:text-slate-200"
+                  >
+                    ✎
+                  </button>
+                  <button
+                    onClick={() => removeBlock(block.id)}
+                    aria-label={t("groundingRemoveBlock")}
+                    className="tap shrink-0 rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-red-800 hover:text-red-400"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {expandedBlockId === block.id && (
+                  <div className="mt-2 space-y-2">
+                    {KIND_HINT_KEY[block.kind] && <p className="text-xs text-muted">{t(KIND_HINT_KEY[block.kind]!)}</p>}
+                    {block.kind === "peer_valuation" && (
+                      <input
+                        type="text"
+                        value={block.peerTicker ?? ""}
+                        onChange={(e) => updateBlockPeerTicker(block.id, e.target.value.toUpperCase())}
+                        placeholder={t("groundingPeerTickerPlaceholder")}
+                        className="w-full rounded-lg border border-slate-700 bg-slate-800/60 px-2 py-1.5 text-xs text-slate-200 focus:border-violet-500 focus:outline-hidden"
+                      />
+                    )}
+                    <AutoGrowTextarea
+                      value={block.text}
+                      onChange={(text) => updateBlockText(block.id, text)}
+                      textareaRef={(el) => {
+                        textareaRefs.current[block.id] = el;
+                      }}
+                      placeholder={t("groundingTextareaPlaceholder")}
+                    />
+                  </div>
                 )}
-
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800/60 pt-3">
-                <p className={`text-xs ${overCap ? "text-danger" : nearCap ? "text-warning" : "text-muted"}`}>
-                  {totalChars.toLocaleString()} {t("groundingCharsSuffix")}
-                  {overCap && ` — ${t("groundingCapExceeded")}`}
-                  {nearCap && ` — ${t("groundingLargeWarning")}`}
-                </p>
-                <button
-                  onClick={handlePrepare}
-                  disabled={!canPrepare}
-                  className="tap rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {extractStatus === "loading" ? t("groundingPreparingState") : t("groundingPrepareBtn")}
-                </button>
               </div>
+            ))}
+          </div>
 
-              {allBlocksEmpty && <p className="text-xs text-warning">{t("groundingAllBlocksEmpty")}</p>}
-              {someBlocksEmpty && <p className="text-xs text-muted">{t("groundingEmptyBlocksSkipped")}</p>}
-              {hasEmptyPeerTicker && <p className="text-xs text-warning">{t("groundingPeerTickerRequired")}</p>}
-              {extractStatus === "error" && extractError && (
-                <p className="text-xs text-danger">
-                  {t("groundingExtractErrorPrefix")} {extractError}
-                </p>
-              )}
-            </>
-          )}
+          <button
+            ref={addButtonRef}
+            onClick={toggleAddMenu}
+            disabled={atBlockCap}
+            className="tap rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200 transition hover:border-slate-400 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {t("groundingAddBlockBtn")} ▾
+          </button>
+          {/* Portaled to <body>: `.card`'s backdrop-blur-sm creates its own stacking
+              context, so an absolutely-positioned menu confined to this card can
+              render BEHIND a later sibling card (e.g. the Deep Value panel) no
+              matter its z-index (AGENTS.md › Modals/Overlays). Fixed-positioned at
+              the trigger's own viewport coordinates instead. */}
+          {addMenuOpen &&
+            addMenuPosition &&
+            ReactDOM.createPortal(
+              <div
+                ref={addMenuRef}
+                style={{ top: addMenuPosition.top, left: addMenuPosition.left }}
+                className="fixed z-50 w-56 rounded-lg border border-slate-700 bg-slate-800 py-1 shadow-lg"
+              >
+                {GROUNDING_BLOCK_KINDS.map((kind) => (
+                  <button
+                    key={kind}
+                    onClick={() => addBlock(kind)}
+                    className="block w-full px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-700/60"
+                  >
+                    {t(KIND_LABEL_KEY[kind])}
+                  </button>
+                ))}
+              </div>,
+              document.body
+            )}
 
-          {view === "preview" && extractResult && (
-            <GroundingPreview
-              ticker={ticker}
-              result={extractResult}
-              confirmed={value !== null}
-              onEdit={() => setView("edit")}
-              onConfirm={handleConfirm}
-            />
-          )}
-        </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800/60 pt-3">
+            <p className={`text-xs ${overCap ? "text-danger" : nearCap ? "text-warning" : "text-muted"}`}>
+              {totalChars.toLocaleString()} {t("groundingCharsSuffix")}
+              {overCap && ` — ${t("groundingCapExceeded")}`}
+              {nearCap && ` — ${t("groundingLargeWarning")}`}
+            </p>
+            <button
+              onClick={handlePrepare}
+              disabled={!canPrepare}
+              className="tap rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {extractStatus === "loading" ? t("groundingPreparingState") : t("groundingPrepareBtn")}
+            </button>
+          </div>
+
+          {allBlocksEmpty && <p className="text-xs text-warning">{t("groundingAllBlocksEmpty")}</p>}
+          {someBlocksEmpty && <p className="text-xs text-muted">{t("groundingEmptyBlocksSkipped")}</p>}
+          {hasEmptyPeerTicker && <p className="text-xs text-warning">{t("groundingPeerTickerRequired")}</p>}
+        </>
+      )}
+
+      {view === "preview" && extractResult && (
+        <GroundingPreview
+          ticker={ticker}
+          result={extractResult}
+          confirmed={savedId !== null && savedId === valueId}
+          onEdit={() => setView("edit")}
+          onConfirm={handleConfirm}
+          failedBlocks={failedBlocks}
+          onRetry={handleRetry}
+          busy={busy}
+        />
+      )}
+
+      {extractError && (
+        <p className="text-xs text-danger">
+          {t("groundingExtractErrorPrefix")} {extractError}
+        </p>
+      )}
+      {confirmStatus === "error" && (
+        <p className="text-xs text-danger">
+          {t("datasetSaveError")}
+          {confirmError ? `: ${confirmError}` : ""}
+        </p>
       )}
     </div>
   );

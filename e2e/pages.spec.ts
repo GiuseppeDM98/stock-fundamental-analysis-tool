@@ -75,13 +75,15 @@ test("analyses list groups by ticker, counts match the DB, and a group expands",
 
 test("grounded analysis detail renders the report from its stored result and the deterministic checks card", async ({ page }) => {
   const row = await queryOne<{
+    datasetId: string | null;
     groundingJson: string | null;
     reportMd: string;
     resultJson: string | null;
     reviewResultJson: string | null;
     reviewBlindJson: string | null;
-  }>("SELECT groundingJson, reportMd, resultJson, reviewResultJson, reviewBlindJson FROM Analysis WHERE id = ?", [IDS.analysisGrounded]);
-  expect(row?.groundingJson, "seeded grounded row carries groundingJson").toBeTruthy();
+  }>("SELECT datasetId, groundingJson, reportMd, resultJson, reviewResultJson, reviewBlindJson FROM Analysis WHERE id = ?", [IDS.analysisGrounded]);
+  expect(row?.datasetId, "seeded grounded row reads its dataset").toBe(IDS.datasetGrounded);
+  expect(row!.groundingJson).toBeNull();
   // Current format: a stored result, and a report whose JSON block is the very last thing.
   expect(JSON.parse(row!.resultJson!).sector).toBe("Regulated Utilities");
   expect(row!.reportMd.trimEnd().endsWith("```")).toBe(true);
@@ -118,6 +120,46 @@ test("grounded analysis detail renders the report from its stored result and the
   expect((JSON.parse(row!.reviewBlindJson!) as { killPrice: number }).killPrice).toBe(8.1);
   await expect(page.getByText(/^✓ Kill price declared — 8\.10$/)).toBeVisible();
   await expect(page.getByText(new RegExp(DECOY.groundedRevisionReason))).toBeVisible();
+
+  // The dataset's tables, each year with its source: the income statement from its paste
+  // block (FY2025 revenue 1,000), the balance sheet with no source recorded.
+  const income = page.getByTestId("dataset-table-income");
+  await expect(income.getByRole("row").nth(2)).toContainText("1,000");
+  await expect(income.getByRole("row").nth(1).getByText("📋 paste")).toHaveCount(5);
+  await expect(page.getByTestId("dataset-table-balance").getByRole("row").nth(1).getByText("—")).toHaveCount(5);
+});
+
+test("an older grounded analysis still reads its extract from groundingJson", async ({ page }) => {
+  const row = await queryOne<{ datasetId: string | null; groundingJson: string | null }>(
+    "SELECT datasetId, groundingJson FROM Analysis WHERE id = ?",
+    [IDS.analysisGroundingLegacy]
+  );
+  expect(row?.datasetId).toBeNull();
+  // Saved before rows carried their sources.
+  expect(JSON.parse(row!.groundingJson!).extract.financials[0].sources).toBeUndefined();
+
+  await page.goto(`/analyses/${IDS.analysisGroundingLegacy}`);
+  await expect(page.getByText(DECOY.groundingLegacyReport)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Deterministic checks", exact: true })).toBeVisible();
+  // The card has the extract: the gates that need it are not marked unavailable.
+  await expect(page.getByText("No dataset: basis, market-implied and net-debt gates unavailable", { exact: true })).toHaveCount(0);
+  const income = page.getByTestId("dataset-table-income");
+  await expect(income.getByRole("row").nth(2)).toContainText("1,000");
+  await expect(income.getByRole("row").nth(1).getByText("—")).toHaveCount(5);
+});
+
+test("/analyze opens on A's recent dataset for the ticker, and Use confirms it with no AI call", async ({ page, forbiddenCalls }) => {
+  const row = await queryOne<{ ticker: string; origin: string }>("SELECT ticker, origin FROM FinancialDataset WHERE id = ?", [IDS.datasetGrounded]);
+  expect(row).toEqual({ ticker: TICKERS.grounded, origin: "paste" });
+
+  await page.goto(`/analyze?ticker=${TICKERS.grounded}`);
+  const section = page.getByTestId("dataset-section");
+  await expect(section.getByText(/^Dataset from .+ \(paste\)$/)).toBeVisible();
+  // Compact: the three most recent years.
+  await expect(section.getByTestId("dataset-table-income").getByRole("columnheader")).toHaveText(["", "2023", "2024", "2025"]);
+  await section.getByRole("button", { name: "Use this dataset" }).click();
+  await expect(section.getByText("✓ Ready").first()).toBeVisible();
+  expect(forbiddenCalls).toEqual([]);
 });
 
 test("a Quick analysis (no dataset) gets the deterministic checks card, read from its leading fence", async ({ page }) => {

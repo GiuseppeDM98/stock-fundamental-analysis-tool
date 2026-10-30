@@ -1,7 +1,7 @@
 // The inputs a live Deep Value run was generated with, frozen when Generate is pressed.
 //
 // The /analyze page keeps every input editable after a run finishes: the user can edit or
-// re-confirm the pasted grounding blocks, move the MoS slider, or the quote can refresh.
+// re-confirm or replace the financial dataset, move the MoS slider, or the quote can refresh.
 // Reading those live props at Save time paired the finished report with inputs it was
 // never generated from — a Grounded report saved as Quick (grounding cleared after the
 // run), a report saved with a different extract than the one it used, or fair values
@@ -11,7 +11,7 @@
 // Pure (no I/O) so the snapshot-to-request mapping is unit-testable.
 import type { SaveAnalysisRequest } from "@/types/analysis";
 import { isAiEffort, isAiModelId, type AiSettings } from "@/types/ai-settings";
-import type { GroundingPayload } from "@/types/grounding";
+import type { GroundedFinancials } from "@/types/grounding";
 import { hasFullTriple, type ParsedAnalystResult } from "@/lib/report/parse-deep-value-json";
 
 export type DeepValueRunInputs = {
@@ -22,8 +22,8 @@ export type DeepValueRunInputs = {
   // which the saved-analysis page needs to recompute the analyst lenses' gates.
   currentPrice: number | null;
   currency: string | null;
-  // null = Quick mode.
-  grounding: GroundingPayload | null;
+  // The confirmed dataset the run was grounded on; null = Quick mode.
+  dataset: { id: string; extract: GroundedFinancials } | null;
   // The report language the run was asked for (frozen at Generate, like the rest).
   language: string;
   // The settings the route resolved, read from its X-AI-Settings response header — the
@@ -78,7 +78,7 @@ export function buildSaveAnalysisRequest(
     fairValueBear: full ? result.bear.fairValue : undefined,
     // Trimmed to the route's limits: a verbose model string must not fail the whole save.
     valuationMethod: full ? result.method.slice(0, 40) : undefined,
-    groundingJson: run.grounding ? JSON.stringify(run.grounding) : undefined,
+    datasetId: run.dataset?.id,
     resultJson: full ? JSON.stringify(result) : undefined,
     // Only a bare ISO 4217 code: "EUR (euro)" would mislabel every figure it travels with.
     currency: result && /^[A-Z]{3}$/.test(result.currency) ? result.currency : undefined,

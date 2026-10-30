@@ -10,7 +10,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: October 29, 2026 — **Spec 03 (universal gates, checks card) retired**: verified criterion by criterion, then deleted (`git log -- doc/evoluzioni/03-gate-universali-e-scheda-verifiche.md` is its archive). It was in service: PR #54 merged and promoted (#55), no DDL. The retirement fixed code too, so the in-service signals hold for the code before it and are to redo after the deploy: the EV/EBITDA gates and the implied multiples read only an EV bridge on EBITDA (a DDM cross-check no longer gets a meaningless multiple); method families are anchored (`Peer EV/EBITDA` read as P/E); a lens's blind JSON and the stored extract are validated on read; every price↔value comparison (detail cards and recap, banner, list verdicts, exit signal, digest) passes `sameCurrency`, else a note. Open, both after a first new analysis (production emptied on 2026-10-29): 02's first-real-analysis check and 03's production check (index § 5, rows 2-3); `/deep-value` suspended (D-76). Next: deploy, then spec 04.
+**Last Updated**: October 29, 2026 — **Spec 04 (financial dataset with provenance)** implemented on `feature/financial-dataset` (the guide, § 5.2): a confirmed paste becomes a per-ticker `FinancialDataset` (a source per statement and row; `Analysis.datasetId`; legacy `groundingJson` read-only through `readAnalysisExtract`), one failed block is retried alone, `/analyze` offers a dataset of the last 7 days, and tables with source chips show in the preview, the reuse view and the saved page. Collaudo done and closed (A–E automated, F the owner's tour; no real run, D-99). Migrated on Turso on 2026-10-30, before the deploy (dump outside the repo, rehearsed on its restore; eight counts equal, `FinancialDataset` 0). Open: the deploy; then, after a first new analysis, 02's and 03's production checks and 04's `datasetId` check (index § 5, rows 2-4); `/deep-value` suspended (D-76). Next: deploy, then spec 05a.
 
 ---
 
@@ -31,9 +31,9 @@ Current project state and context for AI assistants. Implementation patterns & g
 Next.js App Router with client-side interactivity and server-side API routes. Pipeline: **Discover (Advisor) → Decide (Deep Value) → Monitor (Watchlist/Portfolio)**.
 
 - **Frontend**: Hub home (`/`) + `/analyze` (Deep Value) + auth + `/analyses` + `/portfolio` + `/advisor` + `/watchlist`
-- **API**: `/api/quote/[ticker]` (only Yahoo data route), `/api/auth/*`, `/api/analyses(+/[id]` GET/PATCH/DELETE — PATCH attaches the Analyst Review), `/api/positions(+/[id])`, `/api/earnings` GET/POST (POST = the stored default model + web search next-earnings lookup, upsert), `/api/ai/deep-value` + `/verify` + `/api/ai/advisor` (all POST streaming), `/api/ai/grounding/extract`, `/api/settings/ai`, `/api/advisor/sessions(+/[id](+/messages))`, `/api/portfolio/snapshots`, `/api/portfolio/dividends`, `/api/watchlist(+/[id], /settings, /run)`, `/api/cron/{portfolio-snapshot,watchlist-analysis}`
+- **API**: `/api/quote/[ticker]` (only Yahoo data route), `/api/auth/*`, `/api/analyses(+/[id]` GET/PATCH/DELETE — PATCH attaches the Analyst Review), `/api/positions(+/[id])`, `/api/earnings` GET/POST (POST = the stored default model + web search next-earnings lookup, upsert), `/api/ai/deep-value` + `/verify` + `/api/ai/advisor` (all POST streaming), `/api/ai/grounding/extract`, `/api/datasets` (POST, `/latest`, `/[id]`), `/api/settings/ai`, `/api/advisor/sessions(+/[id](+/messages))`, `/api/portfolio/snapshots`, `/api/portfolio/dividends`, `/api/watchlist(+/[id], /settings, /run)`, `/api/cron/{portfolio-snapshot,watchlist-analysis}`
 - **Business logic**: pure TS in `lib/` (Yahoo adapter, deep-value/verify/advisor/earnings prompts, snapshots, dividends, formatters)
-- **DB**: SQLite via Prisma 7 — `User`, `Analysis`, `Position`, `PortfolioSnapshot`, `WatchlistItem`, `EarningsEstimate`, `AdvisorSession`, `AdvisorMessage`
+- **DB**: SQLite via Prisma 7 — `User`, `Analysis`, `FinancialDataset`, `Position`, `PortfolioSnapshot`, `WatchlistItem`, `EarningsEstimate`, `AdvisorSession`, `AdvisorMessage`
 - **Auth**: Auth.js v5 credentials provider, JWT sessions (no DB session table)
 - **Types**: `types/` — fundamentals, market, analysis, auth, portfolio, watchlist
 - **Cron**: Vercel — portfolio snapshot weekdays 20:00 UTC, watchlist digest weekdays 08:00 Europe/Rome (fires at 06:00 + 07:00 UTC, both `1-5`-restricted, to survive CET/CEST, handler no-ops the non-matching hour)
@@ -60,12 +60,10 @@ Full detail: [doc/guide/valutazione.md](doc/guide/valutazione.md).
 - **One currency rule (hard invariant)**: a price is weighed against saved values only in the same currency (`sameCurrency`, via `comparablePrice` in `lib/report/latest-analysis.ts` outside the gates), never converted — `GBp` is not `GBP`; a mismatch shows a note instead of a verdict, a distance or a P&L (the guide, § 2.7).
 - **Position-blind (hard invariant)**: never a position or prior estimate in a Deep Value or lens prompt; hold/exit → the Advisor, evolution → deterministic diff on `/analyses`.
 
-### Grounded Deep Value (paste-your-own-data mode)
-- Optional, above the Deep Value panel on `/analyze`: a collapsible "Pasted data" section (`components/grounding-input.tsx`) where the user adds typed blocks — income statement, balance sheet, cash flow, historical multiples, forward estimates, peer comps (with a ticker) — each a labeled textarea (cap 40k chars/block, 200k total, draft persisted per-ticker in `localStorage`). Source-agnostic by design (no format-specific parser); TIKR is the suggested source in the UI copy only.
-- **Prepare data** → `POST /api/ai/grounding/extract` (Sonnet 5.5, `tools: []` — pure transcription, no web search, no arithmetic) transcribes each block in parallel into a per-kind-scoped Zod schema, merges by fiscal year (`lib/grounding/merge.ts`), and returns a **verifiable preview** (`components/report/grounding-preview.tsx`): currency/units/years covered, the historical multiple distribution (min/p25/median/p75/max + an early→late trend), current peer multiples, the market-implied multiple + percentile (or why it's unavailable), and any `ReconciliationWarning`s (EPS/net-debt mismatches, share-count jumps) — never blocking, just shown.
-- **Analyze with this data →** confirms the payload (`GroundingPayload = { blocks, extract }`) and threads it into `/api/ai/deep-value`'s POST body. The route recomputes the deterministic anchors server-side (never trusts client-sent stats) and injects both the raw paste and the anchors into the prompt via `formatGroundingForPrompt()` (`lib/grounding/prompt-format.ts`) — web search is **rescoped, not disabled**: forbidden on historical data already provided, required for anything published after the paste's coverage date plus qualitative context (moat/risks/catalysts).
-- **Persists with the analysis** (`Analysis.groundingJson`, nullable) and **reaches the Analyst Panel lenses**, blind-first (see above), on a saved analysis — the verify route re-reads it server-side via `analysisId` and injects the extract + anchors (never the raw paste, to keep 3 Opus xhigh passes affordable).
-- Quick mode (no paste) never receives any Grounded text: its prompts are locked by a golden snapshot (`__tests__/deep-value-prompts-quick-identical.test.ts`) that must stay green on every touch of the shared prompt builders. Last regenerated on purpose on 2026-10-29 for the output contract; its header names the next allowed change.
+### Financial dataset (paste)
+- Optional, above the Deep Value panel on `/analyze`: `<DatasetSection>` opens on the user's dataset of the last 7 days for the ticker (its tables, "Use this dataset" / "Refresh data"), else the paste editor `components/grounding-input.tsx` (typed blocks, 40k chars each, 200k total, per-ticker draft; source-agnostic).
+- **Prepare data** → `/api/ai/grounding/extract` (Sonnet 5.5, transcription only) per block, merged by year with each statement's source; a failed block is retried alone. **Analyze with this data →** saves a `FinancialDataset`; Deep Value gets only its `datasetId` and rebuilds the context on the server (web search rescoped, not disabled).
+- `Analysis.datasetId` links the save; lenses read it blind-first; older rows keep `groundingJson`, read through `readAnalysisExtract`. Quick mode stays byte-identical (golden `__tests__/deep-value-prompts-quick-identical.test.ts`, last regenerated 2026-10-29). Detail: the guide, § 5.2.
 
 ### User Accounts & Saved Analyses
 - Email+password (Auth.js v5, bcrypt); `DISABLE_REGISTRATION=true` blocks signups. Save/view/delete at `/analyses`.
@@ -140,7 +138,7 @@ Installable (Android Chrome "Install" prompt; iOS Share → Add to Home Screen).
 ## Project Structure
 
 ```
-types/                       # fundamentals, market, analysis, auth, portfolio, watchlist, earnings
+types/                       # fundamentals, market, analysis, auth, portfolio, watchlist, earnings, dataset
 lib/
   ai/deep-value-prompts.ts   # Deep Value + analyst-panel builders (buildAnalystSystemPrompt, angle-parameterized) — always position-blind
   ai/advisor-prompts.ts      # advisor + discovery builders — portfolio/analyses + live prices + GROUNDING_RULES_BLOCK
@@ -174,6 +172,8 @@ lib/
   grounding/                 # pure: merge/anchors/reconcile/postcheck/prompt-format/schema/currency — Grounded mode + every analysis's gates
   ai/grounding-extract-prompt.ts  # per-kind extraction prompt builders (Sonnet 5.5, no web search)
   grounding-client.ts        # client helper: extractGrounding()
+  datasets/                  # store.ts (server-only: save/latest/get, readAnalysisExtract) + parse.ts (pure)
+  dataset-client.ts          # client helpers: createPasteDataset/fetchLatestDataset/fetchDataset
   ticker.ts                  # pure: normalizeTicker/tickerSchema (trim + uppercase, max 20)
   watchlist-mos.ts           # pure: toWatchlistMosFraction() — WatchlistItem.mosPercent is a fraction
   i18n/translations.ts       # EN/IT dictionary
@@ -183,9 +183,10 @@ app/
   api/ quote/[ticker]  auth/*  analyses(+/[id])  positions(+/[id], PATCH closes/sells)
       earnings (GET/POST — AI next-earnings)  portfolio/snapshots
       cron/{portfolio-snapshot,watchlist-analysis}  watchlist(+/[id],/settings,/run)
-      ai/deep-value(+/verify)  ai/advisor  ai/grounding/extract  advisor/sessions(+/[id](+/messages))
+      ai/deep-value(+/verify)  ai/advisor  ai/grounding/extract  datasets(+/latest, /[id])
+      advisor/sessions(+/[id](+/messages))
       settings/ai (GET/PATCH — global AI model/effort/thinking default)
-components/                  # hub-client, analyze-client, deep-value-panel, analyses-list, grounding-input,
+components/                  # hub-client, analyze-client, deep-value-panel, analyses-list, dataset-section, grounding-input,
                              #   earnings-badge, analysis-detail-body (one price per saved page),
                              #   analyst-panel (3-lens panel on saved detail),
                              #   ai-settings-control (per-run selector), ai-preferences-modal (global default),
@@ -193,7 +194,7 @@ components/                  # hub-client, analyze-client, deep-value-panel, ana
                              #   advisor-client, nav-bar, download-pdf-button, …
   report/                    # report-shell, recap-table, fair-value-cards, report-body,
                              #   method-badges, valuation-ruler (ValuationRuler + ComparisonTable),
-                             #   valuation-checks-card (the gates), grounding-preview,
+                             #   valuation-checks-card (the gates), grounding-preview, dataset-tables, source-chip,
                              #   analyst-blind-card (blind vs. final drift), analyst-final-card
 context/language-context.tsx
 public/sw.js  public/icons/
@@ -241,6 +242,7 @@ See `.env.example` for the full template.
 
 ## Not yet present
 Things the series deliberately left out, one line each (added by the spec that left them out).
+- No backfill of legacy `groundingJson` blobs into `FinancialDataset`: older Grounded analyses read theirs through `readAnalysisExtract` (spec 04, 2026-10-29).
 - `/portfolio`'s own value and P&L assume the quote in the lot's currency (a `GBp` quote on a `GBP` lot reads a hundredfold); the banner, the lists, the exit signal and the digest check it (spec 03's retirement, 2026-10-29).
 
 ---

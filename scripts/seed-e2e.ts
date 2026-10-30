@@ -7,16 +7,18 @@
  *
  * Plants two throwaway users and their data:
  *   - A (e2e-a@example.test) owns everything the page specs look at: a Grounded analysis in
- *     the current format (groundingJson + a report that ends with its ```json block, bridges
- *     included, plus a resultJson column that deliberately differs from that block, and a
- *     blind-first Skeptic run with its final JSON), an analysis with all three analyst lenses filled
+ *     the current format (a financial dataset dated two days back, with its sources, + a
+ *     report that ends with its ```json block, bridges included, plus a resultJson column
+ *     that deliberately differs from that block, and a blind-first Skeptic run with its final
+ *     JSON), an older Grounded save of the same ticker that still carries its extract in
+ *     groundingJson, an analysis with all three analyst lenses filled
  *     in the older format (JSON block at the top, no resultJson) plus an older save of
  *     the same ticker (grouping, evolution diff), an old-format analysis with no JSON block
  *     and no grounding (must still open), a sacrificial analysis and position for the
  *     authorization spec, open and closed positions (some with a capital-gains tax rate),
  *     watchlist items, five portfolio snapshots, one earnings estimate, one advisor session.
- *   - B (e2e-b@example.test) owns one analysis and one position — just enough for the
- *     own-vs-someone-else's pair.
+ *   - B (e2e-b@example.test) owns one analysis, one position and one dataset — just enough
+ *     for the own-vs-someone-else's pair.
  * Password for both: E2E_PASSWORD in e2e/support/fixtures.ts.
  *
  * Idempotent: it first deletes every row owned by the two fixture users (and by any user
@@ -44,7 +46,9 @@ import {
 } from "../e2e/support/fixtures";
 import type { AnalystResult, DeepValueResult } from "../components/report/types";
 import { REPORT_START_MARKER, sanitizeDeepValueResult } from "../lib/report/parse-deep-value-json";
-import type { GroundingPayload } from "../types/grounding";
+import { pasteSource } from "../lib/grounding/merge";
+import { emptyRowSources, type FinancialDataset } from "../types/dataset";
+import type { GroundingBlock } from "../types/grounding";
 import type { SnapshotData, SnapshotEntry } from "../types/portfolio";
 
 export * from "../e2e/support/fixtures";
@@ -147,7 +151,13 @@ const GROUNDED_REVIEW_FINAL: AnalystResult = {
 const GROUNDED_YEARS = [2021, 2022, 2023, 2024, 2025];
 const GROUNDED_EV_EBITDA = [7.5, 8.0, 7.0, 7.8, 8.2];
 
-function groundedPayload(): GroundingPayload {
+const GROUNDED_BLOCKS: GroundingBlock[] = [
+  { id: "e2e-block-is", kind: "income_statement", text: `Fenicottero income statement (${DECOY.groundedReport})\nFY2021 FY2022 FY2023 FY2024 FY2025` },
+  { id: "e2e-block-mult", kind: "valuation_multiples", text: "EV/EBITDA 7.5 8.0 7.0 7.8 8.2" },
+];
+
+/** The grounded extract as it was saved before its rows carried their sources. */
+function groundedExtractV1() {
   const financials = GROUNDED_YEARS.map((fiscalYear, i) => {
     const revenue = 800 + 50 * i;
     const ebitda = 160 + 10 * i;
@@ -188,17 +198,56 @@ function groundedPayload(): GroundingPayload {
     };
   });
   return {
-    blocks: [
-      { id: "e2e-block-is", kind: "income_statement", text: `Fenicottero income statement (${DECOY.groundedReport})\nFY2021 FY2022 FY2023 FY2024 FY2025` },
-      { id: "e2e-block-mult", kind: "valuation_multiples", text: "EV/EBITDA 7.5 8.0 7.0 7.8 8.2" },
+    meta: { reportingCurrency: "EUR", units: "millions" as const, latestPeriodLabel: "FY2025", fiscalYearEnd: "December" },
+    financials,
+    multiples,
+    estimates: [{ fiscalYear: 2026, revenue: 1050, ebitda: 210, ebit: 165, netIncome: 95, eps: 0.95 }],
+    peers: [],
+  };
+}
+
+/** The same extract as a dataset row stores it: the income statement and the multiples
+ *  from their paste blocks, the balance sheet and cash flow with no source recorded. */
+function groundedDataset(createdAt: Date): FinancialDataset {
+  const v1 = groundedExtractV1();
+  return {
+    ...v1,
+    financials: v1.financials.map((row) => ({ ...row, sources: { ...emptyRowSources(), income: pasteSource("e2e-block-is") } })),
+    multiples: v1.multiples.map((row) => ({ ...row, source: pasteSource("e2e-block-mult") })),
+    estimates: v1.estimates.map((row) => ({ ...row, source: null })),
+    datasetMeta: { ticker: TICKERS.grounded, createdAt: createdAt.toISOString(), origin: "paste", pasteDatasetId: null, webDatasetId: null },
+  };
+}
+
+/** User B's dataset: one row, just enough for the own-vs-someone-else's pair. */
+function userBDataset(createdAt: Date): FinancialDataset {
+  return {
+    meta: { reportingCurrency: "USD", units: "millions", latestPeriodLabel: "FY2025", fiscalYearEnd: "December" },
+    financials: [
+      {
+        fiscalYear: 2025,
+        revenue: 500,
+        ebitda: 100,
+        ebit: 80,
+        netIncome: 50,
+        eps: 1,
+        totalEquity: 300,
+        minorityInterest: null,
+        totalDebt: 100,
+        cashAndEquivalents: 50,
+        netDebt: 50,
+        sharesDiluted: 50,
+        cfo: 90,
+        capex: -30,
+        freeCashFlow: 60,
+        dividendsPerShare: null,
+        sources: { ...emptyRowSources(), income: pasteSource("e2e-block-b") },
+      },
     ],
-    extract: {
-      meta: { reportingCurrency: "EUR", units: "millions", latestPeriodLabel: "FY2025", fiscalYearEnd: "December" },
-      financials,
-      multiples,
-      estimates: [{ fiscalYear: 2026, revenue: 1050, ebitda: 210, ebit: 165, netIncome: 95, eps: 0.95 }],
-      peers: [],
-    },
+    multiples: [],
+    estimates: [],
+    peers: [],
+    datasetMeta: { ticker: TICKERS.userB, createdAt: createdAt.toISOString(), origin: "paste", pasteDatasetId: null, webDatasetId: null },
   };
 }
 
@@ -259,6 +308,7 @@ export async function seedE2eDatabase(url: string = E2E_DB_URL): Promise<Date> {
     await db.user.create({ data: { id: USER_A.id, email: USER_A.email, passwordHash } });
     await db.user.create({ data: { id: USER_B.id, email: USER_B.email, passwordHash } });
 
+    await seedDatasets(db, today);
     await seedAnalyses(db);
     await seedPositions(db);
     await seedWatchlist(db);
@@ -308,11 +358,48 @@ async function wipeFixtureUsers(db: PrismaClient): Promise<void> {
   await db.advisorMessage.deleteMany({ where: { session: { userId: { in: userIds } } } });
   await db.advisorSession.deleteMany(byUser);
   await db.analysis.deleteMany(byUser);
+  await db.financialDataset.deleteMany(byUser);
   await db.position.deleteMany(byUser);
   await db.portfolioSnapshot.deleteMany(byUser);
   await db.watchlistItem.deleteMany(byUser);
   await db.earningsEstimate.deleteMany(byUser);
   await db.user.deleteMany({ where: { id: { in: userIds } } });
+}
+
+async function seedDatasets(db: PrismaClient, today: Date): Promise<void> {
+  // Two days back: inside the reuse window of /analyze, outside a one-day one.
+  const groundedAt = daysFrom(today, -2);
+  await db.financialDataset.create({
+    data: {
+      id: IDS.datasetGrounded,
+      userId: USER_A.id,
+      ticker: TICKERS.grounded,
+      origin: "paste",
+      currency: "EUR",
+      units: "millions",
+      coverageLabel: "FY2025",
+      dataJson: JSON.stringify(groundedDataset(groundedAt)),
+      blocksJson: JSON.stringify(GROUNDED_BLOCKS),
+      warningsJson: "[]",
+      createdAt: groundedAt,
+    },
+  });
+  const userBAt = daysFrom(today, -1);
+  await db.financialDataset.create({
+    data: {
+      id: IDS.datasetUserB,
+      userId: USER_B.id,
+      ticker: TICKERS.userB,
+      origin: "paste",
+      currency: "USD",
+      units: "millions",
+      coverageLabel: "FY2025",
+      dataJson: JSON.stringify(userBDataset(userBAt)),
+      blocksJson: "[]",
+      warningsJson: "[]",
+      createdAt: userBAt,
+    },
+  });
 }
 
 async function seedAnalyses(db: PrismaClient): Promise<void> {
@@ -328,7 +415,7 @@ async function seedAnalyses(db: PrismaClient): Promise<void> {
       fairValueBase: GROUNDED_RESULT.base.fairValue,
       fairValueBear: GROUNDED_RESULT.bear.fairValue,
       valuationMethod: GROUNDED_RESULT.method,
-      groundingJson: JSON.stringify(groundedPayload()),
+      datasetId: IDS.datasetGrounded,
       reportMd: deepValueReportJsonLast(
         GROUNDED_RESULT,
         `## 1. Overview\n\nGrounded report ${DECOY.groundedReport}: regulated networks with a stable EBITDA path.\n\n## 2. Moat\n\nConcession-based moat.\n\n## 8. Summary\n\nBase case EV/EBITDA 8.0x on FY2025 EBITDA.`
@@ -348,6 +435,28 @@ async function seedAnalyses(db: PrismaClient): Promise<void> {
       aiEffort: "xhigh",
       aiThinking: true,
       createdAt: new Date("2026-09-15T09:30:00Z"),
+    },
+  });
+
+  // Saved before datasets existed: its extract lives in groundingJson, rows without sources.
+  await db.analysis.create({
+    data: {
+      id: IDS.analysisGroundingLegacy,
+      userId: USER_A.id,
+      ticker: TICKERS.grounded,
+      companyName: DECOY.groundedCompany,
+      mosPercent: 20,
+      priceAtAnalysis: 10.4,
+      fairValueBull: GROUNDED_RESULT.bull.fairValue,
+      fairValueBase: GROUNDED_RESULT.base.fairValue,
+      fairValueBear: GROUNDED_RESULT.bear.fairValue,
+      valuationMethod: GROUNDED_RESULT.method,
+      groundingJson: JSON.stringify({ blocks: GROUNDED_BLOCKS, extract: groundedExtractV1() }),
+      reportMd: deepValueReportJsonLast(GROUNDED_RESULT, `## 1. Overview\n\nGrounded report ${DECOY.groundingLegacyReport}, saved before datasets.`),
+      currency: "EUR",
+      sector: GROUNDED_RESULT_COLUMN.sector,
+      reportLanguage: "English",
+      createdAt: new Date("2026-08-01T09:00:00Z"),
     },
   });
 

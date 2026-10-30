@@ -6,12 +6,14 @@ import { makeExtract, makeFinancialsRow, makeMeta } from "./grounding-test-helpe
 const runStreamMock = vi.fn();
 const userFindUnique = vi.fn();
 const analysisFindFirst = vi.fn();
+const datasetFindFirst = vi.fn();
 
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(async () => ({ user: { id: "u1" } })) }));
 vi.mock("@/lib/db", () => ({
   db: {
     user: { findUnique: (...args: unknown[]) => userFindUnique(...args) },
     analysis: { findFirst: (...args: unknown[]) => analysisFindFirst(...args) },
+    financialDataset: { findFirst: (...args: unknown[]) => datasetFindFirst(...args) },
   },
 }));
 vi.mock("@/lib/yahoo-client", () => ({ getQuote: vi.fn(async () => ({ regularMarketPrice: 10, currency: "EUR" })) }));
@@ -206,5 +208,39 @@ describe("POST /api/ai/deep-value/verify — blind-first review", () => {
     const shown = stripJsonBlock(body);
     expect(shown).toContain("Phase 1 (the blind valuation");
     expect(shown).toContain("Review truncated");
+  });
+});
+
+describe("POST /api/ai/deep-value/verify — grounded on the analysis's dataset", () => {
+  const WARNING = { code: "value_conflict", severity: "warn", fiscalYear: 2025, detail: "ebitda: 1000 (income_statement #1) vs 1100 (other #2)" };
+
+  beforeEach(() => {
+    runStreamMock.mockReset();
+    userFindUnique.mockReset().mockResolvedValue({ aiModel: "claude-opus-4-8", aiEffort: "high", aiThinkingEnabled: true });
+    analysisFindFirst.mockReset().mockResolvedValue({ datasetId: "ds1", groundingJson: null, mosPercent: 20, reportMd: "## 1. X" });
+    datasetFindFirst.mockReset().mockResolvedValue({
+      id: "ds1",
+      dataJson: JSON.stringify({
+        ...EXTRACT,
+        datasetMeta: { ticker: "AAA", createdAt: "2026-10-27T09:00:00.000Z", origin: "paste", pasteDatasetId: null, webDatasetId: null },
+      }),
+      blocksJson: JSON.stringify([{ id: "blk-1", kind: "income_statement", text: "RAW PASTE never shown to a lens" }]),
+      warningsJson: JSON.stringify([WARNING]),
+      createdAt: new Date("2026-10-27T09:00:00Z"),
+    });
+  });
+
+  it("reads the extract from the dataset, without the raw blocks, with its stored warnings", async () => {
+    blindFirstStreams(`${BLIND}\nrationale`, ["<!--critique-->Critique\n", FINAL]);
+    await (await POST(post({ ticker: "AAA", reportMd: "## 1. X", analysisId: "an1" }))).text();
+
+    expect(analysisFindFirst).toHaveBeenCalledWith(expect.objectContaining({ select: expect.objectContaining({ datasetId: true }) }));
+    expect(datasetFindFirst).toHaveBeenCalledWith({ where: { id: "ds1", userId: "u1" } });
+    // Grounded ⇒ blind-first: two turns, the first one blind on the dataset's anchors.
+    expect(runStreamMock).toHaveBeenCalledTimes(2);
+    const prompt = userPromptOf(0);
+    expect(prompt).toContain("STRUCTURED EXTRACT");
+    expect(prompt).toContain(WARNING.detail);
+    expect(prompt).not.toContain("RAW PASTE");
   });
 });

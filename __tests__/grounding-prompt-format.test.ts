@@ -5,6 +5,8 @@ import { computeBasisReconciliation } from "@/lib/grounding/basis";
 import { checkReconciliation } from "@/lib/grounding/reconcile";
 import { makeFinancialsRow, makeMultiplesRow, makeExtract, makeMeta } from "./grounding-test-helpers";
 import type { GroundingBlock } from "@/types/grounding";
+import type { ReconciliationWarning } from "@/lib/grounding/reconcile";
+import { pasteSource } from "@/lib/grounding/merge";
 
 // Eni-shaped fixture, same numbers as grounding-postcheck.test.ts, so the anchors below
 // are internally consistent (bridge inputs tie to the EV/EBITDA history). No
@@ -278,5 +280,34 @@ describe("formatGroundingForPrompt — basis confidence and EV-bridge statements
     expect(text).toContain("EV bridge basis: kB = 1.14 (observed from reported Market Cap / Enterprise Value)");
     expect(text).toContain("already scale the statement bridge by kB");
     expect(text).not.toContain("ASSUMED");
+  });
+});
+
+describe("buildGroundingPromptContext — a stored dataset's warnings and provenance", () => {
+  const conflict: ReconciliationWarning = { code: "value_conflict", severity: "warn", fiscalYear: 2025, detail: "ebitda: 14200 (income_statement #1) vs 15000 (other #2)" };
+
+  it("joins the stored warnings to the recomputed ones, each once", () => {
+    const recomputed = buildGroundingPromptContext(BLOCKS, EXTRACT, null, "EUR").warnings;
+    const ctx = buildGroundingPromptContext(BLOCKS, EXTRACT, null, "EUR", [conflict, conflict, ...recomputed]);
+    expect(ctx.warnings).toEqual([conflict, ...recomputed]);
+  });
+
+  it("names a failed block by its kind, not by its place in the editor", () => {
+    const failed: ReconciliationWarning = { code: "block_extract_failed", severity: "warn", fiscalYear: null, detail: "cash_flow #3" };
+    const text = formatGroundingForPrompt(buildGroundingPromptContext(BLOCKS, EXTRACT, null, "EUR", [failed]));
+    expect(text).toContain("⚠ block_extract_failed — Cash flow block could not be transcribed");
+    expect(text).not.toContain("#3");
+  });
+
+  it("keeps the row sources and the dataset metadata out of the prompt", () => {
+    const sourced = {
+      ...EXTRACT,
+      financials: EXTRACT.financials.map((f) => ({ ...f, sources: { ...f.sources, income: pasteSource("blk-1") } })),
+      multiples: EXTRACT.multiples.map((m) => ({ ...m, source: pasteSource("blk-2") })),
+      datasetMeta: { ticker: "AAA.MI", createdAt: "2026-10-27T09:00:00.000Z", origin: "paste", pasteDatasetId: null, webDatasetId: null },
+    };
+    const text = formatGroundingForPrompt(buildGroundingPromptContext(BLOCKS, sourced, null, "EUR"));
+    expect(text).toContain('"ebitda": 14200');
+    expect(text).not.toMatch(/sources|blockId|datasetMeta/);
   });
 });

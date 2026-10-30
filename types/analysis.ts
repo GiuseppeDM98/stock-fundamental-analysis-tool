@@ -77,16 +77,18 @@ export type SavedAnalysis = {
   reviewResultJson?: string | null;
   optimistResultJson?: string | null;
   qualityResultJson?: string | null;
+  // The financial dataset the analysis was grounded on (FinancialDataset.id); null for
+  // Quick-mode analyses and for those saved before the dataset table.
+  datasetId?: string | null;
   createdAt: string; // ISO 8601 string (JSON serialized from Date)
   // groundingJson is DELIBERATELY NOT a field here. This type mirrors the GET
   // /api/analyses list's select (ANALYSIS_LIST_SELECT in lib/analyses-select.ts, which
   // `satisfies Record<keyof SavedAnalysis, true>`), which omits groundingJson on purpose —
   // it's a JSON blob the list never renders, and adding it to this type without adding it
   // to that select would silently promise a value that's always undefined at runtime
-  // (AGENTS.md gotcha #20). The detail page reads it via a separate `findUnique` with no
-  // `select` (Prisma returns every column, already typed). If a future /analyses list
-  // feature needs it, add BOTH the select field and this one together — never one without
-  // the other.
+  // (AGENTS.md gotcha #20). The detail page reads it, with the dataset, through
+  // readAnalysisExtract (lib/datasets/store.ts). If a future /analyses list feature needs
+  // it, add BOTH the select field and this one together — never one without the other.
 };
 
 /**
@@ -124,9 +126,9 @@ export type SaveAnalysisRequest = {
   fairValueBase?: number;
   fairValueBear?: number;
   valuationMethod?: string;
-  // Grounded Deep Value mode — the confirmed GroundingPayload (blocks + extract),
-  // JSON.stringify'd. Present only when the analysis was generated with pasted data.
-  groundingJson?: string;
+  // Grounded Deep Value mode — the dataset the analysis was generated on (the route
+  // checks it is the user's and of the same ticker).
+  datasetId?: string;
   // The final JSON block (JSON.stringify'd ParsedAnalystResult), only when it carries a
   // full triple — the route answers 400 otherwise, so the client omits it instead.
   resultJson?: string;

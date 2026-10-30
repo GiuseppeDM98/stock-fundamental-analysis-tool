@@ -7,6 +7,7 @@ import type {
   GroundedFinancials,
   GroundingMeta,
 } from "@/types/grounding";
+import { emptyRowSources } from "@/types/dataset";
 import type { BasisReconciliation } from "@/lib/grounding/basis";
 
 export function makeFinancialsRow(overrides: Partial<FiscalYearFinancials> & { fiscalYear: number }): FiscalYearFinancials {
@@ -26,6 +27,7 @@ export function makeFinancialsRow(overrides: Partial<FiscalYearFinancials> & { f
     capex: null,
     freeCashFlow: null,
     dividendsPerShare: null,
+    sources: emptyRowSources(),
     ...overrides,
   };
 }
@@ -40,6 +42,7 @@ export function makeMultiplesRow(overrides: Partial<FiscalYearMultiples> & { fis
     dividendYield: null,
     marketCap: null,
     enterpriseValue: null,
+    source: null,
     ...overrides,
   };
 }
@@ -51,6 +54,7 @@ export function makeEstimateRow(overrides: Partial<ForwardEstimate> & { fiscalYe
     ebit: null,
     netIncome: null,
     eps: null,
+    source: null,
     ...overrides,
   };
 }
