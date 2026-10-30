@@ -10,7 +10,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: October 29, 2026 — **Spec 04 (financial dataset with provenance)** implemented on `feature/financial-dataset` (the guide, § 5.2): a confirmed paste becomes a per-ticker `FinancialDataset` (a source per statement and row; `Analysis.datasetId`; legacy `groundingJson` read-only through `readAnalysisExtract`), one failed block is retried alone, `/analyze` offers a dataset of the last 7 days, and tables with source chips show in the preview, the reuse view and the saved page. Collaudo done and closed (A–E automated, F the owner's tour; no real run, D-99). Migrated on Turso on 2026-10-30, before the deploy (dump outside the repo, rehearsed on its restore; eight counts equal, `FinancialDataset` 0). Open: the deploy; then, after a first new analysis, 02's and 03's production checks and 04's `datasetId` check (index § 5, rows 2-4); `/deep-value` suspended (D-76). Next: deploy, then spec 05a.
+**Last Updated**: October 30, 2026 — **Spec 04 (financial dataset with provenance) retired**: verified criterion by criterion, then deleted (`git log -- doc/evoluzioni/04-dataset-finanziario-con-provenienza.md` is its archive). It was in service: PR #58 merged, migrated on Turso on 2026-10-30 before the deploy (re-read at the retirement: `datasetId`, its FK and index, the table still empty). The retirement fixed code too, so the in-service signals hold for the code before it and are to redo after the deploy: a retry that fixes one of two failed blocks keeps the other's warning (preview, saved dataset, lens prompts); `POST /api/analyses` no longer writes `groundingJson`. The live specs follow the code (index § 3.9, D-100…D-103). Open: the deploy; then, after a first new analysis, 02's, 03's and 04's production checks (index § 5, rows 2-4); `/deep-value` suspended (D-76). Next: deploy, then spec 05a.
 
 ---
 
@@ -172,7 +172,7 @@ lib/
   grounding/                 # pure: merge/anchors/reconcile/postcheck/prompt-format/schema/currency — Grounded mode + every analysis's gates
   ai/grounding-extract-prompt.ts  # per-kind extraction prompt builders (Sonnet 5.5, no web search)
   grounding-client.ts        # client helper: extractGrounding()
-  datasets/                  # store.ts (server-only: save/latest/get, readAnalysisExtract) + parse.ts (pure)
+  datasets/                  # store.ts (server-only: save/latest/get, readAnalysisExtract/readAnalysisGrounding) + parse.ts (pure)
   dataset-client.ts          # client helpers: createPasteDataset/fetchLatestDataset/fetchDataset
   ticker.ts                  # pure: normalizeTicker/tickerSchema (trim + uppercase, max 20)
   watchlist-mos.ts           # pure: toWatchlistMosFraction() — WatchlistItem.mosPercent is a fraction
@@ -243,12 +243,13 @@ See `.env.example` for the full template.
 ## Not yet present
 Things the series deliberately left out, one line each (added by the spec that left them out).
 - No backfill of legacy `groundingJson` blobs into `FinancialDataset`: older Grounded analyses read theirs through `readAnalysisExtract` (spec 04, 2026-10-29).
+- No cleanup of `FinancialDataset` rows: deleting an analysis keeps its dataset, and one saved for a run that then failed is still offered for reuse for 7 days (spec 04, accepted 2026-10-29).
 - `/portfolio`'s own value and P&L assume the quote in the lot's currency (a `GBp` quote on a `GBP` lot reads a hundredfold); the banner, the lists, the exit signal and the digest check it (spec 03's retirement, 2026-10-29).
 
 ---
 
 ## Next Priorities
-The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (twelve specs, 01…08b with 05c added 2026-10-27, one session each, in order; 01, 02 and 03 retired 2026-10-29); its index `00-INDICE.md` holds the series' state and the owner's decisions; after 08b, one `/deep-value` realignment pass (D-76).
+The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (twelve specs, 01…08b with 05c added 2026-10-27, one session each, in order; 01, 02 and 03 retired 2026-10-29, 04 on 2026-10-30); its index `00-INDICE.md` holds the series' state and the owner's decisions; after 08b, one `/deep-value` realignment pass (D-76).
 1. Caching layer for `/api/quote`.
 2. Per-ticker yield-on-cost in the exit signal (needs per-position dividend exposure via snapshots).
 

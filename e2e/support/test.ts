@@ -12,7 +12,7 @@
  *     spec can never silently start spending on Anthropic/DeepSeek.
  *
  * APIRequestContext calls (the `request` fixture) are not routed — authorization.spec.ts
- * only uses them against the analyses/positions routes.
+ * only uses them against the analyses, positions and datasets routes.
  */
 import { test as base, expect, type BrowserContext, type Route } from "@playwright/test";
 import { FX_STUB, QUOTE_STUBS } from "./fixtures";

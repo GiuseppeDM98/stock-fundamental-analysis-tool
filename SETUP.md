@@ -105,14 +105,13 @@ Use this option if you want to replicate the production setup or deploy to Verce
    turso db create stock-analysis
    ```
 
-3. Apply all migrations in order:
+3. Apply every migration, in name order (the folder names start with their timestamp):
 
    ```bash
-   turso db shell stock-analysis < prisma/migrations/20260309185256_init/migration.sql
-   turso db shell stock-analysis < prisma/migrations/20260508050645_add_analysis_snapshot_and_positions/migration.sql
-   turso db shell stock-analysis < prisma/migrations/20260508061809_add_position_currency/migration.sql
-   turso db shell stock-analysis < prisma/migrations/20260510041821_add_portfolio_snapshot/migration.sql
+   for f in prisma/migrations/*/migration.sql; do turso db shell stock-analysis < "$f"; done
    ```
+
+   Without the `turso` CLI (Windows), apply each file as one `client.migrate()` batch of `@libsql/client`: AGENTS.md § Prisma 7 + Turso. Until 2026-10-30 this step listed only the first four of the 21 migrations.
 
 4. Get the connection URL and auth token:
 

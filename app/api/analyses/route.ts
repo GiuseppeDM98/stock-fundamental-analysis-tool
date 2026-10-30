@@ -26,11 +26,10 @@ const saveSchema = z.object({
   // the model's string to this before sending.
   valuationMethod: z.string().max(40).optional(),
   // Grounded Deep Value mode — the dataset the analysis was generated on. Checked below:
-  // it must be the user's and of the same ticker.
+  // it must be the user's and of the same ticker. The legacy groundingJson column is
+  // read-only: a body that still carries it has the key dropped by this schema, so no new
+  // row gets an unvalidated paste blob (it was still written until 2026-10-30).
   datasetId: z.string().min(1).optional(),
-  // Legacy: the GroundingPayload analyses carried before the dataset table. Still
-  // accepted, no longer sent by the app.
-  groundingJson: z.string().max(400000).optional(),
   // The report's final JSON block. Re-sanitized below: what is stored is the server's
   // reading of it, never the client's text.
   resultJson: z.string().max(30000).optional(),
@@ -101,7 +100,6 @@ export async function POST(request: Request) {
       fairValueBear: body.fairValueBear,
       valuationMethod: body.valuationMethod,
       datasetId: body.datasetId,
-      groundingJson: body.groundingJson,
       resultJson,
       currency: body.currency,
       sector: body.sector,
