@@ -16,7 +16,7 @@
  *     the same ticker (grouping, evolution diff), an old-format analysis with no JSON block
  *     and no grounding (must still open), a sacrificial analysis and position for the
  *     authorization spec, open and closed positions (some with a capital-gains tax rate),
- *     watchlist items, five portfolio snapshots, one earnings estimate, one advisor session.
+ *     watchlist items, six portfolio snapshots, one earnings estimate, one advisor session.
  *   - B (e2e-b@example.test) owns one analysis, one position and one dataset — just enough
  *     for the own-vs-someone-else's pair.
  * Password for both: E2E_PASSWORD in e2e/support/fixtures.ts.

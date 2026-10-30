@@ -9,7 +9,7 @@ vi.mock("@/lib/db", () => ({
   db: { financialDataset: { findFirst: (...args: unknown[]) => findFirstMock(...args) } },
 }));
 
-import { readAnalysisExtract, readAnalysisGrounding } from "@/lib/datasets/store";
+import { latestFinancialDataset, readAnalysisExtract, readAnalysisGrounding } from "@/lib/datasets/store";
 
 // Invented, round figures.
 const DATASET_EXTRACT = makeExtract({
@@ -33,6 +33,27 @@ const LEGACY_JSON = JSON.stringify({ blocks: [], extract: { ...makeExtract(), fi
 
 beforeEach(() => {
   findFirstMock.mockReset().mockResolvedValue(null);
+});
+
+describe("latestFinancialDataset", () => {
+  it("normalizes the ticker itself and has no age limit when maxAgeDays is absent", async () => {
+    findFirstMock.mockResolvedValue(DATASET_ROW);
+    expect((await latestFinancialDataset("u1", " aaa.mi "))?.id).toBe("ds1");
+    expect(findFirstMock).toHaveBeenCalledWith({ where: { userId: "u1", ticker: "AAA.MI" }, orderBy: { createdAt: "desc" } });
+  });
+
+  it("looks back maxAgeDays from now", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-30T12:00:00Z") });
+    try {
+      await latestFinancialDataset("u1", "AAA.MI", 7);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(findFirstMock).toHaveBeenCalledWith({
+      where: { userId: "u1", ticker: "AAA.MI", createdAt: { gte: new Date("2026-10-23T12:00:00Z") } },
+      orderBy: { createdAt: "desc" },
+    });
+  });
 });
 
 describe("readAnalysisExtract", () => {

@@ -111,6 +111,12 @@ describe("POST /api/analyses — the dataset of a grounded run", () => {
     expect(res.status).toBe(201);
     expect(createMock.mock.calls[0][0].data).toMatchObject({ ticker: "AAA", datasetId: "ds1" });
   });
+
+  it("never writes the legacy groundingJson column, even when an old client sends it", async () => {
+    const res = await POST(post({ ...SAVE, groundingJson: JSON.stringify({ blocks: [], extract: {} }) }));
+    expect(res.status).toBe(201);
+    expect(createMock.mock.calls[0][0].data).not.toHaveProperty("groundingJson");
+  });
 });
 
 describe("PATCH /api/analyses/:id — a lens's resultJson", () => {

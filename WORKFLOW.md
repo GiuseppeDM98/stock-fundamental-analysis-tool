@@ -198,7 +198,7 @@ After `npm ci` (or on a fresh checkout) run `npx prisma generate` once: stage 2 
 
 - **Never production.** Every child process gets `TURSO_DATABASE_URL`/`DATABASE_URL=file:<repo>/.e2e/e2e.db`, `TURSO_AUTH_TOKEN=""`, `NEXTAUTH_URL=http://localhost:3200`, a throwaway auth secret and empty AI/Resend keys (`e2e/support/env.ts`). Any non-`file:` URL aborts the run before a process starts (verified 2026-10-11 with `E2E_DB_URL=libsql://…`).
 - **Never paid or remote calls.** `/api/quote/*` and Frankfurter are stubbed with fixed values, every request leaving localhost is blocked, and any call to `/api/ai/*`, `POST /api/earnings` or `POST /api/watchlist/run` fails the test (`e2e/support/test.ts`).
-- **Assertions pair visible decoy text with DB rows** (`e2e/support/db.ts`), never the look of the page alone. `authorization.spec.ts` is the own-vs-someone-else's pair on analyses and positions: a foreign id answers 404 and the row is checked unchanged in the DB. Both a wrong-identity run and an injected DB write were shown to turn it red (2026-10-11).
+- **Assertions pair visible decoy text with DB rows** (`e2e/support/db.ts`), never the look of the page alone. `authorization.spec.ts` is the own-vs-someone-else's pair on analyses, positions and datasets: a foreign id answers 404 and the row is checked unchanged in the DB. Both a wrong-identity run and an injected DB write were shown to turn it red (2026-10-11).
 - **Do not run the suite while another `next dev` / `next build` runs from the same checkout** (they share `.next`). Port 3200 must be free; an existing server is never reused. Do not edit source files while the suite or a manual dev server runs either: `next dev` recompiles mid-test and the test it lands on reads as flaky (2026-10-29).
 - **Artifacts** (`.e2e/`, `playwright-report/`, `test-results/`) are gitignored. Open a failure's trace with `npx playwright show-trace test-results/<test>/trace.zip`.
 - **Visual baselines are per session and never committed** (`e2e/**/*-snapshots/` is gitignored). They hold for the UTC day they were generated on, because snapshot and earnings dates are relative to today. Run `npm run e2e:visual:update` before a change and `npm run e2e:visual` after it; the update rewrites every baseline (`--update-snapshots=all`), since Playwright's default mode keeps a file that is still within tolerance and a day-old one survived (2026-10-29). The browser clock is frozen, animations are off, and fonts are the fallback (Google Fonts is blocked).
@@ -222,12 +222,12 @@ Quotes are live in this mode, not stubbed. After any schema change restart the d
 `scripts/seed-e2e.ts` is idempotent; the e2e run calls it and `npm run seed:e2e` re-runs it by hand. It plants:
 
 - **A** — `e2e-a@example.test`, password `e2e-password-123`. Owns:
-  - a Grounded analysis (`/analyses/e2e_an_grounded`, decoy *fenicottero*);
+  - a Grounded analysis read from its financial dataset (`/analyses/e2e_an_grounded`, decoy *fenicottero*; dataset `e2e_ds_fnct`, two days old, offered for reuse on `/analyze?ticker=FNCT.MI`) and an older Grounded save that still carries `groundingJson` (`/analyses/e2e_an_grounding_legacy`, *fenicottero-legacy*);
   - an analysis with all three analyst lenses (`/analyses/e2e_an_panel`, *ornitorinco*) plus an older save of the same ticker;
   - an old-format analysis with no JSON block (`/analyses/e2e_an_legacy`, *pangolino*);
   - open and closed positions (some taxed at 26%), 3 watchlist items, 6 portfolio snapshots, one earnings estimate, one advisor session (*tapiro*);
   - a sacrificial analysis and position that `authorization.spec.ts` patches and deletes.
-- **B** — `e2e-b@example.test`, same password. Owns one analysis and one position (*quokka*).
+- **B** — `e2e-b@example.test`, same password. Owns one analysis, one position and one dataset (`e2e_ds_user_b`) (*quokka*).
 
 Ids, decoys and stub prices live in `e2e/support/fixtures.ts`. **Roles**: the app has none; authorization is per-user data ownership, so the own-vs-someone-else's pair of §2 uses A and B.
 
