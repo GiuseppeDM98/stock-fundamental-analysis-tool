@@ -2,7 +2,9 @@
 // - origin "paste": a confirmed paste (blocks + the extract the extraction route returned);
 // - origin "merged": the user's paste dataset and web dataset of one ticker, merged here
 //   (lib/datasets/merge-sources.ts, the paste winning per statement) from the two stored
-//   rows, so the client never sends a merged extract. Answers with the preview bundle.
+//   rows, so the client never sends a merged extract. It keeps the paste's warnings, the
+//   merge's, and the web's that still describe the merged rows. Answers with the preview
+//   bundle.
 // origin "web" is not accepted: a web dataset is born only from the research route.
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -12,7 +14,7 @@ import { normalizeTicker, tickerSchema } from "@/lib/ticker";
 import { groundingPayloadSchema } from "@/lib/grounding/schema";
 import { DATASET_WARNING_CODES, datasetWarningSchema } from "@/lib/datasets/parse";
 import { getFinancialDataset, saveFinancialDataset } from "@/lib/datasets/store";
-import { mergeDatasets } from "@/lib/datasets/merge-sources";
+import { mergeDatasets, secondaryWarningsKept } from "@/lib/datasets/merge-sources";
 import { computeDatasetAnchors } from "@/lib/datasets/anchors-bundle";
 import type { MergedDatasetResponse } from "@/types/dataset";
 
@@ -83,13 +85,14 @@ async function createMergedDataset(userId: string, body: z.infer<typeof mergedSc
 
   const ids = { pasteDatasetId: paste.id, webDatasetId: web.id };
   const merged = mergeDatasets(paste.dataset, web.dataset, ids);
+  const webKept = secondaryWarningsKept(paste.dataset, merged.dataset, web.warnings);
   const datasetId = await saveFinancialDataset(userId, {
     ticker,
     origin: "merged",
     dataset: merged.dataset,
     blocks: paste.blocks,
-    warnings: [...paste.warnings, ...merged.warnings],
-    research: web.research,
+    warnings: [...paste.warnings, ...merged.warnings, ...webKept.warnings],
+    research: web.research && { ...web.research, unverifiedSources: webKept.unverifiedUrls },
     ...ids,
   });
   const stored = await getFinancialDataset(userId, datasetId);

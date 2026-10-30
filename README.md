@@ -508,7 +508,7 @@ turso db shell <your-db-name> < prisma/migrations/<latest>/migration.sql
 
 **Declared limit** (owner's decision, 2026-10-20): long analyses run from localhost — the app under `npm run dev`, or the `/deep-value` Claude Code command, which saves its analyses to Turso (suspended until its realignment (D-76): it would save analyses in the old format) — and the deployed instance serves everything else. Details in [SETUP.md](SETUP.md).
 
-**Not planned**: Vercel Pro (800s, raising `maxDuration` in both routes), a queue+polling architecture or Vercel Workflows (no duration limit, at the cost of a new data model and of live token-by-token streaming). Evaluated and not planned for a personal tool.
+**Not planned**: Vercel Pro (800s, raising `maxDuration` in the three long routes: deep-value, verify, research), a queue+polling architecture or Vercel Workflows (no duration limit, at the cost of a new data model and of live token-by-token streaming). Evaluated and not planned for a personal tool.
 
 ---
 

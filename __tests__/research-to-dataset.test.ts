@@ -53,10 +53,24 @@ describe("researchToDataset", () => {
     expect(warnings.filter((w) => w.code === "source_unverified")).toEqual([{ code: "source_unverified", severity: "warn", fiscalYear: null, detail: MULT }]);
   });
 
+  it("leaves a source no row cites out of the unverified list, opened or not", () => {
+    const spare = { id: "spare", url: "https://data.example/ORNT/spare", title: "Spare", asOf: null, kind: "other" };
+    const parsed = output();
+    const { unverified, warnings } = researchToDataset(output({ sources: [...parsed.sources, spare] }), SEEN);
+    expect(unverified).toEqual([MULT]);
+    expect(warnings.some((w) => w.detail === spare.url)).toBe(false);
+  });
+
   it("gives a row citing an unknown id a null source and a warning", () => {
     const { extract, warnings } = researchToDataset(output({ estimates: [{ fiscalYear: 2026, revenue: 1150, sourceId: "ghost" }] }), SEEN);
     expect(extract.estimates[0].source).toBeNull();
     expect(warnings).toContainEqual({ code: "source_unknown_id", severity: "warn", fiscalYear: 2026, detail: "ghost" });
+  });
+
+  it("warns once for an unknown id a financials row cites on all three statements", () => {
+    const { extract, warnings } = researchToDataset(output({ financials: [financials(2025, 1080, { income: "ghost", balance: "ghost", cashFlow: "ghost" })] }), SEEN);
+    expect(extract.financials[0].sources.cashFlow).toBeNull();
+    expect(warnings.filter((w) => w.code === "source_unknown_id")).toEqual([{ code: "source_unknown_id", severity: "warn", fiscalYear: 2025, detail: "ghost" }]);
   });
 
   it("keeps meta's currency and units in the extract and leaves the notes out of it", () => {
@@ -123,6 +137,8 @@ describe("researchToDataset", () => {
       [2025, 240.5],
     ]);
     expect(warnings).toContainEqual({ code: "ebitda_derived", severity: "info", fiscalYear: null, detail: "2024, 2025" });
+    // The D&A the page printed as a cost line is stored as the positive amount the type holds.
+    expect(extract.financials[3].depreciationAmortization).toBe(75.5);
     expect(extract.financials[3].sources.mixed.income).toBe(true);
     expect(extract.financials[2].sources.mixed.income).toBe(false);
   });

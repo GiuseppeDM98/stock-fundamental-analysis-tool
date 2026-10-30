@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { makeExtract, makeFinancialsRow, makeMeta } from "./grounding-test-helpers";
 import { pasteSource } from "@/lib/grounding/merge";
-import { emptyRowSources } from "@/types/dataset";
+import { emptyRowSources, type DataSource } from "@/types/dataset";
 
 const createMock = vi.fn();
 const findFirstMock = vi.fn();
@@ -137,7 +137,7 @@ describe("GET /api/datasets/:id", () => {
 
 describe("POST /api/datasets — merged", () => {
   // A's paste (income statement) and web research (balance sheet) of one ticker, invented figures.
-  const WEB_SOURCE = { kind: "web", url: "https://ir.ornitorinco.example/ar.pdf", title: "AR", asOf: "2026-03", blockId: null, verified: true };
+  const WEB_SOURCE: DataSource = { kind: "web", url: "https://ir.ornitorinco.example/ar.pdf", title: "AR", asOf: "2026-03", blockId: null, verified: true };
   const RESEARCH = { model: "claude-sonnet-5-5", effort: "high", searches: 7, fetches: 3, durationMs: 95000, unverifiedSources: [], notes: null };
   function datasetRow(id: string, origin: "paste" | "web", ticker: string, row: object) {
     return {
@@ -186,8 +186,41 @@ describe("POST /api/datasets — merged", () => {
     expect(fy2025.sources.balance.kind).toBe("web");
     expect(JSON.parse(data.warningsJson)).toContainEqual({ code: "value_conflict", severity: "warn", fiscalYear: 2025, detail: "revenue: 1000 (paste) vs 1080 (web)" });
     expect(json.datasetId).toBe("ds-merged");
-    expect(json.research).toEqual(RESEARCH);
+    // The fixture's research predates servedBy: it reads as null.
+    expect(json.research).toEqual({ ...RESEARCH, servedBy: null });
     expect(json.basis).toBeDefined();
+  });
+
+  it("keeps the web's ebitda_derived and source_unverified only where they still describe a merged row", async () => {
+    // FY2025's income statement comes from the paste, with its own published EBITDA; FY2024
+    // is the web's alone.
+    ROWS["ds-paste-ebitda"] = datasetRow("ds-paste-ebitda", "paste", "ORNT", { revenue: 1000, ebitda: 210, sources: { ...emptyRowSources(), income: pasteSource("blk-1") } });
+    const unopened2024 = { ...WEB_SOURCE, url: "https://data.example/ORNT/fy2024", verified: false };
+    const unopened2025 = { ...WEB_SOURCE, url: "https://data.example/ORNT/fy2025", verified: false };
+    const web = datasetRow("ds-web-derived", "web", "ORNT", {});
+    web.dataJson = JSON.stringify({
+      ...JSON.parse(web.dataJson),
+      financials: [
+        makeFinancialsRow({ fiscalYear: 2024, revenue: 1000, ebit: 150, depreciationAmortization: 70, ebitda: 220, sources: { ...emptyRowSources(), income: unopened2024, cashFlow: WEB_SOURCE } }),
+        makeFinancialsRow({ fiscalYear: 2025, revenue: 1080, ebit: 165, depreciationAmortization: 75, ebitda: 240, sources: { ...emptyRowSources(), income: unopened2025, cashFlow: WEB_SOURCE } }),
+      ],
+    });
+    web.warningsJson = JSON.stringify([
+      { code: "source_unverified", severity: "warn", fiscalYear: null, detail: unopened2024.url },
+      { code: "source_unverified", severity: "warn", fiscalYear: null, detail: unopened2025.url },
+      { code: "ebitda_derived", severity: "info", fiscalYear: null, detail: "2024, 2025" },
+    ]);
+    web.researchJson = JSON.stringify({ ...RESEARCH, unverifiedSources: [unopened2024.url, unopened2025.url] });
+    ROWS["ds-web-derived"] = web;
+
+    const res = await merged({ pasteDatasetId: "ds-paste-ebitda", webDatasetId: "ds-web-derived" });
+    expect(res.status).toBe(201);
+    const stored = JSON.parse(createMock.mock.calls[0][0].data.warningsJson) as { code: string; detail: string }[];
+    expect(stored.filter((w) => w.code === "ebitda_derived")).toEqual([{ code: "ebitda_derived", severity: "info", fiscalYear: null, detail: "2024" }]);
+    expect(stored.filter((w) => w.code === "source_unverified").map((w) => w.detail)).toEqual([unopened2024.url]);
+    const json = await res.json();
+    expect(json.research.unverifiedSources).toEqual([unopened2024.url]);
+    expect(json.warnings.map((w: { code: string }) => w.code)).toContain("ebitda_derived");
   });
 
   it("answers 404 for a dataset that is not the user's, and saves nothing", async () => {

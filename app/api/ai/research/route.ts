@@ -35,7 +35,8 @@ import type { ResearchMeta, ResearchResponse } from "@/types/dataset";
 
 // Hobby's ceiling, as on the other AI routes (SETUP.md's maxDuration table). The research is
 // ONE request: a run that needs more than 300 s is cut on the deployment and runs from
-// localhost; the real runs measure how close it gets (durationMs in the log).
+// localhost. Measured on 2026-10-30 (durationMs in the log): 245-390 s on Sonnet 5.5,
+// 405-796 s on DeepSeek V4 Pro (doc/guide/valutazione.md § 5.3).
 export const maxDuration = 300;
 
 const requestSchema = z.object({
@@ -126,9 +127,10 @@ export async function POST(request: Request) {
     if (result.hitIterationCap) return fail("Research ran out of research rounds");
     if (result.stopReason === "max_tokens") return fail("Research truncated: the length limit was reached");
     if (result.stopReason === "refusal") return fail("Research refused by the model");
-    // Seen once on Sonnet 5.5 (2026-10-30, 1 run in 4): the turn ended on "tool_use" with only
-    // server tools declared, after 7 searches and 7 fetches and no JSON. Nothing in the
-    // transcript can be answered, so the run is a failure to retry, not an invalid dataset.
+    // Seen once on Sonnet 5.5 (2026-10-30, 1 of the 5 Claude runs): the turn ended on
+    // "tool_use" with only server tools declared, after 7 searches and 7 fetches and no JSON.
+    // Nothing in the transcript can be answered, so the run is a failure to retry, not an
+    // invalid dataset.
     if (result.stopReason === "tool_use") return fail("Research stopped on a tool call: run it again");
 
     const fence = lastJsonFence(result.text);
@@ -148,6 +150,7 @@ export async function POST(request: Request) {
 
     const research: ResearchMeta = {
       model: settings.model,
+      servedBy: result.servedBy,
       effort: settings.effort,
       searches: seen.searches,
       fetches: seen.fetches,

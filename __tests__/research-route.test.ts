@@ -84,7 +84,7 @@ const CLAUDE_TRANSCRIPT: Anthropic.MessageParam[] = [
   } as Anthropic.MessageParam,
 ];
 
-function runs(text: string, overrides: Partial<{ stopReason: string; hitIterationCap: boolean; messages: Anthropic.MessageParam[] }> = {}) {
+function runs(text: string, overrides: Partial<{ stopReason: string; hitIterationCap: boolean; servedBy: string | null; messages: Anthropic.MessageParam[] }> = {}) {
   runStreamMock.mockResolvedValue({ stopReason: "end_turn", hitIterationCap: false, servedBy: null, text, messages: CLAUDE_TRANSCRIPT, ...overrides });
 }
 
@@ -125,6 +125,7 @@ describe("POST /api/ai/research — Claude", () => {
     expect(data).toMatchObject({ userId: "u1", ticker: "ORNT", origin: "web", currency: "USD", units: "millions", blocksJson: null });
     expect(JSON.parse(data.researchJson)).toEqual({
       model: "claude-sonnet-5-5",
+      servedBy: null,
       effort: "high",
       searches: 1,
       fetches: 2,
@@ -167,6 +168,22 @@ describe("POST /api/ai/research — Claude", () => {
     const userPrompt = (params as { messages: { content: string }[] }).messages[0].content;
     expect(userPrompt).toContain("Ornitorinco Industries (ORNT, listed on NasdaqGS; the share trades in USD)");
     expect(userPrompt).not.toContain("150");
+  });
+
+  it("stores the model that answered through the refusal fallback next to the resolved one", async () => {
+    runs(answer(), { servedBy: "claude-sonnet-5" });
+    const json = await (await POST(post({ ticker: "ORNT" }))).json();
+    expect(json.research).toMatchObject({ model: "claude-sonnet-5-5", servedBy: "claude-sonnet-5" });
+    expect(JSON.parse(datasetCreate.mock.calls[0][0].data.researchJson)).toMatchObject({ model: "claude-sonnet-5-5", servedBy: "claude-sonnet-5" });
+  });
+
+  it("answers 502 to an answer whose every source entry the preprocess drops, without saving", async () => {
+    const relative = OUTPUT.sources.map((source) => ({ ...source, url: `/investors/${source.id}` }));
+    runs(answer({ ...OUTPUT, sources: relative }));
+    const res = await POST(post({ ticker: "ORNT" }));
+    expect(res.status).toBe(502);
+    expect((await res.json()).error).toBe("Research returned an invalid dataset");
+    expect(datasetCreate).not.toHaveBeenCalled();
   });
 
   it("answers 502 to a malformed JSON block, without saving", async () => {
