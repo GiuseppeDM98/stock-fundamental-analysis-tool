@@ -19,7 +19,7 @@ Next.js 15 stock fundamental analysis tool with AI-generated investment analysis
 One file per domain, read before touching that domain; AGENTS.md keeps the stub, the guide keeps the detail.
 
 - `doc/guide/dipendenze.md` — the dependency audit: date, framework version, every open advisory with the owner's decision. Compare `npm audit` with it at session start (WORKFLOW.md rule 8); upgrades are a session of their own.
-- `doc/guide/valutazione.md` — Deep Value, analyst panel, Grounded mode and AI providers: the output contract field by field, routes, persistence, lenses, gates, model and effort settings. The AGENTS.md stub under "AI Integration" keeps the invariants.
+- `doc/guide/valutazione.md` — Deep Value, analyst panel, Grounded mode and its financial dataset, AI providers: the output contract field by field, routes, persistence, lenses, gates, model and effort settings. The AGENTS.md stub under "AI Integration" keeps the invariants.
 
 ---
 
@@ -211,7 +211,7 @@ Use `ReactDOM.createPortal(modal, document.body)` for any modal. The `.card` cla
   const c = createClient({ url: TURSO_DATABASE_URL, authToken: TURSO_AUTH_TOKEN }); // @libsql/client
   await c.migrate(statementsOfMigrationSql); // one batch, foreign keys off for the whole batch
   ```
-  Never one `execute` per statement for a migration that rebuilds a table (`PRAGMA foreign_keys=OFF` + `DROP TABLE`): the PRAGMA does not carry to the next request, and dropping `User` would cascade-delete every child row. Before a rebuild: dump outside the repo, `COUNT(*)` of every table before and after (`drop_watchlist_run_and_freq`, 2026-10-29: same counts). Production Turso has no `_prisma_migrations` table.
+  Never one `execute` per statement for a migration that rebuilds a table (`PRAGMA foreign_keys=OFF` + `DROP TABLE`): the PRAGMA does not carry to the next request, and dropping `User` would cascade-delete every child row. Before a rebuild: dump outside the repo, `COUNT(*)` of every table before and after (`drop_watchlist_run_and_freq`, 2026-10-29, and `add_financial_dataset`, 2026-10-30: same counts). No CLI means no `.dump` either: write the dump from `sqlite_master` and `SELECT *`, restore it into a throwaway `file:` DB and run the migration there first. Production Turso has no `_prisma_migrations` table.
 - **Critical**: if you add a column/table and forget to apply to Turso, the app will crash at runtime with `no such column`/`no such table` even though local dev.db is fine. Restart the dev server after applying (stale Prisma client).
 
 ---
@@ -237,7 +237,6 @@ yahooFinance.quoteSummary(ticker, { modules: ["summaryDetail", "defaultKeyStatis
 - **Mixed schema**: Yahoo returns `number | { raw: number }` — always use `extractRawNumber()`
 - **TYPE: UNKNOWN records**: Use `{ validateResult: false }` + filter by `totalRevenue != null`
 - **EBIT field name**: Uppercase `EBIT` in fundamentalsTimeSeries, fallback to `operatingIncome`
-- **^TNX yield encoding**: `regularMarketPrice` is in percentage points — divide by 100
 - **TTM margin vs historical**: prefer 5yr average over TTM for cyclical companies
 - **`assetProfile` null for non-US tickers**: always guard with `assetProfile?.sector ?? null`
 - **`yahooFinance.quote()` returns undefined**: always null-check — `if (!quote) throw new Error(...)`
@@ -253,6 +252,7 @@ yahooFinance.quoteSummary(ticker, { modules: ["summaryDetail", "defaultKeyStatis
 - **Research first, JSON last**: the report after `<!--report-->` (a lens's critique after `<!--critique-->`), the JSON block last, the routes gated on the marker by `createStreamGate`; parse the LAST ` ```json ` fence (`parseDeepValueJson`) and strip with `stripJsonBlock()`, never a regex.
 - **Stored `fairValue*` are MoS-adjusted buy targets** (intrinsic via `grossUpToIntrinsic()`); call `hasFullTriple()` before dereferencing a parsed result.
 - **The Quick-mode golden** (`__tests__/deep-value-prompts-quick-identical.test.ts`) stays green on every touch of the shared builders; a regeneration is a deliberate, read diff.
+- **Grounded data lives in a dataset** (`FinancialDataset`, `Analysis.datasetId`), not in `groundingJson` (legacy, read-only): read an analysis's extract only through `readAnalysisExtract` / `readAnalysisGrounding` (`lib/datasets/store.ts`). A row spread is shallow: copy `sources` before writing to it, or every row sharing it changes (the merge builds its own rows) → § 5.2.
 - **The model declares, the code verifies**: deterministic gates (`lib/grounding/postcheck.ts`), not a prompt rule alone. **DeepSeek web search is client-executed** (`lib/ai/web-search-tool.ts`, DeepSeek's Search API), never the provider's server-side tool.
 - **Multi-Provider AI Settings** → doc/guide/valutazione.md § 6.2: catalog in `types/ai-settings.ts`, `resolveAiSettings()` and effort per call site, the shared tool loop, `lib/ai/{client,tool-loop,web-search-tool,ai-preferences}.ts`.
 

@@ -234,6 +234,14 @@ La verifica del ritiro ha trovato confronti prezzo↔valore senza controllo di v
 | D-97 | (owner, 2026-10-29): `priceAtAnalysis` non porta la valuta della quotazione e si legge in quella del report (una quotazione LSE in `GBp` su un report in `GBP` diventa un numero sbagliato di cento volte); la colonna `Analysis.priceCurrency` entra nella 05c, nella stessa migrazione (quattro `ADD COLUMN`). | 05c |
 | D-98 | (owner, 2026-10-29): la produzione è stata svuotata il 2026-10-29 e si ripopola a serie finita: nessun fallback per le righe senza `Analysis.currency` (senza colonna niente verdetto, exit signal né stato del digest), nessun backfill. | 05c, 07a, 07b |
 
+### 3.8 Run reali senza paste (2026-10-29)
+
+L'owner non ha un abbonamento TIKR: le run reali scritte su «un paste dell'owner» non hanno input (la run Grounded della 03 era già stata saltata per questo).
+
+| # | Decisione | Spec |
+|---|---|---|
+| D-99 | (owner, 2026-10-29): ogni run reale o passo di collaudo che chiede un paste dell'owner si salta, scritto nella spec. Il percorso del paste resta provato dai test a mock (estrazione, retry D-38, verify, merged), dall'e2e e dal giro owner sul seed; le run reali che chiedono solo un ticker restano (D-24). | 04, 05a, 05b |
+
 ## 4. Scelte adottate dal pianificatore («adottata, ribaltabile» — rovesciabili prima dell'implementazione)
 
 | # | Scelta | Spec |
@@ -292,7 +300,7 @@ La verifica del ritiro ha trovato confronti prezzo↔valore senza controllo di v
 | 1 | 01-hardening-e-pulizia (`git log -- doc/evoluzioni/01-hardening-e-pulizia.md`) | — | **ritirata il 2026-10-29** (branch `chore/retire-spec-01`); implementata in `cd4ada6` (PR #46), migrata su Turso il 2026-10-29 (`bc672d1`: otto conteggi uguali prima e dopo); il grep di A9 trova anche `lastManualWatchlistRun`, una colonna tenuta: con `grep -w` è vuoto |
 | 2 | 02-contratto-di-valutazione-v3 (`git log -- doc/evoluzioni/02-contratto-di-valutazione-v3.md`) | 01 ritirata il 2026-10-29 (`hasFullTriple`/`ParsedAnalystResult`, i18n, PATCH con null) | **ritirata il 2026-10-29** (branch `chore/retire-spec-02`); implementata in `18d7f27` (PR #50, promossa con #51), migrata su Turso il 2026-10-29 prima del deploy (`8afe72b`; al ritiro `Analysis` ha 41 colonne, le dieci nuove comprese); in sospeso il § 8 punto 2, il controllo sulla prima analisi reale: `SELECT id, aiModel, aiEffort, length(resultJson) FROM Analysis ORDER BY createdAt DESC LIMIT 1;` → `aiEffort = 'xhigh'` e `resultJson` non nullo (`Analysis` vuota il 2026-10-29; sul deploy una run `xhigh` supera i 300 s: da localhost, o dopo la 05c, e allora verifica anche i metadati scritti dal server, D-86) |
 | 3 | 03-gate-universali-e-scheda-verifiche (`git log -- doc/evoluzioni/03-gate-universali-e-scheda-verifiche.md`) | 01 ritirata il 2026-10-29 (C-1 `ParsedAnalystResult`/`hasFullTriple`), 02 ritirata il 2026-10-29 (`resultJson`, contratto, test di route, guida) | **ritirata il 2026-10-29** (branch `chore/retire-spec-03`); implementata in `6fea819` (PR #54, promossa con #55), nessun DDL; la run Grounded reale del § 7 saltata dall'owner («dalla per fatta»: nessun paste disponibile); al ritiro corretto il codice (gate EV/EBITDA solo su un bridge EV su EBITDA, famiglie di metodo ancorate, JSON cieco ed estratto validati in lettura, `sameCurrency` su ogni confronto prezzo↔valore: C-24), quindi i segnali sul codice nuovo si rifanno dopo il deploy; in sospeso il § 8, il controllo in produzione: su un'analisi salvata la card «Deterministic checks» compare e i gate «no dataset» leggono `unavailable` (`Analysis` vuota il 2026-10-29: dopo la prima analisi nuova, da localhost o dopo la 05c) |
-| 4 | [04-dataset-finanziario-con-provenienza.md](04-dataset-finanziario-con-provenienza.md) | 01 ritirata il 2026-10-29 (ticker), 02 ritirata il 2026-10-29 (select, test di route, guida), 03 ritirata il 2026-10-29 (`extract \| null`, `AnalysisDetailBody`, `parseStoredExtract`) | riletta il 2026-10-11: 41 rilievi, 8 decisioni; pronta |
+| 4 | [04-dataset-finanziario-con-provenienza.md](04-dataset-finanziario-con-provenienza.md) | 01 ritirata il 2026-10-29 (ticker), 02 ritirata il 2026-10-29 (select, test di route, guida), 03 ritirata il 2026-10-29 (`extract \| null`, `AnalysisDetailBody`, `parseStoredExtract`) | **implementata il 2026-10-29** (branch `feature/financial-dataset`); collaudo A–E automatico (B: la migrazione con `client.migrate()` su un DB usa-e-getta, otto conteggi uguali), F giro owner, run reale saltata (D-99); migrata su Turso il 2026-10-30 prima del deploy (dump fuori dal repo, provato sul suo ripristino; otto conteggi uguali, `FinancialDataset` 0, `Analysis` a 42 colonne); in sospeso il § 8 punto 2, sulla prima analisi Grounded reale `SELECT a.id, a.datasetId, d.origin, length(d.dataJson) FROM Analysis a JOIN FinancialDataset d ON d.id = a.datasetId ORDER BY a.createdAt DESC LIMIT 1;` |
 | 5 | [05a-ricerca-web-stadio-1.md](05a-ricerca-web-stadio-1.md) | 01 ritirata il 2026-10-29 (anche `executeWebSearch`/`callDeepSeekTool`), 02 ritirata il 2026-10-29, 04 | riletta il 2026-10-11: 24 rilievi, 6 decisioni; integrata il 2026-10-18 con DeepSeek nello stadio 1 (D-71, T-35); pronta |
 | 6 | [05b-percorso-unico-dataset.md](05b-percorso-unico-dataset.md) | 02 ritirata il 2026-10-29, 03 ritirata il 2026-10-29, 04, 05a | riletta il 2026-10-11: 17 rilievi, 8 decisioni; allineata il 2026-10-18 a D-70/D-71; pronta |
 | 7 | [05c-corsa-a-fasi.md](05c-corsa-a-fasi.md) | 02 ritirata il 2026-10-29, 03 ritirata il 2026-10-29, 04, 05a, 05b | scritta il 2026-10-27 (D-77, D-79, D-80, D-81); riletta in modo adversariale lo stesso giorno: 68 rilievi, 15 decisioni (D-82…D-96, D-77 riscritta), 8 scelte (T-39…T-46); pronta |
@@ -379,7 +387,8 @@ Dopo la divisione (D-23) le spec vive sono `01 02 03 04 05a 05b 06 07a 07b 08a 0
    nel seed, fasi A–G, esito atteso dichiarato prima, ogni esito promosso a test.
    `e2e/support/test.ts` rifiuta `/api/ai/**`: ogni percorso AI toccato si collauda con test
    unitari a mock + una run reale documentata in `SESSION_NOTES.md` (ticker, costo, esito),
-   mai in e2e; ogni spec rifà la propria run (D-24) e dichiara il costo nel § 7.
+   mai in e2e; ogni spec rifà la propria run (D-24) e dichiara il costo nel § 7; una run che
+   chiede un paste dell'owner si salta (D-99).
 8. **Golden**: fino alla 05b `__tests__/deep-value-prompts-quick-identical.test.ts`, rigenerato
    SOLO dalla 02 con `-u` e un diff letto a mano riportato in `SESSION_NOTES.md`; la 05b lo
    cancella (test e `.snap`) e crea `__tests__/deep-value-prompts-golden.test.ts`; da lì

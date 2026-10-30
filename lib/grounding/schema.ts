@@ -1,8 +1,10 @@
-// Zod schema for the client-submitted GroundingPayload (blocks + extract) — the boundary
-// validation for /api/ai/deep-value. Mirrors types/grounding.ts field-for-field; kept in
-// one place so the two never silently drift apart.
+// Zod schemas for the grounding extract and the pasted blocks — the boundary validation of
+// POST /api/datasets, of the extraction route's priorResults, and of every stored copy read
+// back (FinancialDataset rows, legacy Analysis.groundingJson). Mirrors types/grounding.ts
+// field-for-field; kept in one place so the two never silently drift apart.
 import { z } from "zod";
 import type { GroundedFinancials } from "@/types/grounding";
+import { emptyRowSources } from "@/types/dataset";
 import {
   GROUNDING_BLOCK_KINDS,
   GROUNDING_MAX_BLOCK_CHARS,
@@ -16,14 +18,36 @@ export { GROUNDING_MAX_BLOCK_CHARS, GROUNDING_MAX_BLOCKS, GROUNDING_MAX_TOTAL_CH
 
 const nullableNumber = z.number().nullable();
 
-const groundingMetaSchema = z.object({
+export const dataSourceSchema = z
+  .object({
+    kind: z.enum(["paste", "web"]),
+    url: z.string().nullable(),
+    title: z.string().nullable(),
+    asOf: z.string().nullable(),
+    blockId: z.string().nullable(),
+    verified: z.boolean(),
+  })
+  .nullable();
+
+const rowSourcesSchema = z.object({
+  income: dataSourceSchema,
+  balance: dataSourceSchema,
+  cashFlow: dataSourceSchema,
+  mixed: z.object({ income: z.boolean(), balance: z.boolean(), cashFlow: z.boolean() }),
+});
+
+export const groundingMetaSchema = z.object({
   reportingCurrency: z.string().nullable(),
   units: z.enum(["billions", "millions", "thousands", "units"]).nullable(),
   latestPeriodLabel: z.string().nullable(),
   fiscalYearEnd: z.string().nullable(),
 });
 
-const financialsRowSchema = z.object({
+// The provenance defaults below make an extract saved before rows carried sources parse with
+// every source null and nothing mixed, with no data migration. The row default is a factory:
+// zod copies an object default only shallowly, so a literal would share its `mixed` object
+// between every row that took it.
+export const financialsRowSchema = z.object({
   fiscalYear: z.number(),
   revenue: nullableNumber,
   ebitda: nullableNumber,
@@ -40,9 +64,10 @@ const financialsRowSchema = z.object({
   capex: nullableNumber,
   freeCashFlow: nullableNumber,
   dividendsPerShare: nullableNumber,
+  sources: rowSourcesSchema.default(() => emptyRowSources()),
 });
 
-const multiplesRowSchema = z.object({
+export const multiplesRowSchema = z.object({
   fiscalYear: z.number(),
   evEbitda: nullableNumber,
   evSales: nullableNumber,
@@ -54,15 +79,17 @@ const multiplesRowSchema = z.object({
   // fields existed still parse, with no data migration.
   marketCap: nullableNumber.default(null),
   enterpriseValue: nullableNumber.default(null),
+  source: dataSourceSchema.default(null),
 });
 
-const estimateRowSchema = z.object({
+export const estimateRowSchema = z.object({
   fiscalYear: z.number(),
   revenue: nullableNumber,
   ebitda: nullableNumber,
   ebit: nullableNumber,
   netIncome: nullableNumber,
   eps: nullableNumber,
+  source: dataSourceSchema.default(null),
 });
 
 const peerMultiplesSchema = z.object({
@@ -71,7 +98,7 @@ const peerMultiplesSchema = z.object({
   multiples: z.array(multiplesRowSchema),
 });
 
-const groundedFinancialsSchema = z.object({
+export const groundedFinancialsSchema = z.object({
   meta: groundingMetaSchema,
   financials: z.array(financialsRowSchema),
   multiples: z.array(multiplesRowSchema),
@@ -79,7 +106,7 @@ const groundedFinancialsSchema = z.object({
   peers: z.array(peerMultiplesSchema),
 });
 
-const groundingBlockSchema = z
+export const groundingBlockSchema = z
   .object({
     id: z.string().min(1),
     kind: z.enum(GROUNDING_BLOCK_KINDS),
@@ -93,10 +120,10 @@ const groundingBlockSchema = z
     path: ["peerTicker"],
   });
 
-/** The client-submitted grounding payload — blocks (for the prompt's raw section) plus
- * the confirmed extract. The route recomputes stats/grid/marketImplied/warnings itself
- * from `extract` + its own authoritative `currentPrice` rather than trusting any
- * client-sent copies (single source of truth, smaller request body).
+/** The client-submitted grounding payload (POST /api/datasets) — blocks (for the prompt's
+ * raw section) plus the confirmed extract. The Deep Value route reads it back from the
+ * dataset row and recomputes stats/grid/marketImplied/warnings itself from `extract` + its
+ * own authoritative `currentPrice`, never trusting client-sent copies.
  *
  * The per-block, total and count caps bound the raw paste injected into the prompt —
  * the same limits the extraction route enforces, so a payload that could not have been
@@ -112,12 +139,13 @@ export const groundingPayloadSchema = z.object({
 });
 
 /**
- * The extract of a persisted GroundingPayload (Analysis.groundingJson), validated again on
- * read. The column is client-sent text, stored with only a length cap, so a malformed or
- * partial blob is read as no dataset, never handed to the gates in a shape they would crash
- * on: until 2026-10-29 it was cast unchecked. Only the extract is read: no reader uses the
- * stored blocks. Extracts saved before marketCap/enterpriseValue existed still parse (their
- * defaults above).
+ * The extract of a persisted GroundingPayload (Analysis.groundingJson, the column analyses
+ * used before the dataset table existed), validated again on read. The column is
+ * client-sent text, stored with only a length cap, so a malformed or partial blob is read as
+ * no dataset, never handed to the gates in a shape they would crash on: until 2026-10-29 it
+ * was cast unchecked. Only the extract is read: no reader uses the stored blocks. Extracts
+ * saved before marketCap/enterpriseValue or the row sources existed still parse (their
+ * defaults above). Read through readAnalysisExtract (lib/datasets/store.ts), not directly.
  */
 export function parseStoredExtract(raw: string | null | undefined): GroundedFinancials | null {
   if (!raw) return null;

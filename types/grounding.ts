@@ -7,7 +7,11 @@
  * already anchored to the current price/consensus — modeling them here would offer the
  * model the exact price-anchoring shortcut this feature exists to remove. Forward
  * operating estimates (revenue/EBITDA/EPS) are fine — they are fundamentals.
+ *
+ * Every row carries where it came from (`sources` / `source`, types/dataset.ts), written by
+ * the merge only (lib/grounding/merge.ts): the extraction model never declares a source.
  */
+import type { DataSource, RowSources } from "@/types/dataset";
 
 export const GROUNDING_BLOCK_KINDS = [
   "income_statement",
@@ -67,6 +71,9 @@ export type FiscalYearFinancials = {
   capex: number | null;
   freeCashFlow: number | null;
   dividendsPerShare: number | null;
+  // One source per statement (income/balance/cash flow); the field → statement map is
+  // STATEMENT_FIELD_KIND in types/dataset.ts.
+  sources: RowSources;
 };
 
 export type FiscalYearMultiples = {
@@ -85,6 +92,8 @@ export type FiscalYearMultiples = {
   // absent.
   marketCap: number | null;
   enterpriseValue: number | null;
+  // The source of the row's first non-null value.
+  source: DataSource | null;
 };
 
 export type ForwardEstimate = {
@@ -96,12 +105,14 @@ export type ForwardEstimate = {
   eps: number | null;
   // Deliberately NOT modeled: target price, target multiple, analyst rating — see the
   // module doc comment above.
+  source: DataSource | null;
 };
 
 export type PeerMultiples = {
   ticker: string;
   companyName: string | null;
-  multiples: FiscalYearMultiples[]; // may hold a single "current" row
+  // May hold a single "current" row. No source of its own: each row carries one.
+  multiples: FiscalYearMultiples[];
 };
 
 export type GroundingMeta = {
@@ -119,7 +130,8 @@ export type GroundedFinancials = {
   peers: PeerMultiples[];
 };
 
-/** Persisted on Analysis.groundingJson and round-tripped through the AI routes. */
+/** A confirmed paste: the blocks and the extract made from them, sent to POST /api/datasets.
+ *  Analyses saved before the dataset table existed carry one in Analysis.groundingJson. */
 export type GroundingPayload = {
   blocks: GroundingBlock[];
   extract: GroundedFinancials;

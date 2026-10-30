@@ -522,6 +522,45 @@ export type Translations = {
   groundingWarnEvBridgeMismatch: string;
   groundingWarnDividendNotCovered: string;
   groundingWarnGeneric: string;
+  datasetFieldRevenue: string;
+  datasetFieldEbitda: string;
+  datasetFieldEbit: string;
+  datasetFieldNetIncome: string;
+  datasetFieldEps: string;
+  datasetFieldSharesDiluted: string;
+  datasetFieldDividendsPerShare: string;
+  datasetFieldTotalEquity: string;
+  datasetFieldMinorityInterest: string;
+  datasetFieldTotalDebt: string;
+  datasetFieldCashAndEquivalents: string;
+  datasetFieldNetDebt: string;
+  datasetFieldCfo: string;
+  datasetFieldCapex: string;
+  datasetFieldFreeCashFlow: string;
+  datasetFieldEvEbitda: string;
+  datasetFieldEvSales: string;
+  datasetFieldPe: string;
+  datasetFieldPb: string;
+  datasetFieldFcfYield: string;
+  datasetFieldDividendYield: string;
+  datasetFieldMarketCap: string;
+  datasetFieldEnterpriseValue: string;
+  datasetTableIncome: string;
+  datasetTableBalance: string;
+  datasetTableCashFlow: string;
+  datasetTableMultiples: string;
+  datasetTableEstimates: string;
+  datasetSourceRow: string;
+  sourceChipPaste: string;
+  sourceChipUnverified: string;
+  datasetFoundPrefix: string;
+  datasetOriginPaste: string;
+  datasetUseBtn: string;
+  datasetRefreshBtn: string;
+  datasetRetryBlock: string;
+  datasetDraftKept: string;
+  datasetSaveError: string;
+  datasetLookupError: string;
   groundingCardArithmeticLabel: string;
   groundingCardMosLabel: string;
   groundingCardNoBridge: string;
@@ -1128,6 +1167,45 @@ const en: Translations = {
   groundingWarnEvBridgeMismatch: "The provider's EV bridge includes items ours doesn't (leases, pensions, associates)",
   groundingWarnDividendNotCovered: "Dividend not covered by average free cash flow — may be financed by debt",
   groundingWarnGeneric: "Data quality warning",
+  datasetFieldRevenue: "Revenue",
+  datasetFieldEbitda: "EBITDA",
+  datasetFieldEbit: "EBIT",
+  datasetFieldNetIncome: "Net income",
+  datasetFieldEps: "EPS",
+  datasetFieldSharesDiluted: "Diluted shares",
+  datasetFieldDividendsPerShare: "DPS",
+  datasetFieldTotalEquity: "Total equity",
+  datasetFieldMinorityInterest: "Minorities",
+  datasetFieldTotalDebt: "Total debt",
+  datasetFieldCashAndEquivalents: "Cash",
+  datasetFieldNetDebt: "Net debt",
+  datasetFieldCfo: "Operating cash flow",
+  datasetFieldCapex: "Capex",
+  datasetFieldFreeCashFlow: "Free cash flow",
+  datasetFieldEvEbitda: "EV/EBITDA",
+  datasetFieldEvSales: "EV/Sales",
+  datasetFieldPe: "P/E",
+  datasetFieldPb: "P/B",
+  datasetFieldFcfYield: "FCF yield",
+  datasetFieldDividendYield: "Dividend yield",
+  datasetFieldMarketCap: "Market cap",
+  datasetFieldEnterpriseValue: "EV",
+  datasetTableIncome: "Income statement",
+  datasetTableBalance: "Balance sheet",
+  datasetTableCashFlow: "Cash flow",
+  datasetTableMultiples: "Historical multiples",
+  datasetTableEstimates: "Estimates",
+  datasetSourceRow: "Source",
+  sourceChipPaste: "paste",
+  sourceChipUnverified: "unverified",
+  datasetFoundPrefix: "Dataset from",
+  datasetOriginPaste: "paste",
+  datasetUseBtn: "Use this dataset",
+  datasetRefreshBtn: "Refresh data",
+  datasetRetryBlock: "Retry this block",
+  datasetDraftKept: "Your unsaved draft was kept",
+  datasetSaveError: "Could not save the dataset",
+  datasetLookupError: "Could not check for a recent dataset",
   groundingCardArithmeticLabel: "Bridge arithmetic",
   groundingCardMosLabel: "MoS applied",
   groundingCardNoBridge: "The model did not declare a valuation bridge for this scenario.",
@@ -1734,6 +1812,45 @@ const it: Translations = {
   groundingWarnEvBridgeMismatch: "Il ponte EV del fornitore include voci che il nostro non ha (leasing, pensioni, collegate)",
   groundingWarnDividendNotCovered: "Il dividendo non è coperto dal free cash flow medio — potrebbe essere finanziato a debito",
   groundingWarnGeneric: "Avviso sulla qualità dei dati",
+  datasetFieldRevenue: "Ricavi",
+  datasetFieldEbitda: "EBITDA",
+  datasetFieldEbit: "EBIT",
+  datasetFieldNetIncome: "Utile netto",
+  datasetFieldEps: "EPS",
+  datasetFieldSharesDiluted: "Azioni diluite",
+  datasetFieldDividendsPerShare: "DPS",
+  datasetFieldTotalEquity: "Patrimonio netto",
+  datasetFieldMinorityInterest: "Minoranze",
+  datasetFieldTotalDebt: "Debito totale",
+  datasetFieldCashAndEquivalents: "Cassa",
+  datasetFieldNetDebt: "Debito netto",
+  datasetFieldCfo: "Flusso di cassa operativo",
+  datasetFieldCapex: "Capex",
+  datasetFieldFreeCashFlow: "Free cash flow",
+  datasetFieldEvEbitda: "EV/EBITDA",
+  datasetFieldEvSales: "EV/Sales",
+  datasetFieldPe: "P/E",
+  datasetFieldPb: "P/B",
+  datasetFieldFcfYield: "FCF yield",
+  datasetFieldDividendYield: "Rendimento",
+  datasetFieldMarketCap: "Capitalizzazione",
+  datasetFieldEnterpriseValue: "EV",
+  datasetTableIncome: "Conto economico",
+  datasetTableBalance: "Stato patrimoniale",
+  datasetTableCashFlow: "Flussi di cassa",
+  datasetTableMultiples: "Multipli storici",
+  datasetTableEstimates: "Stime",
+  datasetSourceRow: "Fonte",
+  sourceChipPaste: "paste",
+  sourceChipUnverified: "non verificata",
+  datasetFoundPrefix: "Dataset del",
+  datasetOriginPaste: "paste",
+  datasetUseBtn: "Usa questo dataset",
+  datasetRefreshBtn: "Aggiorna dati",
+  datasetRetryBlock: "Riprova questo blocco",
+  datasetDraftKept: "La bozza non salvata è stata conservata",
+  datasetSaveError: "Impossibile salvare il dataset",
+  datasetLookupError: "Impossibile cercare un dataset recente",
   groundingCardArithmeticLabel: "Aritmetica del ponte",
   groundingCardMosLabel: "MoS applicata",
   groundingCardNoBridge: "Il modello non ha dichiarato un ponte di valutazione per questo scenario.",

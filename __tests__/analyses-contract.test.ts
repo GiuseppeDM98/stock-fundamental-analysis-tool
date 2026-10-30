@@ -43,6 +43,7 @@ const EXPECTED_KEYS = [
   "reviewResultJson",
   "optimistResultJson",
   "qualityResultJson",
+  "datasetId",
   "createdAt",
 ];
 

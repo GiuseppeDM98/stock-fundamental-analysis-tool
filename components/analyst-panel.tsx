@@ -305,7 +305,8 @@ function AnalystSlot({
           model: aiSettings.model,
           effort: aiSettings.effort,
           thinking: aiSettings.thinking,
-          // The route re-reads Analysis.groundingJson server-side from this id — never
+          // The route re-reads the analysis's grounding (its dataset, or the legacy
+          // groundingJson) server-side from this id — never
           // sent as a payload here (it would be 100-200KB per lens).
           analysisId,
         }),

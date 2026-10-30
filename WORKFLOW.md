@@ -190,7 +190,7 @@ The gates before a session's commit, in this order, with no lint stage (`next li
 
 After `npm ci` (or on a fresh checkout) run `npx prisma generate` once: stage 2 comes before the build that generates `generated/prisma`, and without it the type-check fails on `lib/db.ts` and on every implicit `any` that follows (2026-10-23).
 
-**On Windows** (2026-10-19, first run of the gate there): the e2e tooling starts `npx`/`npm` through a shell (`e2e/prepare-db.ts`, `e2e/run-isolated.ts` — Node refuses a `.cmd` without one, `spawnSync EINVAL`), and a fresh checkout needs `npx playwright install chromium` once before stage 4. For a manual run from Git Bash (2026-10-28) write `$(pwd -W)` where the commands below say `$PWD`: `$PWD` is a `/c/Users/…` path that libsql cannot open (`ConnectionFailed … 14`, shown by Auth.js as `error=Configuration`). Stopping the background shell does not stop the `next dev` child, which keeps port 3200 until it is stopped by PID; `sqlite3` may be missing, then read the file with `@libsql/client`.
+**On Windows** (2026-10-19, first run of the gate there): the e2e tooling starts `npx`/`npm` through a shell (`e2e/prepare-db.ts`, `e2e/run-isolated.ts` — Node refuses a `.cmd` without one, `spawnSync EINVAL`), and a fresh checkout needs `npx playwright install chromium` once before stage 4. For a manual run from Git Bash (2026-10-28) write `$(pwd -W)` where the commands below say `$PWD`: `$PWD` is a `/c/Users/…` path that libsql cannot open (`ConnectionFailed … 14`, shown by Auth.js as `error=Configuration`). Stopping the background shell does not stop the `next dev` child, which keeps port 3200 until it is stopped by PID (end the tree from the `npx` root: `taskkill /PID <pid> /T /F`); `sqlite3` may be missing, then read the file with `@libsql/client`. Git Bash rewrites an argument that starts with `/` into a Windows path (`/analyses/x` → `C:/Program Files/Git/analyses/x`, 2026-10-29): hand a page to a script as the full URL.
 
 ### End-to-end suite (Playwright)
 
@@ -241,6 +241,7 @@ For a throwaway user created on the fly: `POST /api/auth/register` with `{ "emai
 ### Handing the app to the owner (obligation 5)
 
 The owner's browser cannot reuse the script's `storageState`: run `npm run seed:e2e`, start the server with the command above, give the owner the A account's email and password and the exact URLs, keep the fixtures alive until they have looked, then delete `.e2e/` in phase G.
+The seeded tickers are invented and a manual run's quotes are live, so a page that needs a quote (`/analyze`) shows nothing past the error in the owner's browser (2026-10-29). Open such a page in a headed Playwright window instead: A's `storageState`, the suite's guards (quotes and FX stubbed, paid routes blocked, `serviceWorkers: "block"`), one window per item, closed by you after each outcome.
 
 ### Real AI runs in a collaudo
 

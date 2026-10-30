@@ -21,6 +21,7 @@ model User {
   watchlistItems          WatchlistItem[]
   advisorSessions         AdvisorSession[]
   earningsEstimates       EarningsEstimate[]
+  datasets                FinancialDataset[]
   // null = use account email
   watchlistEmail          String?
   // When false the cron skips this user entirely — useful when not actively investing
@@ -88,12 +89,16 @@ model Analysis {
   reviewBlindJson    String?
   optimistBlindJson  String?
   qualityBlindJson   String?
-  // Grounded Deep Value mode: the confirmed GroundingPayload (raw paste blocks + the
-  // structured extract) as JSON, when the analysis was generated with pasted financial
-  // data. Null for Quick-mode analyses. NOT selected by the GET /api/analyses list (it's
-  // a blob the list never uses — see ANALYSIS_LIST_SELECT in lib/analyses-select.ts) and NOT
-  // part of SavedAnalysis (see types/analysis.ts) — both exclusions are deliberate, not
-  // oversights.
+  // The financial dataset the analysis was grounded on; null for Quick-mode analyses and
+  // for those saved before the dataset table. Deleting the dataset keeps the analysis.
+  datasetId        String?
+  dataset          FinancialDataset? @relation(fields: [datasetId], references: [id], onDelete: SetNull)
+  // Legacy, read-only: analyses saved before the dataset table carry the confirmed
+  // GroundingPayload (raw paste blocks + extract) here; new ones leave it null and set
+  // datasetId. Read through readAnalysisExtract (lib/datasets/store.ts). NOT selected by
+  // the GET /api/analyses list (a blob the list never uses — see ANALYSIS_LIST_SELECT in
+  // lib/analyses-select.ts) and NOT part of SavedAnalysis (see types/analysis.ts) — both
+  // exclusions are deliberate, not oversights.
   groundingJson    String?
   // Result persistence (2026-10): the sanitized final JSON block, so no surface has to
   // re-parse reportMd, plus the run's own metadata as RESOLVED by the server (which model
@@ -113,6 +118,29 @@ model Analysis {
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+}
+
+// The structured financials of one ticker an analysis is grounded on, each row with its own
+// source (types/dataset.ts). Created when the user confirms a paste; reused by later
+// analyses of the same ticker for DATASET_REUSE_MAX_AGE_DAYS.
+model FinancialDataset {
+  id            String     @id @default(cuid())
+  userId        String
+  ticker        String
+  // "paste" | "web" | "merged" — where the rows came from (every row also carries its own source)
+  origin        String
+  currency      String?    // = dataset.meta.reportingCurrency (read-only for lists; dataJson is the truth)
+  units         String?    // = dataset.meta.units
+  coverageLabel String?    // = dataset.meta.latestPeriodLabel
+  dataJson      String     // FinancialDataset (GroundedFinancials + datasetMeta), with per-row sources
+  blocksJson    String?    // GroundingBlock[] for paste/merged datasets — the raw text the prompt needs
+  warningsJson  String?    // ReconciliationWarning[] from the extraction run (extraction codes only)
+  researchJson  String?    // research run metadata (searches, fetches, unverified sources); null for pasted datasets
+  createdAt     DateTime   @default(now())
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  analyses      Analysis[]
+
+  @@index([userId, ticker, createdAt])
 }
 
 // Daily portfolio value snapshot written by the Vercel cron job.

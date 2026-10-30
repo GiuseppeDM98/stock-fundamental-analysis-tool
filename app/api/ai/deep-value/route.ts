@@ -20,8 +20,10 @@ import { runStreamWithToolLoop, DEEP_RESEARCH_MAX_TOOL_ITERATIONS, GROUNDED_MAX_
 import { fallbackNote } from "@/lib/ai/fallback";
 import { routeErrorStatus } from "@/lib/ai/error-status";
 import { AI_EFFORT_LEVELS, deepValueDefaultEffort, type AiSettings } from "@/types/ai-settings";
-import { groundingPayloadSchema } from "@/lib/grounding/schema";
 import { buildGroundingPromptContext, type GroundingPromptContext } from "@/lib/grounding/prompt-format";
+import { getFinancialDataset } from "@/lib/datasets/store";
+import { normalizeTicker } from "@/lib/ticker";
+import type { StoredDataset } from "@/types/dataset";
 
 const DEFAULT_SETTINGS: AiSettings = { model: "claude-opus-4-8", effort: "xhigh", thinking: true };
 
@@ -40,11 +42,10 @@ const requestSchema = z.object({
   model: aiModelIdSchema.optional(),
   effort: z.enum(AI_EFFORT_LEVELS).optional(),
   thinking: z.boolean().optional(),
-  // Grounded mode: the client sends only blocks + the confirmed extract; the route
-  // recomputes stats/grid/marketImplied/warnings itself from `extract` and its own
-  // authoritative currentPrice — never trusting client-sent copies (smaller body, one
-  // source of truth).
-  grounding: groundingPayloadSchema.optional(),
+  // Grounded mode: the id of the user's confirmed dataset. The route reads its blocks,
+  // extract and stored warnings, and recomputes stats/grid/marketImplied/warnings itself
+  // from the extract and its own authoritative currentPrice.
+  datasetId: z.string().min(1).optional(),
 });
 
 export async function POST(request: Request) {
@@ -64,6 +65,15 @@ export async function POST(request: Request) {
   }
 
   try {
+    let stored: StoredDataset | null = null;
+    if (body.datasetId) {
+      stored = await getFinancialDataset(session.user.id, body.datasetId);
+      if (!stored) return NextResponse.json({ error: "dataset not found" }, { status: 400 });
+      if (stored.dataset.datasetMeta.ticker !== normalizeTicker(body.ticker)) {
+        return NextResponse.json({ error: "dataset ticker mismatch" }, { status: 400 });
+      }
+    }
+
     const quote = await getQuote(body.ticker);
     const currentPrice = quote.regularMarketPrice;
     const currency = quote.currency ?? "USD";
@@ -75,12 +85,12 @@ export async function POST(request: Request) {
       day: "numeric",
     });
 
-    // Grounded mode: recompute the deterministic anchors server-side from the client's
-    // confirmed extract + our own authoritative currentPrice/currency (never the
-    // client's own stats/grid/marketImplied — single source of truth).
+    // Grounded mode: recompute the deterministic anchors server-side from the stored
+    // extract + our own authoritative currentPrice/currency; the dataset's own warnings
+    // (from its extraction run) join the recomputed ones.
     let groundingContext: GroundingPromptContext | undefined;
-    if (body.grounding) {
-      groundingContext = buildGroundingPromptContext(body.grounding.blocks, body.grounding.extract, currentPrice, currency);
+    if (stored) {
+      groundingContext = buildGroundingPromptContext(stored.blocks, stored.dataset, currentPrice, currency, stored.warnings);
     }
 
     // The valuation is always independent/position-blind — no portfolio position or
@@ -152,7 +162,7 @@ export async function POST(request: Request) {
             // shared constant for why it's 35. Grounded mode rescopes (not eliminates)
             // web search to just the post-coverage-date update + qualitative material,
             // so it converges in far fewer rounds — GROUNDED_MAX_TOOL_ITERATIONS.
-            body.grounding ? GROUNDED_MAX_TOOL_ITERATIONS : DEEP_RESEARCH_MAX_TOOL_ITERATIONS
+            stored ? GROUNDED_MAX_TOOL_ITERATIONS : DEEP_RESEARCH_MAX_TOOL_ITERATIONS
           );
 
           // Failsafe: if the model never wrote the report marker (e.g. still researching

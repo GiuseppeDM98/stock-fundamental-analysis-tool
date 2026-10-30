@@ -1,13 +1,20 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { parseDeepValueJson, stripJsonBlock } from "@/lib/report/parse-deep-value-json";
+import { pasteSource } from "@/lib/grounding/merge";
+import { emptyRowSources } from "@/types/dataset";
+import { makeExtract, makeFinancialsRow, makeMeta } from "./grounding-test-helpers";
 
 const runStreamMock = vi.fn();
 const userFindUnique = vi.fn();
+const datasetFindFirst = vi.fn();
 
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(async () => ({ user: { id: "u1" } })) }));
 vi.mock("@/lib/db", () => ({
-  db: { user: { findUnique: (...args: unknown[]) => userFindUnique(...args) } },
+  db: {
+    user: { findUnique: (...args: unknown[]) => userFindUnique(...args) },
+    financialDataset: { findFirst: (...args: unknown[]) => datasetFindFirst(...args) },
+  },
 }));
 vi.mock("@/lib/yahoo-client", () => ({ getQuote: vi.fn(async () => ({ regularMarketPrice: 10, currency: "EUR" })) }));
 vi.mock("@/lib/ai/client", async (importOriginal) => ({
@@ -124,5 +131,56 @@ describe("POST /api/ai/deep-value — effort and resolved settings", () => {
     await res.text();
     expect(sentEffort()).toBe("low");
     expect(JSON.parse(res.headers.get("X-AI-Settings")!)).toEqual({ model: "claude-opus-4-8", effort: "low", thinking: true });
+  });
+});
+
+describe("POST /api/ai/deep-value — grounded on a stored dataset", () => {
+  // Invented, round figures.
+  const STORED_WARNING = { code: "value_conflict", severity: "warn", fiscalYear: 2025, detail: "revenue: 1000 (income_statement #1) vs 1100 (other #2)" };
+  const datasetRow = (ticker: string) => ({
+    id: "ds1",
+    dataJson: JSON.stringify({
+      ...makeExtract({
+        meta: makeMeta({ reportingCurrency: "EUR", units: "millions" }),
+        financials: [makeFinancialsRow({ fiscalYear: 2025, revenue: 1000, sources: { ...emptyRowSources(), income: pasteSource("blk-1") } })],
+      }),
+      datasetMeta: { ticker, createdAt: "2026-10-27T09:00:00.000Z", origin: "paste", pasteDatasetId: null, webDatasetId: null },
+    }),
+    blocksJson: JSON.stringify([{ id: "blk-1", kind: "income_statement", text: "Pasted revenue line 1000" }]),
+    warningsJson: JSON.stringify([STORED_WARNING]),
+    createdAt: new Date("2026-10-27T09:00:00Z"),
+  });
+
+  beforeEach(() => {
+    runStreamMock.mockReset();
+    datasetFindFirst.mockReset();
+    userFindUnique.mockReset().mockResolvedValue({ aiModel: "claude-opus-4-8", aiEffort: "high", aiThinkingEnabled: true });
+    streams(["<!--report-->## 1. X"]);
+  });
+
+  it("reads the user's dataset and puts its blocks and stored warnings in the prompt", async () => {
+    datasetFindFirst.mockResolvedValue(datasetRow("AAA.MI"));
+    const res = await POST(post({ ticker: "aaa.mi", datasetId: "ds1" }));
+    expect(res.status).toBe(200);
+    await res.text();
+    expect(datasetFindFirst).toHaveBeenCalledWith({ where: { id: "ds1", userId: "u1" } });
+    const prompt = JSON.stringify(runStreamMock.mock.calls[0][1]);
+    expect(prompt).toContain("Pasted revenue line 1000");
+    expect(prompt).toContain(STORED_WARNING.detail);
+    // The provenance is for the UI: the prompt gets the numbers.
+    expect(prompt).not.toContain("blockId");
+  });
+
+  it("answers 400 for a dataset of another ticker, or one that is not the user's", async () => {
+    datasetFindFirst.mockResolvedValue(datasetRow("BBB.MI"));
+    const mismatch = await POST(post({ ticker: "AAA.MI", datasetId: "ds1" }));
+    expect(mismatch.status).toBe(400);
+    expect((await mismatch.json()).error).toBe("dataset ticker mismatch");
+
+    datasetFindFirst.mockResolvedValue(null);
+    const missing = await POST(post({ ticker: "AAA.MI", datasetId: "ds-foreign" }));
+    expect(missing.status).toBe(400);
+    expect((await missing.json()).error).toBe("dataset not found");
+    expect(runStreamMock).not.toHaveBeenCalled();
   });
 });

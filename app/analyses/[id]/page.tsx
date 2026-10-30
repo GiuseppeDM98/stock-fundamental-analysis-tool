@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import AnalysisDetailBody from "@/components/analysis-detail-body";
 import { DetailBreadcrumb, DetailFooterActions } from "@/components/analysis-detail-chrome";
-import { parseStoredExtract } from "@/lib/grounding/schema";
+import { readAnalysisExtract } from "@/lib/datasets/store";
 import type { Triple } from "@/lib/report/valuation";
 import {
   hasFullTriple,
@@ -68,9 +68,10 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
     result = null;
   }
   const valuationMeta = hasFullTriple(result) ? result : null;
-  // Grounded Deep Value mode — null for Quick-mode analyses (column never set) and for a
-  // stored extract that no longer validates.
-  const groundingExtract = parseStoredExtract(analysis.groundingJson);
+  // Grounded Deep Value mode — the analysis's dataset (or, saved before the dataset table,
+  // its groundingJson); null for Quick-mode analyses and for a stored extract that no
+  // longer validates.
+  const groundingExtract = await readAnalysisExtract(session.user.id, analysis);
 
   // Strip every JSON block (at the end of a current report, at the top of an older one)
   // and the start markers before rendering.

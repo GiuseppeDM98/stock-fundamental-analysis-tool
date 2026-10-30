@@ -9,6 +9,11 @@
 // total wipeout (zero blocks extracted) fails the request (502, mirroring the earnings
 // route's "invalid shape → the model's fault, not the client's").
 //
+// Retry of one block: the client sends only that block plus `priorResults` (the blocks
+// already extracted) and `blockOrder` (the editor's order). The merge runs here on the
+// whole set, in that order, so the anchors and the warnings are computed in one place
+// and a retry gives the same extract a first run of the same blocks would have.
+//
 // Structured output (2026-10-28): each call carries the block kind's JSON schema in
 // `output_config.format`, so the response IS the JSON object — no fence to find with a
 // regex, no prose around it. Before, a fence never closed or a key too many reached the
@@ -20,6 +25,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 import { auth } from "@/lib/auth";
 import { getQuote } from "@/lib/yahoo-client";
+import { tickerSchema } from "@/lib/ticker";
 import {
   GROUNDING_BLOCK_KINDS,
   GROUNDING_MAX_BLOCK_CHARS,
@@ -31,13 +37,14 @@ import {
   type FiscalYearMultiples,
   type ForwardEstimate,
 } from "@/types/grounding";
+import { estimateRowSchema, financialsRowSchema, groundingMetaSchema, multiplesRowSchema } from "@/lib/grounding/schema";
 import { buildGroundingExtractSystemPrompt, buildGroundingExtractUserPrompt } from "@/lib/ai/grounding-extract-prompt";
 import { EXTRACTION_SCHEMA_BY_KIND, extractionOutputFormat } from "@/lib/ai/grounding-extract-schema";
 import { getAiClient, buildThinkingParam, buildEffortConfig } from "@/lib/ai/client";
 import { runStreamWithToolLoop } from "@/lib/ai/tool-loop";
 import { routeErrorStatus } from "@/lib/ai/error-status";
 import type { AiSettings } from "@/types/ai-settings";
-import { mergeExtractedBlocks, type BlockExtractResult } from "@/lib/grounding/merge";
+import { mergeExtractedBlocks, orderByBlockOrder, type BlockExtractResult } from "@/lib/grounding/merge";
 import { checkReconciliation } from "@/lib/grounding/reconcile";
 import { computeMultipleStats, computeValuationGrid, computeMarketImplied, computeImpliedExpectations } from "@/lib/grounding/anchors";
 import { computeBasisReconciliation } from "@/lib/grounding/basis";
@@ -47,6 +54,10 @@ import { buildBlockFailureWarnings, buildMarketImpliedWarnings } from "@/lib/gro
 // deliberately ignores the user's global AI default: an Opus xhigh default would run once
 // per pasted block, in parallel, for no gain in transcription accuracy.
 const EXTRACT_AI_SETTINGS: AiSettings = { model: "claude-sonnet-5-5", effort: "medium", thinking: true };
+
+// A whole paste runs its blocks in parallel, so the request lasts as long as its slowest
+// block. Hobby's ceiling, as on the Deep Value routes (SETUP.md's maxDuration table).
+export const maxDuration = 300;
 
 // The caps are shared with the client editor and the deep-value payload schema; enforced
 // again here since the client is never trusted (validate at the system boundary).
@@ -61,10 +72,27 @@ const blockSchema = z
     message: "peerTicker is required for peer_valuation blocks.",
   });
 
+// A block result this route returned earlier, sent back on a retry. Validated like any
+// client input; its rows carry no sources (only the merge writes them), and zod drops any
+// the client added.
+const blockExtractResultSchema = z.object({
+  kind: z.enum(GROUNDING_BLOCK_KINDS),
+  blockId: z.string().min(1),
+  peerTicker: z.string().min(1).max(20).optional(),
+  peerCompanyName: z.string().nullable().optional(),
+  meta: groundingMetaSchema.partial().optional(),
+  financials: z.array(financialsRowSchema.omit({ sources: true })).optional(),
+  multiples: z.array(multiplesRowSchema.omit({ source: true })).optional(),
+  estimates: z.array(estimateRowSchema.omit({ source: true })).optional(),
+});
+
 const requestSchema = z
   .object({
-    ticker: z.string().min(1).max(20),
+    ticker: tickerSchema,
     blocks: z.array(blockSchema).min(1).max(GROUNDING_MAX_BLOCKS),
+    // The ids of the editor's submittable blocks, in the editor's order.
+    blockOrder: z.array(z.string()).min(1).max(GROUNDING_MAX_BLOCKS),
+    priorResults: z.array(blockExtractResultSchema).max(GROUNDING_MAX_BLOCKS).optional(),
   })
   .refine((body) => body.blocks.reduce((sum, b) => sum + b.text.length, 0) <= GROUNDING_MAX_TOTAL_CHARS, {
     message: `Total pasted content exceeds ${GROUNDING_MAX_TOTAL_CHARS.toLocaleString()} characters.`,
@@ -74,7 +102,7 @@ const requestSchema = z
  * asked for) out to the full FiscalYearFinancials shape — nulls for every field the
  * block's kind doesn't cover. Required by mergeExtractedBlocks (lib/grounding/merge.ts),
  * which merges rows from different block kinds by key and expects every row fully shaped. */
-function toFullFinancialsRow(row: Record<string, unknown> & { fiscalYear: number }): FiscalYearFinancials {
+function toFullFinancialsRow(row: Record<string, unknown> & { fiscalYear: number }): Omit<FiscalYearFinancials, "sources"> {
   return {
     fiscalYear: row.fiscalYear,
     revenue: (row.revenue as number | null) ?? null,
@@ -95,34 +123,36 @@ function toFullFinancialsRow(row: Record<string, unknown> & { fiscalYear: number
   };
 }
 
-function toBlockExtractResult(kind: GroundingBlockKind, peerTicker: string | undefined, data: unknown): BlockExtractResult {
+type Unsourced<Row> = Omit<Row, "source" | "sources">;
+
+function toBlockExtractResult(kind: GroundingBlockKind, blockId: string, peerTicker: string | undefined, data: unknown): BlockExtractResult {
   switch (kind) {
     case "income_statement":
     case "balance_sheet":
     case "cash_flow": {
       const d = data as { meta: Partial<GroundingMeta>; rows: (Record<string, unknown> & { fiscalYear: number })[] };
-      return { kind, meta: d.meta, financials: d.rows.map(toFullFinancialsRow) };
+      return { kind, blockId, meta: d.meta, financials: d.rows.map(toFullFinancialsRow) };
     }
     case "valuation_multiples": {
-      const d = data as { meta: Partial<GroundingMeta>; rows: FiscalYearMultiples[] };
-      return { kind, meta: d.meta, multiples: d.rows };
+      const d = data as { meta: Partial<GroundingMeta>; rows: Unsourced<FiscalYearMultiples>[] };
+      return { kind, blockId, meta: d.meta, multiples: d.rows };
     }
     case "estimates": {
-      const d = data as { meta: Partial<GroundingMeta>; rows: ForwardEstimate[] };
-      return { kind, meta: d.meta, estimates: d.rows };
+      const d = data as { meta: Partial<GroundingMeta>; rows: Unsourced<ForwardEstimate>[] };
+      return { kind, blockId, meta: d.meta, estimates: d.rows };
     }
     case "peer_valuation": {
-      const d = data as { meta: Partial<GroundingMeta>; companyName: string | null; rows: FiscalYearMultiples[] };
-      return { kind, peerTicker, peerCompanyName: d.companyName, meta: d.meta, multiples: d.rows };
+      const d = data as { meta: Partial<GroundingMeta>; companyName: string | null; rows: Unsourced<FiscalYearMultiples>[] };
+      return { kind, blockId, peerTicker, peerCompanyName: d.companyName, meta: d.meta, multiples: d.rows };
     }
     case "other": {
       const d = data as {
         meta: Partial<GroundingMeta>;
-        financials?: FiscalYearFinancials[];
-        multiples?: FiscalYearMultiples[];
-        estimates?: ForwardEstimate[];
+        financials?: Unsourced<FiscalYearFinancials>[];
+        multiples?: Unsourced<FiscalYearMultiples>[];
+        estimates?: Unsourced<ForwardEstimate>[];
       };
-      return { kind, meta: d.meta, financials: d.financials, multiples: d.multiples, estimates: d.estimates };
+      return { kind, blockId, meta: d.meta, financials: d.financials, multiples: d.multiples, estimates: d.estimates };
     }
   }
 }
@@ -189,7 +219,7 @@ async function extractBlock(
   const parsed = EXTRACTION_SCHEMA_BY_KIND[block.kind].safeParse(raw);
   if (!parsed.success) throw new Error(`Block ${block.id}: AI returned an invalid shape.`);
 
-  return toBlockExtractResult(block.kind, block.peerTicker, parsed.data);
+  return toBlockExtractResult(block.kind, block.id, block.peerTicker, parsed.data);
 }
 
 export async function POST(request: Request) {
@@ -212,16 +242,24 @@ export async function POST(request: Request) {
 
     const settled = await Promise.allSettled(body.blocks.map((block) => extractBlock(client, aiSettings, block)));
 
-    const results: BlockExtractResult[] = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
-    const failureWarnings = buildBlockFailureWarnings(settled);
+    const fresh: BlockExtractResult[] = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
+    const failedBlockIds = settled.flatMap((s, index) => (s.status === "rejected" ? [body.blocks[index].id] : []));
+    const failureWarnings = buildBlockFailureWarnings(settled, body.blocks, body.blockOrder);
+
+    // A block sent again replaces its earlier result, even when this run failed it: the
+    // text the user retried is the one that counts.
+    const sentIds = new Set(body.blocks.map((b) => b.id));
+    const prior = (body.priorResults ?? []).filter((r) => !sentIds.has(r.blockId));
+    const blockResults = orderByBlockOrder([...prior, ...fresh], body.blockOrder);
 
     // A total wipeout means there's nothing usable to return — the model's fault, not
-    // the client's, mirroring the earnings route's "invalid shape → 502" mapping.
-    if (results.length === 0) {
+    // the client's, mirroring the earnings route's "invalid shape → 502" mapping. A retry
+    // that fails on top of earlier results still has those to show.
+    if (prior.length + fresh.length === 0) {
       return NextResponse.json({ error: "AI could not extract any of the pasted blocks." }, { status: 502 });
     }
 
-    const { extract, warnings: mergeWarnings } = mergeExtractedBlocks(results);
+    const { extract, warnings: mergeWarnings } = mergeExtractedBlocks(blockResults, body.blockOrder);
     // The basis reconciliation is a property of the PASTE alone (extract.financials +
     // extract.multiples) — computable before any price is known, and needed by every
     // anchor below to keep multiples on the same accounting basis. Compute it once,
@@ -248,6 +286,8 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({
+      blockResults,
+      failedBlockIds,
       extract,
       basis,
       stats,
