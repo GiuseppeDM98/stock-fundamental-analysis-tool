@@ -211,7 +211,7 @@ Use `ReactDOM.createPortal(modal, document.body)` for any modal. The `.card` cla
   const c = createClient({ url: TURSO_DATABASE_URL, authToken: TURSO_AUTH_TOKEN }); // @libsql/client
   await c.migrate(statementsOfMigrationSql); // one batch, foreign keys off for the whole batch
   ```
-  Never one `execute` per statement for a migration that rebuilds a table (`PRAGMA foreign_keys=OFF` + `DROP TABLE`): the PRAGMA does not carry to the next request, and dropping `User` would cascade-delete every child row. Before a rebuild: dump outside the repo, `COUNT(*)` of every table before and after (`drop_watchlist_run_and_freq`, 2026-10-29: same counts). Production Turso has no `_prisma_migrations` table.
+  Never one `execute` per statement for a migration that rebuilds a table (`PRAGMA foreign_keys=OFF` + `DROP TABLE`): the PRAGMA does not carry to the next request, and dropping `User` would cascade-delete every child row. Before a rebuild: dump outside the repo, `COUNT(*)` of every table before and after (`drop_watchlist_run_and_freq`, 2026-10-29, and `add_financial_dataset`, 2026-10-30: same counts). No CLI means no `.dump` either: write the dump from `sqlite_master` and `SELECT *`, restore it into a throwaway `file:` DB and run the migration there first. Production Turso has no `_prisma_migrations` table.
 - **Critical**: if you add a column/table and forget to apply to Turso, the app will crash at runtime with `no such column`/`no such table` even though local dev.db is fine. Restart the dev server after applying (stale Prisma client).
 
 ---
