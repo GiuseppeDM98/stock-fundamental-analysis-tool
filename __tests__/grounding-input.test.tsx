@@ -6,6 +6,7 @@ import { GroundingInput } from "@/components/grounding-input";
 import type { GroundingExtractResponse } from "@/lib/grounding-client";
 import type { BlockExtractResult } from "@/lib/grounding/merge";
 import { computeBasisReconciliation } from "@/lib/grounding/basis";
+import { blockFailureWarning } from "@/lib/grounding-warnings";
 import type { GroundingBlock } from "@/types/grounding";
 import { makeExtract, makeFinancialsRow } from "./grounding-test-helpers";
 
@@ -81,6 +82,50 @@ describe("GroundingInput — retry of one block", () => {
     expect(opts.priorResults.map((r: BlockExtractResult) => r.blockId)).toEqual(["b1", "b3"]);
     // Every block extracted: no retry left to offer.
     await waitFor(() => expect(screen.queryByRole("button", { name: /Retry this block/ })).not.toBeInTheDocument());
+  });
+
+  it("sends again a block edited since the last extraction, together with the retried one", async () => {
+    renderEditor();
+    await prepareWithFailedBlockTwo();
+
+    // Editing block 1 drops its result: the retry must extract it again, or the merge
+    // would silently miss it.
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit block" })[0]);
+    fireEvent.change(screen.getByDisplayValue("Revenue 1000"), { target: { value: "Revenue 1200" } });
+    extractMock.mockResolvedValueOnce(response([R1, R2, R3], []));
+    fireEvent.click(screen.getByRole("button", { name: "Retry this block" }));
+
+    await waitFor(() => expect(extractMock).toHaveBeenCalledTimes(2));
+    const [, blocks, blockOrder, opts] = extractMock.mock.calls[1];
+    expect(blocks).toEqual([
+      { id: "b1", kind: "income_statement", text: "Revenue 1200" },
+      { id: "b2", kind: "balance_sheet", text: "garbled" },
+    ]);
+    expect(blockOrder).toEqual(["b1", "b2", "b3"]);
+    expect(opts.priorResults.map((r: BlockExtractResult) => r.blockId)).toEqual(["b3"]);
+  });
+
+  it("keeps the warning of a failed block that the retry did not send", async () => {
+    renderEditor();
+    extractMock.mockResolvedValueOnce({
+      ...response([R1], ["b2", "b3"]),
+      warnings: [blockFailureWarning("balance_sheet", 2), blockFailureWarning("cash_flow", 3)],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Prepare data" }));
+    await screen.findByRole("button", { name: /Retry this block #2/ });
+
+    // Block 2 now extracts; block 3 was not sent, so the route says nothing about it.
+    extractMock.mockResolvedValueOnce(response([R1, R2], []));
+    fireEvent.click(screen.getByRole("button", { name: /Retry this block #2/ }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: /Retry this block #2/ })).not.toBeInTheDocument());
+    expect(extractMock.mock.calls[1][1].map((b: GroundingBlock) => b.id)).toEqual(["b2"]);
+    expect(screen.getByRole("button", { name: /Retry this block #3/ })).toBeInTheDocument();
+    expect(screen.getByText(/cash_flow #3/)).toBeInTheDocument();
+
+    createDatasetMock.mockResolvedValueOnce({ id: "ds1" });
+    fireEvent.click(screen.getByRole("button", { name: "Analyze with this data →" }));
+    await waitFor(() => expect(createDatasetMock).toHaveBeenCalledTimes(1));
+    expect(createDatasetMock.mock.calls[0][2]).toEqual([blockFailureWarning("cash_flow", 3)]);
   });
 
   it("drops a removed block's result from the next retry", async () => {

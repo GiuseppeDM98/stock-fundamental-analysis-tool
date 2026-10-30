@@ -477,6 +477,7 @@ npx prisma migrate dev --name <migration-name>
 
 # Deploy migrations to production (Turso) via Turso shell
 turso db shell <your-db-name> < prisma/migrations/<latest>/migration.sql
+# A migration that rebuilds a table (e.g. add_financial_dataset): dump and count every table first — AGENTS.md § Prisma 7 + Turso
 ```
 
 ---

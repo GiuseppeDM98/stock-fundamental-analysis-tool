@@ -12,6 +12,11 @@ import { checkCurrencyMismatch, type ReconciliationWarning } from "@/lib/groundi
 // `detail` must never hold translatable prose. Written and read only in this module.
 const BLOCK_FAILURE_DETAIL = /^([a-z_]+) #(\d+)$/;
 
+/** The `block_extract_failed` warning of one block at a 1-based position of `blockOrder`. */
+export function blockFailureWarning(kind: GroundingBlockKind, position: number): ReconciliationWarning {
+  return { code: "block_extract_failed", severity: "warn", fiscalYear: null, detail: `${kind} #${position}` };
+}
+
 /**
  * One `block_extract_failed` warning per rejected extraction, in submission order.
  * @param blocks The blocks the extraction calls ran on, index for index with `settled`.
@@ -28,8 +33,7 @@ export function buildBlockFailureWarnings(
     if (s.status !== "rejected") return;
     const block = blocks[index];
     const inOrder = blockOrder.indexOf(block.id);
-    const position = inOrder >= 0 ? inOrder + 1 : index + 1;
-    warnings.push({ code: "block_extract_failed", severity: "warn", fiscalYear: null, detail: `${block.kind} #${position}` });
+    warnings.push(blockFailureWarning(block.kind, inOrder >= 0 ? inOrder + 1 : index + 1));
   });
   return warnings;
 }

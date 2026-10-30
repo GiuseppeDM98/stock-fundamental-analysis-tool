@@ -216,3 +216,4 @@
 ## 📚 Documentation
 
 - Added a database inspection guide to the README — how to browse users and saved analyses via the Turso web UI, Turso CLI, local SQLite, and Prisma Studio.
+- Fixed the setup guide's database step, which applied only the first few migrations: a fresh database now gets every table.

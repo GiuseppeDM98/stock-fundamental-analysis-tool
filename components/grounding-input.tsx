@@ -21,6 +21,7 @@ import {
 import { extractGrounding, type GroundingExtractResponse } from "@/lib/grounding-client";
 import { createPasteDataset } from "@/lib/dataset-client";
 import { chooseStartingBlocks, remapFailedBlockPositions, selectSubmittableBlocks } from "@/lib/grounding-blocks";
+import { blockFailureWarning } from "@/lib/grounding-warnings";
 import type { BlockExtractResult } from "@/lib/grounding/merge";
 import { GroundingPreview } from "@/components/report/grounding-preview";
 
@@ -340,7 +341,11 @@ export function GroundingInput({ ticker, seedBlocks, valueId, onConfirm, onInval
         priorResults: Object.values(blockResults).filter((r) => blockOrder.includes(r.blockId)),
       });
       setFailedBlockIds(new Set([...[...failedBlockIds].filter((id) => !sentIds.has(id) && blockOrder.includes(id)), ...result.failedBlockIds]));
-      showResult(result, ordered);
+      // The route reports only this request's failures. A block that failed before and was
+      // not sent again keeps its warning from here, or a retry that fixed one of two failed
+      // blocks dropped the other's from the preview and from the saved dataset (2026-10-30).
+      const unsentFailures = ordered.flatMap((b, i) => (failedBlockIds.has(b.id) && !sentIds.has(b.id) ? [blockFailureWarning(b.kind, i + 1)] : []));
+      showResult({ ...result, warnings: [...unsentFailures, ...result.warnings] }, ordered);
       invalidateConfirmed();
     } catch (err) {
       setExtractError(err instanceof Error ? err.message : "Extraction failed.");
