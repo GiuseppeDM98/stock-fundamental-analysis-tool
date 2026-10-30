@@ -47,7 +47,7 @@ import {
 import type { AnalystResult, DeepValueResult } from "../components/report/types";
 import { REPORT_START_MARKER, sanitizeDeepValueResult } from "../lib/report/parse-deep-value-json";
 import { pasteSource } from "../lib/grounding/merge";
-import { emptyRowSources, type FinancialDataset } from "../types/dataset";
+import { emptyRowSources, type DataSource, type FinancialDataset, type ResearchMeta } from "../types/dataset";
 import type { GroundingBlock } from "../types/grounding";
 import type { SnapshotData, SnapshotEntry } from "../types/portfolio";
 
@@ -212,7 +212,8 @@ function groundedDataset(createdAt: Date): FinancialDataset {
   const v1 = groundedExtractV1();
   return {
     ...v1,
-    financials: v1.financials.map((row) => ({ ...row, sources: { ...emptyRowSources(), income: pasteSource("e2e-block-is") } })),
+    // A paste never carries D&A; the legacy groundingJson blob above lacks the key (read as null).
+    financials: v1.financials.map((row) => ({ ...row, depreciationAmortization: null, sources: { ...emptyRowSources(), income: pasteSource("e2e-block-is") } })),
     multiples: v1.multiples.map((row) => ({ ...row, source: pasteSource("e2e-block-mult") })),
     estimates: v1.estimates.map((row) => ({ ...row, source: null })),
     datasetMeta: { ticker: TICKERS.grounded, createdAt: createdAt.toISOString(), origin: "paste", pasteDatasetId: null, webDatasetId: null },
@@ -239,6 +240,7 @@ function userBDataset(createdAt: Date): FinancialDataset {
         sharesDiluted: 50,
         cfo: 90,
         capex: -30,
+        depreciationAmortization: null,
         freeCashFlow: 60,
         dividendsPerShare: null,
         sources: { ...emptyRowSources(), income: pasteSource("e2e-block-b") },
@@ -248,6 +250,81 @@ function userBDataset(createdAt: Date): FinancialDataset {
     estimates: [],
     peers: [],
     datasetMeta: { ticker: TICKERS.userB, createdAt: createdAt.toISOString(), origin: "paste", pasteDatasetId: null, webDatasetId: null },
+  };
+}
+
+// A's web dataset for ORNT, three days old, as the research stage saves it: the statements
+// from the (invented) annual report the run opened, the multiples from a data page it only
+// cited (unverified). Linked to the OLDER ORNT save: e2e_an_panel stays the dataset-less
+// fixture other pages read.
+const ORNT_ANNUAL_REPORT: DataSource = {
+  kind: "web",
+  url: "https://ir.ornitorinco.example/annual-report-2025.pdf",
+  title: "Annual report 2025",
+  asOf: "2026-03",
+  blockId: null,
+  verified: true,
+};
+const ORNT_MULTIPLES_PAGE: DataSource = {
+  kind: "web",
+  url: "https://data.example/ORNT/multiples",
+  title: "ORNT multiples",
+  asOf: "2026-09",
+  blockId: null,
+  verified: false,
+};
+const ORNT_RESEARCH: ResearchMeta = {
+  model: "claude-sonnet-5-5",
+  effort: "high",
+  searches: 7,
+  fetches: 3,
+  durationMs: 95000,
+  unverifiedSources: [ORNT_MULTIPLES_PAGE.url!],
+  notes: null,
+};
+
+function orntWebDataset(createdAt: Date): FinancialDataset {
+  const years = [2022, 2023, 2024, 2025];
+  return {
+    meta: { reportingCurrency: "USD", units: "millions", latestPeriodLabel: "FY2025", fiscalYearEnd: "December" },
+    financials: years.map((fiscalYear, i) => ({
+      fiscalYear,
+      revenue: [900, 950, 1000, 1080][i],
+      ebitda: [180, 200, 220, 240][i],
+      ebit: [120, 135, 150, 165][i],
+      netIncome: [80, 90, 100, 110][i],
+      eps: [1.6, 1.8, 2.0, 2.2][i],
+      totalEquity: [500, 560, 630, 710][i],
+      minorityInterest: null,
+      totalDebt: null,
+      cashAndEquivalents: null,
+      netDebt: [300, 280, 260, 240][i],
+      sharesDiluted: 50,
+      cfo: null,
+      capex: -40,
+      depreciationAmortization: null,
+      freeCashFlow: [70, 80, 90, 100][i],
+      dividendsPerShare: null,
+      sources: { income: { ...ORNT_ANNUAL_REPORT }, balance: { ...ORNT_ANNUAL_REPORT }, cashFlow: { ...ORNT_ANNUAL_REPORT }, mixed: { income: false, balance: false, cashFlow: false } },
+    })),
+    multiples: years.map((fiscalYear, i) => ({
+      fiscalYear,
+      evEbitda: [9, 9.5, 10, 10.5][i],
+      evSales: null,
+      pe: [18, 19, 20, 21][i],
+      pb: [2, 2.1, 2.2, 2.3][i],
+      fcfYield: null,
+      dividendYield: null,
+      marketCap: null,
+      enterpriseValue: null,
+      source: { ...ORNT_MULTIPLES_PAGE },
+    })),
+    estimates: [
+      { fiscalYear: 2026, revenue: 1150, ebitda: 255, ebit: null, netIncome: null, eps: null, source: { ...ORNT_ANNUAL_REPORT } },
+      { fiscalYear: 2027, revenue: 1230, ebitda: 270, ebit: null, netIncome: null, eps: null, source: { ...ORNT_ANNUAL_REPORT } },
+    ],
+    peers: [],
+    datasetMeta: { ticker: TICKERS.panel, createdAt: createdAt.toISOString(), origin: "web", pasteDatasetId: null, webDatasetId: null },
   };
 }
 
@@ -384,6 +461,23 @@ async function seedDatasets(db: PrismaClient, today: Date): Promise<void> {
       createdAt: groundedAt,
     },
   });
+  const orntAt = daysFrom(today, -3);
+  await db.financialDataset.create({
+    data: {
+      id: IDS.datasetOrnt,
+      userId: USER_A.id,
+      ticker: TICKERS.panel,
+      origin: "web",
+      currency: "USD",
+      units: "millions",
+      coverageLabel: "FY2025",
+      dataJson: JSON.stringify(orntWebDataset(orntAt)),
+      blocksJson: null,
+      warningsJson: JSON.stringify([{ code: "source_unverified", severity: "warn", fiscalYear: null, detail: ORNT_MULTIPLES_PAGE.url }]),
+      researchJson: JSON.stringify(ORNT_RESEARCH),
+      createdAt: orntAt,
+    },
+  });
   const userBAt = daysFrom(today, -1);
   await db.financialDataset.create({
     data: {
@@ -476,6 +570,8 @@ async function seedAnalyses(db: PrismaClient): Promise<void> {
       // verdict, no exit signal and no digest status (a quote is weighed only against values
       // in its own currency, lib/report/latest-analysis.ts).
       currency: PANEL_OLDER_RESULT.currency,
+      // Grounded on A's web dataset: its detail page shows the dataset's tables with web chips.
+      datasetId: IDS.datasetOrnt,
       reportMd: deepValueReport(PANEL_OLDER_RESULT, `## 1. Overview\n\nOlder ${DECOY.panelReport} save.`),
       createdAt: new Date("2026-06-10T08:00:00Z"),
     },

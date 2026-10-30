@@ -198,7 +198,7 @@ The AI routes call the model with a high reasoning effort plus web search. A Dee
 | Pro | 300s | 800s (1800s in beta) |
 | Enterprise | 300s | 800s (1800s in beta) |
 
-**A run that goes past 300s on Hobby is killed** and the report stops mid-stream: streaming doesn't help, since Vercel counts total execution time, not whether the response is still being written. Both `/api/ai/deep-value` and `/api/ai/deep-value/verify` export `maxDuration = 300`, the Hobby ceiling, so the limit is declared in the code rather than left to the platform default.
+**A run that goes past 300s on Hobby is killed** and the report stops mid-stream: streaming doesn't help, since Vercel counts total execution time, not whether the response is still being written. Both `/api/ai/deep-value` and `/api/ai/deep-value/verify` export `maxDuration = 300`, the Hobby ceiling, so the limit is declared in the code rather than left to the platform default. So does the research stage, `/api/ai/research` (one request that answers with JSON at the end of the run): measured at 245-390 s on Claude Sonnet 5.5 and 405-796 s on DeepSeek V4 Pro (2026-10-30), so a Sonnet run fits only sometimes and a DeepSeek one runs from localhost.
 
 **This is a declared limit of the project** (owner's decision, 2026-10-20): long analyses run from localhost, the deployed instance serves everything else (reading saved analyses, portfolio, watchlist, crons). Two ways to run them:
 

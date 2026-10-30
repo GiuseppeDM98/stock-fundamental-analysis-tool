@@ -1,7 +1,7 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { AI_MODEL_CATALOG, type AiEffort, type AiModelId } from "@/types/ai-settings";
-import { CUSTOM_WEB_SEARCH_TOOL } from "@/lib/ai/web-search-tool";
+import { CUSTOM_WEB_FETCH_TOOL, CUSTOM_WEB_SEARCH_TOOL, RESEARCH_MAX_FETCHES } from "@/lib/ai/web-search-tool";
 
 const DEEPSEEK_BASE_URL = "https://api.deepseek.com/anthropic";
 
@@ -77,4 +77,27 @@ export function buildWebSearchTools(model: AiModelId): Anthropic.ToolUnion[] {
     return [CUSTOM_WEB_SEARCH_TOOL as unknown as Anthropic.ToolUnion];
   }
   return [{ type: "web_search_20260209" as const, name: "web_search" } as Anthropic.ToolUnion];
+}
+
+/** Searches per research run on Claude's native tool (`max_uses`): the prompt asks for five
+ *  fiscal years of three statements, multiples, estimates and peers. */
+export const RESEARCH_MAX_SEARCHES = 30;
+
+/** Text tokens of one page Claude's native web_fetch puts in context. It does not limit a
+ *  PDF, which is read whole: the research prompt allows at most three. */
+export const RESEARCH_FETCH_MAX_CONTENT_TOKENS = 40000;
+
+/** The research stage's tools (app/api/ai/research): web search plus web fetch, so the model
+ *  reads the primary documents and not only search snippets. Claude gets the native
+ *  `_20260209` tools (their dynamic filtering runs code execution internally: never declare
+ *  code_execution next to them); DeepSeek gets the two client-executed tools on its
+ *  Search/Fetch APIs, whose fetch cap the shared loop applies (`fetchBudget`). */
+export function buildResearchTools(model: AiModelId): Anthropic.ToolUnion[] {
+  if (AI_MODEL_CATALOG[model].provider === "deepseek") {
+    return [CUSTOM_WEB_SEARCH_TOOL as unknown as Anthropic.ToolUnion, CUSTOM_WEB_FETCH_TOOL as unknown as Anthropic.ToolUnion];
+  }
+  return [
+    { type: "web_search_20260209", name: "web_search", max_uses: RESEARCH_MAX_SEARCHES },
+    { type: "web_fetch_20260209", name: "web_fetch", max_uses: RESEARCH_MAX_FETCHES, max_content_tokens: RESEARCH_FETCH_MAX_CONTENT_TOKENS },
+  ];
 }

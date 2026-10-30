@@ -30,7 +30,15 @@ export type ReconciliationWarning = {
     | "basis_mismatch"
     | "basis_unverifiable"
     | "ev_bridge_mismatch"
-    | "dividend_not_covered";
+    | "dividend_not_covered"
+    // Provenance of a web dataset (lib/ai/research-to-dataset.ts) and of a paste + web merge
+    // (lib/datasets/merge-sources.ts); detail = the URL, the cited id, or "<field> FY<year>".
+    | "source_unverified"
+    | "source_unknown_id"
+    | "value_ignored_secondary"
+    // The research stage computed EBITDA as EBIT + D&A (the company publishes none); detail =
+    // the fiscal years.
+    | "ebitda_derived";
   severity: "warn" | "info";
   fiscalYear: number | null;
   // Numbers/years ONLY — t() has no interpolation, so the component composes

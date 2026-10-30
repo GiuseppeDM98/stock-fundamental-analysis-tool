@@ -45,10 +45,8 @@ import { runStreamWithToolLoop } from "@/lib/ai/tool-loop";
 import { routeErrorStatus } from "@/lib/ai/error-status";
 import type { AiSettings } from "@/types/ai-settings";
 import { mergeExtractedBlocks, orderByBlockOrder, type BlockExtractResult } from "@/lib/grounding/merge";
-import { checkReconciliation } from "@/lib/grounding/reconcile";
-import { computeMultipleStats, computeValuationGrid, computeMarketImplied, computeImpliedExpectations } from "@/lib/grounding/anchors";
-import { computeBasisReconciliation } from "@/lib/grounding/basis";
-import { buildBlockFailureWarnings, buildMarketImpliedWarnings } from "@/lib/grounding-warnings";
+import { computeDatasetAnchors } from "@/lib/datasets/anchors-bundle";
+import { buildBlockFailureWarnings } from "@/lib/grounding-warnings";
 
 // Extraction is pure transcription, so it is pinned to Sonnet 5.5 at medium effort and
 // deliberately ignores the user's global AI default: an Opus xhigh default would run once
@@ -118,6 +116,8 @@ function toFullFinancialsRow(row: Record<string, unknown> & { fiscalYear: number
     sharesDiluted: (row.sharesDiluted as number | null) ?? null,
     cfo: (row.cfo as number | null) ?? null,
     capex: (row.capex as number | null) ?? null,
+    // No paste schema asks for it: a pasted dataset's EBITDA is the one the paste states.
+    depreciationAmortization: (row.depreciationAmortization as number | null) ?? null,
     freeCashFlow: (row.freeCashFlow as number | null) ?? null,
     dividendsPerShare: (row.dividendsPerShare as number | null) ?? null,
   };
@@ -260,41 +260,29 @@ export async function POST(request: Request) {
     }
 
     const { extract, warnings: mergeWarnings } = mergeExtractedBlocks(blockResults, body.blockOrder);
-    // The basis reconciliation is a property of the PASTE alone (extract.financials +
-    // extract.multiples) — computable before any price is known, and needed by every
-    // anchor below to keep multiples on the same accounting basis. Compute it once,
-    // thread it everywhere.
-    const basis = computeBasisReconciliation(extract);
-    const reconciliationWarnings = checkReconciliation(extract, basis);
-
-    const stats = computeMultipleStats(extract.multiples);
-    const grid = computeValuationGrid(extract, basis);
 
     // Best-effort live price for the market-implied control — a quote failure (rate
     // limit, delisted) must not fail the whole extraction; it just leaves the
     // price-implied read absent, same as a currency mismatch would.
-    let marketImplied = null as ReturnType<typeof computeMarketImplied>;
-    let impliedExpectations = null as ReturnType<typeof computeImpliedExpectations>;
-    let anchorWarnings: ReturnType<typeof buildMarketImpliedWarnings> = [];
+    let quote: { price: number; currency: string } | null = null;
     try {
-      const quote = await getQuote(body.ticker);
-      marketImplied = computeMarketImplied(quote.regularMarketPrice, quote.currency, extract, basis);
-      impliedExpectations = computeImpliedExpectations(quote.regularMarketPrice, quote.currency, extract, basis);
-      anchorWarnings = buildMarketImpliedWarnings(extract, quote.currency, marketImplied);
+      const q = await getQuote(body.ticker);
+      quote = { price: q.regularMarketPrice, currency: q.currency };
     } catch {
       // Non-fatal — omit the market-implied read and its warning entirely.
     }
+    const anchors = computeDatasetAnchors(extract, quote);
 
     return NextResponse.json({
       blockResults,
       failedBlockIds,
       extract,
-      basis,
-      stats,
-      grid,
-      marketImplied,
-      impliedExpectations,
-      warnings: [...failureWarnings, ...mergeWarnings, ...reconciliationWarnings, ...anchorWarnings],
+      basis: anchors.basis,
+      stats: anchors.stats,
+      grid: anchors.grid,
+      marketImplied: anchors.marketImplied,
+      impliedExpectations: anchors.impliedExpectations,
+      warnings: [...failureWarnings, ...mergeWarnings, ...anchors.warnings],
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Extraction failed.";

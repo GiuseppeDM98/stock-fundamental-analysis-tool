@@ -148,6 +148,29 @@ test("an older grounded analysis still reads its extract from groundingJson", as
   await expect(income.getByRole("row").nth(1).getByText("—")).toHaveCount(5);
 });
 
+test("an analysis on a web dataset shows each row's web source by host, and the unverified one as such", async ({ page }) => {
+  const dataset = await queryOne<{ origin: string; researchJson: string | null; warningsJson: string }>(
+    "SELECT origin, researchJson, warningsJson FROM FinancialDataset WHERE id = ?",
+    [IDS.datasetOrnt]
+  );
+  expect(dataset?.origin).toBe("web");
+  expect(JSON.parse(dataset!.researchJson!).unverifiedSources).toEqual(["https://data.example/ORNT/multiples"]);
+  expect(JSON.parse(dataset!.warningsJson).map((w: { code: string }) => w.code)).toEqual(["source_unverified"]);
+  const analysis = await queryOne<{ datasetId: string | null }>("SELECT datasetId FROM Analysis WHERE id = ?", [IDS.analysisPanelOlder]);
+  expect(analysis?.datasetId).toBe(IDS.datasetOrnt);
+
+  await page.goto(`/analyses/${IDS.analysisPanelOlder}`);
+  await expect(page.getByText(`Older ${DECOY.panelReport} save.`)).toBeVisible();
+  // The statements come from the annual report the research opened: verified, by host.
+  const income = page.getByTestId("dataset-table-income");
+  await expect(income.getByRole("row").nth(1).getByText("🌐 ir.ornitorinco.example")).toHaveCount(4);
+  await expect(income.getByRole("row").nth(1).getByText(/unverified/)).toHaveCount(0);
+  // The multiples come from a page it only cited: the chip says unverified.
+  const multiples = page.getByTestId("dataset-table-multiples");
+  await expect(multiples.getByRole("row").nth(1).getByText("🌐 data.example")).toHaveCount(4);
+  await expect(multiples.getByRole("row").nth(1).getByText("· unverified")).toHaveCount(4);
+});
+
 test("/analyze opens on A's recent dataset for the ticker, and Use confirms it with no AI call", async ({ page, forbiddenCalls }) => {
   const row = await queryOne<{ ticker: string; origin: string }>("SELECT ticker, origin FROM FinancialDataset WHERE id = ?", [IDS.datasetGrounded]);
   expect(row).toEqual({ ticker: TICKERS.grounded, origin: "paste" });

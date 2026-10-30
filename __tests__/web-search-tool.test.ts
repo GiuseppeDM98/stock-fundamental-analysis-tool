@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 
-import { executeWebSearch } from "@/lib/ai/web-search-tool";
+import { DEEPSEEK_FETCH_MAX_CHARS, executeWebFetch, executeWebSearch } from "@/lib/ai/web-search-tool";
 
 const fetchMock = vi.fn();
 
@@ -79,5 +79,74 @@ describe("executeWebSearch (DeepSeek Search API)", () => {
     const text = await executeWebSearch("x");
     expect(text).toContain("failed");
     expect(text).toContain("socket hang up");
+  });
+});
+
+describe("executeWebFetch (DeepSeek Fetch API)", () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubEnv("DEEPSEEK_API_KEY", "k");
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it("should POST the url to the fetch endpoint with the bearer key", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ title: "FY2025 results", content: "Revenue 1,000" }));
+    await executeWebFetch("https://ir.example.com/results");
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("https://api.deepseek.com/v1/tools/fetch");
+    expect(init.method).toBe("POST");
+    expect(init.headers.Authorization).toBe("Bearer k");
+    expect(JSON.parse(init.body)).toEqual({ url: "https://ir.example.com/results" });
+  });
+
+  it("should return the page as a title heading and its Markdown", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ title: "FY2025 results", content: "| Revenue | 1,000 |" }));
+    expect(await executeWebFetch("https://ir.example.com/results")).toBe("# FY2025 results\n\n| Revenue | 1,000 |");
+  });
+
+  it("should cut a long page at 60,000 characters with a closing line", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ title: "Annual report", content: "x".repeat(70000) }));
+    const text = await executeWebFetch("https://ir.example.com/ar.pdf");
+    expect(DEEPSEEK_FETCH_MAX_CHARS).toBe(60000);
+    expect(text.endsWith("\n\n[truncated at 60000 characters]")).toBe(true);
+    expect(text.length).toBe(60000 + "\n\n[truncated at 60000 characters]".length);
+  });
+
+  it("should refuse a relative or non-http URL without calling the API", async () => {
+    expect(await executeWebFetch("ftp://ir.example.com/ar.pdf")).toBe("FETCH FAILED: invalid URL");
+    expect(await executeWebFetch("/investors/ar.pdf")).toBe("FETCH FAILED: invalid URL");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("should point to the HTML version on HTTP 404", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ error: "could not retrieve usable content" }, 404));
+    const text = await executeWebFetch("https://ir.example.com/ar.pdf");
+    expect(text.startsWith("FETCH FAILED (HTTP 404)")).toBe(true);
+    expect(text).toContain("HTML version");
+  });
+
+  it("should say the site refused on HTTP 403", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ error: "forbidden" }, 403));
+    const text = await executeWebFetch("https://ir.example.com/ar.pdf");
+    expect(text.startsWith("FETCH FAILED (HTTP 403)")).toBe(true);
+    expect(text).toContain("site's policy");
+  });
+
+  it("should start every failure with FETCH FAILED and never throw: no key, network error, empty page", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "");
+    expect(await executeWebFetch("https://ir.example.com/a")).toBe("FETCH FAILED: web fetch not configured (missing DEEPSEEK_API_KEY)");
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    vi.stubEnv("DEEPSEEK_API_KEY", "k");
+    fetchMock.mockRejectedValueOnce(new Error("socket hang up"));
+    expect(await executeWebFetch("https://ir.example.com/a")).toBe("FETCH FAILED (socket hang up)");
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ title: "Empty", content: "" }));
+    expect((await executeWebFetch("https://ir.example.com/a")).startsWith("FETCH FAILED")).toBe(true);
   });
 });

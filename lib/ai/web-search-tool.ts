@@ -1,4 +1,5 @@
 import "server-only";
+import { FETCH_FAILED_PREFIX } from "@/lib/ai/transcript-urls";
 
 // Client-executed web_search tool for models whose SERVER-SIDE web_search tool is
 // unreliable through the Anthropic-compat proxy (DeepSeek — see types/ai-settings.ts).
@@ -39,16 +40,19 @@ interface DeepSeekSearchResult {
   date: string | null; // RFC 3339, UTC
 }
 
-type DeepSeekToolResponse = { ok: true; data: unknown } | { ok: false; message: string };
+type DeepSeekToolResponse = { ok: true; data: unknown } | { ok: false; status: number | null; message: string };
 
-/** One call to DeepSeek's tool REST API (search today; fetch is the same contract). Every
- *  failure comes back as a message the model can read in its tool_result — never a throw
+/** One call to DeepSeek's tool REST API (`search` and `fetch` share the contract). A missing
+ *  key or a non-2xx answer comes back as `{ ok: false }` with the HTTP status (null without a
+ *  key) and a message written for the search tool; each caller wraps the network call in its
+ *  own try/catch, so a failure reaches the model as text in its tool_result, never as a throw
  *  that would end the whole research loop. */
 async function callDeepSeekTool(path: "search" | "fetch", body: object): Promise<DeepSeekToolResponse> {
   const apiKey = process.env.DEEPSEEK_API_KEY; // same key as the model: one balance, one bill
   if (!apiKey) {
     return {
       ok: false,
+      status: null,
       message: "Web search is not configured on this server (missing DEEPSEEK_API_KEY) — answer from existing knowledge and say so.",
     };
   }
@@ -61,6 +65,7 @@ async function callDeepSeekTool(path: "search" | "fetch", body: object): Promise
     const hint = res.status === 402 ? ": DeepSeek balance exhausted" : "";
     return {
       ok: false,
+      status: res.status,
       message: `Web search request failed (HTTP ${res.status}${hint}) — answer from existing knowledge and say so.`,
     };
   }
@@ -87,5 +92,86 @@ export async function executeWebSearch(query: string): Promise<string> {
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     return `Web search failed (${message}) — answer from existing knowledge and say so.`;
+  }
+}
+
+// ─── web_fetch (research stage only) ──────────────────────────────────────────────────
+
+/** Fetches per research run, on both providers: the `max_uses` of Claude's native
+ *  web_fetch (lib/ai/client.ts) and the budget the shared loop applies to the client-executed
+ *  one (lib/ai/tool-loop.ts). A fetched annual report is long, so the cap bounds the cost. */
+export const RESEARCH_MAX_FETCHES = 8;
+
+/** A fetched page is cut here, with a closing line saying so: about 15k tokens, the order of
+ *  magnitude of the `max_content_tokens: 40000` Claude's native fetch gets. */
+export const DEEPSEEK_FETCH_MAX_CHARS = 60000;
+
+
+// Same client-executed pattern as CUSTOM_WEB_SEARCH_TOOL above, on DeepSeek's Fetch API
+// (2026-10-18): the research stage needs whole documents (results releases, annual reports),
+// and a search summary is 600-800 characters.
+export const CUSTOM_WEB_FETCH_TOOL = {
+  name: "web_fetch",
+  description: `Fetch one web page (HTML or PDF) and return its full text as Markdown. Use it to read a primary document found by web_search: results pages, annual reports, filings. At most ${RESEARCH_MAX_FETCHES} fetches per run.`,
+  input_schema: {
+    type: "object",
+    properties: {
+      url: { type: "string", description: "Absolute http(s) URL" },
+    },
+    required: ["url"],
+  },
+} as const;
+
+function isAbsoluteHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/** What the model reads when the Fetch API answers non-2xx: DeepSeek documents 403 when the
+ *  site's policy refuses and 404 when the page has no usable content (a PDF it cannot read,
+ *  for one), hence the hint toward the HTML version. */
+function fetchFailureText(status: number): string {
+  const reason =
+    status === 403
+      ? "rejected by the site's policy"
+      : status === 404
+        ? "no usable content: try the HTML version of the page"
+        : status === 402
+          ? "DeepSeek balance exhausted"
+          : status === 429
+            ? "rate limited: fetch fewer pages at once"
+            : "the page could not be fetched";
+  return `${FETCH_FAILED_PREFIX} (HTTP ${status}): ${reason}.`;
+}
+
+/**
+ * Fetches one page through DeepSeek's Fetch API and returns it as a tool_result text:
+ * `# <title>` and the page's Markdown, cut at DEEPSEEK_FETCH_MAX_CHARS with a closing line.
+ * Never throws and never forwards the shared helper's search-worded message: every failure
+ * is a text that starts with FETCH_FAILED_PREFIX, an invalid URL without any call.
+ */
+export async function executeWebFetch(url: string): Promise<string> {
+  if (typeof url !== "string" || !isAbsoluteHttpUrl(url)) return `${FETCH_FAILED_PREFIX}: invalid URL`;
+  try {
+    const response = await callDeepSeekTool("fetch", { url });
+    if (!response.ok) {
+      return response.status === null
+        ? `${FETCH_FAILED_PREFIX}: web fetch not configured (missing DEEPSEEK_API_KEY)`
+        : fetchFailureText(response.status);
+    }
+    const data = response.data as { title?: unknown; content?: unknown };
+    const content = typeof data.content === "string" ? data.content : "";
+    if (!content.trim()) return `${FETCH_FAILED_PREFIX}: the page returned no content`;
+    const title = typeof data.title === "string" && data.title.trim() ? data.title : url;
+    const page = `# ${title}\n\n${content}`;
+    if (page.length <= DEEPSEEK_FETCH_MAX_CHARS) return page;
+    return `${page.slice(0, DEEPSEEK_FETCH_MAX_CHARS)}\n\n[truncated at ${DEEPSEEK_FETCH_MAX_CHARS} characters]`;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    return `${FETCH_FAILED_PREFIX} (${message})`;
   }
 }
