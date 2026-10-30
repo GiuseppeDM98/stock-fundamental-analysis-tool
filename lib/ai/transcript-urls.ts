@@ -28,7 +28,8 @@ export type SeenUrls = {
   // Result blocks per "<block type> <caller type>" (Claude only; DeepSeek has no caller), a
   // diagnostic: the native tools' dynamic filtering can run a search or fetch from code
   // execution, and a URL that reached the model only through code-execution output would
-  // read as unverified. The first real runs measure whether that happens.
+  // read as unverified. Measured on the real runs of 2026-10-30: every Claude result block
+  // came with caller code_execution_20260120 and still carried its URL.
   blocksByCaller: Record<string, number>;
 };
 

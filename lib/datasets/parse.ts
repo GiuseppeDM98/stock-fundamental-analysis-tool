@@ -29,11 +29,15 @@ export const DATASET_WARNING_CODES = [
   "ebitda_derived",
 ] as const;
 
+/** The longest detail a stored warning may carry: a writer slices to it, since a stored
+ *  warning that fails the schema makes the whole dataset read as none. */
+export const DATASET_WARNING_DETAIL_MAX = 300;
+
 export const datasetWarningSchema = z.object({
   code: z.enum(DATASET_WARNING_CODES),
   severity: z.enum(["warn", "info"]),
   fiscalYear: z.number().int().nullable(),
-  detail: z.string().max(300),
+  detail: z.string().max(DATASET_WARNING_DETAIL_MAX),
 });
 
 const storedDatasetSchema = groundedFinancialsSchema.extend({ datasetMeta: datasetMetaSchema });
@@ -42,6 +46,9 @@ const storedDatasetSchema = groundedFinancialsSchema.extend({ datasetMeta: datas
  *  apart from lib/ai/research-schema.ts's researchOutputMetaSchema, the model's own `meta`. */
 export const researchMetaSchema = z.object({
   model: z.enum(AI_MODEL_IDS),
+  // A string, not a catalog id: a fallback target can be a model the catalog does not list.
+  // Absent on the rows researched before 2026-10-30's retirement of the research spec.
+  servedBy: z.string().nullable().default(null),
   effort: z.enum(AI_EFFORT_LEVELS),
   searches: z.number().int().nonnegative(),
   fetches: z.number().int().nonnegative(),

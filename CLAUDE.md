@@ -10,7 +10,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: October 30, 2026 — **Spec 05a (research stage) implemented**: `POST /api/ai/research` collects five fiscal years from primary sources (Sonnet 5.5 `high`, or the user's DeepSeek model with client-executed search and fetch), verifies every cited URL against the run's transcript and saves a `FinancialDataset` with `origin: "web"`; `POST /api/datasets` merges a paste and a web dataset on the server, the paste winning per statement. Owner's decisions in the session (index § 3.10): a D&A field with EBITDA = EBIT + D&A computed in code when unpublished (D-104), no arithmetic by the model (D-105), 05d decided after 05c (D-106). No UI yet (05b). Collaudo done and closed (A–E automatic, guided tour passed; real runs on ENI.MI and KO met A6, one Sonnet run stopped on `tool_use`, now its own 502); measurements and open findings in the guide, § 5.3. Open: the deploy and the production checks of 02, 03 and 04 (index § 5). Next: spec 05b.
+**Last Updated**: October 30, 2026 — **Spec 05a (research stage) retired**: its content lives in the code, in the guide (§ 5.3) and in the index. The retirement's verification fixed five defects: D&A stored positive whatever sign the page used; a merged dataset keeps the web warnings that still describe it (`ebitda_derived`, `source_unverified`, `unverifiedSources` narrowed); `ResearchMeta.servedBy` names the model that answered through the Sonnet 5.5 refusal fallback; merge rescaling without float noise; one warning per unknown source id and year. The collaudo and the real runs covered the code before these fixes: redo them after the deploy. Open: the deploy and the production checks of 02, 03, 04 and 05a (index § 5). Next: spec 05b.
 
 ---
 
@@ -108,7 +108,7 @@ Full detail: [doc/guide/valutazione.md](doc/guide/valutazione.md).
 - Every AI call site resolves `{model, effort, thinking}` via `resolveAiSettings()` (`lib/ai/ai-preferences.ts`): request-body override > the user's stored `User.ai{Model,Effort,ThinkingEnabled}` default > the route's own historical hardcoded fallback, then clamped to the model's supported efforts, stepping down, never up (`callSiteDefaultEffort`).
 - **Models**: `claude-opus-4-8`, `claude-sonnet-5`, `claude-sonnet-5-5`, `deepseek-v4-pro`, `deepseek-flash` (catalog in `types/ai-settings.ts`; Sonnet 5.5 thinking-off and the pinned Grounded extraction: the guide, § 6.2). DeepSeek exposes `low`/`high`/`max` effort only. Sonnet 5.5 calls carry the server-side refusal fallback (`fallbacks: "default"`); when it serves, a note names the model that answered (the guide, § 6.1).
 - **Global default**: gear icon in `NavBar` → `<AiPreferencesModal>` → `GET/PATCH /api/settings/ai`. **Per-run override**: `<AiSettingsControl>` inline on Deep Value, Advisor, and the Analyst panel (one shared selector for all 3 lenses). Earnings lookup has no inline control — always the stored default.
-- **DeepSeek web search is client-executed**, not the provider's server-side tool — its Anthropic-compat translation of server-side tool calls proved unreliable in production (raw internal syntax leaked into the Advisor's visible stream). `lib/ai/web-search-tool.ts` (DeepSeek Search API, same key as the model) + `lib/ai/tool-loop.ts` (shared agentic loop, all five AI routes) replace it with standard function-calling. Deep Value + its verify route share a higher iteration cap (`DEEP_RESEARCH_MAX_TOOL_ITERATIONS = 35` vs. the default 10) with 8 results carrying model-facing summaries so each round converges faster — their research/verification prompts need far more one-query-at-a-time rounds than the Advisor's. DeepSeek-only in effect.
+- **DeepSeek web search is client-executed**, not the provider's server-side tool — its Anthropic-compat translation of server-side tool calls proved unreliable in production (raw internal syntax leaked into the Advisor's visible stream). `lib/ai/web-search-tool.ts` (DeepSeek Search and Fetch APIs, same key as the model) + `lib/ai/tool-loop.ts` (shared agentic loop, all six AI routes) replace it with standard function-calling. Deep Value, its verify route, earnings and the research stage share a higher iteration cap (`DEEP_RESEARCH_MAX_TOOL_ITERATIONS = 35` vs. the default 10) with 8 results carrying model-facing summaries so each round converges faster — their prompts need far more one-query-at-a-time rounds than the Advisor's. On Claude the cap counts the `pause_turn` resumes.
 
 ### Next-Earnings Calendar (AI-sourced)
 - **Purpose**: know when a stock next reports results, so you know when to re-run its analysis. Sourced **on demand** from the **stored default model + web search** (Opus 4.8 unless changed; Sonnet 5.5 is the route fallback; not Yahoo — `quote.earningsTimestamp` is stale for many MTAA tickers, returning the last reported quarter). Manual (per-stock button), **persisted** so the calendar survives reloads without re-running the model.
@@ -147,13 +147,13 @@ lib/
   earnings.ts                # pure: isFutureEarnings, isAnalysisStalePreEarnings, formatEarningsDate
   earnings-client.ts         # client helpers: fetchEarnings / refreshEarnings
   yahoo-client.ts            # getQuote + extractRawNumber + mapFundamentalsFromTimeSeries
-  ai/client.ts               # server-only: getAiClient/buildThinkingParam/buildEffortConfig/usesServerSideFallback/buildWebSearchTools
+  ai/client.ts               # server-only: getAiClient/buildThinkingParam/buildEffortConfig/usesServerSideFallback/buildWebSearchTools/buildResearchTools
   ai/fallback.ts             # pure: fallbackServedBy/prepareTurnForReplay/fallbackNote (Sonnet 5.5 refusal fallback)
   ai/error-status.ts         # routeErrorStatus(): SDK error classes → 503/400 for the AI routes
-  ai/ai-preferences.ts       # server-only: resolveAiSettings() — override > stored > fallback, effort-clamped
-  ai/tool-loop.ts            # server-only: runStreamWithToolLoop/runCreateWithToolLoop — shared client-side tool loop (DeepSeek web search)
+  ai/ai-preferences.ts       # server-only: resolveAiSettings() — override > stored > fallback, effort-clamped; researchAiSettings()
+  ai/tool-loop.ts            # server-only: runStreamWithToolLoop/runCreateWithToolLoop — shared client-side tool loop (DeepSeek web search + web fetch within fetchBudget)
   ai/stream-gate.ts          # createStreamGate(): forward only after the start marker
-  ai/web-search-tool.ts      # server-only: CUSTOM_WEB_SEARCH_TOOL + executeWebSearch() (DeepSeek Search API)
+  ai/web-search-tool.ts      # server-only: CUSTOM_WEB_SEARCH_TOOL/executeWebSearch() + CUSTOM_WEB_FETCH_TOOL/executeWebFetch() (DeepSeek Search/Fetch APIs)
   ai-settings-client.ts      # client helpers: fetchAiSettings/updateAiSettings
   auth.ts  db.ts  format.ts  analyses.ts  portfolio.ts
   analyses-select.ts         # ANALYSIS_LIST_SELECT / ANALYSIS_SUMMARY_SELECT
@@ -247,13 +247,14 @@ Things the series deliberately left out, one line each (added by the spec that l
 - No backfill of legacy `groundingJson` blobs into `FinancialDataset`: older Grounded analyses read theirs through `readAnalysisExtract` (spec 04, 2026-10-29).
 - No cleanup of `FinancialDataset` rows: deleting an analysis keeps its dataset, and one saved for a run that then failed is still offered for reuse for 7 days (spec 04, accepted 2026-10-29).
 - `/portfolio`'s own value and P&L assume the quote in the lot's currency (a `GBp` quote on a `GBP` lot reads a hundredfold); the banner, the lists, the exit signal and the digest check it (spec 03's retirement, 2026-10-29).
-- A model selector of its own for the research stage on /analyze (it follows the global default; override only in the route body), 2026-10-18.
+- A model selector of its own for the research stage on /analyze (it follows the global default; override only in the route body) (spec 05a, decided 2026-10-18).
+- No serialization of DeepSeek's parallel web searches under the Search API's 5 requests per second: a 429 reaches the model as a tool_result and no log prints it; serialize once one is seen (spec 01, deferred again at spec 05a's retirement, 2026-10-30).
 - No incremental refresh of a web dataset (only the latest fiscal year): a new research run redoes every year (spec 05a, 2026-10-30).
 
 ---
 
 ## Next Priorities
-The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (twelve specs, 01…08b with 05c added 2026-10-27, one session each, in order; 01, 02 and 03 retired 2026-10-29, 04 on 2026-10-30); its index `00-INDICE.md` holds the series' state and the owner's decisions; after 08b, one `/deep-value` realignment pass (D-76).
+The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (twelve specs, 01…08b with 05c added 2026-10-27, one session each, in order; 01, 02 and 03 retired 2026-10-29, 04 and 05a on 2026-10-30); its index `00-INDICE.md` holds the series' state and the owner's decisions; after 08b, one `/deep-value` realignment pass (D-76).
 1. Caching layer for `/api/quote`.
 2. Per-ticker yield-on-cost in the exit signal (needs per-position dividend exposure via snapshots).
 

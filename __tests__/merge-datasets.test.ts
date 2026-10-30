@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-import { mergeDatasets } from "@/lib/datasets/merge-sources";
+import { mergeDatasets, secondaryWarningsKept } from "@/lib/datasets/merge-sources";
 import { pasteSource } from "@/lib/grounding/merge";
 import { emptyRowSources, type DataSource, type DatasetMeta, type FinancialDataset } from "@/types/dataset";
 import { makeEstimateRow, makeExtract, makeFinancialsRow, makeMeta, makeMultiplesRow } from "./grounding-test-helpers";
@@ -131,6 +131,15 @@ describe("mergeDatasets", () => {
     expect(dataset.multiples[0]).toMatchObject({ pe: 19, marketCap: 1200 });
   });
 
+  it("rescales without float noise, in the stored figures and in the conflict details", () => {
+    const thousands = web();
+    thousands.meta.units = "thousands";
+    thousands.financials = thousands.financials.map((r) => ({ ...r, revenue: 7342 }));
+    const { dataset, warnings } = mergeDatasets(paste(), thousands);
+    expect(dataset.financials.find((r) => r.fiscalYear === 2024)!.revenue).toBe(7.342);
+    expect(warnings).toContainEqual({ code: "value_conflict", severity: "warn", fiscalYear: 2025, detail: "revenue: 1000 (paste) vs 7.342 (web)" });
+  });
+
   it("does not merge across currencies: the paste alone, with a warning", () => {
     const eur = web();
     eur.meta.reportingCurrency = "EUR";
@@ -146,6 +155,18 @@ describe("mergeDatasets", () => {
     const { dataset, warnings } = mergeDatasets(paste(), unknown);
     expect(dataset.financials).toHaveLength(1);
     expect(warnings).toEqual([{ code: "meta_units_conflict", severity: "warn", fiscalYear: null, detail: "millions vs unknown" }]);
+  });
+
+  it("carries none of the web's warnings when the merge kept the paste alone", () => {
+    // The paste's FY2024 has a balance sheet only: no income statement, so no EBITDA to flag.
+    const p = paste();
+    p.financials = [makeFinancialsRow({ fiscalYear: 2024, netDebt: 280, sources: { ...emptyRowSources(), balance: pasteSource("blk-4") } }), ...p.financials];
+    const eur = web();
+    eur.meta.reportingCurrency = "EUR";
+    eur.financials[0].sources.income = { ...WEB, verified: false };
+    const { dataset } = mergeDatasets(p, eur);
+    const webWarnings = [{ code: "ebitda_derived" as const, severity: "info" as const, fiscalYear: null, detail: "2024, 2025" }];
+    expect(secondaryWarningsKept(p, dataset, webWarnings)).toEqual({ warnings: [], unverifiedUrls: [] });
   });
 
   it("marks the result merged with both ids, and never writes into its inputs", () => {
