@@ -1,11 +1,25 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type Anthropic from "@anthropic-ai/sdk";
 
-vi.mock("@/lib/ai/web-search-tool", () => ({
+// Each fetch records when it started and ended: the loop must run a turn's fetches one at a
+// time (the Fetch API limits requests per domain), which the order of these marks proves.
+const fetchSpans: { url: string; start: number; end: number }[] = [];
+let clock = 0;
+
+vi.mock("@/lib/ai/web-search-tool", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ai/web-search-tool")>()),
   executeWebSearch: vi.fn(async (query: string) => `results for ${query}`),
+  executeWebFetch: vi.fn(async (url: string) => {
+    const span = { url, start: ++clock, end: 0 };
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    span.end = ++clock;
+    fetchSpans.push(span);
+    return `# page\n\n${url}`;
+  }),
 }));
 
 import { runCreateWithToolLoop, runStreamWithToolLoop, buildPromptCacheParam } from "@/lib/ai/tool-loop";
+import { executeWebFetch, executeWebSearch } from "@/lib/ai/web-search-tool";
 
 const USAGE = { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: null, cache_creation_input_tokens: null };
 
@@ -215,5 +229,69 @@ describe("refusal and the server-side fallback", () => {
     await runStreamWithToolLoop(client, { ...PARAMS, model: "claude-sonnet-5-5" }, () => {}, 5);
     const resumed = calls[1].params.messages as Anthropic.MessageParam[];
     expect((resumed[1].content as { type: string }[]).map((b) => b.type)).toEqual(["text", "fallback", "text"]);
+  });
+});
+
+const fetchCall = (id: string, url: string) => ({ type: "tool_use", id, name: "web_fetch", input: { url } });
+
+describe("client-executed web_fetch and its budget", () => {
+  beforeEach(() => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    fetchSpans.length = 0;
+    vi.mocked(executeWebFetch).mockClear();
+    vi.mocked(executeWebSearch).mockClear();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("answers a turn with a web_search and a web_fetch, one tool_result per call id", async () => {
+    const turn = message("tool_use", [
+      { type: "tool_use", id: "s1", name: "web_search", input: { query: "orn results" } },
+      fetchCall("f1", "https://ir.example.com/fy2025"),
+    ]);
+    const { client, sentMessages } = mockClient([turn, TEXT_ANSWER]);
+    await runCreateWithToolLoop(client, PARAMS, 5, { fetchBudget: 8 });
+    expect(executeWebSearch).toHaveBeenCalledWith("orn results");
+    expect(executeWebFetch).toHaveBeenCalledWith("https://ir.example.com/fy2025");
+    expect(sentMessages[1][2].content).toEqual([
+      { type: "tool_result", tool_use_id: "s1", content: "results for orn results" },
+      { type: "tool_result", tool_use_id: "f1", content: "# page\n\nhttps://ir.example.com/fy2025" },
+    ]);
+  });
+
+  it("executes 8 of 9 fetches across two turns, one at a time, and answers the 9th with the budget message", async () => {
+    const first = message("tool_use", [1, 2, 3, 4, 5].map((n) => fetchCall(`f${n}`, `https://ir.example.com/p${n}`)));
+    const second = message("tool_use", [6, 7, 8, 9].map((n) => fetchCall(`f${n}`, `https://ir.example.com/p${n}`)));
+    const run = mockClient([first, second, TEXT_ANSWER]);
+    await runCreateWithToolLoop(run.client, PARAMS, 5, { fetchBudget: 8 });
+    expect(executeWebFetch).toHaveBeenCalledTimes(8);
+    const lastTurn = run.sentMessages[2][4].content as { tool_use_id: string; content: string }[];
+    expect(lastTurn.map((r) => r.tool_use_id)).toEqual(["f6", "f7", "f8", "f9"]);
+    expect(lastTurn[3].content).toBe(
+      "FETCH FAILED: fetch budget exhausted (8 per run): use the pages already read and the search summaries."
+    );
+    // One at a time: every fetch ends before the next one starts.
+    expect(fetchSpans).toHaveLength(8);
+    for (let i = 1; i < fetchSpans.length; i++) expect(fetchSpans[i].start).toBeGreaterThan(fetchSpans[i - 1].end);
+  });
+
+  it("spends the budget on a failed fetch as on a read one", async () => {
+    for (let i = 0; i < 3; i++) vi.mocked(executeWebFetch).mockResolvedValueOnce("FETCH FAILED (HTTP 404): no usable content: try the HTML version of the page.");
+    const turn = message("tool_use", [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => fetchCall(`f${n}`, `https://ir.example.com/p${n}`)));
+    const run = mockClient([turn, TEXT_ANSWER]);
+    await runCreateWithToolLoop(run.client, PARAMS, 5, { fetchBudget: 8 });
+    expect(executeWebFetch).toHaveBeenCalledTimes(8);
+    const results = run.sentMessages[1][2].content as { content: string }[];
+    expect(results[8].content).toMatch(/^FETCH FAILED: fetch budget exhausted/);
+  });
+
+  it("answers an unexpected web_fetch with the budget message when the route sets no budget, without a call or a throw", async () => {
+    const turn = message("tool_use", [fetchCall("f1", "https://ir.example.com/a")]);
+    const { client, sentMessages } = mockClient([turn, TEXT_ANSWER]);
+    const result = await runCreateWithToolLoop(client, PARAMS, 5);
+    expect(result.hitIterationCap).toBe(false);
+    expect(executeWebFetch).not.toHaveBeenCalled();
+    expect((sentMessages[1][2].content as { content: string }[])[0].content).toMatch(/^FETCH FAILED: fetch budget exhausted \(0 per run\)/);
   });
 });

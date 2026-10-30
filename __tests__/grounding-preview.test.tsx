@@ -2,7 +2,8 @@ import { describe, it, expect, vi } from "vitest";
 import { createElement } from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 
-import { GroundingPreview } from "@/components/report/grounding-preview";
+import { GroundingPreview, warningLabelKey } from "@/components/report/grounding-preview";
+import { DATASET_WARNING_CODES } from "@/lib/datasets/parse";
 import type { GroundingExtractResponse } from "@/lib/grounding-client";
 import { computeBasisReconciliation } from "@/lib/grounding/basis";
 import {
@@ -135,5 +136,16 @@ describe("GroundingPreview", () => {
   it("renders no retry button without an onRetry", () => {
     renderPreview();
     expect(screen.queryByRole("button", { name: /Riprova questo blocco/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("warningLabelKey", () => {
+  // The code → label map is a Partial record, so the compiler does not catch a code added
+  // without its label: every stored dataset code must read as words, in both languages.
+  it.each(DATASET_WARNING_CODES)("gives the stored code %s its own label in English and Italian", (code) => {
+    const key = warningLabelKey(code);
+    expect(key).not.toBe("groundingWarnGeneric");
+    expect(translations.en[key]).toBeTruthy();
+    expect(translations.it[key]).toBeTruthy();
   });
 });

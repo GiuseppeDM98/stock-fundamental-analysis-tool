@@ -300,14 +300,24 @@ function parseFencedBlock(text: string, re: RegExp): ParsedAnalystResult | null 
  *   them), or null if no block is present or the last one is not a JSON object.
  */
 export function parseDeepValueJson(text: string): ParsedAnalystResult | null {
-  const matches = [...text.matchAll(JSON_BLOCK_RE_GLOBAL)];
-  const last = matches[matches.length - 1];
-  if (!last) return null;
+  const last = lastJsonFence(text);
+  if (last == null) return null;
   try {
-    return sanitizeDeepValueResult(JSON.parse(last[1]));
+    return sanitizeDeepValueResult(JSON.parse(last));
   } catch {
     return null;
   }
+}
+
+/**
+ * The body of the LAST fenced ```json block in `text`, unparsed, or null when there is none.
+ * The one fence rule of every model answer that ends with a JSON block: the valuation
+ * contract above, and the research stage's dataset (app/api/ai/research), whose shape is not
+ * a valuation and is validated by its own schema.
+ */
+export function lastJsonFence(text: string): string | null {
+  const matches = [...text.matchAll(JSON_BLOCK_RE_GLOBAL)];
+  return matches.length > 0 ? matches[matches.length - 1][1] : null;
 }
 
 /**

@@ -5,7 +5,7 @@ vi.mock("@/lib/db", () => ({
   db: { user: { findUnique: (...args: unknown[]) => findUniqueMock(...args) } },
 }));
 
-import { aiModelIdSchema, resolveAiSettings } from "@/lib/ai/ai-preferences";
+import { aiModelIdSchema, researchAiSettings, resolveAiSettings } from "@/lib/ai/ai-preferences";
 import type { AiSettings } from "@/types/ai-settings";
 
 const FALLBACK: AiSettings = { model: "claude-opus-4-8", effort: "xhigh", thinking: true };
@@ -93,5 +93,22 @@ describe("aiModelIdSchema", () => {
       expect(parsed.success).toBe(false);
       expect(parsed.error?.issues[0].message).toBe("Unknown AI model");
     }
+  });
+});
+
+describe("researchAiSettings", () => {
+  it("runs the research on Sonnet 5.5 at high for an Anthropic default, whatever its model and effort", async () => {
+    findUniqueMock.mockResolvedValueOnce({ aiModel: "claude-opus-4-8", aiEffort: "max", aiThinkingEnabled: false });
+    expect(await researchAiSettings("user8", undefined)).toEqual({ model: "claude-sonnet-5-5", effort: "high", thinking: true });
+  });
+
+  it("keeps the user's DeepSeek model, at high and never max", async () => {
+    findUniqueMock.mockResolvedValueOnce({ aiModel: "deepseek-flash", aiEffort: "max", aiThinkingEnabled: false });
+    expect(await researchAiSettings("user9", undefined)).toEqual({ model: "deepseek-flash", effort: "high", thinking: true });
+  });
+
+  it("follows a body override naming a DeepSeek model over an Anthropic default", async () => {
+    findUniqueMock.mockResolvedValueOnce({ aiModel: "claude-opus-4-8", aiEffort: "high", aiThinkingEnabled: true });
+    expect(await researchAiSettings("user10", { model: "deepseek-v4-pro" })).toEqual({ model: "deepseek-v4-pro", effort: "high", thinking: true });
   });
 });

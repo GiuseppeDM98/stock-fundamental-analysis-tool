@@ -6,7 +6,7 @@ import { normalizeTicker } from "@/lib/ticker";
 import { parseStoredExtract } from "@/lib/grounding/schema";
 import { parseStoredDataset } from "@/lib/datasets/parse";
 import type { GroundedFinancials, GroundingBlock } from "@/types/grounding";
-import type { DatasetMeta, DatasetOrigin, FinancialDataset, StoredDataset } from "@/types/dataset";
+import type { DatasetMeta, DatasetOrigin, FinancialDataset, ResearchMeta, StoredDataset } from "@/types/dataset";
 import type { ReconciliationWarning } from "@/lib/grounding/reconcile";
 
 const DAY_MS = 86_400_000;
@@ -21,7 +21,7 @@ export async function saveFinancialDataset(
     dataset: GroundedFinancials;
     blocks: GroundingBlock[] | null;
     warnings: ReconciliationWarning[];
-    research?: unknown;
+    research?: ResearchMeta | null;
     pasteDatasetId?: string | null;
     webDatasetId?: string | null;
   }
@@ -48,7 +48,7 @@ export async function saveFinancialDataset(
       dataJson: JSON.stringify({ ...extract, datasetMeta } satisfies FinancialDataset),
       blocksJson: input.blocks == null ? null : JSON.stringify(input.blocks),
       warningsJson: JSON.stringify(input.warnings),
-      researchJson: input.research === undefined ? null : JSON.stringify(input.research),
+      researchJson: input.research == null ? null : JSON.stringify(input.research),
       createdAt,
     },
     select: { id: true },

@@ -1,6 +1,7 @@
 import "server-only";
 import type Anthropic from "@anthropic-ai/sdk";
-import { executeWebSearch } from "@/lib/ai/web-search-tool";
+import { executeWebFetch, executeWebSearch } from "@/lib/ai/web-search-tool";
+import { FETCH_FAILED_PREFIX } from "@/lib/ai/transcript-urls";
 import { SERVER_SIDE_FALLBACK_BETA, usesServerSideFallback } from "@/lib/ai/client";
 import { fallbackServedBy, prepareTurnForReplay } from "@/lib/ai/fallback";
 import { AI_MODEL_CATALOG, type AiModelId } from "@/types/ai-settings";
@@ -94,23 +95,63 @@ function logFallback(round: number, requested: string, message: Anthropic.Messag
   return servedBy;
 }
 
-/** Runs every client-executed `web_search` call in `message` and returns the tool_result
- * user turn to send back — or null when the turn is final (no tool call to answer). */
-async function answerSearchCalls(message: Anthropic.Message): Promise<Anthropic.MessageParam | null> {
-  const searchCalls = message.content.filter(
-    (b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === "web_search"
-  );
-  if (message.stop_reason !== "tool_use" || searchCalls.length === 0) return null;
+/** Options of one loop run. `fetchBudget`: how many client-executed `web_fetch` calls the
+ *  run may execute (DeepSeek; Claude's native web_fetch has its own `max_uses`). Without it
+ *  the budget is 0: a route that does not declare web_fetch never fetches, and an unexpected
+ *  call gets the budget message as its tool_result instead of a throw. */
+export interface ToolLoopOptions {
+  fetchBudget?: number;
+}
 
-  // In parallel: DeepSeek's Search API allows 5 requests per second per account (429 above).
-  // A turn carries 1-3 calls (counted 2026-10-11) and the DeepSeek real run of late October 2026
-  // hit none. A 429 comes back as a tool_result the model reads, never a throw, and is the signal
-  // to serialize this map.
+/** The fetch budget of one run, shared by all its rounds. */
+interface FetchBudget {
+  readonly total: number;
+  fetchesLeft: number;
+}
+
+function fetchBudgetText(total: number): string {
+  // Starts with FETCH_FAILED_PREFIX like every fetch that read nothing, so the transcript
+  // check (lib/ai/transcript-urls.ts) never counts a refused fetch's URL as seen.
+  return `${FETCH_FAILED_PREFIX}: fetch budget exhausted (${total} per run): use the pages already read and the search summaries.`;
+}
+
+/** Runs every client-executed `web_search` and `web_fetch` call in `message` and returns the
+ * tool_result user turn to send back, results in the order of the calls — or null when the
+ * turn is final (no such call to answer). */
+async function answerClientToolCalls(message: Anthropic.Message, budget: FetchBudget): Promise<Anthropic.MessageParam | null> {
+  const calls = message.content.filter(
+    (b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && (b.name === "web_search" || b.name === "web_fetch")
+  );
+  if (message.stop_reason !== "tool_use" || calls.length === 0) return null;
+
+  // Searches in parallel: DeepSeek's Search API allows 5 requests per second per account (429
+  // above). A turn carries 1-3 calls (counted 2026-10-11) and the DeepSeek real run of late
+  // October 2026 hit none. A 429 comes back as a tool_result the model reads, never a throw,
+  // and is the signal to serialize this map.
+  const searchResults = new Map<string, Promise<string>>();
+  for (const call of calls) {
+    if (call.name === "web_search") searchResults.set(call.id, executeWebSearch((call.input as { query: string }).query));
+  }
+
+  // Fetches one at a time: the Fetch API also limits requests per domain, and a research turn
+  // usually fetches several pages of the same investor-relations site. Only an executed fetch
+  // (read or failed) spends the budget; one beyond it gets the budget message, no call.
+  const fetchResults = new Map<string, string>();
+  for (const call of calls) {
+    if (call.name !== "web_fetch") continue;
+    if (budget.fetchesLeft <= 0) {
+      fetchResults.set(call.id, fetchBudgetText(budget.total));
+      continue;
+    }
+    budget.fetchesLeft--;
+    fetchResults.set(call.id, await executeWebFetch((call.input as { url: string }).url));
+  }
+
   const toolResults = await Promise.all(
-    searchCalls.map(async (call) => ({
+    calls.map(async (call) => ({
       type: "tool_result" as const,
       tool_use_id: call.id,
-      content: await executeWebSearch((call.input as { query: string }).query),
+      content: call.name === "web_search" ? await searchResults.get(call.id)! : fetchResults.get(call.id)!,
     }))
   );
   return { role: "user", content: toolResults };
@@ -137,16 +178,18 @@ interface StreamLoopResult {
 }
 
 /** Runs a streaming Messages call, forwarding text deltas via `onTextDelta`. If the
- * model emits a `web_search` tool_use (the client-executed custom tool — see
- * lib/ai/web-search-tool.ts), executes the search and continues the conversation until
- * the model stops calling tools or the iteration cap is hit. */
+ * model emits a `web_search` or `web_fetch` tool_use (the client-executed custom tools — see
+ * lib/ai/web-search-tool.ts), executes it and continues the conversation until the model
+ * stops calling tools or the iteration cap is hit. */
 export async function runStreamWithToolLoop(
   client: Anthropic,
   params: StreamParams,
   onTextDelta: (text: string) => void,
-  maxIterations: number = DEFAULT_MAX_TOOL_ITERATIONS
+  maxIterations: number = DEFAULT_MAX_TOOL_ITERATIONS,
+  options: ToolLoopOptions = {}
 ): Promise<StreamLoopResult> {
   const messages = [...params.messages];
+  const budget: FetchBudget = { total: options.fetchBudget ?? 0, fetchesLeft: options.fetchBudget ?? 0 };
   let stopReason: string | null = null;
   let text = "";
   let servedBy: string | null = null;
@@ -175,7 +218,7 @@ export async function runStreamWithToolLoop(
     // — never append a new user message after a pause, only after resuming it.
     if (finalMessage.stop_reason === "pause_turn") continue;
 
-    const toolResultTurn = await answerSearchCalls(finalMessage);
+    const toolResultTurn = await answerClientToolCalls(finalMessage, budget);
     if (!toolResultTurn) return { stopReason, hitIterationCap: false, messages, text, servedBy };
     messages.push(toolResultTurn);
   }
@@ -233,14 +276,16 @@ export interface CreateLoopResult {
 
 /** Non-streaming equivalent of `runStreamWithToolLoop`, for one-shot structured-JSON
  * lookups (e.g. the earnings route). Same loop semantics: resumes on `pause_turn`,
- * answers client-executed `web_search` calls, logs usage per round, and reports
- * `hitIterationCap` when it gave up before a final answer. */
+ * answers client-executed `web_search` and `web_fetch` calls, logs usage per round, and
+ * reports `hitIterationCap` when it gave up before a final answer. */
 export async function runCreateWithToolLoop(
   client: Anthropic,
   params: CreateParams,
-  maxIterations: number = DEFAULT_MAX_TOOL_ITERATIONS
+  maxIterations: number = DEFAULT_MAX_TOOL_ITERATIONS,
+  options: ToolLoopOptions = {}
 ): Promise<CreateLoopResult> {
   const messages = [...params.messages];
+  const budget: FetchBudget = { total: options.fetchBudget ?? 0, fetchesLeft: options.fetchBudget ?? 0 };
   let lastMessage: Anthropic.Message | null = null;
   let servedBy: string | null = null;
 
@@ -253,7 +298,7 @@ export async function runCreateWithToolLoop(
     // Same resume-on-pause rule as the streaming loop above.
     if (lastMessage.stop_reason === "pause_turn") continue;
 
-    const toolResultTurn = await answerSearchCalls(lastMessage);
+    const toolResultTurn = await answerClientToolCalls(lastMessage, budget);
     if (!toolResultTurn) {
       return { message: lastMessage, stopReason: lastMessage.stop_reason, hitIterationCap: false, messages, servedBy };
     }

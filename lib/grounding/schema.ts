@@ -62,6 +62,8 @@ export const financialsRowSchema = z.object({
   sharesDiluted: nullableNumber,
   cfo: nullableNumber,
   capex: nullableNumber,
+  // Added 2026-10-30 (research stage): defaulted so every extract saved before parses.
+  depreciationAmortization: nullableNumber.default(null),
   freeCashFlow: nullableNumber,
   dividendsPerShare: nullableNumber,
   sources: rowSourcesSchema.default(() => emptyRowSources()),

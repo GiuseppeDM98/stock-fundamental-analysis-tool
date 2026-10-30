@@ -37,6 +37,7 @@ const FIELD_LABEL_KEY: Record<string, keyof Translations> = {
   netDebt: "datasetFieldNetDebt",
   cfo: "datasetFieldCfo",
   capex: "datasetFieldCapex",
+  depreciationAmortization: "datasetFieldDepreciationAmortization",
   freeCashFlow: "datasetFieldFreeCashFlow",
   evEbitda: "datasetFieldEvEbitda",
   evSales: "datasetFieldEvSales",

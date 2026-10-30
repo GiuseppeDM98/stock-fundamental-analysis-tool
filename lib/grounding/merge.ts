@@ -224,7 +224,7 @@ const MONTHS_IN_YEAR = 12;
  * same company's fiscal calendar, so only their relative order matters. null when no year
  * can be read from the label.
  */
-function periodEndKey(label: string): number | null {
+export function periodEndKey(label: string): number | null {
   const fourDigit = label.match(/\b(19|20)\d{2}\b/);
   const fyTwoDigit = label.match(/\bFY\s?'?(\d{2})\b/i);
   const year = fourDigit ? Number(fourDigit[0]) : fyTwoDigit ? 2000 + Number(fyTwoDigit[1]) : null;
