@@ -7,6 +7,9 @@
  */
 import type { FiscalYearFinancials, GroundedFinancials, GroundingBlock } from "@/types/grounding";
 import type { ReconciliationWarning } from "@/lib/grounding/reconcile";
+import type { BasisReconciliation } from "@/lib/grounding/basis";
+import type { ImpliedExpectations, MarketImplied, MultipleStats, ValuationGrid } from "@/lib/grounding/anchors";
+import type { AiEffort, AiModelId } from "@/types/ai-settings";
 
 export type DataSourceKind = "paste" | "web";
 
@@ -62,6 +65,7 @@ export const STATEMENT_FIELD_KIND = {
   netDebt: "balance",
   cfo: "cashFlow",
   capex: "cashFlow",
+  depreciationAmortization: "cashFlow",
   freeCashFlow: "cashFlow",
 } as const satisfies Record<FinancialField, StatementKind>;
 
@@ -85,11 +89,45 @@ export type DatasetMeta = {
 
 export type FinancialDataset = GroundedFinancials & { datasetMeta: DatasetMeta };
 
-/** A FinancialDataset row read back and validated (lib/datasets/parse.ts). */
+/** How a web dataset was researched (FinancialDataset.researchJson): the run's model and
+ *  effort, the searches and fetches it made, how long it took, the cited URLs the run never
+ *  opened, and the model's own notes (the EBITDA definition used, gaps). */
+export type ResearchMeta = {
+  model: AiModelId;
+  effort: AiEffort;
+  searches: number;
+  fetches: number;
+  durationMs: number;
+  unverifiedSources: string[];
+  notes: string | null;
+};
+
+/** A FinancialDataset row read back and validated (lib/datasets/parse.ts). `research` is null
+ *  for a paste, and for a web or merged row whose researchJson is missing or malformed. */
 export type StoredDataset = {
   id: string;
   dataset: FinancialDataset;
   blocks: GroundingBlock[];
   warnings: ReconciliationWarning[];
+  research: ResearchMeta | null;
   createdAt: string;
 };
+
+/** POST /api/ai/research: the saved web dataset with everything the preview needs, computed
+ *  on the server (the anchors against the current quote, the warnings), so the browser
+ *  recomputes nothing. */
+export type ResearchResponse = {
+  datasetId: string;
+  dataset: FinancialDataset;
+  basis: BasisReconciliation;
+  stats: MultipleStats[];
+  grid: ValuationGrid | null;
+  marketImplied: MarketImplied | null;
+  impliedExpectations: ImpliedExpectations | null;
+  warnings: ReconciliationWarning[];
+  research: ResearchMeta;
+};
+
+/** POST /api/datasets with origin "merged": the same bundle, the research being the web
+ *  dataset's (null when that row carries none). */
+export type MergedDatasetResponse = Omit<ResearchResponse, "research"> & { research: ResearchMeta | null };

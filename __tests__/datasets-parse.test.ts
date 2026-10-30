@@ -15,7 +15,7 @@ const DATASET = {
 const BLOCKS = [{ id: "blk-1", kind: "income_statement", text: "Revenue 1000" }];
 const WARNINGS = [{ code: "value_conflict", severity: "warn", fiscalYear: 2025, detail: "revenue: 1000 (income_statement #1) vs 1100 (other #2)" }];
 
-function row(overrides: Partial<{ dataJson: string; blocksJson: string | null; warningsJson: string | null }> = {}) {
+function row(overrides: Partial<{ dataJson: string; blocksJson: string | null; warningsJson: string | null; researchJson: string | null }> = {}) {
   return {
     id: "ds1",
     dataJson: JSON.stringify(DATASET),
@@ -33,6 +33,7 @@ describe("parseStoredDataset", () => {
       dataset: DATASET,
       blocks: BLOCKS,
       warnings: WARNINGS,
+      research: null,
       createdAt: "2026-10-27T09:00:00.000Z",
     });
   });
@@ -48,5 +49,38 @@ describe("parseStoredDataset", () => {
     const { datasetMeta: _m, ...withoutMeta } = DATASET;
     expect(parseStoredDataset(row({ dataJson: JSON.stringify(withoutMeta) }))).toBeNull();
     expect(parseStoredDataset(row({ blocksJson: JSON.stringify([{ id: "x" }]) }))).toBeNull();
+  });
+});
+
+describe("parseStoredDataset — a web dataset", () => {
+  const RESEARCH = { model: "claude-sonnet-5-5", effort: "high", searches: 7, fetches: 3, durationMs: 95000, unverifiedSources: ["https://data.example/m"], notes: null };
+  const webRow = (researchJson: string | null) =>
+    row({
+      dataJson: JSON.stringify({ ...DATASET, datasetMeta: { ...META, origin: "web" } }),
+      blocksJson: null,
+      warningsJson: JSON.stringify([{ code: "source_unverified", severity: "warn", fiscalYear: null, detail: "https://data.example/m" }]),
+      researchJson,
+    });
+
+  it("reads a row whose warnings carry the research codes, warnings and research included", () => {
+    const parsed = parseStoredDataset(webRow(JSON.stringify(RESEARCH)));
+    expect(parsed?.warnings.map((w) => w.code)).toEqual(["source_unverified"]);
+    expect(parsed?.research).toEqual(RESEARCH);
+  });
+
+  it("keeps the row with research null when researchJson is missing or malformed", () => {
+    expect(parseStoredDataset(webRow(null))?.research).toBeNull();
+    expect(parseStoredDataset(webRow("{not json"))?.research).toBeNull();
+    const malformed = parseStoredDataset(webRow(JSON.stringify({ ...RESEARCH, model: "gpt-9" })));
+    expect(malformed).not.toBeNull();
+    expect(malformed?.research).toBeNull();
+  });
+});
+
+describe("parseStoredDataset — a dataset saved before D&A existed", () => {
+  it("reads a financials row without the depreciationAmortization key as null", () => {
+    const old = JSON.parse(JSON.stringify(DATASET));
+    delete old.financials[0].depreciationAmortization;
+    expect(parseStoredDataset(row({ dataJson: JSON.stringify(old) }))?.dataset.financials[0].depreciationAmortization).toBeNull();
   });
 });

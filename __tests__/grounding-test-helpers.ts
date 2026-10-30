@@ -25,6 +25,7 @@ export function makeFinancialsRow(overrides: Partial<FiscalYearFinancials> & { f
     sharesDiluted: null,
     cfo: null,
     capex: null,
+    depreciationAmortization: null,
     freeCashFlow: null,
     dividendsPerShare: null,
     sources: emptyRowSources(),

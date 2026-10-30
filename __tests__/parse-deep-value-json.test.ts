@@ -18,6 +18,7 @@ import {
   ANALYST_PHASE_MARKERS,
   REPORT_START_MARKER,
   CRITIQUE_START_MARKER,
+  lastJsonFence,
 } from "@/lib/report/parse-deep-value-json";
 
 const BLIND_BLOCK = '```json-blind\n{"method":"DCF","sector":"Utilities","currency":"EUR","bull":{"fairValue":10},"base":{"fairValue":8},"bear":{"fairValue":5}}\n```';
@@ -72,6 +73,16 @@ describe("report first, JSON last — the parser reads the LAST fence", () => {
     const stream = `${BLIND_BLOCK}\nRationale.\n${CRITIQUE_START_MARKER}Critique.\n${FINAL_BLOCK}`;
     expect(parseDeepValueJson(stream)?.base?.fairValue).toBe(9);
     expect(parseBlindJson(stream)?.base?.fairValue).toBe(8);
+  });
+});
+
+describe("lastJsonFence", () => {
+  it("returns the body of the last ```json fence, unparsed, and ignores a json-blind one", () => {
+    const text = `log\n\`\`\`json\n{"a":1}\n\`\`\`\nmore\n${BLIND_BLOCK}\n\`\`\`json\n{"b":2}\n\`\`\`\n`;
+    expect(lastJsonFence(text)).toBe('{"b":2}');
+    expect(lastJsonFence("no fence here")).toBeNull();
+    // Unparseable content still comes back: the caller's schema judges it.
+    expect(lastJsonFence("```json\n{broken\n```")).toBe("{broken");
   });
 });
 

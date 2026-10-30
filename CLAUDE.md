@@ -10,7 +10,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: October 30, 2026 — **Spec 04 (financial dataset with provenance) retired**: verified criterion by criterion, then deleted (`git log -- doc/evoluzioni/04-dataset-finanziario-con-provenienza.md` is its archive). It was in service: PR #58 merged, migrated on Turso on 2026-10-30 before the deploy (re-read at the retirement: `datasetId`, its FK and index, the table still empty). The retirement fixed code too, so the in-service signals hold for the code before it and are to redo after the deploy: a retry that fixes one of two failed blocks keeps the other's warning (preview, saved dataset, lens prompts); `POST /api/analyses` no longer writes `groundingJson`. The live specs follow the code (index § 3.9, D-100…D-103). Open: the deploy; then, after a first new analysis, 02's, 03's and 04's production checks (index § 5, rows 2-4); `/deep-value` suspended (D-76). Next: deploy, then spec 05a.
+**Last Updated**: October 30, 2026 — **Spec 05a (research stage) implemented**: `POST /api/ai/research` collects five fiscal years from primary sources (Sonnet 5.5 `high`, or the user's DeepSeek model with client-executed search and fetch), verifies every cited URL against the run's transcript and saves a `FinancialDataset` with `origin: "web"`; `POST /api/datasets` merges a paste and a web dataset on the server, the paste winning per statement. Owner's decisions in the session (index § 3.10): a D&A field with EBITDA = EBIT + D&A computed in code when unpublished (D-104), no arithmetic by the model (D-105), 05d decided after 05c (D-106). No UI yet (05b). Collaudo done and closed (A–E automatic, guided tour passed; real runs on ENI.MI and KO met A6, one Sonnet run stopped on `tool_use`, now its own 502); measurements and open findings in the guide, § 5.3. Open: the deploy and the production checks of 02, 03 and 04 (index § 5). Next: spec 05b.
 
 ---
 
@@ -20,7 +20,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 - **yahoo-finance2** `3.13.2` + **Zod** `4.6.7`
 - **Prisma** client `7.4.2` (CLI `7.10.0`) + **Turso** (libSQL) via `@prisma/adapter-libsql`
 - **Auth.js** `next-auth@5.0.0-beta.32` + **bcryptjs**
-- **Anthropic SDK** `0.133.0` + **Claude Opus 4.8** as the user's stored default (`User.ai*`, schema default `high`; changed in Settings), floored at `xhigh` for Deep Value and the lenses — research first, report streamed, JSON last / **Claude Sonnet 5.5** pinned for the Grounded extraction (`medium`); the route fallbacks (Opus 4.8 `xhigh` for Deep Value + Analyst Review, Sonnet 5.5 for Advisor `high` and earnings `medium`) run only when the stored value is invalid / **DeepSeek V4 Pro** or **V4.1 Flash** (alternative providers, same SDK via its Anthropic-compat endpoint, user-selectable, `low`/`high`/`max` effort) — adaptive thinking, web search enabled (native for Claude, client-executed via DeepSeek's Search API for DeepSeek)
+- **Anthropic SDK** `0.133.0` + **Claude Opus 4.8** as the user's stored default (`User.ai*`, schema default `high`; changed in Settings), floored at `xhigh` for Deep Value and the lenses — research first, report streamed, JSON last / **Claude Sonnet 5.5** pinned for the Grounded extraction (`medium`) and the research stage (`high`, or the user's DeepSeek model via DeepSeek's Search/Fetch APIs); the route fallbacks (Opus 4.8 `xhigh` for Deep Value + Analyst Review, Sonnet 5.5 for Advisor `high` and earnings `medium`) run only when the stored value is invalid / **DeepSeek V4 Pro** or **V4.1 Flash** (alternative providers, same SDK via its Anthropic-compat endpoint, user-selectable, `low`/`high`/`max` effort) — adaptive thinking, web search enabled (native for Claude, client-executed via DeepSeek's Search API for DeepSeek)
 - **Tailwind** `4.3.3` (`@tailwindcss/postcss`) + typography `0.5.20` + **Framer Motion** `11.18.2` + **Recharts** `2.15.4` + react-markdown + remark-gfm + node-html-parser
 - **Vitest** `4.1.11` + Testing Library `16.3.2` + **Playwright** `1.63.0` (e2e, isolated DB) + `tsx` (seed/e2e scripts)
 
@@ -31,7 +31,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 Next.js App Router with client-side interactivity and server-side API routes. Pipeline: **Discover (Advisor) → Decide (Deep Value) → Monitor (Watchlist/Portfolio)**.
 
 - **Frontend**: Hub home (`/`) + `/analyze` (Deep Value) + auth + `/analyses` + `/portfolio` + `/advisor` + `/watchlist`
-- **API**: `/api/quote/[ticker]` (only Yahoo data route), `/api/auth/*`, `/api/analyses(+/[id]` GET/PATCH/DELETE — PATCH attaches the Analyst Review), `/api/positions(+/[id])`, `/api/earnings` GET/POST (POST = the stored default model + web search next-earnings lookup, upsert), `/api/ai/deep-value` + `/verify` + `/api/ai/advisor` (all POST streaming), `/api/ai/grounding/extract`, `/api/datasets` (POST, `/latest`, `/[id]`), `/api/settings/ai`, `/api/advisor/sessions(+/[id](+/messages))`, `/api/portfolio/snapshots`, `/api/portfolio/dividends`, `/api/watchlist(+/[id], /settings, /run)`, `/api/cron/{portfolio-snapshot,watchlist-analysis}`
+- **API**: `/api/quote/[ticker]` (only Yahoo data route), `/api/auth/*`, `/api/analyses(+/[id]` GET/PATCH/DELETE — PATCH attaches the Analyst Review), `/api/positions(+/[id])`, `/api/earnings` GET/POST (POST = the stored default model + web search next-earnings lookup, upsert), `/api/ai/deep-value` + `/verify` + `/api/ai/advisor` (all POST streaming), `/api/ai/grounding/extract`, `/api/ai/research` (POST, JSON), `/api/datasets` (POST paste/merged, `/latest`, `/[id]`), `/api/settings/ai`, `/api/advisor/sessions(+/[id](+/messages))`, `/api/portfolio/snapshots`, `/api/portfolio/dividends`, `/api/watchlist(+/[id], /settings, /run)`, `/api/cron/{portfolio-snapshot,watchlist-analysis}`
 - **Business logic**: pure TS in `lib/` (Yahoo adapter, deep-value/verify/advisor/earnings prompts, snapshots, dividends, formatters)
 - **DB**: SQLite via Prisma 7 — `User`, `Analysis`, `FinancialDataset`, `Position`, `PortfolioSnapshot`, `WatchlistItem`, `EarningsEstimate`, `AdvisorSession`, `AdvisorMessage`
 - **Auth**: Auth.js v5 credentials provider, JWT sessions (no DB session table)
@@ -63,6 +63,7 @@ Full detail: [doc/guide/valutazione.md](doc/guide/valutazione.md).
 ### Financial dataset (paste)
 - Optional, above the Deep Value panel on `/analyze`: `<DatasetSection>` opens on the user's dataset of the last 7 days for the ticker (its tables, "Use this dataset" / "Refresh data"), else the paste editor `components/grounding-input.tsx` (typed blocks, 40k chars each, 200k total, per-ticker draft; source-agnostic).
 - **Prepare data** → `/api/ai/grounding/extract` (Sonnet 5.5, transcription only) per block, merged by year with each statement's source; a failed block is retried alone. **Analyze with this data →** saves a `FinancialDataset`; Deep Value gets only its `datasetId` and rebuilds the context on the server (web search rescoped, not disabled).
+- **Research stage** (no UI until spec 05b): `POST /api/ai/research` builds a web dataset with a verified source per row, and `POST /api/datasets` merges it with a paste on the server. Detail: the guide, § 5.3.
 - `Analysis.datasetId` links the save; lenses read it blind-first; older rows keep `groundingJson`, read through `readAnalysisExtract`. Quick mode stays byte-identical (golden `__tests__/deep-value-prompts-quick-identical.test.ts`, last regenerated 2026-10-29). Detail: the guide, § 5.2.
 
 ### User Accounts & Saved Analyses
@@ -171,9 +172,10 @@ lib/
   report/evolution.ts        # computeEvolution()/computeEvolutionChain() — deterministic history (no AI)
   grounding/                 # pure: merge/anchors/reconcile/postcheck/prompt-format/schema/currency — Grounded mode + every analysis's gates
   ai/grounding-extract-prompt.ts  # per-kind extraction prompt builders (Sonnet 5.5, no web search)
+  ai/research-{prompt,schema,to-dataset}.ts + ai/transcript-urls.ts  # research stage: prompt, output schema, web dataset, verified sources
   grounding-client.ts        # client helper: extractGrounding()
-  datasets/                  # store.ts (server-only: save/latest/get, readAnalysisExtract/readAnalysisGrounding) + parse.ts (pure)
-  dataset-client.ts          # client helpers: createPasteDataset/fetchLatestDataset/fetchDataset
+  datasets/                  # store.ts (server-only: save/latest/get, readAnalysisExtract/readAnalysisGrounding) + parse.ts, merge-sources.ts, anchors-bundle.ts (pure)
+  dataset-client.ts          # client helpers: createPasteDataset/fetchLatestDataset/fetchDataset/researchDataset
   ticker.ts                  # pure: normalizeTicker/tickerSchema (trim + uppercase, max 20)
   watchlist-mos.ts           # pure: toWatchlistMosFraction() — WatchlistItem.mosPercent is a fraction
   i18n/translations.ts       # EN/IT dictionary
@@ -183,7 +185,7 @@ app/
   api/ quote/[ticker]  auth/*  analyses(+/[id])  positions(+/[id], PATCH closes/sells)
       earnings (GET/POST — AI next-earnings)  portfolio/snapshots
       cron/{portfolio-snapshot,watchlist-analysis}  watchlist(+/[id],/settings,/run)
-      ai/deep-value(+/verify)  ai/advisor  ai/grounding/extract  datasets(+/latest, /[id])
+      ai/deep-value(+/verify)  ai/advisor  ai/grounding/extract  ai/research  datasets(+/latest, /[id])
       advisor/sessions(+/[id](+/messages))
       settings/ai (GET/PATCH — global AI model/effort/thinking default)
 components/                  # hub-client, analyze-client, deep-value-panel, analyses-list, dataset-section, grounding-input,
@@ -230,7 +232,7 @@ TURSO_AUTH_TOKEN="..."                 # not needed for local file:
 NEXTAUTH_SECRET="..."                  # openssl rand -hex 32
 NEXTAUTH_URL="http://localhost:3000"   # prod: https://your-domain.vercel.app
 ANTHROPIC_API_KEY="sk-ant-..."
-DEEPSEEK_API_KEY="sk-..."          # optional — DeepSeek V4 Pro provider + its web search
+DEEPSEEK_API_KEY="sk-..."          # optional — DeepSeek V4 Pro provider + its web search and fetch
 DISABLE_REGISTRATION="false"
 CRON_SECRET="..."                      # also set in Vercel project settings
 RESEND_API_KEY="re_..."                # watchlist email digest
@@ -245,6 +247,8 @@ Things the series deliberately left out, one line each (added by the spec that l
 - No backfill of legacy `groundingJson` blobs into `FinancialDataset`: older Grounded analyses read theirs through `readAnalysisExtract` (spec 04, 2026-10-29).
 - No cleanup of `FinancialDataset` rows: deleting an analysis keeps its dataset, and one saved for a run that then failed is still offered for reuse for 7 days (spec 04, accepted 2026-10-29).
 - `/portfolio`'s own value and P&L assume the quote in the lot's currency (a `GBp` quote on a `GBP` lot reads a hundredfold); the banner, the lists, the exit signal and the digest check it (spec 03's retirement, 2026-10-29).
+- A model selector of its own for the research stage on /analyze (it follows the global default; override only in the route body), 2026-10-18.
+- No incremental refresh of a web dataset (only the latest fiscal year): a new research run redoes every year (spec 05a, 2026-10-30).
 
 ---
 

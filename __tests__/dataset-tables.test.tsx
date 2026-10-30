@@ -55,4 +55,27 @@ describe("DatasetTables", () => {
     const header = within(screen.getByTestId("dataset-table-income")).getAllByRole("row")[0];
     expect(within(header).getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["", "2023", "2024", "2025"]);
   });
+
+  it("shows a web source by its host, and an unverified one as such", () => {
+    const opened = { kind: "web" as const, url: "https://www.ir.ornitorinco.example/annual-report-2025.pdf", title: "Annual report 2025", asOf: "2026-03", blockId: null, verified: true };
+    const notOpened = { kind: "web" as const, url: "https://data.example/ORNT/multiples", title: "ORNT multiples", asOf: "2026-09", blockId: null, verified: false };
+    render(
+      createElement(DatasetTables, {
+        extract: makeExtract({
+          meta: makeMeta({ reportingCurrency: "USD", units: "millions" }),
+          financials: [makeFinancialsRow({ fiscalYear: 2025, revenue: 1080, depreciationAmortization: 75, sources: { ...emptyRowSources(), income: opened, cashFlow: opened } })],
+          multiples: [makeMultiplesRow({ fiscalYear: 2025, pe: 21, source: notOpened })],
+        }),
+      })
+    );
+    const incomeSource = within(screen.getByTestId("dataset-table-income")).getAllByRole("row")[1];
+    expect(within(incomeSource).getByText("🌐 ir.ornitorinco.example")).toBeInTheDocument();
+    expect(within(incomeSource).queryByText(/unverified/)).not.toBeInTheDocument();
+    const multiplesSource = within(screen.getByTestId("dataset-table-multiples")).getAllByRole("row")[1];
+    expect(within(multiplesSource).getByText("🌐 data.example")).toBeInTheDocument();
+    expect(within(multiplesSource).getByText("· unverified")).toBeInTheDocument();
+    // D&A sits in the cash flow table, the input of an EBITDA the research computed.
+    const daRow = within(screen.getByTestId("dataset-table-cashFlow")).getByText("D&A").closest("tr")!;
+    expect(daRow.textContent).toContain("75");
+  });
 });

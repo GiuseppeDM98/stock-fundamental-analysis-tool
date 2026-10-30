@@ -46,6 +46,10 @@ const WARNING_KEY: Partial<Record<ReconciliationWarning["code"], keyof Translati
   basis_unverifiable: "groundingWarnBasisUnverifiable",
   ev_bridge_mismatch: "groundingWarnEvBridgeMismatch",
   dividend_not_covered: "groundingWarnDividendNotCovered",
+  source_unverified: "warningSourceUnverified",
+  source_unknown_id: "warningSourceUnknownId",
+  value_ignored_secondary: "warningValueIgnoredSecondary",
+  ebitda_derived: "warningEbitdaDerived",
 };
 
 // Exported — reused by valuation-checks-card.tsx so the two surfaces that render

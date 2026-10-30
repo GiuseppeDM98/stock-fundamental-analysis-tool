@@ -69,6 +69,10 @@ export type FiscalYearFinancials = {
   sharesDiluted: number | null; // see UNIT NOTE above
   cfo: number | null;
   capex: number | null;
+  // Depreciation and amortization, a positive amount (cash-flow statement add-back). Lets the
+  // research stage compute EBITDA = EBIT + D&A when a company publishes no EBITDA
+  // (lib/ai/research-to-dataset.ts); null on pastes and on datasets saved before 2026-10-30.
+  depreciationAmortization: number | null;
   freeCashFlow: number | null;
   dividendsPerShare: number | null;
   // One source per statement (income/balance/cash flow); the field → statement map is

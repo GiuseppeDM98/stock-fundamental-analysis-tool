@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildEffortConfig, buildThinkingParam, buildWebSearchTools, usesServerSideFallback } from "@/lib/ai/client";
+import { buildEffortConfig, buildResearchTools, buildThinkingParam, buildWebSearchTools, usesServerSideFallback } from "@/lib/ai/client";
 import { AI_MODEL_CATALOG } from "@/types/ai-settings";
 
 describe("buildThinkingParam", () => {
@@ -59,5 +59,21 @@ describe("usesServerSideFallback", () => {
     for (const model of ["claude-opus-4-8", "claude-sonnet-5", "deepseek-v4-pro", "deepseek-flash"]) {
       expect(usesServerSideFallback(model)).toBe(false);
     }
+  });
+});
+
+describe("buildResearchTools", () => {
+  it("gives Claude the native web_search and web_fetch tools with their caps, and no code execution", () => {
+    expect(buildResearchTools("claude-sonnet-5-5")).toEqual([
+      { type: "web_search_20260209", name: "web_search", max_uses: 30 },
+      { type: "web_fetch_20260209", name: "web_fetch", max_uses: 8, max_content_tokens: 40000 },
+    ]);
+  });
+
+  it("gives DeepSeek the two client-executed tools, named web_search and web_fetch, with no server type", () => {
+    const tools = buildResearchTools("deepseek-v4-pro") as unknown as Record<string, unknown>[];
+    expect(tools.map((t) => t.name)).toEqual(["web_search", "web_fetch"]);
+    for (const tool of tools) expect(tool).not.toHaveProperty("type");
+    expect(String(tools[1].description)).toContain("At most 8 fetches per run");
   });
 });
