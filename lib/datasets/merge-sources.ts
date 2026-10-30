@@ -17,6 +17,9 @@
 // and shares; per-share values, ratios and percentages do not scale); a different currency,
 // or an unknown unit on either side, is no merge at all — the primary comes back alone, with
 // a warning, because a figure in the wrong currency or scale corrupts every ratio silently.
+//
+// Warnings: the merge's own (above), plus the secondary's that still describe the merged rows
+// (secondaryWarningsKept): the route stores both with the merged dataset.
 import type {
   FiscalYearFinancials,
   FiscalYearMultiples,
@@ -24,8 +27,9 @@ import type {
   GroundingMeta,
   PeerMultiples,
 } from "@/types/grounding";
-import { STATEMENT_FIELD_KIND, type DatasetMeta, type FinancialDataset, type FinancialField, type StatementKind } from "@/types/dataset";
+import { STATEMENT_FIELD_KIND, type DataSource, type DatasetMeta, type FinancialDataset, type FinancialField, type StatementKind } from "@/types/dataset";
 import type { ReconciliationWarning } from "@/lib/grounding/reconcile";
+import { DATASET_WARNING_DETAIL_MAX } from "@/lib/datasets/parse";
 import { sameCurrency } from "@/lib/grounding/currency";
 import { periodEndKey } from "@/lib/grounding/merge";
 import { normalizeTicker } from "@/lib/ticker";
@@ -61,8 +65,11 @@ const STATEMENTS: StatementKind[] = ["income", "balance", "cashFlow"];
 
 export type MergeDatasetIds = { pasteDatasetId: string | null; webDatasetId: string | null };
 
+/** Rounded to 15 significant digits: a factor such as 0.001 leaves float noise in the stored
+ *  figure and in the conflict details (7342 × 0.001 = 7.3420000000000005), and no reported
+ *  figure has that many digits, so the rounding changes nothing else. */
 function scaled(value: number | null, factor: number): number | null {
-  return value == null || factor === 1 ? value : value * factor;
+  return value == null || factor === 1 ? value : Number((value * factor).toPrecision(15));
 }
 
 /** Deep copies, so the merged dataset never shares a row or a source with its inputs. */
@@ -168,6 +175,53 @@ function laterPeriodLabel(primary: string | null, secondary: string | null): str
   const p = periodEndKey(primary);
   const s = periodEndKey(secondary);
   return p != null && s != null && s > p ? secondary : primary;
+}
+
+/** Every source a dataset's rows cite. */
+function citedSources(dataset: FinancialDataset): DataSource[] {
+  return [
+    ...dataset.financials.flatMap((row) => [row.sources.income, row.sources.balance, row.sources.cashFlow]),
+    ...dataset.multiples.map((row) => row.source),
+    ...dataset.estimates.map((row) => row.source),
+    ...dataset.peers.flatMap((peer) => peer.multiples.map((row) => row.source)),
+  ].filter((source): source is DataSource => source != null);
+}
+
+const INCOME_FIELDS = FINANCIAL_FIELDS.filter((field) => STATEMENT_FIELD_KIND[field] === "income");
+
+/**
+ * The secondary's warnings that still describe the merged dataset (2026-10-30: a merged
+ * dataset without them handed stage 2 an EBITDA computed in code, or a figure from a page the
+ * research never opened, with nothing saying so):
+ * - `ebitda_derived`, for the years it names whose income statement came from the secondary
+ *   (the primary has no income figure that year) and still carries an EBITDA;
+ * - `source_unverified`, one per unverified web URL a merged row still cites, recomputed from
+ *   the merged rows: a URL whose rows the primary replaced is gone.
+ * The secondary's `source_unknown_id` and `value_conflict` are not carried: neither says
+ * which statement it belongs to, so neither can be matched to what the merge kept. Also
+ * returns the unverified URLs, the merged row's ResearchMeta.unverifiedSources.
+ */
+export function secondaryWarningsKept(
+  primary: FinancialDataset,
+  merged: FinancialDataset,
+  secondaryWarnings: readonly ReconciliationWarning[]
+): { warnings: ReconciliationWarning[]; unverifiedUrls: string[] } {
+  const primaryIncomeYears = new Set(primary.financials.filter((row) => INCOME_FIELDS.some((field) => row[field] != null)).map((row) => row.fiscalYear));
+  // An ebitda_derived detail is the comma-separated list of years researchToDataset writes.
+  const derivedYears = new Set(secondaryWarnings.filter((w) => w.code === "ebitda_derived").flatMap((w) => w.detail.split(",").map((year) => Number(year.trim()))));
+  const keptYears = merged.financials
+    .filter((row) => derivedYears.has(row.fiscalYear) && !primaryIncomeYears.has(row.fiscalYear) && row.ebitda != null)
+    .map((row) => row.fiscalYear);
+
+  const unverifiedUrls = [...new Set(citedSources(merged).flatMap((source) => (source.kind === "web" && !source.verified && source.url ? [source.url] : [])))];
+  const warnings: ReconciliationWarning[] = unverifiedUrls.map((url) => ({
+    code: "source_unverified",
+    severity: "warn",
+    fiscalYear: null,
+    detail: url.slice(0, DATASET_WARNING_DETAIL_MAX),
+  }));
+  if (keptYears.length > 0) warnings.push({ code: "ebitda_derived", severity: "info", fiscalYear: null, detail: keptYears.join(", ") });
+  return { warnings, unverifiedUrls };
 }
 
 /**

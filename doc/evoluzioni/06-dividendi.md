@@ -1,7 +1,7 @@
 # 06 — Dividendi: statistiche, proiezione per scenario, yield e yield on cost
 
 > **Stato**: scritta 2026-10-11; riletta in modo adversariale il 2026-10-11: 29 rilievi, 5 decisioni (D-21, D-24, D-25, D-45, D-46; T-28, T-33). Pronta per l'implementazione dopo la 05b.
-> **Branch**: `feature/dividend-outlook` da `develop`. **Dipende da**: 02 ritirata il 2026-10-29 (`DividendPath` nel JSON), 03 ritirata il 2026-10-29 (`dividend_coverage`, `AnalysisDetailBody`, `sameCurrency`), 04 ritirata il 2026-10-30 (dataset con `sources`, `SourceChip`, `readAnalysisExtract`, `DatasetTables` sul dettaglio), 05a/05b (seed ORNT con DPS null, fixture `DATASET_FENICOTTERO`, run reali con dataset).
+> **Branch**: `feature/dividend-outlook` da `develop`. **Dipende da**: 02 ritirata il 2026-10-29 (`DividendPath` nel JSON), 03 ritirata il 2026-10-29 (`dividend_coverage`, `AnalysisDetailBody`, `sameCurrency`), 04 ritirata il 2026-10-30 (dataset con `sources`, `SourceChip`, `readAnalysisExtract`, `DatasetTables` sul dettaglio), 05a ritirata il 2026-10-30 (seed ORNT con DPS null), 05b (fixture `DATASET_FENICOTTERO`, run reali con dataset).
 > **Indice**: [00-INDICE.md](00-INDICE.md) — decisioni D-8, D-21, D-24, D-25, D-45, D-46, D-101; scelte T-28, T-33; contratti C-11, C-17, C-20.
 
 ## 1. Il problema oggi (prove, commit `17e54b6`, 2026-10-11)

@@ -205,7 +205,7 @@ The AI routes call the model with a high reasoning effort plus web search. A Dee
 - **The app on localhost**, which has no function-duration limit. Mind the database: `.env` points at the production Turso database, so a plain `npm run dev` writes there — which is what you want for a real analysis, never for a test (WORKFLOW.md § 3).
 - **The `/deep-value` Claude Code command** (`.claude/commands/deep-value.md`), which produces the analyses and the analyst panel outside the app and saves them to Turso — suspended until its realignment (D-76): it would save analyses in the old format.
 
-Upgrading to Pro lifts the ceiling to 800s by raising `maxDuration` to 800 in both routes. A queue+polling architecture, or Vercel Workflows (no duration limit), would remove it on Hobby too, at the cost of a new data model and of live streaming — evaluated and not planned for a personal tool.
+Upgrading to Pro lifts the ceiling to 800s by raising `maxDuration` to 800 in the three long routes (deep-value, verify, research). A queue+polling architecture, or Vercel Workflows (no duration limit), would remove it on Hobby too, at the cost of a new data model and of live streaming — evaluated and not planned for a personal tool.
 
 **Planned** (2026-10-27, `doc/evoluzioni/05c-corsa-a-fasi.md`, D-77): every AI call becomes its own request ≤ 300 s, persisted by the server and retried from its phase — the pattern of net-worth-tracker's Consulente. The limit then holds only for a single model turn, measured per phase.
 

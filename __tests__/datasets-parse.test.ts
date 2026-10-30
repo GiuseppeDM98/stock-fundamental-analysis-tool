@@ -53,7 +53,7 @@ describe("parseStoredDataset", () => {
 });
 
 describe("parseStoredDataset — a web dataset", () => {
-  const RESEARCH = { model: "claude-sonnet-5-5", effort: "high", searches: 7, fetches: 3, durationMs: 95000, unverifiedSources: ["https://data.example/m"], notes: null };
+  const RESEARCH = { model: "claude-sonnet-5-5", servedBy: "claude-sonnet-5", effort: "high", searches: 7, fetches: 3, durationMs: 95000, unverifiedSources: ["https://data.example/m"], notes: null };
   const webRow = (researchJson: string | null) =>
     row({
       dataJson: JSON.stringify({ ...DATASET, datasetMeta: { ...META, origin: "web" } }),
@@ -66,6 +66,11 @@ describe("parseStoredDataset — a web dataset", () => {
     const parsed = parseStoredDataset(webRow(JSON.stringify(RESEARCH)));
     expect(parsed?.warnings.map((w) => w.code)).toEqual(["source_unverified"]);
     expect(parsed?.research).toEqual(RESEARCH);
+  });
+
+  it("reads servedBy as null on a research saved before it existed", () => {
+    const { servedBy: _servedBy, ...older } = RESEARCH;
+    expect(parseStoredDataset(webRow(JSON.stringify(older)))?.research).toEqual({ ...RESEARCH, servedBy: null });
   });
 
   it("keeps the row with research null when researchJson is missing or malformed", () => {

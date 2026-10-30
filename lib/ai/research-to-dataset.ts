@@ -26,12 +26,10 @@ import { STATEMENT_FIELD_KIND, emptyRowSources, type DataSource, type FinancialF
 import type { ReconciliationWarning } from "@/lib/grounding/reconcile";
 import type { ResearchOutput } from "@/lib/ai/research-schema";
 import { normalizeTicker } from "@/lib/ticker";
+import { DATASET_WARNING_DETAIL_MAX as DETAIL_MAX } from "@/lib/datasets/parse";
 
 // Same threshold as the merge of pasted blocks (lib/grounding/merge.ts).
 const VALUE_CONFLICT_TOLERANCE = 0.01;
-// datasetWarningSchema caps a stored detail at 300 characters, and a stored warning that
-// fails it makes the whole dataset read as none (lib/datasets/parse.ts).
-const DETAIL_MAX = 300;
 
 /**
  * The form two URLs are compared in: origin + pathname, no query string or fragment, no
@@ -64,6 +62,7 @@ class SourceResolver {
   private readonly byId = new Map<string, DataSource>();
   readonly warnings: ReconciliationWarning[] = [];
   private readonly unverified = new Set<string>();
+  private readonly unknownWarned = new Set<string>();
 
   constructor(sources: ResearchOutput["sources"], seenUrls: Set<string>) {
     for (const s of sources) {
@@ -72,12 +71,17 @@ class SourceResolver {
   }
 
   /** A fresh copy of the source `id` names (no two rows share an object a later writer
-   *  could change), or null: no id, or an id with no entry (warned once per row). */
+   *  could change), or null: no id, or an id with no entry (warned once per fiscal year and
+   *  id: a financials row cites one id per statement, and three equal warnings say no more). */
   resolve(id: string | null, fiscalYear: number): DataSource | null {
     if (id == null) return null;
     const source = this.byId.get(id);
     if (!source) {
-      this.warnings.push({ code: "source_unknown_id", severity: "warn", fiscalYear, detail: id.slice(0, DETAIL_MAX) });
+      const key = `${fiscalYear} ${id}`;
+      if (!this.unknownWarned.has(key)) {
+        this.unknownWarned.add(key);
+        this.warnings.push({ code: "source_unknown_id", severity: "warn", fiscalYear, detail: id.slice(0, DETAIL_MAX) });
+      }
       return null;
     }
     if (!source.verified && source.url) this.unverified.add(source.url);
@@ -166,6 +170,13 @@ function toSourcedRows<Field extends string, Row extends { fiscalYear: number; s
   return [...byYear.values()].sort((a, b) => a.fiscalYear - b.fiscalYear);
 }
 
+/** D&A as the positive amount the type stores (types/grounding.ts), whatever sign the page
+ *  used: an add-back on the cash-flow statement reads positive, a cost line negative. */
+function positiveDepreciation(row: FinancialRowOut): FinancialRowOut {
+  const da = row.depreciationAmortization;
+  return da == null || da >= 0 ? row : { ...row, depreciationAmortization: -da };
+}
+
 /** Rounds away the float noise of a sum of two reported figures (150.1 + 50.2). */
 function roundSum(a: number, b: number): number {
   return Math.round((a + b) * 1e6) / 1e6;
@@ -173,7 +184,7 @@ function roundSum(a: number, b: number): number {
 
 /**
  * Fills EBITDA as EBIT + D&A on every row whose EBITDA is missing and whose EBIT and D&A are
- * both reported (D&A taken as a positive amount, whatever sign the page used). The income
+ * both reported (D&A already positive: positiveDepreciation). The income
  * statement then holds a field from the cash-flow source: when that is another page, the
  * income chip says "+1". Returns the warning naming the years, or none.
  */
@@ -181,7 +192,7 @@ function deriveMissingEbitda(rows: FiscalYearFinancials[]): ReconciliationWarnin
   const years: number[] = [];
   for (const row of rows) {
     if (row.ebitda != null || row.ebit == null || row.depreciationAmortization == null) continue;
-    row.ebitda = roundSum(row.ebit, Math.abs(row.depreciationAmortization));
+    row.ebitda = roundSum(row.ebit, row.depreciationAmortization);
     years.push(row.fiscalYear);
     const income = row.sources.income;
     const cashFlow = row.sources.cashFlow;
@@ -203,7 +214,7 @@ export function researchToDataset(
   const resolver = new SourceResolver(output.sources, seenUrls);
   const fused: ReconciliationWarning[] = [];
 
-  const financials = toFinancialsRows(output.financials, resolver, fused);
+  const financials = toFinancialsRows(output.financials.map(positiveDepreciation), resolver, fused);
   const derived = deriveMissingEbitda(financials);
   const multiples = toSourcedRows<(typeof MULTIPLE_FIELDS)[number], FiscalYearMultiples>(output.multiples as MultiplesRowOut[], MULTIPLE_FIELDS, resolver, fused);
   const estimates = toSourcedRows<(typeof ESTIMATE_FIELDS)[number], ForwardEstimate>(output.estimates as EstimateRowOut[], ESTIMATE_FIELDS, resolver, fused);

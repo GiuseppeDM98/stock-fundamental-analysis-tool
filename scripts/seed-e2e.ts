@@ -275,6 +275,7 @@ const ORNT_MULTIPLES_PAGE: DataSource = {
 };
 const ORNT_RESEARCH: ResearchMeta = {
   model: "claude-sonnet-5-5",
+  servedBy: null,
   effort: "high",
   searches: 7,
   fetches: 3,

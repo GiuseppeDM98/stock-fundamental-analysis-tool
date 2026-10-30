@@ -6,11 +6,11 @@ import { SERVER_SIDE_FALLBACK_BETA, usesServerSideFallback } from "@/lib/ai/clie
 import { fallbackServedBy, prepareTurnForReplay } from "@/lib/ai/fallback";
 import { AI_MODEL_CATALOG, type AiModelId } from "@/types/ai-settings";
 
-// Default cap for the client-side agentic loop for the custom web_search tool (DeepSeek
-// path). Claude's web_search runs server-side and never surfaces a client-visible
-// tool_use for it, so this loop always exits after one iteration for Claude — the cap
-// only matters for DeepSeek, as a runaway-search guard. Matches Claude's own
-// server-side web_search loop's default cap (10 rounds before pause_turn) — verified
+// Default cap for the agentic loop, a runaway-search guard that counts every round: on
+// DeepSeek one round of client-executed web_search/web_fetch calls, on Claude (whose
+// web_search runs server-side, with no client tool_use) one resume after a `pause_turn`
+// (the pause_turn branch below spends an iteration). Matches Claude's own server-side
+// web_search loop's default cap (10 rounds before pause_turn) — verified
 // empirically (2026-07-10) that a broad multi-stock research prompt at high effort
 // needed 7+ rounds to converge; 6 was too tight and silently cut the loop off mid-
 // research with no final answer. Callers with heavier research prompts (Deep Value's
@@ -19,27 +19,26 @@ import { AI_MODEL_CATALOG, type AiModelId } from "@/types/ai-settings";
 // for Deep Value and silently returned an empty report with no error.
 const DEFAULT_MAX_TOOL_ITERATIONS = 10;
 
-// Cap for the heavy-research routes (Deep Value + its analyst-panel review), and also
-// reused by the earnings lookup even though its research is much lighter — a single
-// shared "give DeepSeek plenty of room" knob is simpler than tuning a separate value per
-// route, and 35 rounds only costs anything if the model actually needs them. Deep Value's
-// prompts demand far more one-query-at-a-time rounds than the Advisor's single-answer
-// prompt — and the ANALYTICAL_RIGOR_BLOCK / analyst structural checks (EV→equity bridge,
+// Cap for the heavy-research routes (Deep Value + its analyst-panel review, the research
+// stage), and also reused by the earnings lookup even though its research is much
+// lighter — a single shared "give DeepSeek plenty of room" knob is simpler than tuning a
+// separate value per route, and 35 rounds only costs anything if the model actually needs
+// them. Deep Value's prompts demand far more one-query-at-a-time rounds than the Advisor's
+// single-answer prompt — and the ANALYTICAL_RIGOR_BLOCK / analyst structural checks (EV→equity bridge,
 // same-basis comparables, scenario-vs-sensitivity, anchoring, reverse) each add figures
 // to web-verify. Raised 25→35 after the added checks pushed real DeepSeek runs into the
 // "too many search rounds" cutoff; the earnings route hit the same cutoff independently
 // at the old 10-round default (reproduced in production, 2026-08-24) and was moved onto
-// this shared cap rather than getting its own. DeepSeek-only in effect: Claude's
-// server-side web_search never surfaces a client tool_use, so its loop exits after one
-// iteration regardless of this value.
+// this shared cap rather than getting its own. On Claude it counts the resumes after
+// `pause_turn`: the research stage relies on that, and a Claude research run whose resumes
+// run out answers 502 (2026-10-30).
 export const DEEP_RESEARCH_MAX_TOOL_ITERATIONS = 35;
 
 // Cap for Grounded-mode Deep Value runs (and its analyst lenses) — lower than the Quick
 // cap above because the web search is RESCOPED, not eliminated: the model no
 // longer needs to research 5y of financials/multiples/comparables (they're provided), it
-// only needs the post-coverage-date update + qualitative material. DeepSeek-only in
-// effect, same as DEEP_RESEARCH_MAX_TOOL_ITERATIONS — Claude's server-side web_search
-// never surfaces a client tool_use, so its loop exits after one iteration regardless.
+// only needs the post-coverage-date update + qualitative material. Counts rounds as
+// DEEP_RESEARCH_MAX_TOOL_ITERATIONS does (on Claude, the resumes after `pause_turn`).
 export const GROUNDED_MAX_TOOL_ITERATIONS = 12;
 
 // Cap for the blind-first analyst lenses' RECONCILE turn — that turn reconciles a
@@ -125,9 +124,9 @@ async function answerClientToolCalls(message: Anthropic.Message, budget: FetchBu
   if (message.stop_reason !== "tool_use" || calls.length === 0) return null;
 
   // Searches in parallel: DeepSeek's Search API allows 5 requests per second per account (429
-  // above). A turn carries 1-3 calls (counted 2026-10-11) and the DeepSeek real run of late
-  // October 2026 hit none. A 429 comes back as a tool_result the model reads, never a throw,
-  // and is the signal to serialize this map.
+  // above). A turn carries 1-3 calls (counted 2026-10-11). A 429 comes back as a tool_result
+  // the model reads, never a throw, and no log prints it: none was reported for the two
+  // DeepSeek real runs of 2026-10-30, and seeing one is the signal to serialize this map.
   const searchResults = new Map<string, Promise<string>>();
   for (const call of calls) {
     if (call.name === "web_search") searchResults.set(call.id, executeWebSearch((call.input as { query: string }).query));

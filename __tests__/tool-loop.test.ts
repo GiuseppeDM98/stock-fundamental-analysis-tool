@@ -276,6 +276,19 @@ describe("client-executed web_fetch and its budget", () => {
     for (let i = 1; i < fetchSpans.length; i++) expect(fetchSpans[i].start).toBeGreaterThan(fetchSpans[i - 1].end);
   });
 
+  it("gives the streaming loop, the one the research runs on, the same budget: 8 of 9 fetches, the 9th refused", async () => {
+    const first = message("tool_use", [1, 2, 3, 4, 5].map((n) => fetchCall(`f${n}`, `https://ir.example.com/p${n}`)));
+    const second = message("tool_use", [6, 7, 8, 9].map((n) => fetchCall(`f${n}`, `https://ir.example.com/p${n}`)));
+    const { client, calls } = mockDualClient([first, second, TEXT_ANSWER]);
+    const result = await runStreamWithToolLoop(client, { ...PARAMS, model: "deepseek-v4-pro" }, () => {}, 5, { fetchBudget: 8 });
+    expect(result.hitIterationCap).toBe(false);
+    expect(executeWebFetch).toHaveBeenCalledTimes(8);
+    const lastTurn = (calls[2].params.messages as Anthropic.MessageParam[])[4].content as { tool_use_id: string; content: string }[];
+    expect(lastTurn.map((r) => r.tool_use_id)).toEqual(["f6", "f7", "f8", "f9"]);
+    expect(lastTurn[2].content).toBe("# page\n\nhttps://ir.example.com/p8");
+    expect(lastTurn[3].content).toMatch(/^FETCH FAILED: fetch budget exhausted \(8 per run\)/);
+  });
+
   it("spends the budget on a failed fetch as on a read one", async () => {
     for (let i = 0; i < 3; i++) vi.mocked(executeWebFetch).mockResolvedValueOnce("FETCH FAILED (HTTP 404): no usable content: try the HTML version of the page.");
     const turn = message("tool_use", [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => fetchCall(`f${n}`, `https://ir.example.com/p${n}`)));

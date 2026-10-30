@@ -91,9 +91,12 @@ export type FinancialDataset = GroundedFinancials & { datasetMeta: DatasetMeta }
 
 /** How a web dataset was researched (FinancialDataset.researchJson): the run's model and
  *  effort, the searches and fetches it made, how long it took, the cited URLs the run never
- *  opened, and the model's own notes (the EBITDA definition used, gaps). */
+ *  opened, and the model's own notes (the EBITDA definition used, gaps). `model` is the
+ *  resolved one; `servedBy` names the model that answered instead through Sonnet 5.5's
+ *  refusal fallback (lib/ai/fallback.ts), null when the resolved model answered itself. */
 export type ResearchMeta = {
   model: AiModelId;
+  servedBy: string | null;
   effort: AiEffort;
   searches: number;
   fetches: number;
@@ -129,5 +132,6 @@ export type ResearchResponse = {
 };
 
 /** POST /api/datasets with origin "merged": the same bundle, the research being the web
- *  dataset's (null when that row carries none). */
+ *  dataset's (null when that row carries none), its unverifiedSources narrowed to the URLs a
+ *  merged row still cites. */
 export type MergedDatasetResponse = Omit<ResearchResponse, "research"> & { research: ResearchMeta | null };
