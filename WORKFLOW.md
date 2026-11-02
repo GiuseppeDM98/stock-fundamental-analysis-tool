@@ -132,6 +132,16 @@ disappear. The verification is done together, in chat, one phase at a time.
    the tour finds becomes an assertion before the session ends, or it will come back: the tour
    exists to discover what nobody thought to assert, not to replace the tests.
 
+**A before/after comparison of screenshots is shown cropped, one item at a time** (2026-10-30, after
+«I don't understand the differences between before and after, which images am I supposed to compare?»
+in front of twenty near-identical PNGs): never a folder of files to open. The agent opens a browser
+window on an HTML page with BEFORE and AFTER **cropped to the area that changes** — one above the
+other, or side by side for phone screenshots — and **enlarged** when the difference is a few pixels (a
+darker grey), with a title saying where to look; before talking about it, it checks the crop with a
+headless screenshot of the same page. The message says «Comparison N of M», what changes and which
+side is which; the window rules of obligation 5 apply (one item per message, closed and counted before
+the next).
+
 ### Standard phases, when they make sense
 
 | | Phase | What it establishes |
