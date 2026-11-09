@@ -1,4 +1,4 @@
-// Per-kind Zod schemas for the Grounded extraction route (app/api/ai/grounding/extract).
+// Per-kind Zod schemas for the paste extraction route (app/api/ai/grounding/extract).
 // Narrow on purpose: a model call for an "income_statement" block literally cannot return
 // a totalDebt value — fewer degrees of freedom, less hallucination risk.
 //

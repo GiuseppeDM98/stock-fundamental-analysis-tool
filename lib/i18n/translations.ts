@@ -424,7 +424,7 @@ export type Translations = {
   analystOptimistDesc: string;
   analystQualityDesc: string;
   analystRunButton: string;
-  // ─── Blind-first lenses (Grounded mode only) ─────
+  // ─── Blind-first lenses (every lens since 2026-11-09) ─────
   analystPhaseBlind: string;
   analystPhaseReconcile: string;
   analystBlindCardTitle: string;
@@ -468,7 +468,7 @@ export type Translations = {
   hubRecentEmpty: string;
   hubWatchlistTracked: string;
 
-  // ─── Grounded Deep Value — pasted-data blocks + extract preview ───────────────
+  // ─── Financial dataset — pasted-data blocks, research, preview ───────────────
   groundingSectionTitle: string;
   groundingSectionDesc: string;
   groundingAddBlockBtn: string;
@@ -1127,7 +1127,7 @@ const en: Translations = {
   hubRecentEmpty: "Nothing yet",
   hubWatchlistTracked: "tracked",
 
-  // Grounded Deep Value
+  // Financial dataset
   groundingSectionTitle: "Financial dataset",
   groundingSectionDesc:
     "Every analysis starts from a financial dataset with a source per row: research it from primary documents on the web, or paste your own statements (merged with the research when both exist).",
@@ -1278,7 +1278,7 @@ const en: Translations = {
   groundingImpliedOnProviderLabel: "Provider basis",
   groundingLtmEquivLabel: "LTM-equivalent",
   groundingWedgeLabel: "wedge",
-  groundingWedgeCaveat: "real growth or a basis mismatch in the pasted EBITDA — check for data conflicts",
+  groundingWedgeCaveat: "real growth or a basis mismatch in the dataset's EBITDA — check for data conflicts",
   groundingCollapseSection: "Collapse",
   groundingExpandSection: "Expand",
   groundingEditBlock: "Edit block",
@@ -1306,7 +1306,7 @@ const en: Translations = {
   groundingConfidenceLow: "low",
   groundingConfidenceUnavailable: "unavailable",
   groundingLowConfidenceNote: "Low confidence — few overlapping years or a wide year-to-year spread in kE.",
-  groundingKbAssumed: "kB assumed = 1 (EV bridge not estimable from the paste)",
+  groundingKbAssumed: "kB assumed = 1 (EV bridge not estimable from the dataset)",
   groundingKbObserved: "observed",
   groundingKbInferred: "inferred",
   groundingCardGatesUnavailable: "Unavailable — the model's valuation block could not be verified.",
@@ -1787,7 +1787,7 @@ const it: Translations = {
   hubRecentEmpty: "Ancora niente",
   hubWatchlistTracked: "monitorati",
 
-  // Grounded Deep Value
+  // Financial dataset
   groundingSectionTitle: "Dataset finanziario",
   groundingSectionDesc:
     "Ogni analisi parte da un dataset finanziario con una fonte per riga: cercalo sul web dalle fonti primarie, oppure incolla i tuoi bilanci (fusi con la ricerca quando ci sono entrambi).",
@@ -1939,7 +1939,7 @@ const it: Translations = {
   groundingImpliedOnProviderLabel: "Base fornitore",
   groundingLtmEquivLabel: "Equivalente LTM",
   groundingWedgeLabel: "scarto",
-  groundingWedgeCaveat: "crescita reale o base diversa nell'EBITDA incollato — controlla i conflitti di dato",
+  groundingWedgeCaveat: "crescita reale o base diversa nell'EBITDA del dataset — controlla i conflitti di dato",
   groundingCollapseSection: "Comprimi",
   groundingExpandSection: "Espandi",
   groundingEditBlock: "Modifica blocco",
@@ -1967,7 +1967,7 @@ const it: Translations = {
   groundingConfidenceLow: "bassa",
   groundingConfidenceUnavailable: "non disponibile",
   groundingLowConfidenceNote: "Affidabilità bassa — pochi anni sovrapposti o forte dispersione di kE tra un anno e l'altro.",
-  groundingKbAssumed: "kB assunto = 1 (ponte EV non stimabile dai dati incollati)",
+  groundingKbAssumed: "kB assunto = 1 (ponte EV non stimabile dal dataset)",
   groundingKbObserved: "osservato",
   groundingKbInferred: "dedotto",
   groundingCardGatesUnavailable: "Non disponibili — il blocco di valutazione del modello non è verificabile.",

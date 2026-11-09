@@ -1,7 +1,7 @@
 "use client";
 
-// A lens's FINAL valuation, checked — for a run with no blind commitment (a Quick-mode
-// lens, or a blind-first run whose Phase 1 degraded to a single pass), where
+// A lens's FINAL valuation, checked — for a run with no blind commitment (a lens saved
+// without a dataset before 2026-11-09, or a run whose Phase 1 degraded to a single pass), where
 // AnalystBlindCard has nothing to compare against. Shows the kill price, the revisions[]
 // and the deterministic gates of the final JSON, live or read back from *ResultJson after
 // a reload. No buttons (gotcha #24): the slot around it owns every action.

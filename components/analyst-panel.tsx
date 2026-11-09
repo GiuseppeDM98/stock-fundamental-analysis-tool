@@ -81,8 +81,8 @@ type PanelProps = {
   // Existing critique per lens, if this analysis already has one (keyed by angle).
   initialCritiques: Partial<Record<AnalystAngle, string | null>>;
   // Blind-first commitment persisted per lens — JSON.stringify'd DeepValueResult, null
-  // until a Grounded blind-first run completes Phase 1. Undefined entries (Quick-mode
-  // analyses) render no blind card for that lens.
+  // until a run completes Phase 1. Undefined entries (lenses saved before blind-first, or
+  // without a dataset before 2026-11-09) render no blind card for that lens.
   initialBlind: Partial<Record<AnalystAngle, string | null>>;
   // Each lens's FINAL (post-reconciliation) buy-target triple from its *FairValue*
   // columns: the drift column's fallback for a row saved before *ResultJson existed (a
@@ -94,9 +94,9 @@ type PanelProps = {
   // The analysis's dataset for the dataset gates; null (an analysis saved without one, or a
   // stored extract that no longer validates) → those gates read "no dataset".
   groundingExtract: GroundedFinancials | null;
-  // Whether the analysis was saved on a dataset (datasetId or a legacy groundingJson). Since
-  // 2026-11-09 a lens runs only blind-first on one: without it Run is disabled, and the saved
-  // lenses stay readable.
+  // Whether the page read the analysis's dataset (groundingExtract != null, set by
+  // AnalysisDetailBody). Since 2026-11-09 a lens runs only blind-first on one: without it Run
+  // is disabled, the model selector is hidden, and the saved lenses stay readable.
   hasDataset: boolean;
   // The page's one price (AnalysisDetailBody): null while it loads or when none exists.
   currentPrice: number | null;
@@ -150,7 +150,8 @@ export default function AnalystPanel({
           <p className="mt-1 text-xs text-slate-400">{t("analystPanelDesc")}</p>
           {!hasDataset && <p className="mt-1 text-xs text-warning">{t("analystNeedsDataset")}</p>}
         </div>
-        <AiSettingsControl value={aiSettings} onChange={setAiSettings} />
+        {/* Without a dataset nothing can run, so there is no model to pick (2026-11-09). */}
+        {hasDataset && <AiSettingsControl value={aiSettings} onChange={setAiSettings} />}
       </div>
 
       <div className="mt-4 space-y-4">
@@ -225,8 +226,8 @@ function AnalystSlot({
   const [critique, setCritique] = useState<string>(initialCritiqueMd ?? "");
   // If a critique already exists we start "done"; otherwise idle until run.
   const [status, setStatus] = useState<Status>(initialCritiqueMd ? "done" : "idle");
-  // Blind-first streaming phase (drives the phase label) — null on a Quick-mode/
-  // non-blind-first run, which never emits a phase marker.
+  // Blind-first streaming phase (drives the phase label) — null before a run and on a
+  // response with no phase marker.
   const [phase, setPhase] = useState<"blind" | "reconcile" | null>(null);
   // The lens's OWN parsed commitments from the run started in this session. liveBlind is
   // set mid-stream, as soon as the Phase-1 block parses; liveFinal once the stream ends.

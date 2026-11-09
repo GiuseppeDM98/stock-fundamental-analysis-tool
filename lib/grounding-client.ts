@@ -1,4 +1,4 @@
-// Client-side fetch helper for the Grounded Deep Value extraction endpoint. Thin wrapper
+// Client-side fetch helper for the paste extraction endpoint. Thin wrapper
 // over POST /api/ai/grounding/extract — keeps components clean (mirrors lib/earnings-client.ts).
 import type { GroundingBlock, GroundedFinancials } from "@/types/grounding";
 import type { MultipleStats, ValuationGrid, MarketImplied, ImpliedExpectations } from "@/lib/grounding/anchors";

@@ -7,7 +7,9 @@
 // it ("Use this dataset", "Refresh data", "Edit the pasted data"); otherwise it offers the
 // web research and the paste editor. Nothing is picked or researched for the user: a
 // research run takes minutes and costs, so it starts from a click, and every dataset is
-// previewed before it is used.
+// previewed before it is used. A preview offers the same moves as the reuse view: "Refresh
+// data", and "Add pasted data" on a web dataset or "Edit the pasted data" on a merged one
+// (2026-11-09).
 //
 // A paste confirmed while a web dataset is on screen is merged with it on the server
 // (POST /api/datasets, origin "merged"): the merged dataset is previewed in its turn.
@@ -35,17 +37,24 @@ type Props = {
 
 type Bundle = ResearchResponse | MergedDatasetResponse;
 
-// `pasteDatasetId` on researching/error: the paste the new web dataset is merged with once
-// the research answers ("Refresh data" on a paste or merged dataset), null for a plain run.
+// A paste dataset by id, with the blocks "Edit the pasted data" opens on: a stored
+// dataset's own blocks, or undefined for the paste just confirmed (the editor's local draft
+// still holds it).
+type PasteRef = { id: string; seed: GroundingBlock[] | undefined };
+
+// `paste` on researching/error: the paste the new web dataset is merged with once the
+// research answers ("Refresh data" on a paste or merged dataset), null for a plain run. On
+// a preview: the paste merged into it, or the one whose merge failed (`mergeError`), so
+// "Refresh data" merges it again.
 type Lookup =
   | { status: "idle" }
   | { status: "checking" }
   | { status: "reuse"; stored: StoredDataset }
   // `failed`: the lookup itself failed — said once, then the same choices as when there is none.
   | { status: "empty"; failed: boolean }
-  | { status: "researching"; startedAt: number; pasteDatasetId: string | null }
-  | { status: "error"; message: string; pasteDatasetId: string | null }
-  | { status: "preview"; bundle: Bundle; origin: "web" | "merged"; mergeError: string | null };
+  | { status: "researching"; startedAt: number; paste: PasteRef | null }
+  | { status: "error"; message: string; paste: PasteRef | null }
+  | { status: "preview"; bundle: Bundle; origin: "web" | "merged"; mergeError: string | null; paste: PasteRef | null };
 
 const ORIGIN_LABEL: Record<DatasetOrigin, keyof Translations> = {
   paste: "datasetOriginPaste",
@@ -67,10 +76,11 @@ function webDatasetIdOf(lookup: Lookup): string | null {
 }
 
 /** The paste a refreshed research is merged with: the reused paste itself, or the paste
- *  half of a merged one. */
-function pasteDatasetIdOf(stored: StoredDataset): string | null {
+ *  half of a merged one (whose blocks are the paste's). */
+function pasteOf(stored: StoredDataset): PasteRef | null {
   const meta = stored.dataset.datasetMeta;
-  return meta.origin === "paste" ? stored.id : meta.origin === "merged" ? meta.pasteDatasetId : null;
+  const id = meta.origin === "paste" ? stored.id : meta.origin === "merged" ? meta.pasteDatasetId : null;
+  return id ? { id, seed: stored.blocks } : null;
 }
 
 const errorMessage = (err: unknown) => (err instanceof Error ? err.message : "");
@@ -144,37 +154,38 @@ export function DatasetSection({ ticker, quote, value, onChange }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticker]);
 
-  async function runResearch(pasteDatasetId: string | null) {
+  async function runResearch(paste: PasteRef | null) {
     const forTicker = ticker;
     // The confirmed dataset is being replaced: no analysis runs on it in the meantime.
     onChange(null);
     setEditor(null);
     setMergeError(null);
-    setLookup({ status: "researching", startedAt: Date.now(), pasteDatasetId });
+    setLookup({ status: "researching", startedAt: Date.now(), paste });
     let web: ResearchResponse;
     try {
       web = await researchDataset(forTicker);
     } catch (err) {
-      if (tickerRef.current === forTicker) setLookup({ status: "error", message: errorMessage(err), pasteDatasetId });
+      if (tickerRef.current === forTicker) setLookup({ status: "error", message: errorMessage(err), paste });
       return;
     }
     if (tickerRef.current !== forTicker) return;
-    if (!pasteDatasetId) {
-      setLookup({ status: "preview", bundle: web, origin: "web", mergeError: null });
+    if (!paste) {
+      setLookup({ status: "preview", bundle: web, origin: "web", mergeError: null, paste: null });
       return;
     }
     try {
-      const merged = await createMergedDataset(forTicker, pasteDatasetId, web.datasetId);
-      if (tickerRef.current === forTicker) setLookup({ status: "preview", bundle: merged, origin: "merged", mergeError: null });
+      const merged = await createMergedDataset(forTicker, paste.id, web.datasetId);
+      if (tickerRef.current === forTicker) setLookup({ status: "preview", bundle: merged, origin: "merged", mergeError: null, paste });
     } catch (err) {
       // The research succeeded and is saved: show it, and say the merge did not happen.
-      if (tickerRef.current === forTicker) setLookup({ status: "preview", bundle: web, origin: "web", mergeError: errorMessage(err) });
+      if (tickerRef.current === forTicker) setLookup({ status: "preview", bundle: web, origin: "web", mergeError: errorMessage(err), paste });
     }
   }
 
   // The editor saved a paste dataset: with a web dataset on screen the two are merged on
   // the server and the merge is previewed; alone, the paste is the dataset (the editor's
-  // own preview was the look at the numbers).
+  // own preview was the look at the numbers). The editor awaits this, so its confirm button
+  // stays disabled until the merge answers.
   async function handlePasteConfirm(paste: DatasetValue) {
     const webDatasetId = webDatasetIdOf(lookup);
     if (!webDatasetId) {
@@ -182,12 +193,15 @@ export function DatasetSection({ ticker, quote, value, onChange }: Props) {
       return;
     }
     const forTicker = ticker;
+    // The dataset confirmed before is being replaced by the merge, as on a research: until
+    // 2026-11-09 it stayed confirmed, and Generate ran on it while the merge was previewed.
+    onChange(null);
     setMerging(true);
     setMergeError(null);
     try {
       const merged = await createMergedDataset(forTicker, paste.id, webDatasetId);
       if (tickerRef.current !== forTicker) return;
-      setLookup({ status: "preview", bundle: merged, origin: "merged", mergeError: null });
+      setLookup({ status: "preview", bundle: merged, origin: "merged", mergeError: null, paste: { id: paste.id, seed: undefined } });
       setEditor(null);
     } catch (err) {
       if (tickerRef.current === forTicker) setMergeError(errorMessage(err));
@@ -202,8 +216,8 @@ export function DatasetSection({ ticker, quote, value, onChange }: Props) {
     : [];
   const researching = lookup.status === "researching";
 
-  const researchButton = (pasteDatasetId: string | null, label: keyof Translations = "datasetResearchBtn") => (
-    <button onClick={() => runResearch(pasteDatasetId)} disabled={researching || merging} className={PRIMARY_BTN}>
+  const researchButton = (paste: PasteRef | null, label: keyof Translations = "datasetResearchBtn") => (
+    <button onClick={() => runResearch(paste)} disabled={researching || merging} className={PRIMARY_BTN}>
       {t(label)}
     </button>
   );
@@ -262,7 +276,7 @@ export function DatasetSection({ ticker, quote, value, onChange }: Props) {
                 {lookup.message && ` — ${lookup.message}`}
               </p>
               <div className="flex flex-wrap items-center gap-2">
-                {researchButton(lookup.pasteDatasetId, "datasetRetryResearch")}
+                {researchButton(lookup.paste, "datasetRetryResearch")}
                 {addPasteButton}
               </div>
             </div>
@@ -289,7 +303,7 @@ export function DatasetSection({ ticker, quote, value, onChange }: Props) {
                 <button onClick={() => onChange({ id: stored.id, extract: stored.dataset })} disabled={value?.id === stored.id} className={PRIMARY_BTN}>
                   {t("datasetUseBtn")}
                 </button>
-                <button onClick={() => runResearch(pasteDatasetIdOf(stored))} className={SECONDARY_BTN}>
+                <button onClick={() => runResearch(pasteOf(stored))} className={SECONDARY_BTN}>
                   {t("datasetRefreshBtn")}
                 </button>
                 {stored.blocks.length > 0 ? (
@@ -334,7 +348,18 @@ export function DatasetSection({ ticker, quote, value, onChange }: Props) {
                   </ul>
                 </div>
               )}
-              {lookup.origin === "web" && <div className="flex flex-wrap items-center gap-2">{addPasteButton}</div>}
+              <div className="flex flex-wrap items-center gap-2">
+                <button onClick={() => runResearch(lookup.paste)} disabled={researching || merging} className={SECONDARY_BTN}>
+                  {t("datasetRefreshBtn")}
+                </button>
+                {lookup.origin === "merged" ? (
+                  <button onClick={() => setEditor({ seed: lookup.paste?.seed })} disabled={researching || merging} className={SECONDARY_BTN}>
+                    {t("datasetEditPasteBtn")}
+                  </button>
+                ) : (
+                  addPasteButton
+                )}
+              </div>
             </div>
           )}
 

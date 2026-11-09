@@ -28,7 +28,7 @@ const patchSchema = z.object({
   fairValueBear: z.number().positive().nullable().optional(),
   valuationMethod: z.string().max(40).nullable().optional(),
   // Blind-first commitment (the lens's pre-report Phase 1) — a JSON.stringify'd
-  // DeepValueResult, present only for a Grounded blind-first run whose Phase 1 parsed.
+  // DeepValueResult, present only for a lens run whose Phase 1 parsed.
   blindJson: z.string().max(20000).optional(),
   // The lens's FINAL JSON block, re-sanitized below like the POST's. null clears it with
   // the fair values; absent leaves it untouched.

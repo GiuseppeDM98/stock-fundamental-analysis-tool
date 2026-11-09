@@ -498,28 +498,28 @@ const ANALYST_BASIS_CHECK = `7. **Basis reconciliation.** Before judging any mul
  * @param currentDate - Today's date string injected from the server
  * @param mosPercent - Margin of safety to apply to the analyst's own fair values,
  *   so its JSON buy targets are directly comparable to the base analysis's.
- * @param blindFirst - The two-phase contract (commit blind, then reconcile against the
- *   report), which the verify route always uses. The SAME system prompt is reused across
- *   both turns (the model sees this once; only the user message differs —
- *   buildAnalystBlindUserPrompt, then buildAnalystReconcileUserPrompt), so it must
- *   describe both phases up front.
+ *
+ * Always the two-phase contract (commit blind, then reconcile against the report): the
+ * SAME system prompt is reused across both turns (the model sees this once; only the user
+ * message differs — buildAnalystBlindUserPrompt, then buildAnalystReconcileUserPrompt, or
+ * buildAnalystUserPrompt when Phase 1 degraded), so it describes both phases up front. The
+ * single-phase variant behind a `blindFirst` flag was removed on 2026-11-09: no lens runs
+ * without a dataset, so nothing called it but the tests.
  */
 export function buildAnalystSystemPrompt({
   angle = "skeptic",
   language = "English",
   currentDate = "",
   mosPercent = 0,
-  blindFirst = false,
 }: {
   angle?: AnalystAngle;
   language?: string;
   currentDate?: string;
   mosPercent?: number;
   // Required, unread here, as in buildDeepValueSystemPrompt: the lens reads the data
-  // (extract + anchors + warnings) from the user prompt, re-read server-side through
+  // (extract + anchors + warnings + research notes) from the user prompt, re-read server-side through
   // readAnalysisGrounding (the analysis's dataset, or its legacy groundingJson).
   grounding: GroundingPromptContext;
-  blindFirst?: boolean;
 }): string {
   const cfg = ANGLE_CONFIG[angle];
   const dateClause = dateClauseFor(currentDate);
@@ -529,20 +529,14 @@ export function buildAnalystSystemPrompt({
   // would reintroduce the unreconciled web numbers the dataset exists to replace).
   const spotCheckClause =
     "Use web search only for what the dataset cannot hold: figures newer than `meta.latestPeriodLabel`, restatements and qualitative context. The dataset's historical figures are authoritative, so spot-check the report's load-bearing figures (revenue, margins, FCF/EBITDA, net debt, shares, growth rate, discount rate, terminal assumptions) against them, not against the web.";
-  const jsonBlocksPhrase = blindFirst
-    ? "the two valuation blocks above (one in Phase 1, one in Phase 2)"
-    : "the valuation block above";
-  // The closing rules describe the critique turn. A blind-first review also has a Phase 1
-  // that opens with its JSON and puts the rationale AFTER the fence, so unscoped rules gave
-  // that turn two opposite orders (2026-10-29). The disclaimer is asked in the critique's
-  // language: an English literal ended an Italian critique in English (fixed 2026-11-09).
+  // The closing rules are scoped per phase: Phase 1 opens with its JSON and puts the
+  // rationale AFTER the fence, so unscoped rules gave that turn two opposite orders
+  // (2026-10-29). The disclaimer is asked in the critique's language: an English literal
+  // ended an Italian critique in English (fixed 2026-11-09).
   const disclaimer = `this disclaimer, written in ${language}: "⚠️ This review is for informational purposes only and does not constitute financial advice."`;
   const critiqueBounds = `Do not write anything before the \`${CRITIQUE_START_MARKER}\` line, and nothing after the JSON block's closing fence.`;
-  const closingRules = blindFirst
-    ? `- Phase 1: the JSON block opens your answer and the rationale follows it; no critique marker, no disclaimer.
-- Phase 2: close the critique with ${disclaimer}, then emit the final JSON block. ${critiqueBounds}`
-    : `- Close the critique with ${disclaimer}, then emit the JSON block.
-- ${critiqueBounds}`;
+  const closingRules = `- Phase 1: the JSON block opens your answer and the rationale follows it; no critique marker, no disclaimer.
+- Phase 2: close the critique with ${disclaimer}, then emit the final JSON block. ${critiqueBounds}`;
   // Skeptic-only, in both phases (see the hardened persona above). Feeds the kill_price
   // gate (lib/grounding/postcheck.ts).
   const killPriceLine =
@@ -550,8 +544,7 @@ export function buildAnalystSystemPrompt({
       ? `,\n  "killPrice": <the price below which your thesis is dead — REQUIRED; null ONLY if your critique explicitly states you could not construct one>,\n  "killPriceNote": "<ONLY when killPrice is null: one sentence on why no kill price can be given — omit this key otherwise>"`
       : "";
 
-  const valuationSection = blindFirst
-    ? `## Your own independent valuation (MANDATORY, TWO PHASES)
+  const valuationSection = `## Your own independent valuation (MANDATORY, TWO PHASES)
 This review runs across two user messages — you will not always have the report yet.
 
 **PHASE 1 — this message has NO report.** ${cfg.valuationFraming} Commit to it from the data and anchors given below plus web search alone, in the JSON block below, followed by a rationale of AT MOST 200 words. Do not critique anything yet (there is nothing to critique) and do not remark that the report is missing — simply commit.
@@ -587,27 +580,6 @@ ${assumptionsCrossCheckJson()}${killPriceLine},
 
 ${BRIDGE_RULE}
 
-Each \`fairValue\` is your intrinsic estimate AFTER applying a margin of safety of ${mosPercent}% (buy target = intrinsic × (1 − ${mosPercent}/100)) — same convention as the report under review, so the two are directly comparable.`
-    : `## Your own independent valuation (MANDATORY)
-${cfg.valuationFraming}
-
-Write the critique first, opening with the exact line \`${CRITIQUE_START_MARKER}\`, and emit the JSON block as the very LAST thing. Nothing before the marker, nothing after the fence.
-
-\`\`\`json
-{
-  "method": "<${METHOD_LIST}>",
-  "sector": "<sector name>",
-  "currency": "<ISO currency code, e.g. USD, EUR>",
-${UNITS_JSON_LINE}
-${scenarioJsonLine("bull", mosPercent)},
-${scenarioJsonLine("base", mosPercent)},
-${scenarioJsonLine("bear", mosPercent)},
-${assumptionsCrossCheckJson()}${killPriceLine}
-}
-\`\`\`
-
-${BRIDGE_RULE}
-
 Each \`fairValue\` is your intrinsic estimate AFTER applying a margin of safety of ${mosPercent}% (buy target = intrinsic × (1 − ${mosPercent}/100)) — same convention as the report under review, so the two are directly comparable.`;
 
   return `You are ${cfg.persona}
@@ -630,7 +602,7 @@ Rules:
 - Write the critique entirely in ${language}, using ONLY that language's writing system — never emit stray characters from another script (e.g. no CJK character dropped into a Western-language sentence). If a foreign-script word slips in, replace it with its ${language} equivalent.
 - Be specific and cite sources for any figure you challenge (e.g. "According to [source]...").
 - Be concise: this is a review, not a second full report. Use short sections and bullet points.
-- The ONLY JSON you emit is ${jsonBlocksPhrase}; do NOT restate the whole report.
+- The ONLY JSON you emit is the two valuation blocks above (one in Phase 1, one in Phase 2); do NOT restate the whole report.
 - **Do not escalate prescriptiveness beyond the report you review.** Your output is a second opinion on the VALUATION: commit to your own bull/base/bear and say whether the report's fair value should be revised up or down. Do NOT issue an operational trade instruction more prescriptive than the base report — no "buy at €X", "accumulate below €Y", "sell now" when the report itself only concludes "hold". Judge the number; do not originate a trade call the report did not make.
 ${closingRules}`;
 }
@@ -739,7 +711,7 @@ ${formatGroundingForPrompt(grounding)}`;
  * gates already computed against the base report's own declared bridge (the model
  * declares, the code verifies — ANALYST_STRUCTURAL_CHECKS #6). The actual anti-anchoring
  * rule ("cite a NEW fact or arithmetic error, or restate unchanged") lives in the system
- * prompt (buildAnalystSystemPrompt's blindFirst branch), not here — this only supplies data.
+ * prompt (buildAnalystSystemPrompt's Phase 2 rule), not here — this only supplies data.
  */
 export function buildAnalystReconcileUserPrompt({
   ticker,

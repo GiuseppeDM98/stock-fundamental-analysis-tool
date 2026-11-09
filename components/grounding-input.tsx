@@ -1,6 +1,6 @@
 "use client";
 
-// Typed paste-block editor for the Grounded Deep Value mode — mounted by <DatasetSection>
+// Typed paste-block editor of the financial dataset — mounted by <DatasetSection>
 // on /analyze. Owns the block list (add/edit/remove), a per-ticker localStorage draft, the
 // "Prepare data" extraction call, the retry of one failed block, and on "Analyze with
 // this data" saves the paste as a financial dataset and hands its id up (onConfirm).
@@ -116,8 +116,9 @@ type Props = {
   seedBlocks?: GroundingBlock[];
   // The id of the dataset confirmed for the run, if any.
   valueId: string | null;
-  // The paste was saved as a dataset: the run can use it.
-  onConfirm: (dataset: { id: string; extract: GroundedFinancials }) => void;
+  // The paste was saved as a dataset: the run can use it. Awaited: the parent may merge it
+  // with the web dataset on screen first, and the confirm button waits for that too.
+  onConfirm: (dataset: { id: string; extract: GroundedFinancials }) => void | Promise<void>;
   // A block changed: the confirmed dataset no longer matches the editor.
   onInvalidate: () => void;
 };
@@ -361,8 +362,10 @@ export function GroundingInput({ ticker, seedBlocks, valueId, onConfirm, onInval
     try {
       const { id } = await createPasteDataset(ticker, { blocks: extractedBlocks, extract: extractResult.extract }, extractResult.warnings);
       setSavedId(id);
+      // Still "saving" while the parent merges: until 2026-11-09 the button came back before
+      // the merge answered, and a second click saved a second paste and a second merge.
+      await onConfirm({ id, extract: extractResult.extract });
       setConfirmStatus("idle");
-      onConfirm({ id, extract: extractResult.extract });
     } catch (err) {
       setConfirmError(err instanceof Error ? err.message : "");
       setConfirmStatus("error");
@@ -517,6 +520,7 @@ export function GroundingInput({ ticker, seedBlocks, valueId, onConfirm, onInval
           failedBlocks={failedBlocks}
           onRetry={handleRetry}
           busy={busy}
+          showPasteHint
         />
       )}
 

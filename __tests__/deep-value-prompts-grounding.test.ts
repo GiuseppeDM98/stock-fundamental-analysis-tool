@@ -125,13 +125,11 @@ describe("The report prompts rescope web search to what the dataset cannot hold"
   });
 });
 
-describe("Analyst prompts: blind-first wording, Skeptic framing, basis check, kill price note", () => {
-  it("mentions two JSON blocks only in a blind-first review", () => {
-    const single = buildAnalystSystemPrompt({ angle: "optimist", mosPercent: 20, grounding: LENS_GROUNDING });
-    expect(single).not.toContain("Phase 1");
-    expect(single).toContain("The ONLY JSON you emit is the valuation block above;");
-    const blind = buildAnalystSystemPrompt({ angle: "optimist", mosPercent: 20, grounding: LENS_GROUNDING, blindFirst: true });
-    expect(blind).toContain("the two valuation blocks above (one in Phase 1, one in Phase 2)");
+describe("Analyst prompts: two-phase wording, Skeptic framing, basis check, kill price note", () => {
+  it("names the two JSON blocks, one per phase", () => {
+    const sys = buildAnalystSystemPrompt({ angle: "optimist", mosPercent: 20, grounding: LENS_GROUNDING });
+    expect(sys).toContain("The ONLY JSON you emit is the two valuation blocks above (one in Phase 1, one in Phase 2);");
+    expect(sys).not.toContain("The ONLY JSON you emit is the valuation block above;");
   });
 
   it("frames the Skeptic as breaking the thesis, not judging whether it holds up", () => {
@@ -151,9 +149,8 @@ describe("Analyst prompts: blind-first wording, Skeptic framing, basis check, ki
   it("puts killPriceNote in the Skeptic JSON contract only", () => {
     expect(buildAnalystSystemPrompt({ angle: "skeptic", grounding: LENS_GROUNDING })).toContain('"killPriceNote"');
     expect(buildAnalystSystemPrompt({ angle: "optimist", grounding: LENS_GROUNDING })).not.toContain("killPrice");
-    // Both blind-first blocks carry it.
-    const blind = buildAnalystSystemPrompt({ angle: "skeptic", grounding: LENS_GROUNDING, blindFirst: true });
-    expect(blind.split('"killPriceNote"')).toHaveLength(3);
+    // Both phases' blocks carry it.
+    expect(buildAnalystSystemPrompt({ angle: "skeptic", grounding: LENS_GROUNDING }).split('"killPriceNote"')).toHaveLength(3);
   });
 });
 

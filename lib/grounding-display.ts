@@ -1,4 +1,4 @@
-// Display-side derivations for the Grounded post-generation card — numbers the card shows
+// Display-side derivations for the post-generation checks card — numbers the card shows
 // that PostCheck doesn't expose as fields of their own. Pure, no server-only.
 import type { BridgeCheck, PostCheck } from "@/lib/grounding/postcheck";
 

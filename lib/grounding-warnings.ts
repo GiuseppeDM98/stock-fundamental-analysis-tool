@@ -1,4 +1,4 @@
-// Warning assembly for the Grounded extraction route and the post-generation card — the
+// Warning assembly for the paste extraction route and the post-generation card — the
 // warnings that are NOT a property of the extract alone (those live in
 // lib/grounding/reconcile.ts) but of the extraction run (a block failed) or of the extract
 // meeting a live quote (why the price-implied read is missing). Pure, no server-only, so

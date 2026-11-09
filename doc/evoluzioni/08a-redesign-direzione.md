@@ -25,7 +25,7 @@
 ## 3. Decisioni
 
 - **D-4** (owner): tutta l'app, ultima della serie. **D-51**: redesign completo con new-work: la North Star «The Investor's Ledger» può cambiare, DESIGN.md viene sostituito dal documenter nella 08b. **D-52**: i comp li produce impeccable.
-- **T-30** (adottata, ribaltabile): gli stati AI di `/analyze` (stream, done, `cut` con «Riprova», errore, anteprima della ricerca) non si vedono in e2e (lo stato `cut` sì, dalla riga seminata dalla 05c con `?resume=`): `/analyze` (stato vuoto) e `/register` entrano nel visual (05b ha già `/analyze`); lo stato «done» si rivede sul dettaglio salvato (stesso `ReportShell`); il pannello live si vede in una run reale documentata (08b).
+- **T-30** (adottata, ribaltabile): gli stati AI di `/analyze` (stream, done, `cut` con «Riprova», errore, anteprima della ricerca) non si vedono in e2e (lo stato `cut` sì, dalla riga seminata dalla 05c con `?resume=`): `/analyze` (stato vuoto) e `/register` entrano nel visual (`/analyze` c'è dal 2026-11-09, con la 05b ritirata quel giorno); lo stato «done» si rivede sul dettaglio salvato (stesso `ReportShell`); il pannello live si vede in una run reale documentata (08b).
 - Adottata, ribaltabile: nessuna libreria UI nuova (niente component kit: anti-reference di PRODUCT.md); un cambio di font è una delle domande di A2 (gli e2e bloccano Google Fonts: una scelta tipografica si vede solo nel giro owner, non negli screenshot).
 - Adottata, ribaltabile: l'audit si ripete a fine build (08b) con lo stesso comando: la prova di A1 è il confronto prima/dopo.
 

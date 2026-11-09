@@ -76,6 +76,29 @@ function mergedBundle(ticker: string, pasteId: string, webId: string): MergedDat
 
 const QUOTE = { price: 11, currency: "EUR" };
 
+const DRAFT = JSON.stringify([{ id: "draft-1", kind: "balance_sheet", text: "Total debt 400" }]);
+
+/** The extraction of the draft above. */
+function extracted(basis = makeBasis()): GroundingExtractResponse {
+  return { blockResults: [{ kind: "balance_sheet", blockId: "draft-1" }], failedBlockIds: [], extract: EXTRACT, basis, stats: [], grid: null, marketImplied: null, impliedExpectations: null, warnings: [] };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => (resolve = r));
+  return { promise, resolve };
+}
+
+/** Opens the paste editor with `open`, prepares the draft and confirms it. */
+async function confirmDraft(open: string) {
+  fireEvent.click(await screen.findByRole("button", { name: open }));
+  fireEvent.click(screen.getByRole("button", { name: "Prepare data" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Analyze with this data →" }));
+}
+
+// The EV-columns hint of the paste editor's preview (kE unverifiable).
+const PASTE_HINT = /Include the EV\/Revenue, Market Cap and Enterprise Value columns/;
+
 function renderSection(ticker: string, onChange = vi.fn()) {
   const view = render(createElement(DatasetSection, { ticker, quote: QUOTE, value: null, onChange }));
   return { ...view, onChange, rerenderTicker: (next: string) => view.rerender(createElement(DatasetSection, { ticker: next, quote: QUOTE, value: null, onChange })) };
@@ -158,6 +181,90 @@ describe("DatasetSection — reuse of a recent dataset", () => {
     expect(await screen.findByText(/\(web \+ paste\)/)).toBeInTheDocument();
     expect(researchMock).toHaveBeenCalledWith("AAA.MI");
     expect(mergeMock).toHaveBeenCalledWith("AAA.MI", "ds-paste-old", "ds-web");
+  });
+
+  it("Refresh data on a reused paste researches and merges the new web dataset with that paste", async () => {
+    fetchLatestMock.mockResolvedValue(stored("AAA.MI"));
+    researchMock.mockResolvedValue(webBundle("AAA.MI"));
+    mergeMock.mockImplementation(async (ticker: string, pasteId: string, webId: string) => mergedBundle(ticker, pasteId, webId));
+    renderSection("AAA.MI");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Refresh data" }));
+    expect(await screen.findByText(/\(web \+ paste\)/)).toBeInTheDocument();
+    expect(mergeMock).toHaveBeenCalledWith("AAA.MI", "ds-AAA.MI", "ds-web");
+  });
+
+  it("Refresh data on a reused web dataset researches again, with nothing to merge", async () => {
+    fetchLatestMock.mockResolvedValue(stored("AAA.MI", "web"));
+    researchMock.mockResolvedValue(webBundle("AAA.MI"));
+    renderSection("AAA.MI");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Refresh data" }));
+    expect(await screen.findByRole("button", { name: "Analyze with this data →" })).toBeInTheDocument();
+    expect(researchMock).toHaveBeenCalledWith("AAA.MI");
+    expect(mergeMock).not.toHaveBeenCalled();
+  });
+
+  it("merges a paste confirmed on a reused web dataset with it", async () => {
+    window.localStorage.setItem("sfa:grounding:AAA.MI", DRAFT);
+    fetchLatestMock.mockResolvedValue(stored("AAA.MI", "web"));
+    extractMock.mockResolvedValue(extracted());
+    createPasteMock.mockResolvedValue({ id: "ds-paste-new" });
+    mergeMock.mockImplementation(async (ticker: string, pasteId: string, webId: string) => mergedBundle(ticker, pasteId, webId));
+    renderSection("AAA.MI");
+
+    await confirmDraft("Add pasted data");
+    expect(await screen.findByText(/\(web \+ paste\)/)).toBeInTheDocument();
+    expect(mergeMock).toHaveBeenCalledWith("AAA.MI", "ds-paste-new", "ds-AAA.MI");
+  });
+
+  it("drops the dataset confirmed before as soon as a paste starts merging with it", async () => {
+    window.localStorage.setItem("sfa:grounding:AAA.MI", DRAFT);
+    fetchLatestMock.mockResolvedValue(stored("AAA.MI", "web"));
+    extractMock.mockResolvedValue(extracted());
+    createPasteMock.mockResolvedValue({ id: "ds-paste-new" });
+    mergeMock.mockReturnValue(new Promise(() => {}));
+    const { onChange } = renderSection("AAA.MI");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Use this dataset" }));
+    expect(onChange).toHaveBeenLastCalledWith({ id: "ds-AAA.MI", extract: stored("AAA.MI", "web").dataset });
+    await confirmDraft("Add pasted data");
+
+    await waitFor(() => expect(mergeMock).toHaveBeenCalled());
+    expect(onChange).toHaveBeenLastCalledWith(null);
+  });
+
+  it("keeps the paste's confirm disabled until the merge answers, so a second click saves nothing", async () => {
+    window.localStorage.setItem("sfa:grounding:AAA.MI", DRAFT);
+    fetchLatestMock.mockResolvedValue(stored("AAA.MI", "web"));
+    extractMock.mockResolvedValue(extracted());
+    createPasteMock.mockResolvedValue({ id: "ds-paste-new" });
+    const merge = deferred<MergedDatasetResponse>();
+    mergeMock.mockReturnValue(merge.promise);
+    renderSection("AAA.MI");
+
+    await confirmDraft("Add pasted data");
+    await waitFor(() => expect(mergeMock).toHaveBeenCalledTimes(1));
+    const confirm = screen.getByRole("button", { name: "Analyze with this data →" });
+    expect(confirm).toBeDisabled();
+    fireEvent.click(confirm);
+    expect(createPasteMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => merge.resolve(mergedBundle("AAA.MI", "ds-paste-new", "ds-AAA.MI")));
+    expect(await screen.findByText(/\(web \+ paste\)/)).toBeInTheDocument();
+    expect(mergeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("Edit the pasted data on the merge of a reused paste opens on that paste's blocks", async () => {
+    fetchLatestMock.mockResolvedValue(stored("AAA.MI"));
+    researchMock.mockResolvedValue(webBundle("AAA.MI"));
+    mergeMock.mockImplementation(async (ticker: string, pasteId: string, webId: string) => mergedBundle(ticker, pasteId, webId));
+    renderSection("AAA.MI");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Refresh data" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit the pasted data" }));
+    expect(screen.getByText(/Income statement ·/)).toBeInTheDocument();
+    expect(screen.queryByText("Your unsaved draft was kept")).not.toBeInTheDocument();
   });
 });
 
@@ -298,5 +405,66 @@ describe("DatasetSection — web research", () => {
     expect(await screen.findByText("Could not check for a recent dataset")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Add pasted data" }));
     expect(screen.getByRole("button", { name: "Prepare data" })).toBeInTheDocument();
+  });
+});
+
+describe("DatasetSection — the moves on a preview", () => {
+  it("a web preview offers Refresh data and Add pasted data, without the paste editor's EV-columns hint", async () => {
+    fetchLatestMock.mockResolvedValue(null);
+    researchMock.mockResolvedValue({ ...webBundle("AAA.MI"), basis: makeBasis({ kE: null, sameBasis: false }) });
+    renderSection("AAA.MI");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Search the web for the data" }));
+    expect(await screen.findByText(/\(web\)/)).toBeInTheDocument();
+    expect(screen.queryByText(PASTE_HINT)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add pasted data" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit the pasted data" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh data" }));
+    await waitFor(() => expect(researchMock).toHaveBeenCalledTimes(2));
+    expect(mergeMock).not.toHaveBeenCalled();
+  });
+
+  it("shows the EV-columns hint on the paste editor's own preview", async () => {
+    window.localStorage.setItem("sfa:grounding:AAA.MI", DRAFT);
+    fetchLatestMock.mockResolvedValue(null);
+    extractMock.mockResolvedValue(extracted(makeBasis({ kE: null, sameBasis: false })));
+    renderSection("AAA.MI");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add pasted data" }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare data" }));
+    expect(await screen.findByText(PASTE_HINT)).toBeInTheDocument();
+  });
+
+  async function mergedPreview() {
+    window.localStorage.setItem("sfa:grounding:AAA.MI", DRAFT);
+    fetchLatestMock.mockResolvedValue(null);
+    researchMock.mockResolvedValue(webBundle("AAA.MI"));
+    extractMock.mockResolvedValue(extracted());
+    createPasteMock.mockResolvedValueOnce({ id: "ds-paste-new" }).mockResolvedValueOnce({ id: "ds-paste-2" });
+    mergeMock.mockImplementation(async (ticker: string, pasteId: string, webId: string) => mergedBundle(ticker, pasteId, webId));
+    const view = renderSection("AAA.MI");
+    fireEvent.click(await screen.findByRole("button", { name: "Search the web for the data" }));
+    await confirmDraft("Add pasted data");
+    expect(await screen.findByText(/\(web \+ paste\)/)).toBeInTheDocument();
+    return view;
+  }
+
+  it("Edit the pasted data on a merged preview reopens the draft, and a new confirm merges with the same web dataset", async () => {
+    await mergedPreview();
+    expect(screen.queryByRole("button", { name: "Add pasted data" })).not.toBeInTheDocument();
+
+    await confirmDraft("Edit the pasted data");
+    await waitFor(() => expect(mergeMock).toHaveBeenCalledTimes(2));
+    expect(mergeMock).toHaveBeenLastCalledWith("AAA.MI", "ds-paste-2", "ds-web");
+  });
+
+  it("Refresh data on a merged preview researches again and merges with the same paste", async () => {
+    await mergedPreview();
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh data" }));
+    await waitFor(() => expect(mergeMock).toHaveBeenCalledTimes(2));
+    expect(researchMock).toHaveBeenCalledTimes(2);
+    expect(mergeMock).toHaveBeenLastCalledWith("AAA.MI", "ds-paste-new", "ds-web");
   });
 });

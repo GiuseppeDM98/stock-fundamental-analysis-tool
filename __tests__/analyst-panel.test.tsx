@@ -10,7 +10,7 @@ vi.mock("@/lib/analyses", () => ({
   updateAnalystOpinion: vi.fn(async () => undefined),
 }));
 vi.mock("@/components/ai-settings-control", () => ({
-  AiSettingsControl: () => null,
+  AiSettingsControl: () => "AI model selector",
 }));
 vi.mock("@/components/report/report-body", () => ({
   default: ({ markdown }: { markdown: string }) => <div data-testid="critique">{markdown}</div>,
@@ -325,6 +325,8 @@ describe("AnalystPanel after a reload reads the FINAL JSON from *ResultJson", ()
     renderPanel({ hasDataset: false });
 
     expect(screen.getByText(translations.en.analystNeedsDataset)).toBeInTheDocument();
+    // Nothing can run, so there is no model to pick.
+    expect(screen.queryByText("AI model selector")).not.toBeInTheDocument();
     // The Skeptic has a saved critique (Re-run), the other two lenses have none (Run).
     const buttons = [screen.getByRole("button", { name: translations.en.analystReviewRerun }), ...screen.getAllByRole("button", { name: translations.en.analystRunButton })];
     expect(buttons).toHaveLength(3);

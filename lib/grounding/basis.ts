@@ -1,10 +1,10 @@
-// Basis reconciliation — the highest-ROI rigor check of the Grounded Deep Value mode.
-// Pasted data lives in two coordinate spaces that are easy to silently treat as one:
+// Basis reconciliation — the highest-ROI rigor check of the financial dataset.
+// Its data lives in two coordinate spaces that are easy to silently treat as one:
 // the STATEMENT basis (S, the income statement/balance sheet the model builds its bridge
 // from) and the PROVIDER basis (P, whatever EV/EBITDA definition the multiples-table
 // source used — reported vs adjusted EBITDA, pre/post IFRS-16 leases, etc). This module
 // estimates the conversion factors between them (kE for EBITDA, kB for the EV→equity
-// bridge) from the pasted data itself — arithmetic, not judgment; an LLM is the wrong tool
+// bridge) from the dataset itself — arithmetic, not judgment; an LLM is the wrong tool
 // for a definitional mismatch. Pure, no server-only.
 import type { FiscalYearFinancials, FiscalYearMultiples, GroundedFinancials } from "@/types/grounding";
 import { computeMultipleStats, quantile, type MultipleStats } from "@/lib/grounding/anchors";
@@ -148,7 +148,7 @@ function computeAdjustedEvEbitda(extract: GroundedFinancials, kE: number): Multi
 }
 
 /**
- * Estimates kE (EBITDA basis ratio) and kB (EV-bridge basis ratio) from the pasted data,
+ * Estimates kE (EBITDA basis ratio) and kB (EV-bridge basis ratio) from the dataset,
  * year by year, then aggregates via median (robust to a single noisy year). Degrades
  * honestly: never assumes kE = 1 when unverifiable, never silently picks a
  * side when the P/E- and P/B-implied MarketCap estimates disagree.
