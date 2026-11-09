@@ -19,26 +19,27 @@ import { AI_MODEL_CATALOG, type AiModelId } from "@/types/ai-settings";
 // for Deep Value and silently returned an empty report with no error.
 const DEFAULT_MAX_TOOL_ITERATIONS = 10;
 
-// Cap for the heavy-research routes (Deep Value + its analyst-panel review, the research
-// stage), and also reused by the earnings lookup even though its research is much
-// lighter — a single shared "give DeepSeek plenty of room" knob is simpler than tuning a
-// separate value per route, and 35 rounds only costs anything if the model actually needs
-// them. Deep Value's prompts demand far more one-query-at-a-time rounds than the Advisor's
-// single-answer prompt — and the ANALYTICAL_RIGOR_BLOCK / analyst structural checks (EV→equity bridge,
-// same-basis comparables, scenario-vs-sensitivity, anchoring, reverse) each add figures
-// to web-verify. Raised 25→35 after the added checks pushed real DeepSeek runs into the
-// "too many search rounds" cutoff; the earnings route hit the same cutoff independently
-// at the old 10-round default (reproduced in production, 2026-08-24) and was moved onto
-// this shared cap rather than getting its own. On Claude it counts the resumes after
-// `pause_turn`: the research stage relies on that, and a Claude research run whose resumes
-// run out answers 502 (2026-10-30).
+// Cap for the heavy-research routes: the research stage, which builds the web dataset,
+// and the earnings lookup, even though its research is much lighter — a single shared
+// "give DeepSeek plenty of room" knob is simpler than tuning a separate value per route,
+// and 35 rounds only costs anything if the model actually needs them. It was also Deep
+// Value's cap while a report could gather its own figures: those prompts demanded far more
+// one-query-at-a-time rounds than the Advisor's, and the ANALYTICAL_RIGOR_BLOCK / analyst
+// structural checks each added figures to web-verify, so it was raised 25→35 after real
+// DeepSeek runs hit the "too many search rounds" cutoff. Since 2026-11-09 every report and
+// lens has a dataset and runs at GROUNDED_MAX_TOOL_ITERATIONS below. The earnings route
+// hit the same cutoff independently at the old 10-round default (reproduced in production,
+// 2026-08-24) and was moved onto this shared cap rather than getting its own. On Claude it
+// counts the resumes after `pause_turn`: the research stage relies on that, and a Claude
+// research run whose resumes run out answers 502 (2026-10-30).
 export const DEEP_RESEARCH_MAX_TOOL_ITERATIONS = 35;
 
-// Cap for Grounded-mode Deep Value runs (and its analyst lenses) — lower than the Quick
-// cap above because the web search is RESCOPED, not eliminated: the model no
-// longer needs to research 5y of financials/multiples/comparables (they're provided), it
-// only needs the post-coverage-date update + qualitative material. Counts rounds as
-// DEEP_RESEARCH_MAX_TOOL_ITERATIONS does (on Claude, the resumes after `pause_turn`).
+// Cap for every Deep Value report and analyst lens (all on a dataset since 2026-11-09) —
+// lower than the research cap above because the web search is RESCOPED, not eliminated:
+// the model no longer needs to research 5y of financials/multiples/comparables (they're
+// provided), it only needs the post-coverage-date update + qualitative material. Counts
+// rounds as DEEP_RESEARCH_MAX_TOOL_ITERATIONS does (on Claude, the resumes after
+// `pause_turn`).
 export const GROUNDED_MAX_TOOL_ITERATIONS = 12;
 
 // Cap for the blind-first analyst lenses' RECONCILE turn — that turn reconciles a

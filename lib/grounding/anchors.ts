@@ -1,4 +1,4 @@
-// Deterministic, price-independent anchors for the Grounded Deep Value mode: historical
+// Deterministic, price-independent anchors of the financial dataset: historical
 // multiple statistics, the 3×3 valuation grid, the market-implied read (a CONTROL, never
 // an input — see ANALYTICAL_RIGOR_BLOCK item 10 in lib/ai/deep-value-prompts.ts) and the
 // reverse-engineered "what must be true" read. Pure, no server-only.
@@ -85,7 +85,7 @@ export type MultipleStats = {
 };
 
 /**
- * Per-multiple historical stats, in PROVIDER basis — this is the raw pasted series,
+ * Per-multiple historical stats, in PROVIDER basis — this is the raw provider series,
  * unadjusted. `multiples` is expected ordered ascending by fiscalYear (as
  * `GroundedFinancials.multiples` is documented) — early/late means split the window IN
  * TIME, not by value, so a structural de-rating (e.g. energy) is visible rather than
@@ -151,7 +151,7 @@ export type ValuationGrid = {
 const GRID_LOOKBACK_YEARS = 5;
 
 /**
- * The 3×3 grid the Grounded prompt injects as FACTS: 3 historical EV/EBITDA multiples
+ * The 3×3 grid the Deep Value prompt injects as FACTS: 3 historical EV/EBITDA multiples
  * (p25/median/p75, SAME-BASIS — rescaled by kE when `basis.adjustedEvEbitda` is available)
  * × 3 EBITDA bases (last FY, 5y median, next forward estimate). The bridge deduction in
  * every cell is scaled by kB (`basis.kB ?? 1`). Row labels are plain English, not wired

@@ -1,8 +1,8 @@
 // POST /api/ai/grounding/extract — transcribes the user's pasted financial-statement
 // blocks into structured JSON (Sonnet 5.5, tools: [] — pure transcription, not judgment;
-// the ONLY call site in the whole Grounded feature with web search off), merges them,
+// the ONLY call site in the whole dataset path with web search off), merges them,
 // and computes the deterministic anchors so the client can render a verifiable preview
-// before spending a 30-60s Deep Value run on possibly-mistranscribed data.
+// before spending a Deep Value run (minutes at xhigh) on possibly-mistranscribed data.
 //
 // One extraction call PER BLOCK, in parallel (Promise.allSettled) — a failed block
 // raises a `block_extract_failed` warning instead of sinking the whole request; only a

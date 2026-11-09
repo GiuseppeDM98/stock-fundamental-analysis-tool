@@ -185,7 +185,7 @@ function isFiniteNumber(value: unknown): value is number {
  *  JSON block didn't carry a valid one (no `fairValue`, wrong type). */
 type ScenarioSet = { bull: Scenario | undefined; base: Scenario | undefined; bear: Scenario | undefined };
 
-/** Everything a gate may read from the pasted dataset. Without one: EMPTY_BASIS, no latest
+/** Everything a gate may read from the dataset. Without one: EMPTY_BASIS, no latest
  *  fiscal year and an empty EV/EBITDA series, so the provider-basis reads and percentiles
  *  come back null while Check A/B and the statement-basis implied multiple still compute. */
 type DatasetContext = {
@@ -253,7 +253,7 @@ function isEvBridge(method: string): boolean | null {
 }
 
 /** An EV bridge on EBITDA: the one bridge whose (equity + net debt + minorities) / driver
- *  is an EV/EBITDA, the multiple the pasted history, the basis reconciliation and the
+ *  is an EV/EBITDA, the multiple the dataset history, the basis reconciliation and the
  *  market-implied read are all built on. An EV/EBITDA method by definition, or a DCF on
  *  FCFF whose driver label names EBITDA. Never an equity-value method (equity / EBITDA is no
  *  EV multiple, and a DPS per share turned it into a meaningless number on a DDM), nor
@@ -290,8 +290,8 @@ function checkOneScenario(
     growthWedgePct: null,
   };
 
-  // `bridge` is optional on Scenario (Quick reports, and older saved reports, never had
-  // it) — the Grounded prompt instructs the model to always include it, but this is
+  // `bridge` is optional on Scenario (reports saved without a dataset before 2026-11-09,
+  // and older ones, may lack it) — the prompt instructs the model to always include it, but this is
   // untrusted LLM output, not a validated schema. Degrade every downstream check to null
   // rather than throw when the model didn't declare one for this scenario (or declared no
   // valid scenario at all — then there's nothing to check the bridge against either).
@@ -688,7 +688,7 @@ function checkDividendCoverage(result: ParsedAnalystResult, dataset: GroundedFin
 }
 
 /** The scale the bridges were written in must be the dataset's: a bridge in millions on a
- *  paste in thousands is off by a factor of a thousand everywhere. */
+ *  dataset in thousands is off by a factor of a thousand everywhere. */
 function checkUnitsMatch(result: ParsedAnalystResult, dataset: GroundedFinancials | null): Gate {
   if (!dataset) return unavailableNoDataset("units_match");
   if (!result.units || !dataset.meta.units) return { code: "units_match", status: "unavailable", detail: "units undeclared" };
@@ -814,7 +814,7 @@ function buildGates({ result, scenarioSet, scenarios, ctx, price, isPriceCompara
  * scenario order, method family, sensitivity centre, dividend coverage, units) — the layer
  * that turns "the model declares" into "the code verifies".
  *
- * @param extract the pasted dataset, or null: without one (or with no financial rows) the
+ * @param extract the dataset, or null: without one (or with no financial rows) the
  *   dataset gates read "unavailable — no dataset", basis is EMPTY_BASIS, marketImplied null.
  * @param quoteCurrency the price's currency; a price gate whose result currency differs
  *   reads "unavailable — currency mismatch" and expectedValue is null.

@@ -51,7 +51,7 @@ export type SavedAnalysis = {
   qualityValuationMethod?: string | null;
   // Blind-first commitment — JSON.stringify'd DeepValueResult (bridge/probability/
   // assumptions/crossCheck + killPrice for skeptic),
-  // committed by this lens BEFORE it saw the report. Null until a Grounded blind-first run
+  // committed by this lens BEFORE it saw the report. Null until a lens run
   // completes Phase 1; persisted ALONGSIDE the *FairValue* columns above, which remain the
   // FINAL (post-reconciliation) triple — see components/report/analyst-blind-card.tsx for
   // the blind-vs-final drift this exists to make visible.
@@ -78,7 +78,7 @@ export type SavedAnalysis = {
   optimistResultJson?: string | null;
   qualityResultJson?: string | null;
   // The financial dataset the analysis was grounded on (FinancialDataset.id); null for
-  // Quick-mode analyses and for those saved before the dataset table.
+  // analyses saved without one (before 2026-11-09) or before the dataset table.
   datasetId?: string | null;
   createdAt: string; // ISO 8601 string (JSON serialized from Date)
   // groundingJson is DELIBERATELY NOT a field here. This type mirrors the GET
@@ -106,7 +106,7 @@ export type AnalystOpinionUpdate = {
   fairValueBear?: number | null;
   valuationMethod?: string | null;
   // Blind-first commitment — JSON.stringify'd DeepValueResult from Phase 1, present only
-  // for a Grounded blind-first run whose Phase 1 parsed successfully. Omitted (not null)
+  // for a lens run whose Phase 1 parsed successfully. Omitted (not null)
   // leaves any prior commitment untouched, same convention as the fairValue* fields above.
   blindJson?: string;
   // The lens's FINAL JSON (JSON.stringify'd ParsedAnalystResult), re-sanitized by the
@@ -126,8 +126,8 @@ export type SaveAnalysisRequest = {
   fairValueBase?: number;
   fairValueBear?: number;
   valuationMethod?: string;
-  // Grounded Deep Value mode — the dataset the analysis was generated on (the route
-  // checks it is the user's and of the same ticker).
+  // The dataset the analysis was generated on (the route checks it is the user's and of
+  // the same ticker).
   datasetId?: string;
   // The final JSON block (JSON.stringify'd ParsedAnalystResult), only when it carries a
   // full triple — the route answers 400 otherwise, so the client omits it instead.

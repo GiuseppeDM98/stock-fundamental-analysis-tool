@@ -1,9 +1,9 @@
 "use client";
 
-// The verifiable extract preview for the Grounded Deep Value mode — renders what the
-// extraction endpoint transcribed (the dataset tables, each row with its source) + the
-// deterministic anchors computed from it, BEFORE the user spends a 30-60s Deep Value run
-// on possibly-mistranscribed data. A block whose extraction failed can be retried alone.
+// The verifiable preview of a financial dataset — renders what the extraction endpoint
+// transcribed or the research found (the dataset tables, each row with its source) + the
+// deterministic anchors computed from it, BEFORE the user spends a Deep Value run (minutes
+// at xhigh) on possibly-mistranscribed data. A block whose extraction failed can be retried alone.
 import { useLanguage } from "@/context/language-context";
 import type { Translations } from "@/lib/i18n/translations";
 import type { GroundingExtractResponse } from "@/lib/grounding-client";
@@ -92,6 +92,9 @@ type Props = {
   onRetry?: (blockId: string) => void;
   // A save or a retry is in flight: the actions wait for it.
   busy?: boolean;
+  // The paste editor's own preview: the EV-columns hint names a column to add to the
+  // paste. A web or merged dataset on /analyze has no paste to add it to (2026-11-09).
+  showPasteHint?: boolean;
 };
 
 type T = (key: keyof Translations) => string;
@@ -215,7 +218,7 @@ function ImpliedExpectationsBlock({
   );
 }
 
-export function GroundingPreview({ ticker, result, confirmed, onEdit, onConfirm, failedBlocks = [], onRetry, busy = false }: Props) {
+export function GroundingPreview({ ticker, result, confirmed, onEdit, onConfirm, failedBlocks = [], onRetry, busy = false, showPasteHint = false }: Props) {
   const { t, locale } = useLanguage();
   const { extract, basis, stats, grid, marketImplied, impliedExpectations, warnings } = result;
 
@@ -259,9 +262,9 @@ export function GroundingPreview({ ticker, result, confirmed, onEdit, onConfirm,
 
       <DatasetTables extract={extract} />
 
-      {/* Basis reconciliation — a property of the PASTE, so it's shown here, before any
+      {/* Basis reconciliation — a property of the DATASET, so it's shown here, before any
           AI run is spent: the cheapest possible moment to catch a basis mismatch. */}
-      <BasisReconciliationLine basis={basis} showPasteHint />
+      <BasisReconciliationLine basis={basis} showPasteHint={showPasteHint} />
 
       {evEbitdaStats && (
         <div>

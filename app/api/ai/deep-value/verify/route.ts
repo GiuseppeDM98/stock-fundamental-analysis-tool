@@ -177,9 +177,9 @@ export async function POST(request: Request) {
     let groundingContext: GroundingPromptContext | null = null;
     if (grounding) {
       try {
-        // Lenses get extract + anchors + warnings, never the raw paste — see the doc
-        // comment on buildAnalystUserPrompt's `grounding` param for why.
-        groundingContext = buildGroundingPromptContext([], grounding.extract, currentPrice ?? null, currency, grounding.warnings);
+        // Lenses get extract + anchors + warnings + the research notes, never the raw paste
+        // — see the doc comment on buildAnalystUserPrompt's `grounding` param for why.
+        groundingContext = buildGroundingPromptContext([], grounding.extract, currentPrice ?? null, currency, grounding.warnings, grounding.researchNotes);
       } catch {
         // Anchors that cannot be built on this extract: answered below, like a missing one.
       }
@@ -195,9 +195,7 @@ export async function POST(request: Request) {
     // — the prompts then simply omit the section.
     const baseGatesText = buildBaseGatesText(analysis, groundingContext.extract, effectiveMosPercent, currentPrice, currency);
 
-    // A dataset ⇒ blind-first: the lens commits blind, THEN sees the report.
-    const blindFirst = groundingContext != null;
-
+    // Always blind-first: the lens commits blind on the dataset, THEN sees the report.
     const angle = body.angle as (typeof ANALYST_ANGLES)[number];
     const systemPrompt = buildAnalystSystemPrompt({
       angle,
@@ -205,7 +203,6 @@ export async function POST(request: Request) {
       currentDate,
       mosPercent: effectiveMosPercent,
       grounding: groundingContext,
-      blindFirst,
     });
     const isItalian = body.language === "Italiano" || body.language === "Italian";
 

@@ -1,5 +1,5 @@
 /**
- * Prompt builders for the Grounded Deep Value extraction endpoint (Sonnet 5.5, no web
+ * Prompt builders for the paste extraction endpoint (Sonnet 5.5, no web
  * search — pure transcription, not judgment). One call per pasted block, scoped by
  * `GroundingBlockKind` so the model only ever attempts the fields relevant to that
  * block's statement type — narrower schema, fewer degrees of freedom, less hallucination
@@ -128,7 +128,7 @@ The peer's ticker is already known from context — do not try to extract it.`,
 /**
  * System prompt for one block's extraction call. Transcription only — the model must
  * not calculate, infer, or complete missing values (that discretion is exactly what the
- * rest of the Grounded feature exists to remove from the valuation, so it can't be
+ * rest of the dataset path exists to remove from the valuation, so it can't be
  * allowed to creep back in at the transcription step).
  */
 export function buildGroundingExtractSystemPrompt({ kind }: { kind: GroundingBlockKind }): string {

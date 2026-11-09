@@ -105,14 +105,22 @@ describe("Deep Value report prompt — research first, report, JSON last", () =>
   });
 });
 
-describe("Analyst lens prompts — critique first, JSON last, no sensitivity", () => {
+describe("Analyst lens prompts — Phase 2 critique first, JSON last, no sensitivity", () => {
   const lens = buildAnalystSystemPrompt({ angle: "skeptic", language: "English", currentDate: "October 11, 2026", mosPercent: 20, grounding: GROUNDING });
 
-  it("asks for the critique marker and the JSON as the very last thing", () => {
-    expect(lens).toContain(`Write the critique first, opening with the exact line \`${CRITIQUE_START_MARKER}\`, and emit the JSON block as the very LAST thing.`);
-    expect(lens).toContain('Close the critique with this disclaimer, written in English: "⚠️ This review is for informational purposes only and does not constitute financial advice.", then emit the JSON block.');
+  it("asks Phase 2 for the critique marker and the final JSON as the very last thing", () => {
+    expect(lens).toContain(`Write your critique first, opening with the exact line \`${CRITIQUE_START_MARKER}\`, then emit the FINAL JSON`);
+    expect(lens).toContain("as the very LAST thing.");
+    expect(lens).toContain('- Phase 2: close the critique with this disclaimer, written in English: "⚠️ This review is for informational purposes only and does not constitute financial advice.", then emit the final JSON block.');
     expect(lens).toContain(`Do not write anything before the \`${CRITIQUE_START_MARKER}\` line`);
     expect(lens).not.toContain("MUST be the very FIRST thing");
+  });
+
+  it("always describes both phases: there is no single-phase lens prompt (removed 2026-11-09)", () => {
+    expect(lens).toContain("## Your own independent valuation (MANDATORY, TWO PHASES)");
+    expect(lens).toContain("**PHASE 1 — this message has NO report.**");
+    expect(lens).not.toContain("## Your own independent valuation (MANDATORY)\n");
+    expect(lens).not.toContain("\n- Close the critique with");
   });
 
   it("carries units and a bridge with the bridge rule, but no sensitivity or dividends", () => {
@@ -124,16 +132,16 @@ describe("Analyst lens prompts — critique first, JSON last, no sensitivity", (
     expect(lens).not.toContain('"dividends"');
   });
 
-  it("keeps Phase 1 JSON-first and moves Phase 2 to critique-first in a blind-first review", () => {
-    const blind = buildAnalystSystemPrompt({ angle: "optimist", blindFirst: true, mosPercent: 20, currentDate: "October 11, 2026", grounding: GROUNDING });
+  it("keeps Phase 1 JSON-first and moves Phase 2 to critique-first", () => {
+    const blind = buildAnalystSystemPrompt({ angle: "optimist", mosPercent: 20, currentDate: "October 11, 2026", grounding: GROUNDING });
     expect(blind).toContain("Commit to it from the data and anchors given below plus web search alone, in the JSON block below, followed by a rationale");
     expect(blind).toContain(`Write your critique first, opening with the exact line \`${CRITIQUE_START_MARKER}\`, then emit the FINAL JSON`);
     expect(blind.split(`"method": "<${METHODS}>"`)).toHaveLength(3);
     expect(blind.split('"units": "<billions')).toHaveLength(3);
   });
 
-  it("scopes the closing rules to Phase 2 in a blind-first review, with the disclaimer in the critique's language", () => {
-    const blind = buildAnalystSystemPrompt({ angle: "optimist", blindFirst: true, mosPercent: 20, currentDate: "October 11, 2026", language: "Italiano", grounding: GROUNDING });
+  it("scopes the closing rules to Phase 2, with the disclaimer in the critique's language", () => {
+    const blind = buildAnalystSystemPrompt({ angle: "optimist", mosPercent: 20, currentDate: "October 11, 2026", language: "Italiano", grounding: GROUNDING });
     expect(blind).toContain("- Phase 1: the JSON block opens your answer and the rationale follows it; no critique marker, no disclaimer.");
     expect(blind).toContain(
       `- Phase 2: close the critique with this disclaimer, written in Italiano: "⚠️ This review is for informational purposes only and does not constitute financial advice.", then emit the final JSON block. Do not write anything before the \`${CRITIQUE_START_MARKER}\` line`

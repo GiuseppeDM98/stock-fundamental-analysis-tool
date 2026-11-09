@@ -1,6 +1,6 @@
 /**
- * Types for the Grounded Deep Value mode — user-pasted financial statements/multiples/
- * estimates/peers, transcribed to structured JSON, used to compute deterministic
+ * Types for the financial dataset — financial statements/multiples/estimates/peers,
+ * pasted by the user or researched from primary sources, as structured JSON, used to compute deterministic
  * historical-multiple anchors and to verify the model's own valuation bridge.
  *
  * Deliberately NOT modeled: analyst target price, target multiple, rating. Those are

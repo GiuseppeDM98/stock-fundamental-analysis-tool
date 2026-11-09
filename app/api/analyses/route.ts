@@ -25,7 +25,7 @@ const saveSchema = z.object({
   // 40: the longest method name the prompt offers is "Residual Income"; the client trims
   // the model's string to this before sending.
   valuationMethod: z.string().max(40).optional(),
-  // Grounded Deep Value mode — the dataset the analysis was generated on. Checked below:
+  // The dataset the analysis was generated on (every new one has one since 2026-11-09). Checked below:
   // it must be the user's and of the same ticker. The legacy groundingJson column is
   // read-only: a body that still carries it has the key dropped by this schema, so no new
   // row gets an unvalidated paste blob (it was still written until 2026-10-30).

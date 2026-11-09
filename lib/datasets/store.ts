@@ -86,16 +86,17 @@ export async function readAnalysisExtract(userId: string, analysis: AnalysisGrou
   return (await readAnalysisGrounding(userId, analysis))?.extract ?? null;
 }
 
-/** readAnalysisExtract plus the warnings stored with the dataset — none for a legacy
- *  groundingJson, which never kept them. Used by the verify route, whose prompt shows them. */
+/** readAnalysisExtract plus the warnings and the research notes stored with the dataset —
+ *  none for a legacy groundingJson, which never kept them. Used by the verify route, whose
+ *  prompt shows them: a lens reads the notes the report read (since 2026-11-09). */
 export async function readAnalysisGrounding(
   userId: string,
   analysis: AnalysisGroundingColumns
-): Promise<{ extract: GroundedFinancials; warnings: ReconciliationWarning[] } | null> {
+): Promise<{ extract: GroundedFinancials; warnings: ReconciliationWarning[]; researchNotes: string | null } | null> {
   if (analysis.datasetId) {
     const stored = await getFinancialDataset(userId, analysis.datasetId);
-    if (stored) return { extract: stored.dataset, warnings: stored.warnings };
+    if (stored) return { extract: stored.dataset, warnings: stored.warnings, researchNotes: stored.research?.notes ?? null };
   }
   const legacy = parseStoredExtract(analysis.groundingJson);
-  return legacy ? { extract: legacy, warnings: [] } : null;
+  return legacy ? { extract: legacy, warnings: [], researchNotes: null } : null;
 }

@@ -69,11 +69,9 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
   }
   const valuationMeta = hasFullTriple(result) ? result : null;
   // The analysis's dataset (or, saved before the dataset table, its groundingJson); null for
-  // an analysis saved without one and for a stored extract that no longer validates.
+  // an analysis saved without one and for a stored extract that no longer validates. The
+  // lenses run only on the extract read here (AnalysisDetailBody).
   const groundingExtract = await readAnalysisExtract(session.user.id, analysis);
-  // The lenses run only blind-first on a dataset (since 2026-11-09): an older analysis
-  // without one keeps its saved lenses readable, with Run disabled.
-  const hasDataset = analysis.datasetId != null || analysis.groundingJson != null;
 
   // Strip every JSON block (at the end of a current report, at the top of an older one)
   // and the start markers before rendering.
@@ -96,7 +94,6 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
         mosPercent={analysis.mosPercent}
         priceAtAnalysis={analysis.priceAtAnalysis ?? null}
         groundingExtract={groundingExtract}
-        hasDataset={hasDataset}
         position={position}
         initialCritiques={{
           skeptic: analysis.reviewMd,

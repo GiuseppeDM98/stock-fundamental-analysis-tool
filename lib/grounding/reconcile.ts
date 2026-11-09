@@ -1,6 +1,6 @@
-// Reconciliation "linter" for the Grounded Deep Value mode — spots numbers in the pasted
-// financials that don't tie together (a transcription slip, a unit-scale mistake, a stale
-// share count). Pure, no server-only — shared by the extraction route and the Grounded
+// Reconciliation "linter" for the financial dataset — spots numbers in its financials that
+// don't tie together (a transcription slip, a unit-scale mistake, a stale share count).
+// Pure, no server-only — shared by the extraction route and the dataset's
 // prompt builder (lib/grounding/prompt-format.ts).
 //
 // These warnings are surfaced to the user, never blocking: stopping a 30-60s streaming run
