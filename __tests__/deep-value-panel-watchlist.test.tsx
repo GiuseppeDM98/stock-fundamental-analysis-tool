@@ -22,6 +22,11 @@ vi.mock("@/components/report/report-body", () => ({
 }));
 
 import DeepValuePanel from "@/components/deep-value-panel";
+import { makeExtract, makeMeta } from "./grounding-test-helpers";
+
+// Every run is built on a confirmed dataset (invented, empty of rows: the panel only
+// forwards its id).
+const DATASET = { id: "ds1", extract: makeExtract({ meta: makeMeta({ reportingCurrency: "USD", units: "millions" }) }) };
 
 const FULL_JSON = {
   method: "EV/EBITDA",
@@ -60,9 +65,24 @@ describe("DeepValuePanel — Add to Watchlist and incomplete valuation", () => {
 
   async function generate(streamText: string) {
     fetchMock.mockResolvedValueOnce(streamResponse(streamText));
-    render(<DeepValuePanel ticker="ORNT" companyName="Orient Co" mosPercent={25} currentPrice={150} currency="USD" />);
+    render(<DeepValuePanel ticker="ORNT" companyName="Orient Co" mosPercent={25} currentPrice={150} currency="USD" dataset={DATASET} />);
     fireEvent.click(screen.getByText(translations.en.deepAnalysisBtn));
   }
+
+  it("keeps Generate disabled without a dataset, says why, and calls nothing", () => {
+    render(<DeepValuePanel ticker="ORNT" companyName="Orient Co" mosPercent={25} currentPrice={150} currency="USD" />);
+    const button = screen.getByText(translations.en.deepAnalysisBtn).closest("button")!;
+    expect(button).toBeDisabled();
+    expect(screen.getByText(translations.en.deepValueNeedsDataset)).toBeInTheDocument();
+    fireEvent.click(button);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sends the confirmed dataset's id", async () => {
+    await generate("# Report");
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).datasetId).toBe("ds1");
+  });
 
   it("sends the MoS to the watchlist as a fraction", async () => {
     await generate("```json\n" + JSON.stringify(FULL_JSON) + "\n```\n# Report");

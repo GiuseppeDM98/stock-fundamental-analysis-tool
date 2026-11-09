@@ -36,9 +36,24 @@ const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] 
 const q = await yf.quote(ticker);   // NON yf.quote() sul default export: v3 richiede `new`
 ```
 
+### 1b — Stadio 1: il dataset dalla ricerca web
+
+Dal 2026-11-09 ogni analisi parte da un dataset finanziario, come su `/analyze`: prima dei prompt il comando costruisce il dataset web con le **stesse funzioni e nella stessa sequenza** di `app/api/ai/research/route.ts` (leggila prima di scrivere lo script; è un `.mts` in `out/` come al passo 2):
+
+1. `researchAiSettings(userId, override?)` — il provider dell'utente decide (Sonnet 5.5 `high` su Anthropic, il modello DeepSeek dell'utente su DeepSeek: chiedi prima di ogni run DeepSeek).
+2. `runStreamWithToolLoop(getAiClient(model), { …, system: buildResearchSystemPrompt({ currentDate }), tools: buildResearchTools(model), messages: [buildResearchUserPrompt({ ticker, companyName, exchange, quoteCurrency })], ...buildPromptCacheParam(model) }, () => {}, DEEP_RESEARCH_MAX_TOOL_ITERATIONS, { fetchBudget: RESEARCH_MAX_FETCHES })`. Senza il quinto argomento un run DeepSeek non può fare fetch (il budget vale 0).
+3. I controlli di stop della route, nello stesso ordine: cap delle iterazioni, `max_tokens`, `refusal`, `tool_use` → fermati e riporta, non salvare nulla.
+4. `lastJsonFence(result.text)` → `JSON.parse` → `preprocessResearchOutput`; `hasNoFinancialRows` **prima** di `researchOutputSchema.safeParse`.
+5. `collectSeenUrls(result.messages)` → `researchToDataset(parsed.data, seen.urls)` (una fonte verificata per riga, `unverified` per le altre).
+6. `ResearchMeta` completo, `servedBy: result.servedBy` incluso (il modello che ha risposto col fallback di Sonnet 5.5).
+7. `saveFinancialDataset(userId, { ticker: normalizeTicker(ticker), origin: "web", dataset, blocks: null, warnings, research })` salvando **solo** gli avvisi con codice in `DATASET_WARNING_CODES`: un codice fuori lista (come quelli di `computeDatasetAnchors`) fa leggere null la riga intera.
+8. Rileggi con `getFinancialDataset(userId, datasetId)`: è il dataset come lo vedrà ogni lettore successivo. Poi `computeDatasetAnchors(stored.dataset, { price, currency })` per riportare base e avvisi all'utente.
+
+Riporta all'utente le fonti non verificate (`research.unverifiedSources`) e le `notes` della ricerca prima di passare allo stadio 2.
+
 ### 2 — Genera i prompt VERI dell'app
 
-Non parafrasare i prompt: estraili dai builder. Servono `buildDeepValueSystemPrompt` e `buildDeepValueUserPrompt` con `language: "Italiano"`, `mosPercent`, e `currentDate` nello stesso formato del route:
+Non parafrasare i prompt: estraili dai builder. Il contesto del dataset è `buildGroundingPromptContext(stored.blocks, stored.dataset, price, currency, stored.warnings, stored.research?.notes ?? null)` (la stessa chiamata di `/api/ai/deep-value`), passato come `grounding` a entrambi i builder: senza, non compilano. Servono `buildDeepValueSystemPrompt` e `buildDeepValueUserPrompt` con `grounding`, `language: "Italiano"`, `mosPercent`, e `currentDate` nello stesso formato del route:
 
 ```js
 new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
@@ -70,17 +85,19 @@ Attenzione: se cerchi intestazioni inglesi (`"What must be true"`) in un report 
 
 ### 5 — Salva le analisi base con Prisma
 
-Righe nuove ⇒ servono `id` (cuid) e `createdAt` generati come li genera l'app. **Non fare INSERT SQL a mano.** Usa il client Prisma vero (`import { db } from "@/lib/db"`) da uno script `.mts` lanciato con `tsx` come al passo 2, con gli stessi campi di `POST /api/analyses`: `userId, ticker, companyName, reportMd` (JSON block **incluso**), `mosPercent, priceAtAnalysis, fairValue{Bull,Base,Bear}, valuationMethod`. Il ticker si scrive come `normalizeTicker(ticker)` (`import { normalizeTicker } from "@/lib/ticker"`): lo script salta la route, che lo normalizza da sé, e un ticker minuscolo o con spazi spezzerebbe i raggruppamenti per ticker.
+Righe nuove ⇒ servono `id` (cuid) e `createdAt` generati come li genera l'app. **Non fare INSERT SQL a mano.** Usa il client Prisma vero (`import { db } from "@/lib/db"`) da uno script `.mts` lanciato con `tsx` come al passo 2, con gli stessi campi di `POST /api/analyses`: `userId, ticker, companyName, reportMd` (JSON block **incluso**), `mosPercent, priceAtAnalysis, fairValue{Bull,Base,Bear}, valuationMethod`, e `datasetId` (l'id dello stadio 1: senza, le lenti dell'app non partono su quella riga). Il ticker si scrive come `normalizeTicker(ticker)` (`import { normalizeTicker } from "@/lib/ticker"`): lo script salta la route, che lo normalizza da sé, e un ticker minuscolo o con spazi spezzerebbe i raggruppamenti per ticker.
 
 Metti una guardia `findFirst` contro il doppio-run. Risolvi lo `userId` dal DB, non a memoria.
 
 ### 6 — Prompt degli analisti col builder vero
 
-Rileggi il `reportMd` **dal DB** (la stessa fonte del verify route), passalo per `stripJsonBlock`, e costruisci i 3 prompt per ticker con `buildAnalystUserPrompt({ angle, ticker, reportMd, language, currentDate, currentPrice, currency, mosPercent })`. Ri-preleva i prezzi: il verify route usa un `getQuote` fresco, non `priceAtAnalysis`.
+Rileggi il `reportMd` **dal DB** (la stessa fonte del verify route) e passalo per `stripJsonBlock`. Ri-preleva i prezzi: il verify route usa un `getQuote` fresco, non `priceAtAnalysis`.
+
+Le lenti girano **blind-first**, come la route verify: il contesto è `readAnalysisGrounding(userId, analysis)` → `buildGroundingPromptContext([], extract, price, currency, warnings)` (niente blocchi grezzi né note della ricerca alle lenti). Per ogni (ticker × angolo): system `buildAnalystSystemPrompt({ angle, language, currentDate, mosPercent, grounding, blindFirst: true })`; fase 1 `buildAnalystBlindUserPrompt({ ticker, language, currentDate, currentPrice, currency, mosPercent, grounding })` (nessun report); fase 2 `buildAnalystReconcileUserPrompt({ ticker, reportMd, language, currentDate, mosPercent, blind, gatesText })`, con `blind` la terna della fase 1 e `gatesText` = `formatGatesForPrompt(checkValuationBridges(baseResult, mosPercent, price, currency, extract).gates)`, come `buildBaseGatesText` della route.
 
 ### 7 — Workflow B: le 12 lenti
 
-Un agente per (ticker × angolo), in `parallel`. Ricorda a ciascuno:
+Un agente per (ticker × angolo), in `parallel`. Ogni agente fa le due fasi nello stesso giro: legge system e prompt di fase 1, scrive il blocco JSON di fase 1 su `out/blind.<TICKER>.<angolo>.json` **senza aver letto il report**, lancia lo script che costruisce il prompt di fase 2 da quella terna, lo legge e solo allora scrive critica e JSON finale. Ricorda a ciascuno:
 - **regola del non elogio**, assoluta: niente "buon lavoro" o "nessun errore strutturale". La critica è (a) gli errori, (b) l'assunzione più fragile, (c) l'unico numero che ribalta la conclusione. Essere d'accordo è legittimo, ma (b) e (c) restano obbligatori.
 - impegnarsi sulla **propria** valutazione, non copiare quella del report;
 - gli `structural checks` anche fuori dalla propria persona: ponte EV→equity con le minoranze, coerenza metodo/narrativa, comparabili sulla **stessa base contabile**, scenari coerenti con la sensibilità dichiarata dal report;
@@ -91,7 +108,7 @@ Un agente per (ticker × angolo), in `parallel`. Ricorda a ciascuno:
 
 Stessi controlli, più il limite Zod del PATCH: `critiqueMd` fra 1 e **60.000** caratteri. Il `critiqueMd` da salvare è `stripJsonBlock(stripAnalystStreamArtifacts(raw))` — il markdown **senza** il blocco json.
 
-Mappa angolo→colonne con `ANALYST_COLUMNS` di `lib/report/consensus.ts` (lo scettico usa le colonne legacy `review*`). Qui l'UPDATE SQL diretto va bene: le righe esistono già. Lascia `*BlindJson` a `null` — il blind-first è solo per la modalità Grounded.
+Mappa angolo→colonne con `ANALYST_COLUMNS` di `lib/report/consensus.ts` (lo scettico usa le colonne legacy `review*`). Qui l'UPDATE SQL diretto va bene: le righe esistono già. `*BlindJson` = `JSON.stringify` della terna di fase 1 sanificata (`sanitizeDeepValueResult`), come la scrive il pannello dell'app; `*ResultJson` = il JSON finale sanificato.
 
 Calcola il consenso come `lib/report/consensus.ts`: media dell'analisi base e di ogni lente che ha girato, e il verdetto con `getVerdict(prezzo, buyTargetBase, intrinsecoBase)`.
 

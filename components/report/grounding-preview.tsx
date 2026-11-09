@@ -82,7 +82,9 @@ type Props = {
   ticker: string;
   result: GroundingExtractResponse;
   confirmed: boolean;
-  onEdit: () => void;
+  // Back to the paste editor; without it no Edit button renders (a web or merged dataset
+  // previewed on /analyze has no editor to go back to).
+  onEdit?: () => void;
   onConfirm: () => void;
   // The blocks whose extraction failed, by id and editor position; without onRetry no
   // retry button renders.
@@ -360,12 +362,14 @@ export function GroundingPreview({ ticker, result, confirmed, onEdit, onConfirm,
       )}
 
       <div className="flex flex-wrap items-center gap-2 border-t border-slate-800/60 pt-3">
-        <button
-          onClick={onEdit}
-          className="tap rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200 transition hover:border-slate-400 hover:text-slate-100"
-        >
-          {t("groundingEditBtn")}
-        </button>
+        {onEdit && (
+          <button
+            onClick={onEdit}
+            className="tap rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200 transition hover:border-slate-400 hover:text-slate-100"
+          >
+            {t("groundingEditBtn")}
+          </button>
+        )}
         <button
           onClick={onConfirm}
           disabled={busy}

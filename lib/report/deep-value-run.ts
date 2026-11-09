@@ -3,9 +3,9 @@
 // The /analyze page keeps every input editable after a run finishes: the user can edit or
 // re-confirm or replace the financial dataset, move the MoS slider, or the quote can refresh.
 // Reading those live props at Save time paired the finished report with inputs it was
-// never generated from — a Grounded report saved as Quick (grounding cleared after the
-// run), a report saved with a different extract than the one it used, or fair values
-// computed at one MoS stored under another. Everything that describes the run (save
+// never generated from — a report saved with no dataset (the dataset cleared after the
+// run), or with a different extract than the one it used, or fair values computed at one
+// MoS stored under another. Everything that describes the run (save
 // request, checks card) reads this snapshot instead.
 //
 // Pure (no I/O) so the snapshot-to-request mapping is unit-testable.
@@ -22,8 +22,8 @@ export type DeepValueRunInputs = {
   // which the saved-analysis page needs to recompute the analyst lenses' gates.
   currentPrice: number | null;
   currency: string | null;
-  // The confirmed dataset the run was grounded on; null = Quick mode.
-  dataset: { id: string; extract: GroundedFinancials } | null;
+  // The confirmed dataset the run was built on (every run has one).
+  dataset: { id: string; extract: GroundedFinancials };
   // The report language the run was asked for (frozen at Generate, like the rest).
   language: string;
   // The settings the route resolved, read from its X-AI-Settings response header — the
@@ -78,7 +78,7 @@ export function buildSaveAnalysisRequest(
     fairValueBear: full ? result.bear.fairValue : undefined,
     // Trimmed to the route's limits: a verbose model string must not fail the whole save.
     valuationMethod: full ? result.method.slice(0, 40) : undefined,
-    datasetId: run.dataset?.id,
+    datasetId: run.dataset.id,
     resultJson: full ? JSON.stringify(result) : undefined,
     // Only a bare ISO 4217 code: "EUR (euro)" would mislabel every figure it travels with.
     currency: result && /^[A-Z]{3}$/.test(result.currency) ? result.currency : undefined,

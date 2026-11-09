@@ -10,13 +10,13 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: October 30, 2026 — **Spec 05a (research stage) retired**: its content lives in the code, in the guide (§ 5.3) and in the index. The retirement's verification fixed five defects: D&A stored positive whatever sign the page used; a merged dataset keeps the web warnings that still describe it (`ebitda_derived`, `source_unverified`, `unverifiedSources` narrowed); `ResearchMeta.servedBy` names the model that answered through the Sonnet 5.5 refusal fallback; merge rescaling without float noise; one warning per unknown source id and year. The collaudo and the real runs covered the code before these fixes: redo them after the deploy. Open: the deploy and the production checks of 02, 03, 04 and 05a (index § 5). Next: spec 05b.
+**Last Updated**: November 9, 2026 — **Single dataset path** (spec 05b; the guide, § 5): every analysis starts from a financial dataset, researched on the web from `/analyze` (a verified source per row) or pasted, merged on the server when both exist, previewed and confirmed before Deep Value, which requires `datasetId`; every lens runs blind-first on it, and an analysis without one keeps its lenses readable with Run disabled. Quick mode and its golden are gone: `__tests__/deep-value-prompts-golden.test.ts` pins the prompts. Collaudo done and closed, with a real run on TRN.MI (measured in the guide, § 2.1 and § 5.3); `/deep-value`'s real run deferred to its realignment. Open: the deploy and the production checks of 02, 03, 04, 05a and 05b (index § 5). Next: spec 05c.
 
 ---
 
 ## Tech Stack
 
-- **Next.js** `15.5.27` (App Router) + **React** `19.2.4` + **TypeScript** `5.9.3`
+- **Next.js** `15.5.28` (App Router) + **React** `19.2.4` + **TypeScript** `5.9.3`
 - **yahoo-finance2** `3.13.2` + **Zod** `4.6.7`
 - **Prisma** client `7.4.2` (CLI `7.10.0`) + **Turso** (libSQL) via `@prisma/adapter-libsql`
 - **Auth.js** `next-auth@5.0.0-beta.32` + **bcryptjs**
@@ -46,25 +46,25 @@ Next.js App Router with client-side interactivity and server-side API routes. Pi
 Adaptive landing framing Discover→Decide→Monitor: 3 pipeline cards + "Start with the Advisor" CTA + quick ticker box → `/analyze?ticker=` (full `window.location` nav — Router-Cache gotcha). `app/page.tsx` calls `auth()` **without redirect** (renders logged-out too). Logged-in recent-activity strip: last 3 analyses, portfolio P&L, watchlist count — fetched once via a `ranRef` guard (avoids `useSession` re-render loop), each degrades to empty on failure. The Portfolio P&L figure is the **last `PortfolioSnapshot`** (cron), not a live price — labeled "as of &lt;date&gt;" so it doesn't read as disagreeing with the live P&L shown on `/portfolio` itself. `components/hub-client.tsx`.
 
 ### Deep Dive — `/analyze`
-Slim, single path: ticker search → `GET /api/quote` (price header + reference price) → MoS slider (0–80%, `sfa:mosPercent`) → **Deep Value** panel. No Yahoo fundamentals fetch. `analyze-client.tsx` reads only `?ticker=` on mount then `replaceState` clears it. **Always position-blind** — no WAC/prevFv from URL or props.
+Single path: ticker search → `GET /api/quote` (price header + reference price) → MoS slider (0–80%, `sfa:mosPercent`) → **financial dataset** (web research or paste, previewed with a source per row) → **Deep Value** panel, disabled until a dataset is confirmed. No Yahoo fundamentals fetch. `analyze-client.tsx` reads only `?ticker=` on mount then `replaceState` clears it. **Always position-blind** — no WAC/prevFv from URL or props.
 
 ### Deep Value Analysis (AI-autonomous)
 Full detail: [doc/guide/valutazione.md](doc/guide/valutazione.md).
-- The only AI analysis mode (violet panel): the model picks the method (DCF, DDM, EV/EBITDA, P/E, P/B, SOTP, EV/RAB, NAV, Residual Income) and sources all data by web search, any global ticker; 8 languages; respects MoS. Builders `lib/ai/deep-value-prompts.ts`, endpoint `/api/ai/deep-value`.
+- The only AI analysis mode (violet panel): the model picks the method (DCF, DDM, EV/EBITDA, P/E, P/B, SOTP, EV/RAB, NAV, Residual Income) on the user's confirmed dataset, web search rescoped to what it cannot hold, any global ticker; 8 languages; respects MoS. Builders `lib/ai/deep-value-prompts.ts`, endpoint `/api/ai/deep-value`.
 - **Output**: research first, then `<!--report-->` and the 10-section report, streamed as written, then the JSON block LAST (method, sector, currency, units, bull/base/bear each with a bridge, assumptions in percentage points, cross-check, 3×3 sensitivity, dividends). The route forwards only after the marker (`lib/ai/stream-gate.ts`); the parser reads the LAST ` ```json ` fence, so older reports (JSON on top) still parse.
 - **Model**: the user's stored default floored at `xhigh` (`deepValueDefaultEffort`), adaptive thinking, `max_tokens: 64000`, web search, `maxDuration = 300`, `currentDate` injected. 19 rigor checks (`ANALYTICAL_RIGOR_BLOCK`); key one: never anchor the lever to the current price.
 - **Persistence**: the server re-sanitizes the block into `Analysis.resultJson` and stores `currency`/`sector`/`reportLanguage`/`aiModel`/`aiEffort`/`aiThinking` (the last three from the `X-AI-Settings` header); the scalar `fairValue*` stay what consensus, ruler, watchlist and digest read. The detail page reads `resultJson`, else the report's last fence.
-- **Analyst panel** (saved analyses only, `/verify` with `angle`): Skeptic (must give a kill price), Optimist, Quality, one on-demand button each, same `xhigh` floor; the critique after `<!--critique-->`, then its own MoS-adjusted bull/base/bear JSON; no-praise rule. Grounded analyses run blind-first (Phase 1 commits from the anchors alone; a Phase-2 revision must cite a fact unavailable blind; drift in `<AnalystBlindCard>`). Lens columns include `*BlindJson` and `*ResultJson`. **Mirror a new persisted field** across Zod, `types/analysis.ts`, `ANALYSIS_LIST_SELECT` (`lib/analyses-select.ts`) and `ANALYST_COLUMNS`.
+- **Analyst panel** (saved analyses only, `/verify` with `angle`): Skeptic (must give a kill price), Optimist, Quality, one on-demand button each, same `xhigh` floor; the critique after `<!--critique-->`, then its own MoS-adjusted bull/base/bear JSON; no-praise rule. Every lens runs blind-first on the analysis's dataset (Phase 1 commits from the anchors alone; a Phase-2 revision must cite a fact unavailable blind; drift in `<AnalystBlindCard>`); without a dataset Run is disabled and `/verify` answers 400. Lens columns include `*BlindJson` and `*ResultJson`. **Mirror a new persisted field** across Zod, `types/analysis.ts`, `ANALYSIS_LIST_SELECT` (`lib/analyses-select.ts`) and `ANALYST_COLUMNS`.
 - **Report UI + PDF**: `<ReportShell>` on the live panel and the detail page; "Download PDF" → `window.print()`. **Decision Panel**: "Add to Watchlist" (409 → "In Watchlist").
-- **Deterministic checks** (every analysis, with or without pasted data): 17 gates recomputed in code on the model's own bridges, one price per saved page (live with `priceAtAnalysis` fallback); table in `doc/guide/valutazione.md` § 5.1, the `kE`/`kB` basis reconciliation in § 5.
+- **Deterministic checks** (every analysis, older ones without a dataset included): 17 gates recomputed in code on the model's own bridges, one price per saved page (live with `priceAtAnalysis` fallback); table in `doc/guide/valutazione.md` § 5.1, the `kE`/`kB` basis reconciliation in § 5.
 - **One currency rule (hard invariant)**: a price is weighed against saved values only in the same currency (`sameCurrency`, via `comparablePrice` in `lib/report/latest-analysis.ts` outside the gates), never converted — `GBp` is not `GBP`; a mismatch shows a note instead of a verdict, a distance or a P&L (the guide, § 2.7).
 - **Position-blind (hard invariant)**: never a position or prior estimate in a Deep Value or lens prompt; hold/exit → the Advisor, evolution → deterministic diff on `/analyses`.
 
-### Financial dataset (paste)
-- Optional, above the Deep Value panel on `/analyze`: `<DatasetSection>` opens on the user's dataset of the last 7 days for the ticker (its tables, "Use this dataset" / "Refresh data"), else the paste editor `components/grounding-input.tsx` (typed blocks, 40k chars each, 200k total, per-ticker draft; source-agnostic).
+### Financial dataset (web or paste)
+- Required, above the Deep Value panel on `/analyze`: `<DatasetSection>` opens on the user's dataset of the last 7 days for the ticker (its tables and origin, "Use this dataset" / "Refresh data" = a new research / "Edit the pasted data"), else "Search the web for the data" and "Add pasted data" (nothing starts alone); the paste editor is `components/grounding-input.tsx` (typed blocks, 40k chars each, 200k total, per-ticker draft; source-agnostic).
 - **Prepare data** → `/api/ai/grounding/extract` (Sonnet 5.5, transcription only) per block, merged by year with each statement's source; a failed block is retried alone. **Analyze with this data →** saves a `FinancialDataset`; Deep Value gets only its `datasetId` and rebuilds the context on the server (web search rescoped, not disabled).
-- **Research stage** (no UI until spec 05b): `POST /api/ai/research` builds a web dataset with a verified source per row, and `POST /api/datasets` merges it with a paste on the server. Detail: the guide, § 5.3.
-- `Analysis.datasetId` links the save; lenses read it blind-first; older rows keep `groundingJson`, read through `readAnalysisExtract`. Quick mode stays byte-identical (golden `__tests__/deep-value-prompts-quick-identical.test.ts`, last regenerated 2026-10-29). Detail: the guide, § 5.2.
+- **Research stage**: `POST /api/ai/research` builds a web dataset with a verified source per row (4–7 min); a paste confirmed with a web dataset in view is merged on the server (`POST /api/datasets`, origin merged). Detail: the guide, § 5.3.
+- `Analysis.datasetId` links the save; lenses read it blind-first; older rows keep `groundingJson`, read through `readAnalysisExtract`. The prompts carry the dataset rules, a source line per row and the research notes, pinned by the golden `__tests__/deep-value-prompts-golden.test.ts` (regenerated only when a spec declares it). Detail: the guide, § 5.
 
 ### User Accounts & Saved Analyses
 - Email+password (Auth.js v5, bcrypt); `DISABLE_REGISTRATION=true` blocks signups. Save/view/delete at `/analyses`.
@@ -106,7 +106,7 @@ Full detail: [doc/guide/valutazione.md](doc/guide/valutazione.md).
 
 ### AI Model Selection (multi-provider)
 - Every AI call site resolves `{model, effort, thinking}` via `resolveAiSettings()` (`lib/ai/ai-preferences.ts`): request-body override > the user's stored `User.ai{Model,Effort,ThinkingEnabled}` default > the route's own historical hardcoded fallback, then clamped to the model's supported efforts, stepping down, never up (`callSiteDefaultEffort`).
-- **Models**: `claude-opus-4-8`, `claude-sonnet-5`, `claude-sonnet-5-5`, `deepseek-v4-pro`, `deepseek-flash` (catalog in `types/ai-settings.ts`; Sonnet 5.5 thinking-off and the pinned Grounded extraction: the guide, § 6.2). DeepSeek exposes `low`/`high`/`max` effort only. Sonnet 5.5 calls carry the server-side refusal fallback (`fallbacks: "default"`); when it serves, a note names the model that answered (the guide, § 6.1).
+- **Models**: `claude-opus-4-8`, `claude-sonnet-5`, `claude-sonnet-5-5`, `deepseek-v4-pro`, `deepseek-flash` (catalog in `types/ai-settings.ts`; Sonnet 5.5 thinking-off and the pinned pasted-data extraction: the guide, § 6.2). DeepSeek exposes `low`/`high`/`max` effort only. Sonnet 5.5 calls carry the server-side refusal fallback (`fallbacks: "default"`); when it serves, a note names the model that answered (the guide, § 6.1).
 - **Global default**: gear icon in `NavBar` → `<AiPreferencesModal>` → `GET/PATCH /api/settings/ai`. **Per-run override**: `<AiSettingsControl>` inline on Deep Value, Advisor, and the Analyst panel (one shared selector for all 3 lenses). Earnings lookup has no inline control — always the stored default.
 - **DeepSeek web search is client-executed**, not the provider's server-side tool — its Anthropic-compat translation of server-side tool calls proved unreliable in production (raw internal syntax leaked into the Advisor's visible stream). `lib/ai/web-search-tool.ts` (DeepSeek Search and Fetch APIs, same key as the model) + `lib/ai/tool-loop.ts` (shared agentic loop, all six AI routes) replace it with standard function-calling. Deep Value, its verify route, earnings and the research stage share a higher iteration cap (`DEEP_RESEARCH_MAX_TOOL_ITERATIONS = 35` vs. the default 10) with 8 results carrying model-facing summaries so each round converges faster — their prompts need far more one-query-at-a-time rounds than the Advisor's. On Claude the cap counts the `pause_turn` resumes.
 
@@ -170,7 +170,7 @@ lib/
   report/latest-analysis.ts  # pure: latestAnalysisWithValues/verdictBasis/watchlistBuyTarget — one verdict basis
   report/consensus.ts        # pure: N-way consensus (consensusTriple/meanTriple/presentAnalysts) + ANALYST_COLUMNS
   report/evolution.ts        # computeEvolution()/computeEvolutionChain() — deterministic history (no AI)
-  grounding/                 # pure: merge/anchors/reconcile/postcheck/prompt-format/schema/currency — Grounded mode + every analysis's gates
+  grounding/                 # pure: merge/anchors/reconcile/postcheck/prompt-format/schema/currency — the dataset's prompt context + every analysis's gates
   ai/grounding-extract-prompt.ts  # per-kind extraction prompt builders (Sonnet 5.5, no web search)
   ai/research-{prompt,schema,to-dataset}.ts + ai/transcript-urls.ts  # research stage: prompt, output schema, web dataset, verified sources
   grounding-client.ts        # client helper: extractGrounding()
@@ -244,12 +244,13 @@ See `.env.example` for the full template.
 
 ## Not yet present
 Things the series deliberately left out, one line each (added by the spec that left them out).
-- No backfill of legacy `groundingJson` blobs into `FinancialDataset`: older Grounded analyses read theirs through `readAnalysisExtract` (spec 04, 2026-10-29).
+- No backfill of legacy `groundingJson` blobs into `FinancialDataset`: older analyses read theirs through `readAnalysisExtract` (spec 04, 2026-10-29).
 - No cleanup of `FinancialDataset` rows: deleting an analysis keeps its dataset, and one saved for a run that then failed is still offered for reuse for 7 days (spec 04, accepted 2026-10-29).
 - `/portfolio`'s own value and P&L assume the quote in the lot's currency (a `GBp` quote on a `GBP` lot reads a hundredfold); the banner, the lists, the exit signal and the digest check it (spec 03's retirement, 2026-10-29).
 - A model selector of its own for the research stage on /analyze (it follows the global default; override only in the route body) (spec 05a, decided 2026-10-18).
 - No serialization of DeepSeek's parallel web searches under the Search API's 5 requests per second: a 429 reaches the model as a tool_result and no log prints it; serialize once one is seen (spec 01, deferred again at spec 05a's retirement, 2026-10-30).
 - No incremental refresh of a web dataset (only the latest fiscal year): a new research run redoes every year (spec 05a, 2026-10-30).
+- No prompt caching of the dataset across a report and its three lenses: their system prompts differ, so the dataset would first have to lead a shared prefix (spec 05b, 2026-11-09).
 
 ---
 

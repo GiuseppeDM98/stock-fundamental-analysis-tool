@@ -35,11 +35,10 @@ describe("buildSaveAnalysisRequest", () => {
     expect(buildSaveAnalysisRequest({ ...RUN, currentPrice: 0 }, "# r", RESULT).priceAtAnalysis).toBeUndefined();
   });
 
-  it("names the dataset the run used, and none for a Quick run", () => {
+  it("names the dataset the run used", () => {
     const request = buildSaveAnalysisRequest(RUN, "# r", RESULT);
     expect(request.datasetId).toBe("ds1");
     expect("groundingJson" in request).toBe(false);
-    expect(buildSaveAnalysisRequest({ ...RUN, dataset: null }, "# r", RESULT).datasetId).toBeUndefined();
   });
 
   it("maps the snapshot's MoS and the parsed fair values", () => {

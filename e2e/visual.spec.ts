@@ -22,13 +22,15 @@
  */
 import path from "node:path";
 import { test, expect } from "./support/test";
-import { DECOY, IDS, referenceDay } from "./support/fixtures";
+import { DECOY, IDS, TICKERS, referenceDay } from "./support/fixtures";
 
 const STYLE_PATH = path.join(__dirname, "visual.css");
 
 const PAGES: Array<{ name: string; url: string; ready: string; loggedOut?: boolean }> = [
   { name: "login", url: "/login", ready: "Sign in", loggedOut: true },
   { name: "hub", url: "/", ready: "Pick up where you left off" },
+  // No dataset for OKPI: the research and paste buttons, Deep Value disabled.
+  { name: "analyze", url: `/analyze?ticker=${TICKERS.watchOnly}`, ready: "Search the web for the data" },
   { name: "analyses", url: "/analyses", ready: DECOY.panelCompany },
   { name: "analysis-grounded", url: `/analyses/${IDS.analysisGrounded}`, ready: "Deterministic checks" },
   { name: "analysis-panel", url: `/analyses/${IDS.analysisPanel}`, ready: DECOY.qualityCritique },

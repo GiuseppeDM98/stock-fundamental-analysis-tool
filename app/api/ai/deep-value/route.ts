@@ -1,8 +1,8 @@
-// POST /api/ai/deep-value — fully autonomous AI valuation.
-// Claude picks the method, finds all financial data via web search, then streams the
-// full Markdown report followed by a closing JSON block (fair values, sensitivity,
-// dividend path). Research chatter before the report's start marker never reaches the
-// client (lib/ai/stream-gate.ts).
+// POST /api/ai/deep-value — the AI valuation, on the user's confirmed financial dataset.
+// Claude picks the method, takes the history from the dataset and web-searches only what it
+// cannot hold, then streams the full Markdown report followed by a closing JSON block (fair
+// values, sensitivity, dividend path). Research chatter before the report's start marker
+// never reaches the client (lib/ai/stream-gate.ts).
 // No Yahoo Finance fundamentals call — only a quote for the current price.
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -16,14 +16,13 @@ import { getAiClient, buildThinkingParam, buildEffortConfig, buildWebSearchTools
 import { createStreamGate } from "@/lib/ai/stream-gate";
 import { REPORT_START_MARKER, stripTrailingOpenJsonFence } from "@/lib/report/parse-deep-value-json";
 import { resolveAiSettings, aiModelIdSchema } from "@/lib/ai/ai-preferences";
-import { runStreamWithToolLoop, DEEP_RESEARCH_MAX_TOOL_ITERATIONS, GROUNDED_MAX_TOOL_ITERATIONS } from "@/lib/ai/tool-loop";
+import { runStreamWithToolLoop, GROUNDED_MAX_TOOL_ITERATIONS } from "@/lib/ai/tool-loop";
 import { fallbackNote } from "@/lib/ai/fallback";
 import { routeErrorStatus } from "@/lib/ai/error-status";
 import { AI_EFFORT_LEVELS, deepValueDefaultEffort, type AiSettings } from "@/types/ai-settings";
-import { buildGroundingPromptContext, type GroundingPromptContext } from "@/lib/grounding/prompt-format";
+import { buildGroundingPromptContext } from "@/lib/grounding/prompt-format";
 import { getFinancialDataset } from "@/lib/datasets/store";
 import { normalizeTicker } from "@/lib/ticker";
-import type { StoredDataset } from "@/types/dataset";
 
 const DEFAULT_SETTINGS: AiSettings = { model: "claude-opus-4-8", effort: "xhigh", thinking: true };
 
@@ -42,10 +41,11 @@ const requestSchema = z.object({
   model: aiModelIdSchema.optional(),
   effort: z.enum(AI_EFFORT_LEVELS).optional(),
   thinking: z.boolean().optional(),
-  // Grounded mode: the id of the user's confirmed dataset. The route reads its blocks,
-  // extract and stored warnings, and recomputes stats/grid/marketImplied/warnings itself
-  // from the extract and its own authoritative currentPrice.
-  datasetId: z.string().min(1).optional(),
+  // The id of the user's confirmed dataset, required since 2026-11-09 (one path: every
+  // report is built on a dataset). The route reads its blocks, extract, stored warnings and
+  // research notes, and recomputes stats/grid/marketImplied/warnings itself from the
+  // extract and its own authoritative currentPrice.
+  datasetId: z.string({ error: "datasetId is required" }).min(1, "datasetId is required"),
 });
 
 export async function POST(request: Request) {
@@ -65,13 +65,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    let stored: StoredDataset | null = null;
-    if (body.datasetId) {
-      stored = await getFinancialDataset(session.user.id, body.datasetId);
-      if (!stored) return NextResponse.json({ error: "dataset not found" }, { status: 400 });
-      if (stored.dataset.datasetMeta.ticker !== normalizeTicker(body.ticker)) {
-        return NextResponse.json({ error: "dataset ticker mismatch" }, { status: 400 });
-      }
+    const stored = await getFinancialDataset(session.user.id, body.datasetId);
+    if (!stored) return NextResponse.json({ error: "dataset not found" }, { status: 400 });
+    if (stored.dataset.datasetMeta.ticker !== normalizeTicker(body.ticker)) {
+      return NextResponse.json({ error: "dataset ticker mismatch" }, { status: 400 });
     }
 
     const quote = await getQuote(body.ticker);
@@ -85,13 +82,18 @@ export async function POST(request: Request) {
       day: "numeric",
     });
 
-    // Grounded mode: recompute the deterministic anchors server-side from the stored
-    // extract + our own authoritative currentPrice/currency; the dataset's own warnings
-    // (from its extraction run) join the recomputed ones.
-    let groundingContext: GroundingPromptContext | undefined;
-    if (stored) {
-      groundingContext = buildGroundingPromptContext(stored.blocks, stored.dataset, currentPrice, currency, stored.warnings);
-    }
+    // Recompute the deterministic anchors server-side from the stored extract + our own
+    // authoritative currentPrice/currency; the dataset's own warnings (from its extraction
+    // or research run) join the recomputed ones, and a web dataset's research notes lead
+    // the extract.
+    const groundingContext = buildGroundingPromptContext(
+      stored.blocks,
+      stored.dataset,
+      currentPrice,
+      currency,
+      stored.warnings,
+      stored.research?.notes ?? null
+    );
 
     // The valuation is always independent/position-blind — no portfolio position or
     // prior estimate is ever injected into the prompt, so the fair values can't be
@@ -153,16 +155,10 @@ export async function POST(request: Request) {
               messages: [{ role: "user", content: userPrompt }],
             },
             (text) => forward(gate.push(text)),
-            // Deep Value's prompt (ANALYTICAL_RIGOR_BLOCK: ~5y financials, quality
-            // metrics, historical multiples, comparables, EV→equity bridge, reverse
-            // check) needs far more research rounds than Advisor's default cap —
-            // reproduced in production (2026-07-10) with DeepSeek: the default 10 was hit
-            // mid-research, discarding everything silently (nothing had reached the
-            // start of the report yet) and returning an empty report with no error. See the
-            // shared constant for why it's 35. Grounded mode rescopes (not eliminates)
-            // web search to just the post-coverage-date update + qualitative material,
-            // so it converges in far fewer rounds — GROUNDED_MAX_TOOL_ITERATIONS.
-            stored ? GROUNDED_MAX_TOOL_ITERATIONS : DEEP_RESEARCH_MAX_TOOL_ITERATIONS
+            // The dataset rescopes (not eliminates) web search to the post-coverage update
+            // and the qualitative material, so the run converges in far fewer rounds than
+            // the 35 a report that gathered its own history needed (until 2026-11-09).
+            GROUNDED_MAX_TOOL_ITERATIONS
           );
 
           // Failsafe: if the model never wrote the report marker (e.g. still researching

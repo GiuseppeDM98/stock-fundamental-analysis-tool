@@ -35,8 +35,8 @@ type Props = {
   // implied read must never divide a price in one currency by an EBITDA in another).
   currency?: string;
   // The confirmed financial dataset from <DatasetSection>, lifted in analyze-client.tsx.
-  // Null (the default) is Quick mode — no datasetId in the POST body, so its absence keeps
-  // the request (and thus the prompt) unchanged from before this feature existed.
+  // Every run is built on one (the route answers 400 without a datasetId): while it is
+  // null the Generate button stays disabled, with a hint.
   dataset?: { id: string; extract: GroundedFinancials } | null;
 };
 
@@ -107,7 +107,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
   const abortRef = useRef<AbortController | null>(null);
 
   async function handleGenerate() {
-    if (!ticker) return;
+    if (!ticker || !dataset) return;
 
     if (!session) {
       router.push("/login");
@@ -148,7 +148,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           model: aiSettings.model,
           effort: aiSettings.effort,
           thinking: aiSettings.thinking,
-          ...(inputs.dataset ? { datasetId: inputs.dataset.id } : {}),
+          datasetId: inputs.dataset.id,
         }),
         signal: controller.signal,
       });
@@ -290,7 +290,8 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
 
           <button
             onClick={() => handleGenerate()}
-            disabled={!ticker || isStreaming}
+            disabled={!ticker || !dataset || isStreaming}
+            title={ticker && !dataset ? t("deepValueNeedsDataset") : undefined}
             className="tap rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {isStreaming ? (
@@ -304,6 +305,9 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           </button>
         </div>
       </div>
+
+      {/* No dataset yet: the analysis waits for one (the section above). */}
+      {ticker && !dataset && !isStreaming && <p className="text-xs text-muted print:hidden">{t("deepValueNeedsDataset")}</p>}
 
       {/* Auth hint */}
       {!session && ticker && (
@@ -351,14 +355,14 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
         />
       )}
 
-      {/* Deterministic checks card — every run with a complete block and a price, Quick
-          included (its dataset gates read "no dataset"). Recomputes the model's own declared
-          bridge from the extract this run actually used (not the live input, which may
-          have been edited since), before and independently of any save. */}
+      {/* Deterministic checks card — every run with a complete block and a price.
+          Recomputes the model's own declared bridge from the extract this run actually used
+          (not the live input, which may have been edited since), before and independently
+          of any save. */}
       {status === "done" && hasFullTriple(result) && runInputs?.currentPrice != null && (
         <ValuationChecksCard
           result={result}
-          extract={runInputs.dataset?.extract ?? null}
+          extract={runInputs.dataset.extract}
           mosPercent={runInputs.mosPercent}
           currentPrice={runInputs.currentPrice}
           // An unknown quote currency stays unknown: assuming the report's would compare

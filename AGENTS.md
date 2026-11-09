@@ -19,7 +19,7 @@ Next.js 15 stock fundamental analysis tool with AI-generated investment analysis
 One file per domain, read before touching that domain; AGENTS.md keeps the stub, the guide keeps the detail.
 
 - `doc/guide/dipendenze.md` — the dependency audit: date, framework version, every open advisory with the owner's decision. Compare `npm audit` with it at session start (WORKFLOW.md rule 8); upgrades are a session of their own.
-- `doc/guide/valutazione.md` — Deep Value, analyst panel, Grounded mode and its financial dataset, AI providers: the output contract field by field, routes, persistence, lenses, gates, model and effort settings. The AGENTS.md stub under "AI Integration" keeps the invariants.
+- `doc/guide/valutazione.md` — Deep Value, analyst panel, the financial dataset (web or paste), AI providers: the output contract field by field, routes, persistence, lenses, gates, model and effort settings. The AGENTS.md stub under "AI Integration" keeps the invariants.
 
 ---
 
@@ -246,13 +246,13 @@ yahooFinance.quoteSummary(ticker, { modules: ["summaryDetail", "defaultKeyStatis
 
 ## AI Integration
 
-### Deep Value, analyst panel, Grounded mode, AI providers — see doc/guide/valutazione.md
+### Deep Value, analyst panel, financial dataset, AI providers — see doc/guide/valutazione.md
 - **Anthropic AI Integration** → doc/guide/valutazione.md § 6.1: model split, thinking, web search, `stop_reason`, refusal fallback, caching. Prompt builders: `lib/ai/deep-value-prompts.ts`, `advisor-prompts.ts`, `earnings-prompt.ts`.
 - **Position-blind**: never a portfolio position, a prior estimate or the run metadata in a Deep Value or lens prompt; hold/exit → the Advisor, evolution → `lib/report/evolution.ts`.
 - **Research first, JSON last**: the report after `<!--report-->` (a lens's critique after `<!--critique-->`), the JSON block last, the routes gated on the marker by `createStreamGate`; parse the LAST ` ```json ` fence (`parseDeepValueJson`) and strip with `stripJsonBlock()`, never a regex.
 - **Stored `fairValue*` are MoS-adjusted buy targets** (intrinsic via `grossUpToIntrinsic()`); call `hasFullTriple()` before dereferencing a parsed result.
-- **The Quick-mode golden** (`__tests__/deep-value-prompts-quick-identical.test.ts`) stays green on every touch of the shared builders; a regeneration is a deliberate, read diff.
-- **Grounded data lives in a dataset** (`FinancialDataset`, `Analysis.datasetId`), not in `groundingJson` (legacy, read-only): read an analysis's extract only through `readAnalysisExtract` / `readAnalysisGrounding` (`lib/datasets/store.ts`). A row spread is shallow: copy `sources` before writing to it, or every row sharing it changes (the merge builds its own rows) → § 5.2.
+- **One path: every analysis has a dataset** (since 2026-11-09): Deep Value requires `datasetId`, every lens runs blind-first on it. The golden `__tests__/deep-value-prompts-golden.test.ts` pins the prompts; regenerate it only when a spec declares it, with a read diff.
+- **The data lives in a dataset** (`FinancialDataset`, `Analysis.datasetId`), not in `groundingJson` (legacy, read-only): read an analysis's extract only through `readAnalysisExtract` / `readAnalysisGrounding` (`lib/datasets/store.ts`). A row spread is shallow: copy `sources` before writing to it, or every row sharing it changes (the merge builds its own rows) → § 5.2.
 - **The model declares, the code verifies**: deterministic gates (`lib/grounding/postcheck.ts`), not a prompt rule alone; a cited URL is not an opened URL, so a research source is `verified` only against the run's transcript (`collectSeenUrls`, guide § 5.3). **DeepSeek web search is client-executed** (`lib/ai/web-search-tool.ts`, DeepSeek's Search API), never the provider's server-side tool.
 - **Multi-Provider AI Settings** → doc/guide/valutazione.md § 6.2: catalog in `types/ai-settings.ts`, `resolveAiSettings()` and effort per call site, the shared tool loop, `lib/ai/{client,tool-loop,web-search-tool,ai-preferences}.ts`. The research stage is Sonnet 5.5 `high` on Anthropic and the user's DeepSeek model at `high` on DeepSeek (`researchAiSettings`), with a client-executed `web_fetch` on DeepSeek's Fetch API (§ 5.3).
 
