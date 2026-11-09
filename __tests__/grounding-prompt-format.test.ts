@@ -37,6 +37,7 @@ function buildContext(overrides: Partial<GroundingPromptContext> = {}): Groundin
     marketImplied: computeMarketImplied(14.18, "EUR", EXTRACT, basis),
     impliedExpectations: computeImpliedExpectations(14.18, "EUR", EXTRACT, basis),
     warnings: checkReconciliation(EXTRACT, basis),
+    researchNotes: null,
     ...overrides,
   };
 }
@@ -156,6 +157,7 @@ describe("formatGroundingForPrompt — basis-verified fixture (Iren-shaped)", ()
       marketImplied: null,
       impliedExpectations: null,
       warnings: checkReconciliation(irenExtract, basis),
+      researchNotes: null,
     };
   }
 
@@ -299,7 +301,7 @@ describe("buildGroundingPromptContext — a stored dataset's warnings and proven
     expect(text).not.toContain("#3");
   });
 
-  it("keeps the row sources and the dataset metadata out of the prompt", () => {
+  it("prints the row sources as their own lines, never inside the extract JSON, and keeps the dataset metadata out", () => {
     const sourced = {
       ...EXTRACT,
       financials: EXTRACT.financials.map((f) => ({ ...f, sources: { ...f.sources, income: pasteSource("blk-1") } })),
@@ -309,5 +311,6 @@ describe("buildGroundingPromptContext — a stored dataset's warnings and proven
     const text = formatGroundingForPrompt(buildGroundingPromptContext(BLOCKS, sourced, null, "EUR"));
     expect(text).toContain('"ebitda": 14200');
     expect(text).not.toMatch(/sources|blockId|datasetMeta/);
+    expect(text).toContain("FY2025 — income: paste");
   });
 });

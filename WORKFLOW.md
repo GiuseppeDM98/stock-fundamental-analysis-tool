@@ -31,7 +31,14 @@
    scattered across several.
 
 4. **Always answer in Italian** when working on this repo. This applies to the conversational
-   channel; code, identifiers and comments stay in English.
+   channel; code, identifiers and comments stay in English. **Every tracked document is written in
+   the repo's documentation language** (2026-11-01): English in the open repos, Italian where the
+   repo's documentation is Italian (its WORKFLOW.md says which). In an English-language repo, Italian
+   is reserved for the UI text a document quotes, for page and feature names (they are the labels the
+   product shows) and for the owner's own words, quoted as such — the launch prompt at the end of a
+   spec, the text the owner pastes, is the owner's words and stays in Italian. A guide still in the
+   other language is rewritten the first time a session rewrites it anyway, never in a session of its
+   own.
 
 5. **Questions and proposals are asked interactively** (2026-09-11). When a decision is the owner's —
    which layers to build, on which surfaces, a wording — put it through the agent's interactive
@@ -125,6 +132,16 @@ disappear. The verification is done together, in chat, one phase at a time.
    the tour finds becomes an assertion before the session ends, or it will come back: the tour
    exists to discover what nobody thought to assert, not to replace the tests.
 
+**A before/after comparison of screenshots is shown cropped, one item at a time** (2026-10-30, after
+«I don't understand the differences between before and after, which images am I supposed to compare?»
+in front of twenty near-identical PNGs): never a folder of files to open. The agent opens a browser
+window on an HTML page with BEFORE and AFTER **cropped to the area that changes** — one above the
+other, or side by side for phone screenshots — and **enlarged** when the difference is a few pixels (a
+darker grey), with a title saying where to look; before talking about it, it checks the crop with a
+headless screenshot of the same page. The message says «Comparison N of M», what changes and which
+side is which; the window rules of obligation 5 apply (one item per message, closed and counted before
+the next).
+
 ### Standard phases, when they make sense
 
 | | Phase | What it establishes |
@@ -201,7 +218,7 @@ After `npm ci` (or on a fresh checkout) run `npx prisma generate` once: stage 2 
 - **Assertions pair visible decoy text with DB rows** (`e2e/support/db.ts`), never the look of the page alone. `authorization.spec.ts` is the own-vs-someone-else's pair on analyses, positions and datasets: a foreign id answers 404 and the row is checked unchanged in the DB. Both a wrong-identity run and an injected DB write were shown to turn it red (2026-10-11).
 - **Do not run the suite while another `next dev` / `next build` runs from the same checkout** (they share `.next`). Port 3200 must be free; an existing server is never reused. Do not edit source files while the suite or a manual dev server runs either: `next dev` recompiles mid-test and the test it lands on reads as flaky (2026-10-29).
 - **Artifacts** (`.e2e/`, `playwright-report/`, `test-results/`) are gitignored. Open a failure's trace with `npx playwright show-trace test-results/<test>/trace.zip`.
-- **Visual baselines are per session and never committed** (`e2e/**/*-snapshots/` is gitignored). They hold for the UTC day they were generated on, because snapshot and earnings dates are relative to today. Run `npm run e2e:visual:update` before a change and `npm run e2e:visual` after it; the update rewrites every baseline (`--update-snapshots=all`), since Playwright's default mode keeps a file that is still within tolerance and a day-old one survived (2026-10-29). The browser clock is frozen, animations are off, and fonts are the fallback (Google Fonts is blocked).
+- **Visual baselines are per session and never committed** (`e2e/**/*-snapshots/` is gitignored). They hold for the UTC day they were generated on, because snapshot and earnings dates are relative to today. Run `npm run e2e:visual:update` before a change and `npm run e2e:visual` after it; the update rewrites every baseline (`--update-snapshots=all`), since Playwright's default mode keeps a file that is still within tolerance and a day-old one survived (2026-10-29). The browser clock is frozen, animations are off, and fonts are the fallback (Google Fonts is blocked). Copy the baselines a before/after comparison needs out of the repo (to the scratchpad) before the update: they are not in git, and the update overwrites the "before" of a page the session changed (2026-11-09).
 
 Sessions are JWT (Auth.js v5 credentials provider, `session: { strategy: "jwt" }`), so there is no session table to clean up.
 
@@ -215,7 +232,7 @@ DATABASE_URL="file:$PWD/.e2e/e2e.db" TURSO_DATABASE_URL="file:$PWD/.e2e/e2e.db" 
   NEXTAUTH_URL=http://localhost:3200 npx next dev -p 3200
 ```
 
-Quotes are live in this mode, not stubbed. After any schema change restart the dev server: it keeps a stale Prisma client and crashes with `no such column` (AGENTS.md, gotcha #7).
+Quotes are live in this mode, not stubbed. To show a missing provider key, add `ANTHROPIC_API_KEY="" DEEPSEEK_API_KEY=""` to the command: a variable present in the environment wins over `.env.local` even when empty (verified on Windows, 2026-11-09), so an AI route answers 503 without spending. After any schema change restart the dev server: it keeps a stale Prisma client and crashes with `no such column` (AGENTS.md, gotcha #7).
 
 ### Seed and throwaway identities
 
@@ -241,11 +258,11 @@ For a throwaway user created on the fly: `POST /api/auth/register` with `{ "emai
 ### Handing the app to the owner (obligation 5)
 
 The owner's browser cannot reuse the script's `storageState`: run `npm run seed:e2e`, start the server with the command above, give the owner the A account's email and password and the exact URLs, keep the fixtures alive until they have looked, then delete `.e2e/` in phase G.
-The seeded tickers are invented and a manual run's quotes are live, so a page that needs a quote (`/analyze`) shows nothing past the error in the owner's browser (2026-10-29). Open such a page in a headed Playwright window instead: A's `storageState`, the suite's guards (quotes and FX stubbed, paid routes blocked, `serviceWorkers: "block"`), one window per item, closed by you after each outcome.
+The seeded tickers are invented and a manual run's quotes are live, so a page that needs a quote (`/analyze`) shows nothing past the error in the owner's browser (2026-10-29). Open such a page in a headed Playwright window instead: A's `storageState`, the suite's guards (quotes and FX stubbed, paid routes blocked, `serviceWorkers: "block"`), one window per item, closed by you after each outcome. A script that signs in on a freshly started `next dev` waits for `networkidle` before filling the form: a click before hydration submits it as a native GET (`/login?`) and no session is set (2026-11-09).
 
 ### Real AI runs in a collaudo
 
-- **Budget** (the owner's rule, 2026-10-29): Anthropic cost is not a constraint, so run every real check the collaudo needs; DeepSeek credit is low, so ask before any DeepSeek run. The ticker or paste and the OK for each run still come from the owner. Measured cost: about $4 for a Quick run at `xhigh` and $2 for one lens (`doc/guide/valutazione.md` § 2.1); the costs go in the commit message.
+- **Budget** (the owner's rule, 2026-10-29): Anthropic cost is not a constraint, so run every real check the collaudo needs; DeepSeek credit is low, so ask before any DeepSeek run. The ticker or paste and the OK for each run still come from the owner. Measured cost: about $4 for a Deep Value run at `xhigh`, $2 for one lens (`doc/guide/valutazione.md` § 2.1) and $0.4-1.3 for a research on Sonnet 5.5 (§ 5.3); the costs go in the commit message.
 - **Seeing what the model got**: the Anthropic SDK reads `ANTHROPIC_BASE_URL`, so a throwaway local proxy started with the dev server logs each call's model, effort, tokens, searches and prompt without a source edit. It never logs headers (the API key travels there), and it is deleted in phase G with the rest of the script.
 - **A driver waits for the save, not for the button**: a reload right after a run ends can still land before its PATCH (2026-10-29), so a script waits for the response of the request that persists the run.
 
@@ -266,5 +283,5 @@ The seeded tickers are invented and a manual run's quotes are live, so a page th
 
   Pre-merge ritual, on the session branch and after the owner's OK: write every entry into its destination, delete `SESSION_NOTES.md`, then make the single commit that carries code and docs together. In `CLAUDE.md` the session's "Last Updated" entry replaces the previous one (in English), and any project-state section the session changed is updated in place (a spec of a series declares the balance of the body sections it rewrites in its § 9 — T-22 of `doc/evoluzioni/00-INDICE.md`); the file has a hard limit of 40,000 characters, measured as Unicode characters with CR excluded (`node -e "console.log([...require('fs').readFileSync('CLAUDE.md','utf8').replace(/\r/g,'')].length)"`). `wc -c` counts bytes — about 350 more on an LF checkout, about 600 more on a Windows one, where it counts the CRs too — so it is never the measure against the limit (2026-10-19).
 - **Outcome of a collaudo**: one line in `CLAUDE.md`'s "Last Updated" entry for that session (that it ran, and what was left to the owner's tour); which phases ran and how go in the commit message (§ 2, *Closing a verification*). Every finding that can be asserted by a test is promoted into `__tests__/` before the session ends.
-- **Conventions that already live elsewhere — not duplicated here**: `CLAUDE.md` (project state and hard invariants such as the position-blind Deep Value rule), `AGENTS.md` (implementation patterns and numbered gotchas: read the section of the domain you touch), `COMMENTS.md` and `DEVELOPMENT_GUIDELINES.md` (read both before writing code, every session). Touching a prompt builder in `lib/ai/deep-value-prompts.ts` requires the Quick-mode golden test (`__tests__/deep-value-prompts-quick-identical.test.ts`) to stay green.
+- **Conventions that already live elsewhere — not duplicated here**: `CLAUDE.md` (project state and hard invariants such as the position-blind Deep Value rule), `AGENTS.md` (implementation patterns and numbered gotchas: read the section of the domain you touch), `COMMENTS.md` and `DEVELOPMENT_GUIDELINES.md` (read both before writing code, every session). Touching a prompt builder in `lib/ai/deep-value-prompts.ts` requires the golden `__tests__/deep-value-prompts-golden.test.ts` to stay green; it is regenerated only when a spec declares it.
 - **Rule 6 here** (the owner's decision, 2026-10-19): the regression fixtures built on a listed company's published accounts — the Iren case in `__tests__/grounding-basis.test.ts`, Iren and Webuild in the `grounding-postcheck`, `-anchors`, `-reconcile` and `-prompt-format` tests — are public data that is not the owner's, so they stay; a figure of the owner's own portfolio, positions or analyses never enters a test.

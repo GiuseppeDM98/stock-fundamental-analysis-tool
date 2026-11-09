@@ -91,8 +91,13 @@ type PanelProps = {
   // Each lens's FINAL JSON as persisted (*ResultJson, JSON.stringify'd) — kill price,
   // revisions[] and the gates after a reload. null on rows saved before the column existed.
   initialResult: Partial<Record<AnalystAngle, string | null>>;
-  // The pasted dataset for the dataset gates; null (Quick) → those gates read "no dataset".
+  // The analysis's dataset for the dataset gates; null (an analysis saved without one, or a
+  // stored extract that no longer validates) → those gates read "no dataset".
   groundingExtract: GroundedFinancials | null;
+  // Whether the analysis was saved on a dataset (datasetId or a legacy groundingJson). Since
+  // 2026-11-09 a lens runs only blind-first on one: without it Run is disabled, and the saved
+  // lenses stay readable.
+  hasDataset: boolean;
   // The page's one price (AnalysisDetailBody): null while it loads or when none exists.
   currentPrice: number | null;
   currency: string;
@@ -109,6 +114,7 @@ export default function AnalystPanel({
   initialFinal,
   initialResult,
   groundingExtract,
+  hasDataset,
   currentPrice,
   currency,
   priceSource,
@@ -142,6 +148,7 @@ export default function AnalystPanel({
         <div>
           <h3 className="text-sm font-semibold text-violet-300">{t("analystPanelTitle")}</h3>
           <p className="mt-1 text-xs text-slate-400">{t("analystPanelDesc")}</p>
+          {!hasDataset && <p className="mt-1 text-xs text-warning">{t("analystNeedsDataset")}</p>}
         </div>
         <AiSettingsControl value={aiSettings} onChange={setAiSettings} />
       </div>
@@ -162,6 +169,7 @@ export default function AnalystPanel({
             initialFinalTriple={initialFinal[angle] ?? null}
             initialResultJson={initialResult[angle] ?? null}
             groundingExtract={groundingExtract}
+            hasDataset={hasDataset}
             currentPrice={currentPrice}
             currency={currency}
             priceSource={priceSource}
@@ -186,6 +194,7 @@ type SlotProps = {
   initialFinalTriple: Triple | null;
   initialResultJson: string | null;
   groundingExtract: GroundedFinancials | null;
+  hasDataset: boolean;
   currentPrice: number | null;
   currency: string;
   priceSource: "live" | "analysis";
@@ -205,6 +214,7 @@ function AnalystSlot({
   initialFinalTriple,
   initialResultJson,
   groundingExtract,
+  hasDataset,
   currentPrice,
   currency,
   priceSource,
@@ -278,6 +288,8 @@ function AnalystSlot({
   const finalKillPriceGate = finalGates?.find((g) => g.code === "kill_price");
 
   async function handleRun() {
+    // The route answers 400 without a dataset: the button is disabled, this is the backstop.
+    if (!hasDataset) return;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -401,7 +413,9 @@ function AnalystSlot({
         {status === "idle" && (
           <button
             onClick={handleRun}
-            className="tap shrink-0 rounded-lg border border-violet-500/40 px-3 py-1.5 text-xs font-medium text-violet-300 transition hover:border-violet-400 hover:bg-violet-500/10 print:hidden"
+            disabled={!hasDataset}
+            title={hasDataset ? undefined : t("analystNeedsDataset")}
+            className="tap shrink-0 rounded-lg border border-violet-500/40 px-3 py-1.5 text-xs font-medium text-violet-300 transition hover:border-violet-400 hover:bg-violet-500/10 disabled:cursor-not-allowed disabled:opacity-40 print:hidden"
           >
             {t("analystRunButton")}
           </button>
@@ -417,7 +431,9 @@ function AnalystSlot({
         {status === "done" && critique && (
           <button
             onClick={handleRun}
-            className="tap shrink-0 rounded-lg border border-violet-500/40 px-2.5 py-1 text-xs font-medium text-violet-300 transition hover:border-violet-400 hover:bg-violet-500/10 print:hidden"
+            disabled={!hasDataset}
+            title={hasDataset ? undefined : t("analystNeedsDataset")}
+            className="tap shrink-0 rounded-lg border border-violet-500/40 px-2.5 py-1 text-xs font-medium text-violet-300 transition hover:border-violet-400 hover:bg-violet-500/10 disabled:cursor-not-allowed disabled:opacity-40 print:hidden"
           >
             {t("analystReviewRerun")}
           </button>
@@ -429,7 +445,9 @@ function AnalystSlot({
           <p className="text-sm text-red-400">{t("analystReviewError")}</p>
           <button
             onClick={handleRun}
-            className="tap rounded-lg border border-violet-500/40 px-3 py-1 text-xs font-medium text-violet-300 transition hover:border-violet-400 hover:bg-violet-500/10"
+            disabled={!hasDataset}
+            title={hasDataset ? undefined : t("analystNeedsDataset")}
+            className="tap rounded-lg border border-violet-500/40 px-3 py-1 text-xs font-medium text-violet-300 transition hover:border-violet-400 hover:bg-violet-500/10 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {t("analystRunButton")}
           </button>
@@ -452,8 +470,8 @@ function AnalystSlot({
         />
       )}
 
-      {/* No blind commitment (a Quick-mode lens, or a degraded Phase 1): the final JSON is
-          checked on its own. */}
+      {/* No blind commitment (a lens saved before every lens ran blind-first, or a degraded
+          Phase 1): the final JSON is checked on its own. */}
       {!blindResult && finalResult && (
         <AnalystFinalCard
           final={finalResult}

@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { buildDeepValueSystemPrompt, buildDeepValueUserPrompt, buildAnalystSystemPrompt, buildAnalystUserPrompt, buildAnalystReconcileUserPrompt } from "@/lib/ai/deep-value-prompts";
 import { CRITIQUE_START_MARKER } from "@/lib/report/parse-deep-value-json";
-import { buildGroundingPromptContext } from "@/lib/grounding/prompt-format";
-import { makeFinancialsRow, makeMultiplesRow, makeExtract, makeMeta } from "./grounding-test-helpers";
+import { buildGroundingPromptContext, formatGroundingForPrompt, formatRowSources } from "@/lib/grounding/prompt-format";
+import { pasteSource } from "@/lib/grounding/merge";
+import { emptyRowSources, type DataSource } from "@/types/dataset";
+import { makeEstimateRow, makeFinancialsRow, makeMultiplesRow, makeExtract, makeMeta } from "./grounding-test-helpers";
 import type { GroundingBlock } from "@/types/grounding";
 
 const EXTRACT = makeExtract({
@@ -11,205 +13,165 @@ const EXTRACT = makeExtract({
   multiples: [3.0, 3.8, 4.6].map((evEbitda, i) => makeMultiplesRow({ fiscalYear: 2023 + i, evEbitda })),
 });
 const BLOCKS: GroundingBlock[] = [{ id: "1", kind: "balance_sheet", text: "some pasted table" }];
-const GROUNDING = buildGroundingPromptContext(BLOCKS, EXTRACT, 14.18, "EUR");
+const GROUNDING = buildGroundingPromptContext(BLOCKS, EXTRACT, 10, "EUR");
+// The lenses get extract + anchors + warnings, never the raw paste — the verify route
+// calls buildGroundingPromptContext([], ...) after re-reading the analysis's dataset.
+const LENS_GROUNDING = { ...GROUNDING, blocks: [] };
 
-describe("Quick mode stays untouched by the grounding param", () => {
-  it("buildDeepValueSystemPrompt omits GROUNDED_RULES_BLOCK when grounding is not passed", () => {
-    const withNoArg = buildDeepValueSystemPrompt({ language: "English", currentDate: "July 12, 2026", mosPercent: 20 });
-    const withExplicitUndefined = buildDeepValueSystemPrompt({
-      language: "English",
-      currentDate: "July 12, 2026",
-      mosPercent: 20,
-      grounding: undefined,
-    });
-    expect(withNoArg).toBe(withExplicitUndefined);
-    expect(withNoArg).not.toContain("Grounded mode");
-  });
+const SYSTEM = buildDeepValueSystemPrompt({ language: "English", currentDate: "July 12, 2026", mosPercent: 20, grounding: GROUNDING });
 
-  it("buildDeepValueUserPrompt appends nothing when grounding is not passed", () => {
-    const withNoArg = buildDeepValueUserPrompt({ ticker: "ENI.MI", currentPrice: 14.18, currency: "EUR", language: "English" });
-    const withExplicitUndefined = buildDeepValueUserPrompt({
-      ticker: "ENI.MI",
-      currentPrice: 14.18,
-      currency: "EUR",
-      language: "English",
-      grounding: undefined,
-    });
-    expect(withNoArg).toBe(withExplicitUndefined);
-    expect(withNoArg).not.toContain("AUTHORITATIVE FINANCIAL DATA");
-  });
+function web(url: string, verified: boolean): DataSource {
+  return { kind: "web", url, title: null, asOf: null, blockId: null, verified };
+}
 
-  it("buildAnalystSystemPrompt/buildAnalystUserPrompt omit the grounding markers when grounding is not passed", () => {
-    const sys = buildAnalystSystemPrompt({ angle: "optimist", language: "English", currentDate: "July 12, 2026", mosPercent: 20 });
-    expect(sys).not.toContain("Grounded mode");
-    const usr = buildAnalystUserPrompt({ angle: "optimist", ticker: "ENI.MI", reportMd: "# R\nBody", language: "English" });
-    expect(usr).not.toContain("STRUCTURED EXTRACT");
-  });
-
-  it("buildAnalystUserPrompt appends the base report's gates after the report when gatesText is passed, and only then", () => {
-    const args = { angle: "skeptic" as const, ticker: "ENI.MI", reportMd: "# R\nBody", language: "English" };
-    const gatesText = "--- DETERMINISTIC GATES ON THE BASE REPORT (computed in code — NOT the model's judgment) ---\n✓ scenario_order: bear 8.00 · base 10.00 · bull 12.00\n--- END DETERMINISTIC GATES ---";
-    const withGates = buildAnalystUserPrompt({ ...args, gatesText });
-    expect(withGates).toContain("DETERMINISTIC GATES");
-    expect(withGates.indexOf("--- END REPORT ---")).toBeLessThan(withGates.indexOf("DETERMINISTIC GATES"));
-    // Absent (not empty): the prompt is byte-identical to a call without the param — the
-    // golden Quick snapshots never pass it.
-    expect(buildAnalystUserPrompt({ ...args, gatesText: undefined })).toBe(buildAnalystUserPrompt(args));
-    expect(withGates.startsWith(buildAnalystUserPrompt(args))).toBe(true);
-  });
-});
-
-describe("Grounded mode injects the rules block + the data section", () => {
-  it("buildDeepValueSystemPrompt injects GROUNDED_RULES_BLOCK, between Step 2 and Step 3, only when grounding is passed", () => {
-    const sys = buildDeepValueSystemPrompt({ language: "English", currentDate: "July 12, 2026", mosPercent: 20, grounding: GROUNDING });
-    expect(sys).toContain("Grounded mode — using the user-provided data");
-    expect(sys).toContain("Do not search the web for historical data already provided");
+describe("The dataset rules block and the data section", () => {
+  it("buildDeepValueSystemPrompt injects DATASET_RULES_BLOCK between Step 2 and Step 3", () => {
+    expect(SYSTEM).toContain("## Financial dataset — how to use it (MANDATORY)");
+    expect(SYSTEM).toContain("The financial dataset below was transcribed from documents the user pasted and/or researched from primary sources, with a source per row");
     // The rules must land AFTER Step 2 (data gathering) and BEFORE Step 3 (scenarios) —
-    // otherwise the model reads "search for financial data" instructions before the
-    // "don't re-search what's provided" override, in the wrong order.
-    const step2Idx = sys.indexOf("## Step 2");
-    const groundedIdx = sys.indexOf("Grounded mode");
-    const step3Idx = sys.indexOf("## Step 3");
-    expect(step2Idx).toBeLessThan(groundedIdx);
-    expect(groundedIdx).toBeLessThan(step3Idx);
+    // otherwise the model reads "gather the data" before the "don't re-collect what's
+    // provided" override, in the wrong order.
+    const step2Idx = SYSTEM.indexOf("## Step 2");
+    const rulesIdx = SYSTEM.indexOf("## Financial dataset — how to use it");
+    const step3Idx = SYSTEM.indexOf("## Step 3");
+    expect(step2Idx).toBeLessThan(rulesIdx);
+    expect(rulesIdx).toBeLessThan(step3Idx);
+    expect(SYSTEM).not.toContain("Grounded mode");
   });
 
-  it("buildDeepValueUserPrompt appends the formatted grounding section after the base prompt", () => {
-    const usr = buildDeepValueUserPrompt({
-      ticker: "ENI.MI",
-      currentPrice: 14.18,
-      currency: "EUR",
-      language: "English",
-      grounding: GROUNDING,
-    });
-    expect(usr).toContain("Analyze ENI.MI.");
+  it("states the rescoped web search (1), the dataset winning on history unless restated (3), unverified rows (11) and the declared units (12)", () => {
+    expect(SYSTEM).toContain(
+      "Web search is for what the dataset cannot hold: anything published after `meta.latestPeriodLabel`, qualitative context (moat, risks, catalysts, guidance) and restatements. Never re-collect a historical figure the dataset already has."
+    );
+    expect(SYSTEM).toContain(
+      "On conflict between a web figure and the dataset on a HISTORICAL figure, the dataset wins — unless the web source is a restatement published after `meta.latestPeriodLabel`, in which case use the restated figure and say so in the Data conflicts note. Never let a web figure silently replace a dataset figure."
+    );
+    expect(SYSTEM).toContain(
+      "11. **Unverified sources.** Rows whose source is marked UNVERIFIED carry lower confidence: use them, say so in the Data conflicts note, and never let an unverified row be the single support of the thesis."
+    );
+    expect(SYSTEM).toContain('12. **Declared units.** Declare "units" in the JSON equal to the dataset\'s meta.units.');
+    expect(SYSTEM).toContain("The deterministic anchors below were computed in code from the dataset: they are facts, not suggestions");
+    expect(SYSTEM).toContain("When raw pasted text is present, the RAW TEXT wins over the structured extract for a field that was mis-transcribed; say so in the Data conflicts note");
+    expect(SYSTEM).not.toContain("your own pasted data");
+  });
+
+  it("states the rigor checks without the conditions a dataset always meets", () => {
+    expect(SYSTEM).not.toContain("When a BASIS RECONCILIATION block is provided");
+    expect(SYSTEM).not.toContain("When the anchors give you");
+    expect(SYSTEM).not.toContain("gathered in Step 2)");
+    expect(SYSTEM).toContain("The BASIS RECONCILIATION block below");
+    expect(SYSTEM).toContain("The anchors give you");
+    expect(SYSTEM).toContain("the company's OWN historical distribution as given in the dataset's anchors (median/percentile)");
+  });
+
+  it("buildDeepValueUserPrompt appends the formatted dataset section after the base prompt", () => {
+    const usr = buildDeepValueUserPrompt({ ticker: "FNCT.MI", currentPrice: 10, currency: "EUR", language: "English", grounding: GROUNDING });
+    expect(usr).toContain("Analyze FNCT.MI.");
     expect(usr).toContain("AUTHORITATIVE FINANCIAL DATA");
     expect(usr).toContain("some pasted table");
-    expect(usr.indexOf("AUTHORITATIVE FINANCIAL DATA")).toBeGreaterThan(usr.indexOf("Analyze ENI.MI."));
+    expect(usr.indexOf("AUTHORITATIVE FINANCIAL DATA")).toBeGreaterThan(usr.indexOf("Analyze FNCT.MI."));
   });
 });
 
-describe("Grounded mode reaches the analyst lenses too", () => {
-  // The lenses get extract + anchors + warnings, never the raw paste —
-  // this fixture's blocks are intentionally empty, mirroring how the verify route
-  // calls buildGroundingPromptContext([], ...) after re-reading Analysis.groundingJson.
-  const LENS_GROUNDING = { ...GROUNDING, blocks: [] };
-
-  it("buildAnalystSystemPrompt injects GROUNDED_RULES_BLOCK, between the structural checks and the valuation section", () => {
+describe("The dataset reaches the analyst lenses too", () => {
+  it("buildAnalystSystemPrompt injects DATASET_RULES_BLOCK between the structural checks and the valuation section", () => {
     const sys = buildAnalystSystemPrompt({ angle: "skeptic", language: "English", mosPercent: 20, grounding: LENS_GROUNDING });
-    expect(sys).toContain("Grounded mode — using the user-provided data");
     const structuralIdx = sys.indexOf("Structural checks");
-    const groundedIdx = sys.indexOf("Grounded mode");
+    const rulesIdx = sys.indexOf("## Financial dataset — how to use it");
     const valuationIdx = sys.indexOf("Your own independent valuation");
-    expect(structuralIdx).toBeLessThan(groundedIdx);
-    expect(groundedIdx).toBeLessThan(valuationIdx);
+    expect(structuralIdx).toBeLessThan(rulesIdx);
+    expect(rulesIdx).toBeLessThan(valuationIdx);
   });
 
   it("buildAnalystUserPrompt appends the anchors/extract/warnings but NOT the raw-paste section", () => {
-    const usr = buildAnalystUserPrompt({
-      angle: "skeptic",
-      ticker: "ENI.MI",
-      reportMd: "# R\nBody",
-      language: "English",
-      grounding: LENS_GROUNDING,
-    });
+    const usr = buildAnalystUserPrompt({ angle: "skeptic", ticker: "FNCT.MI", reportMd: "# R\nBody", language: "English", grounding: LENS_GROUNDING });
     expect(usr).toContain("STRUCTURED EXTRACT");
     expect(usr).toContain("DETERMINISTIC ANCHORS");
     expect(usr).not.toContain("AUTHORITATIVE FINANCIAL DATA");
   });
 
+  it("buildAnalystUserPrompt appends the base report's gates after the report when gatesText is passed, and only then", () => {
+    const args = { angle: "skeptic" as const, ticker: "FNCT.MI", reportMd: "# R\nBody", language: "English", grounding: LENS_GROUNDING };
+    const gatesText = "--- DETERMINISTIC GATES ON THE BASE REPORT (computed in code — NOT the model's judgment) ---\n✓ scenario_order: bear 8.00 · base 10.00 · bull 12.00\n--- END DETERMINISTIC GATES ---";
+    const withGates = buildAnalystUserPrompt({ ...args, gatesText });
+    expect(withGates).toContain("DETERMINISTIC GATES ON THE BASE REPORT");
+    expect(withGates.indexOf("--- END REPORT ---")).toBeLessThan(withGates.indexOf("DETERMINISTIC GATES ON THE BASE REPORT"));
+    // Absent (not empty): the prompt is byte-identical to a call without the param.
+    expect(buildAnalystUserPrompt({ ...args, gatesText: undefined })).toBe(buildAnalystUserPrompt(args));
+    expect(withGates.startsWith(buildAnalystUserPrompt(args))).toBe(true);
+  });
+
   it("a lens on a currency-mismatched extract is told why the market-implied read is missing", () => {
     // Same call shape as the verify route: no raw blocks, the route's own quote currency.
     const mismatched = buildGroundingPromptContext([], EXTRACT, 15, "USD"); // extract is EUR
-    const usr = buildAnalystUserPrompt({ angle: "skeptic", ticker: "ENI.MI", reportMd: "# R\nBody", language: "English", grounding: mismatched });
+    const usr = buildAnalystUserPrompt({ angle: "skeptic", ticker: "FNCT.MI", reportMd: "# R\nBody", language: "English", grounding: mismatched });
     expect(usr).toContain("currency_mismatch — EUR vs USD");
     expect(usr).toContain("Market-implied: NOT computed — currency mismatch");
   });
 });
 
-describe("Grounded mode rescopes web search in the base report prompts", () => {
-  it("system prompt Step 2 no longer says to gather the data via web search", () => {
-    const sys = buildDeepValueSystemPrompt({ language: "English", mosPercent: 20, grounding: GROUNDING });
-    expect(sys).not.toContain("Gather financial data via web search");
-    expect(sys).not.toContain("Search for the most recent annual financial data");
-    expect(sys).toContain("## Step 2 — Gather financial data\n");
-    expect(sys).toContain("Use web search only for what was published after that data's coverage period");
+describe("The report prompts rescope web search to what the dataset cannot hold", () => {
+  it("system prompt Step 2 does not say to gather the data via web search", () => {
+    expect(SYSTEM).not.toContain("Gather financial data via web search");
+    expect(SYSTEM).not.toContain("Search for the most recent annual financial data");
+    expect(SYSTEM).toContain("## Step 2 — Gather financial data\n");
+    expect(SYSTEM).toContain("Use web search only for what was published after that data's coverage period");
   });
 
-  it("user prompt no longer says to find the financial data via web search", () => {
-    const usr = buildDeepValueUserPrompt({ ticker: "ENI.MI", currentPrice: 14.18, currency: "EUR", language: "English", grounding: GROUNDING });
+  it("user prompt does not say to find the financial data via web search", () => {
+    const usr = buildDeepValueUserPrompt({ ticker: "FNCT.MI", currentPrice: 10, currency: "EUR", language: "English", grounding: GROUNDING });
     expect(usr).not.toContain("Use web search to find the financial data");
     expect(usr).toContain("use web search only for what was published after its coverage period");
-  });
-
-  it("Quick mode keeps the original web-search wording", () => {
-    const sys = buildDeepValueSystemPrompt({ language: "English", mosPercent: 20 });
-    expect(sys).toContain("## Step 2 — Gather financial data via web search");
-    const usr = buildDeepValueUserPrompt({ ticker: "ENI.MI", currentPrice: 14.18, currency: "EUR", language: "English" });
-    expect(usr).toContain("Use web search to find the financial data");
   });
 });
 
 describe("Analyst prompts: blind-first wording, Skeptic framing, basis check, kill price note", () => {
-  const LENS_GROUNDING = { ...GROUNDING, blocks: [] };
-
   it("mentions two JSON blocks only in a blind-first review", () => {
-    const quick = buildAnalystSystemPrompt({ angle: "optimist", mosPercent: 20 });
-    expect(quick).not.toContain("Phase 1");
-    expect(quick).toContain("The ONLY JSON you emit is the valuation block above;");
+    const single = buildAnalystSystemPrompt({ angle: "optimist", mosPercent: 20, grounding: LENS_GROUNDING });
+    expect(single).not.toContain("Phase 1");
+    expect(single).toContain("The ONLY JSON you emit is the valuation block above;");
     const blind = buildAnalystSystemPrompt({ angle: "optimist", mosPercent: 20, grounding: LENS_GROUNDING, blindFirst: true });
     expect(blind).toContain("the two valuation blocks above (one in Phase 1, one in Phase 2)");
   });
 
   it("frames the Skeptic as breaking the thesis, not judging whether it holds up", () => {
-    const sys = buildAnalystSystemPrompt({ angle: "skeptic" });
+    const sys = buildAnalystSystemPrompt({ angle: "skeptic", grounding: LENS_GROUNDING });
     expect(sys).not.toContain("does the base-case fair value hold up");
     expect(sys).toContain("**break the thesis**");
     expect(sys).toContain("**Kill price & verdict**");
   });
 
-  it("adds the basis-reconciliation structural check only when grounding is present", () => {
-    const quick = buildAnalystSystemPrompt({ angle: "quality" });
-    expect(quick).not.toContain("Basis reconciliation");
-    const grounded = buildAnalystSystemPrompt({ angle: "quality", grounding: LENS_GROUNDING });
-    expect(grounded).toContain("7. **Basis reconciliation.**");
-    // Part of the structural checks, before the Grounded rules block.
-    expect(grounded.indexOf("7. **Basis reconciliation.**")).toBeLessThan(grounded.indexOf("Grounded mode —"));
+  it("always includes the basis-reconciliation structural check", () => {
+    const sys = buildAnalystSystemPrompt({ angle: "quality", grounding: LENS_GROUNDING });
+    expect(sys).toContain("7. **Basis reconciliation.**");
+    // Part of the structural checks, before the dataset rules block.
+    expect(sys.indexOf("7. **Basis reconciliation.**")).toBeLessThan(sys.indexOf("## Financial dataset — how to use it"));
   });
 
   it("puts killPriceNote in the Skeptic JSON contract only", () => {
-    expect(buildAnalystSystemPrompt({ angle: "skeptic" })).toContain('"killPriceNote"');
-    expect(buildAnalystSystemPrompt({ angle: "optimist" })).not.toContain("killPrice");
+    expect(buildAnalystSystemPrompt({ angle: "skeptic", grounding: LENS_GROUNDING })).toContain('"killPriceNote"');
+    expect(buildAnalystSystemPrompt({ angle: "optimist", grounding: LENS_GROUNDING })).not.toContain("killPrice");
     // Both blind-first blocks carry it.
     const blind = buildAnalystSystemPrompt({ angle: "skeptic", grounding: LENS_GROUNDING, blindFirst: true });
     expect(blind.split('"killPriceNote"')).toHaveLength(3);
   });
 });
 
-describe("Analyst lenses do not tell the model to re-search pasted history", () => {
-  const LENS_GROUNDING = { ...GROUNDING, blocks: [] };
-
-  it("rescopes the spot-check to the pasted data in Grounded mode", () => {
+describe("Analyst lenses do not tell the model to re-search the dataset's history", () => {
+  it("rescopes the spot-check to the dataset", () => {
     const sys = buildAnalystSystemPrompt({ angle: "skeptic", language: "English", mosPercent: 20, grounding: LENS_GROUNDING });
-    const usr = buildAnalystUserPrompt({ angle: "skeptic", ticker: "ENI.MI", reportMd: "# R", language: "English", grounding: LENS_GROUNDING });
-    expect(sys).toContain("The pasted historical figures are authoritative");
+    const usr = buildAnalystUserPrompt({ angle: "skeptic", ticker: "FNCT.MI", reportMd: "# R", language: "English", grounding: LENS_GROUNDING });
+    expect(sys).toContain("The dataset's historical figures are authoritative");
     expect(sys).not.toContain("against primary sources");
-    expect(usr).toContain("against the pasted data");
+    expect(usr).toContain("spot-check key figures against the dataset");
     expect(usr).not.toContain("spot-check key figures via web search");
-  });
-
-  it("keeps the original web spot-check wording in Quick mode", () => {
-    const sys = buildAnalystSystemPrompt({ angle: "skeptic", language: "English", mosPercent: 20 });
-    const usr = buildAnalystUserPrompt({ angle: "skeptic", ticker: "ENI.MI", reportMd: "# R", language: "English" });
-    expect(sys).toContain("against primary sources");
-    expect(usr).toContain("spot-check key figures via web search");
   });
 });
 
 describe("Phase 2 reconcile prompt asks for the critique before the final JSON", () => {
   it("opens the critique with the marker and closes with the FINAL JSON", () => {
     const usr = buildAnalystReconcileUserPrompt({
-      ticker: "ENI.MI",
+      ticker: "FNCT.MI",
       reportMd: "# R",
       language: "English",
       mosPercent: 20,
@@ -218,5 +180,84 @@ describe("Phase 2 reconcile prompt asks for the critique before the final JSON",
     expect(usr).toContain(`Write your critique first, opening with the line \`${CRITIQUE_START_MARKER}\`, then the FINAL JSON`);
     expect(usr).toContain("as the very last thing, in English.");
     expect(usr).not.toContain("and then your critique");
+  });
+});
+
+describe("formatRowSources — where each row came from", () => {
+  const SOURCED = makeExtract({
+    meta: makeMeta({ reportingCurrency: "EUR", units: "millions" }),
+    financials: [
+      makeFinancialsRow({
+        fiscalYear: 2025,
+        revenue: 1000,
+        totalDebt: 400,
+        cfo: 150,
+        sources: {
+          ...emptyRowSources(),
+          income: pasteSource("blk-7"),
+          balance: web("https://www.ir.alfa.example/report.pdf", true),
+          cashFlow: web("https://data.example/alfa/cf", false),
+          mixed: { income: true, balance: false, cashFlow: false },
+        },
+      }),
+    ],
+    multiples: [makeMultiplesRow({ fiscalYear: 2025, evEbitda: 6, source: web("https://data.example/alfa/multiples", false) })],
+    estimates: [makeEstimateRow({ fiscalYear: 2026, revenue: 1100, source: web("https://broker.example/alfa", true) })],
+    peers: [{ ticker: "BETA", companyName: null, multiples: [makeMultiplesRow({ fiscalYear: 2025, evEbitda: 7, source: web("https://data.example/beta", true) })] }],
+  });
+
+  it("prints one line per financials row, per statement, paste without its block number", () => {
+    const text = formatRowSources(SOURCED)!;
+    expect(text).toContain("FY2025 — income: paste + another source; balance: ir.alfa.example; cash flow: data.example, UNVERIFIED");
+    expect(text).not.toContain("blk-7");
+  });
+
+  it("prints the multiples, the estimates and the peers' multiples too", () => {
+    const text = formatRowSources(SOURCED)!;
+    expect(text).toContain("FY2025 multiples: data.example, UNVERIFIED");
+    expect(text).toContain("FY2026 estimates: broker.example");
+    expect(text).toContain("Peer BETA FY2025 multiples: data.example");
+  });
+
+  it("is omitted for an extract whose rows carry no source (an older analysis)", () => {
+    const legacy = { ...EXTRACT, financials: EXTRACT.financials.map(({ sources: _sources, ...row }) => row) } as unknown as typeof EXTRACT;
+    expect(formatRowSources(legacy)).toBeNull();
+    expect(formatGroundingForPrompt(buildGroundingPromptContext([], legacy, null, "EUR"))).not.toContain("ROW SOURCES");
+  });
+
+  it("sits after the extract and before the anchors in the prompt", () => {
+    const text = formatGroundingForPrompt(buildGroundingPromptContext([], SOURCED, null, "EUR"));
+    expect(text.indexOf("STRUCTURED EXTRACT")).toBeLessThan(text.indexOf("ROW SOURCES"));
+    expect(text.indexOf("ROW SOURCES")).toBeLessThan(text.indexOf("DETERMINISTIC ANCHORS"));
+  });
+});
+
+describe("The anchors say when their multiples come from unverified rows", () => {
+  const withMultiples = (rows: ReturnType<typeof makeMultiplesRow>[]) => formatGroundingForPrompt(buildGroundingPromptContext([], makeExtract({ ...EXTRACT, multiples: rows }), null, "EUR"));
+
+  it("leads the ANCHORS section with the unverified years the statistics use", () => {
+    const text = withMultiples([
+      makeMultiplesRow({ fiscalYear: 2023, evEbitda: 5, source: web("https://data.example/m", false) }),
+      makeMultiplesRow({ fiscalYear: 2024, pe: 12, source: web("https://data.example/m", false) }),
+      makeMultiplesRow({ fiscalYear: 2025, evEbitda: 6, source: web("https://ir.example/m", true) }),
+      // No value the statistics read: not an anchor input.
+      makeMultiplesRow({ fiscalYear: 2022, fcfYield: 4, source: web("https://data.example/m", false) }),
+    ]);
+    const anchors = text.slice(text.indexOf("--- DETERMINISTIC ANCHORS"));
+    expect(anchors.split("\n")[1]).toBe("Anchor inputs include UNVERIFIED multiples (years: 2023, 2024)");
+  });
+
+  it("says nothing when every multiples row is verified", () => {
+    const text = withMultiples([makeMultiplesRow({ fiscalYear: 2025, evEbitda: 6, source: web("https://ir.example/m", true) })]);
+    expect(text).not.toContain("UNVERIFIED multiples");
+  });
+});
+
+describe("The research notes lead the extract", () => {
+  it("prints them at the head of the extract section, and nothing without them", () => {
+    const withNotes = formatGroundingForPrompt(buildGroundingPromptContext([], EXTRACT, null, "EUR", [], "EBITDA as reported, not adjusted."));
+    const extract = withNotes.slice(withNotes.indexOf("--- STRUCTURED EXTRACT"));
+    expect(extract.split("\n")[1]).toBe("Research notes: EBITDA as reported, not adjusted.");
+    expect(formatGroundingForPrompt(buildGroundingPromptContext([], EXTRACT, null, "EUR"))).not.toContain("Research notes");
   });
 });

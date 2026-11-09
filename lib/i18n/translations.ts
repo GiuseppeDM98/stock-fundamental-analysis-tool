@@ -562,6 +562,17 @@ export type Translations = {
   datasetDraftKept: string;
   datasetSaveError: string;
   datasetLookupError: string;
+  datasetResearchBtn: string;
+  datasetAddPasteBtn: string;
+  datasetEditPasteBtn: string;
+  datasetOriginWeb: string;
+  datasetOriginMerged: string;
+  datasetResearchingState: string;
+  datasetResearchError: string;
+  datasetRetryResearch: string;
+  datasetUnverifiedSources: string;
+  deepValueNeedsDataset: string;
+  analystNeedsDataset: string;
   groundingCardArithmeticLabel: string;
   groundingCardMosLabel: string;
   groundingCardNoBridge: string;
@@ -838,7 +849,7 @@ const en: Translations = {
   analyzingState: "Analyzing…",
   signInToAnalyze: "to generate AI analyses and save your reports.",
   deepValueTitle: "Deep Value Analysis",
-  deepValueDesc: "Claude picks the valuation method and sources all data via web search",
+  deepValueDesc: "Claude picks the valuation method on the dataset above, searching the web only for what is newer",
   deepValueEmptyResponse: "The AI didn't return a result — it may have run out of research rounds. Try again, possibly with a different model.",
   deepAnalysisBtn: "Deep Analysis (AI)",
 
@@ -1117,9 +1128,9 @@ const en: Translations = {
   hubWatchlistTracked: "tracked",
 
   // Grounded Deep Value
-  groundingSectionTitle: "Pasted data (optional)",
+  groundingSectionTitle: "Financial dataset",
   groundingSectionDesc:
-    "Paste authoritative financial statements, historical multiples, estimates and peer data to ground the valuation in numbers you provide, instead of what the model finds via web search.",
+    "Every analysis starts from a financial dataset with a source per row: research it from primary documents on the web, or paste your own statements (merged with the research when both exist).",
   groundingAddBlockBtn: "+ Add table",
   groundingKindIncomeStatement: "Income statement",
   groundingKindBalanceSheet: "Balance sheet",
@@ -1212,6 +1223,17 @@ const en: Translations = {
   datasetDraftKept: "Your unsaved draft was kept",
   datasetSaveError: "Could not save the dataset",
   datasetLookupError: "Could not check for a recent dataset",
+  datasetResearchBtn: "Search the web for the data",
+  datasetAddPasteBtn: "Add pasted data",
+  datasetEditPasteBtn: "Edit the pasted data",
+  datasetOriginWeb: "web",
+  datasetOriginMerged: "web + paste",
+  datasetResearchingState: "Researching primary sources… {s} s",
+  datasetResearchError: "Research failed",
+  datasetRetryResearch: "Retry the research",
+  datasetUnverifiedSources: "Sources not opened during research",
+  deepValueNeedsDataset: "Prepare or research a dataset first",
+  analystNeedsDataset: "Re-run the analysis with a dataset to use the lenses",
   groundingCardArithmeticLabel: "Bridge arithmetic",
   groundingCardMosLabel: "MoS applied",
   groundingCardNoBridge: "The model did not declare a valuation bridge for this scenario.",
@@ -1487,7 +1509,7 @@ const it: Translations = {
   analyzingState: "Analisi…",
   signInToAnalyze: "per generare analisi AI e salvare i report.",
   deepValueTitle: "Analisi Deep Value",
-  deepValueDesc: "Claude sceglie il metodo di valutazione e raccoglie i dati via web search",
+  deepValueDesc: "Claude sceglie il metodo di valutazione sul dataset qui sopra e cerca sul web solo ciò che è più recente",
   deepValueEmptyResponse: "L'AI non ha restituito un risultato — potrebbe aver esaurito i cicli di ricerca. Riprova, magari con un modello diverso.",
   deepAnalysisBtn: "Analisi Profonda (AI)",
 
@@ -1766,9 +1788,9 @@ const it: Translations = {
   hubWatchlistTracked: "monitorati",
 
   // Grounded Deep Value
-  groundingSectionTitle: "Dati incollati (opzionale)",
+  groundingSectionTitle: "Dataset finanziario",
   groundingSectionDesc:
-    "Incolla bilanci, multipli storici, stime e dati dei peer per ancorare la valutazione a numeri forniti da te, invece di quelli trovati dal modello via web search.",
+    "Ogni analisi parte da un dataset finanziario con una fonte per riga: cercalo sul web dalle fonti primarie, oppure incolla i tuoi bilanci (fusi con la ricerca quando ci sono entrambi).",
   groundingAddBlockBtn: "+ Aggiungi tabella",
   groundingKindIncomeStatement: "Conto economico",
   groundingKindBalanceSheet: "Stato patrimoniale",
@@ -1862,6 +1884,17 @@ const it: Translations = {
   datasetDraftKept: "La bozza non salvata è stata conservata",
   datasetSaveError: "Impossibile salvare il dataset",
   datasetLookupError: "Impossibile cercare un dataset recente",
+  datasetResearchBtn: "Cerca i dati sul web",
+  datasetAddPasteBtn: "Aggiungi dati incollati",
+  datasetEditPasteBtn: "Modifica il paste",
+  datasetOriginWeb: "web",
+  datasetOriginMerged: "web + paste",
+  datasetResearchingState: "Ricerca sulle fonti primarie… {s} s",
+  datasetResearchError: "Ricerca fallita",
+  datasetRetryResearch: "Riprova la ricerca",
+  datasetUnverifiedSources: "Fonti non aperte durante la ricerca",
+  deepValueNeedsDataset: "Prepara o cerca prima un dataset",
+  analystNeedsDataset: "Rilancia l'analisi con un dataset per usare le lenti",
   groundingCardArithmeticLabel: "Aritmetica del ponte",
   groundingCardMosLabel: "MoS applicata",
   groundingCardNoBridge: "Il modello non ha dichiarato un ponte di valutazione per questo scenario.",

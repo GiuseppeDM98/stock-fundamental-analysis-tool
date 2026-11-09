@@ -4,23 +4,14 @@
 // or a web page named by its host. A web source the research run never opened is shown as
 // unverified; a statement filled by a second source carries "+1".
 import { useLanguage } from "@/context/language-context";
-import type { DataSource } from "@/types/dataset";
-
-function hostOf(url: string | null): string | null {
-  if (!url) return null;
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return null;
-  }
-}
+import { sourceHost, type DataSource } from "@/types/dataset";
 
 export function SourceChip({ source, mixed = false }: { source: DataSource | null; mixed?: boolean }) {
   const { t } = useLanguage();
   if (!source) return <span className="text-slate-500 print:text-slate-500">—</span>;
 
   const unverified = !source.verified;
-  const label = source.kind === "paste" ? `📋 ${t("sourceChipPaste")}` : `🌐 ${hostOf(source.url) ?? source.title ?? "web"}`;
+  const label = source.kind === "paste" ? `📋 ${t("sourceChipPaste")}` : `🌐 ${sourceHost(source.url) ?? source.title ?? "web"}`;
   const tooltip = source.kind === "web" ? [source.title, source.asOf, unverified ? t("sourceChipUnverified") : null].filter(Boolean).join(" · ") : undefined;
 
   return (

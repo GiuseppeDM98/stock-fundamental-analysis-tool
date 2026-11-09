@@ -1,7 +1,7 @@
 // Client-side fetch helpers for the financial dataset routes (/api/datasets). Thin wrappers
 // that keep components clean (mirrors lib/grounding-client.ts).
 import type { GroundingPayload } from "@/types/grounding";
-import type { ResearchResponse, StoredDataset } from "@/types/dataset";
+import type { MergedDatasetResponse, ResearchResponse, StoredDataset } from "@/types/dataset";
 import type { AiSettings } from "@/types/ai-settings";
 import type { ReconciliationWarning } from "@/lib/grounding/reconcile";
 
@@ -48,5 +48,18 @@ export async function researchDataset(ticker: string, aiSettings?: Partial<AiSet
     body: JSON.stringify({ ticker, ...(aiSettings ? { aiSettings } : {}) }),
   });
   if (!res.ok) throw await errorOf(res, "The web research failed.");
+  return res.json();
+}
+
+/** Merges the user's paste dataset with their web dataset of the same ticker, on the server
+ *  (the paste wins on every field it holds), and returns the saved merged dataset with its
+ *  preview. The route answers 400 unless the pair is one paste and one web of that ticker. */
+export async function createMergedDataset(ticker: string, pasteDatasetId: string, webDatasetId: string): Promise<MergedDatasetResponse> {
+  const res = await fetch("/api/datasets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ticker, origin: "merged", pasteDatasetId, webDatasetId }),
+  });
+  if (!res.ok) throw await errorOf(res, "Could not merge the datasets.");
   return res.json();
 }

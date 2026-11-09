@@ -1,6 +1,10 @@
 // Prompt builders for the autonomous deep-value AI analysis.
-// Unlike the standard analysis, Claude here finds all financial data via web search
-// and autonomously picks the valuation method — no Yahoo Finance dependency.
+// One path since 2026-11-09: every report and every lens starts from a financial dataset
+// (pasted and/or researched from primary sources, a source per row, previewed by the
+// user), so `grounding` is required everywhere. The model picks the valuation method and
+// uses web search only for what the dataset cannot hold. Until then a report without a
+// dataset (Quick mode) gathered every figure via web search while it wrote, and that branch
+// kept two contracts alive in every builder.
 // Business logic lives here (not in the API route) per project conventions.
 //
 // Output order (2026-10): research first, then a sentinel line (<!--report--> for the
@@ -38,20 +42,20 @@ These are non-negotiable. A valuation that fails them is not defensible.
 
 3. **Guidance vs. your own estimate.** Only call a figure "guidance" if it comes from a primary company source (press release, filing, earnings call) — cite the source and date. If you derive or assume a number, label it explicitly as your estimate. Never present an assumption as official guidance.
 
-4. **Normalized earnings for multiples.** For EV/EBITDA, margin, and multiple analysis use RECURRING/normalized figures: strip out one-off items (asset disposals, insurance indemnities, impairments, litigation) and disclose them. Any headline multiple you quote must be computed on the normalized figure, not one flattered by non-recurring gains. When a BASIS RECONCILIATION block is provided below and states a basis ratio ≠ 1, the same-basis multiples given there are the ONLY ones you may apply to income-statement EBITDA. Applying the raw provider-table multiple to an income-statement figure is forbidden — it is a definitional error, not a judgment call.
+4. **Normalized earnings for multiples.** For EV/EBITDA, margin, and multiple analysis use RECURRING/normalized figures: strip out one-off items (asset disposals, insurance indemnities, impairments, litigation) and disclose them. Any headline multiple you quote must be computed on the normalized figure, not one flattered by non-recurring gains. The BASIS RECONCILIATION block below is computed in code from the dataset: when it states a basis ratio ≠ 1, the same-basis multiples given there are the ONLY ones you may apply to income-statement EBITDA. Applying the raw provider-table multiple to an income-statement figure is forbidden — it is a definitional error, not a judgment call.
 
 5. **Differentiate scenarios on fundamentals — and reconcile them to your own sensitivity.** The three scenarios must differ primarily through operating fundamentals (revenue growth, margins, EBITDA/FCF), not merely through the exit multiple or discount rate. Identify the single assumption that drives most of the value range and disclose its sensitivity (e.g. "each +1.0x on the exit multiple = +X per share"). If the whole upside rests on one lever, say so plainly. Then reconcile each scenario's operating figure to the driver assumption of THAT scenario using the sensitivity you just stated: e.g. if you claim "$10/bbl of Brent ≈ €2–3bn of EBITDA" and the bear assumes Brent far below the base, the bear EBITDA must fall by the implied amount — a bear EBITDA that contradicts your own stated sensitivity is an internal error. Avoid stretching the multiple in the SAME direction as the operating figure across scenarios unless you justify it: co-moving both levers inflates the tails and compounds error.
 
 6. **Base case uses the central point — and normalize to the base driver, not a stale trailing figure.** For the base case use the central/most-likely point of any guidance or estimate range — not the optimistic end — especially when recent results trend below it. Reserve the top of the range for the bull case and the bottom for the bear case. For a commodity/cyclical business, the base operating figure (EBITDA/FCF) must be RE-DERIVED at the base-case commodity/price assumption using your stated sensitivity: do NOT reuse a trailing-twelve-month figure that embeds a different point in the cycle (e.g. a TTM that includes a quarter at much higher prices) and label it "normalized" — if the base assumes $75 but TTM earned an average $90, the base figure must be marked down to the $75 level.
 
-7. **Closest comparables, same basis, and structural discounts.** When valuing on a multiple, benchmark against the CLOSEST comparables (similar size, geography, ownership structure, free float, liquidity, index membership) — not just large global leaders that trade at a premium. Compare on the SAME basis: net debt and EBITDA for both the subject and the peers must use the same lease-accounting treatment (pre- vs post-IFRS 16) and the same EBITDA definition (reported vs adjusted/normalized). A headline "discount vs peers" computed on mismatched bases is a perimeter artifact, not a real discount — verify the basis before quoting it. Justify the target multiple against them. Assess whether any valuation discount is STRUCTURAL (controlling shareholder, thin free float, low liquidity, limited analyst coverage) — which tends to persist — versus a temporary anomaly likely to close. If your thesis depends on multiple re-rating, name the specific catalyst that would trigger it; if none is visible, temper the conclusion accordingly. **No selection bias:** do not drop the closest structural comparable merely because it lowers (or raises) the peer average — if a peer shares the very traits you cite as the cause of the subject's discount (e.g. state control, high commodity/E&P weight), it is the MOST relevant comp, not the least; include it, or justify its exclusion on grounds independent of its effect on the average. Never compare a FORWARD (NTM) multiple against a TRAILING (LTM) historical distribution. For a growing company the forward multiple is structurally lower than the trailing one, so the "discount" you would report is a measurement artifact, not a signal. When the anchors give you an LTM-equivalent of your own multiple, that is the number to compare.
+7. **Closest comparables, same basis, and structural discounts.** When valuing on a multiple, benchmark against the CLOSEST comparables (similar size, geography, ownership structure, free float, liquidity, index membership) — not just large global leaders that trade at a premium. Compare on the SAME basis: net debt and EBITDA for both the subject and the peers must use the same lease-accounting treatment (pre- vs post-IFRS 16) and the same EBITDA definition (reported vs adjusted/normalized). A headline "discount vs peers" computed on mismatched bases is a perimeter artifact, not a real discount — verify the basis before quoting it. Justify the target multiple against them. Assess whether any valuation discount is STRUCTURAL (controlling shareholder, thin free float, low liquidity, limited analyst coverage) — which tends to persist — versus a temporary anomaly likely to close. If your thesis depends on multiple re-rating, name the specific catalyst that would trigger it; if none is visible, temper the conclusion accordingly. **No selection bias:** do not drop the closest structural comparable merely because it lowers (or raises) the peer average — if a peer shares the very traits you cite as the cause of the subject's discount (e.g. state control, high commodity/E&P weight), it is the MOST relevant comp, not the least; include it, or justify its exclusion on grounds independent of its effect on the average. Never compare a FORWARD (NTM) multiple against a TRAILING (LTM) historical distribution. For a growing company the forward multiple is structurally lower than the trailing one, so the "discount" you would report is a measurement artifact, not a signal. The anchors give you an LTM-equivalent of your own multiple whenever the dataset holds forward estimates: that is the number to compare.
 
 8. **Complete the EV→equity bridge.** When converting enterprise value to equity, do NOT stop at EV − net debt. Subtract minority (non-controlling) interests, preferred equity and unfunded pension/decommissioning liabilities, and add associates/JVs carried at equity. This matters most when consolidated EBITDA already includes subsidiaries the company does not wholly own (third-party or private-equity stakes, JVs): that minority share of value is not shareholders', so treating EV − net debt as equity overstates fair value per share. State each bridge item you deduct, or note "not material" explicitly. **The bridge is scenario-dependent, not a constant:** net debt moves with each scenario's cash generation (a bear with low prices, a suspended buyback and maintained capex de-levers slower or re-levers — net debt RISES; a bull generates more cash — net debt falls); and minority interests move with the value of the partially-owned subsidiaries (a bull that marks the satellites to higher valuations must deduct a correspondingly HIGHER minority share — you cannot claim higher segment value AND deduct constant minorities). Never carry the same net-debt and minority figures unchanged across bull, base and bear.
 
 9. **Method ↔ narrative coherence (no disguised sum-of-the-parts).** If your thesis leans on segment-specific value — a demerger, stake sales at segment multiples, "crystallizing" or "unlocking" the value of a division — then value the company as a genuine SUM-OF-THE-PARTS (each segment at its own appropriate multiple/method, then minus net debt and minorities), not as a single blended multiple on consolidated EBITDA. You may not narrate SOTP upside AND add it on top of a consolidated multiple that already captures the whole group: that double-counts. Pick one framework and apply it consistently.
 
 10. **Anchor the valuation lever to something INDEPENDENT of today's price — the market-implied read is a control, never the input.** The fair value of a multiple method is dominated by one number (the multiple); of a DCF/DDM, by the key lever (WACC, terminal growth, cost of equity). That lever must be anchored to evidence that does NOT depend on the current price:
-   - FIRST commit to the base-case lever justified ONLY from (a) the company's OWN historical distribution (median/percentile over 3–5y, gathered in Step 2) and (b) the closest peers with an explicit, reasoned discount/premium. Do this BEFORE, and WITHOUT reference to, the current price or the multiple the price implies.
+   - FIRST commit to the base-case lever justified ONLY from (a) the company's OWN historical distribution as given in the dataset's anchors (median/percentile) and (b) the closest peers with an explicit, reasoned discount/premium. Do this BEFORE, and WITHOUT reference to, the current price or the multiple the price implies.
    - It is FORBIDDEN to set the base multiple equal to — or reverse-engineer it (or the WACC/terminal growth) from — the multiple/inputs implied by the current price. That produces a fair value ≈ price by construction: a null result dressed as analysis, not a signal.
    - THEN compute the market-implied read as a separate CONTROL: back out what the price already prices in (the implied multiple on your normalized EBITDA/earnings; and for a commodity/cyclical name, the commodity price implied — which requires FIXING the multiple and holding it constant, since you cannot derive an implied commodity price from a multiple alone). Do not stop at "the market implies 5.5x and I anchor at 7.1x, therefore upside". SOLVE FOR WHAT MUST BE TRUE: at your history-anchored multiple, what EBITDA (or growth, or margin) does the current price imply? Then JUDGE whether those implied conditions are plausible. The deterministic anchors give you this number — use it. This turns the report from advocacy into investigation. Report it in the "What must be true for the current price to be right" subsection (§4). If your anchored lever and the market-implied one coincide, state it as a finding ("the market already prices my anchored multiple"), not as your method.
    - Never normalize on a trailing figure that spans a different point in the cycle than the scenario you are pricing (see check 6).
@@ -80,48 +84,44 @@ These are non-negotiable. A valuation that fails them is not defensible.
 19. **Sensitivity honesty.** The 3×3 grid must be recomputed, not interpolated: the corner cells must come from the same model with both levers moved; a grid whose centre differs from your base intrinsic value is a contradiction, not a rounding.
 `;
 
-// Injected only in Grounded mode (when the caller passes `grounding`) — the user has
-// pasted authoritative financial data (transcribed + anchored in code, see
-// lib/grounding/*) that is appended to the USER prompt via formatGroundingForPrompt.
-// This block carries the RULES for using it; it is deliberately static (no
-// interpolation) so it can't accidentally break Quick's byte-identical output — the
-// concrete numbers (the actual market-implied multiple/percentile) live in the anchors
-// section itself, formatted per-request.
-const GROUNDED_RULES_BLOCK = `## Grounded mode — using the user-provided data (MANDATORY)
-The user has pasted authoritative financial data for this company. It has been transcribed into a structured extract and turned into deterministic anchors, both injected below in the user message. This does NOT turn off web search — it RESCOPES it:
+// The rules for using the financial dataset, in every report and lens prompt: the dataset
+// itself (transcribed and/or researched, anchored in code, see lib/grounding/*) is appended
+// to the USER prompt via formatGroundingForPrompt. The block is static (no interpolation):
+// the concrete numbers (the actual market-implied multiple/percentile, the source of each
+// row) live in the data sections, formatted per request.
+const DATASET_RULES_BLOCK = `## Financial dataset — how to use it (MANDATORY)
+The financial dataset below was transcribed from documents the user pasted and/or researched from primary sources, with a source per row, and turned into deterministic anchors in code; both are in the user message, and the user previewed them before this run. Write every conflict, unverified row and basis caveat the rules below name into a short "Data conflicts" note in the report — never resolve one silently. The dataset does NOT turn off web search — it RESCOPES it:
 
-1. **Do not search the web for historical data already provided** — financial statements, historical valuation multiples, peer multiples. Searching for them re-contaminates authoritative, human-confirmed data with the same low-quality web data this mode exists to remove.
-2. **You MUST still search the web for**: (a) any results, guidance, trading update, buyback or M&A published AFTER the extract's stated coverage period — these can move net debt and share count, which the anchors below assume are current as of that period; (b) the qualitative material for the Moat, Risks and Catalysts sections, which cannot come from a balance sheet; (c) whatever the analytical-rigor checks above require (latest quarter, current guidance/plans).
-3. **On conflict between web data and the pasted data on a HISTORICAL figure, the pasted data wins.** State the conflict explicitly in a short "Data conflicts" note in the report — never resolve it silently by quietly picking one number.
+1. **Rescoped web search.** Web search is for what the dataset cannot hold: anything published after \`meta.latestPeriodLabel\`, qualitative context (moat, risks, catalysts, guidance) and restatements. Never re-collect a historical figure the dataset already has.
+2. **You MUST still search the web for**: (a) any results, guidance, trading update, buyback or M&A published AFTER \`meta.latestPeriodLabel\` — these can move net debt and share count, which the anchors below assume are current as of that period; (b) the qualitative material for the Moat, Risks and Catalysts sections, which cannot come from a balance sheet; (c) whatever the analytical-rigor checks above require (latest quarter, current guidance/plans).
+3. **The dataset wins on history.** On conflict between a web figure and the dataset on a HISTORICAL figure, the dataset wins — unless the web source is a restatement published after \`meta.latestPeriodLabel\`, in which case use the restated figure and say so in the Data conflicts note. Never let a web figure silently replace a dataset figure.
 4. **Forward estimates are a legitimate input; analyst targets are not.** The provided forward revenue/EBITDA/EPS estimates are legitimate inputs for a fundamentals-based base case. Analyst TARGET PRICE, TARGET MULTIPLE, and RATING are NEVER a legitimate valuation anchor — even if web search surfaces them — because they are already anchored to the price/consensus; do not use them to justify your multiple or discount rate.
-5. **Units.** Every monetary figure in the structured extract and the anchors below is expressed in the SAME unit (stated in the extract's \`meta.units\`) — do not apply any unit conversion, and do not assume a different scale.
+5. **Units.** Every monetary figure in the structured extract and the anchors below is expressed in the SAME unit (stated in the dataset's \`meta.units\`) — do not apply any unit conversion, and do not assume a different scale.
 6. **The deterministic anchors are FACTS, not suggestions.** Your base case's multiple (or key DCF/DDM lever) must be one of the anchor statistics below, or an explicit deviation you justify with a stated number and reason. The market-implied read is a CONTROL that reports the GAP versus your independently-anchored lever — never the source of it (rigor item 10 above).
 7. **No selection bias on the provided peers.** Every peer supplied below must appear in your comparables table — you may not drop one because it is unfavorable to your thesis (rigor item 7 above).
-8. **The BASIS RECONCILIATION block is binding.** It is computed in code from your own pasted data, not inferred. When it states a basis ratio, the same-basis multiples it gives are the ones to use. When it states the basis is unverifiable, you must treat every multiple-vs-EBITDA comparison as unverified and say so in the Data conflicts note.
-9. **On conflict between the raw pasted text and the structured extract, the RAW TEXT wins.** The extract is a machine transcription of your data and may have erred; the paste is the source.
+8. **The BASIS RECONCILIATION block is binding.** The deterministic anchors below were computed in code from the dataset: they are facts, not suggestions. When the block states a basis ratio, the same-basis multiples it gives are the ones to use. When it states the basis is unverifiable, you must treat every multiple-vs-EBITDA comparison as unverified and say so in the Data conflicts note.
+9. **Raw text over transcription.** When raw pasted text is present, the RAW TEXT wins over the structured extract for a field that was mis-transcribed; say so in the Data conflicts note.
 10. **Horizon.** The historical multiple distribution is built on TRAILING, reported-fiscal-year EBITDA. Any multiple you apply to a forward estimate lives in a different space and cannot be ranked against that distribution without the LTM-equivalent the anchors provide.
+11. **Unverified sources.** Rows whose source is marked UNVERIFIED carry lower confidence: use them, say so in the Data conflicts note, and never let an unverified row be the single support of the thesis.
+12. **Declared units.** Declare "units" in the JSON equal to the dataset's meta.units.
 `;
 
 // The valuation methods the JSON "method" field may name — one list for the report and
 // every lens, so a lens can disagree with the report's method without leaving the contract.
 const METHOD_LIST = "DCF|DDM|EV/EBITDA|P/E|P/B|SOTP|EV/RAB|NAV|Residual Income";
 
-// Where every bridge figure's unit comes from. Grounded mode has the extract's declared
-// unit; Quick mode has only the "units" key the model declares in the same block.
-function bridgeUnitPhrases(grounding: GroundingPromptContext | undefined): { money: string; shares: string } {
-  return grounding
-    ? { money: "SAME unit as the extract's meta.units", shares: "SAME unit as sharesDiluted" }
-    : { money: 'in the unit you declare in "units"', shares: 'on the same scale as "units"' };
-}
+// Where every bridge figure's unit comes from: the dataset's declared unit.
+const BRIDGE_UNIT = { money: "SAME unit as the dataset's meta.units", shares: "SAME unit as sharesDiluted" } as const;
 
-// The "units" key, shared by the report and the lenses: without it a Quick-mode bridge
-// has no scale, and a gate cannot tell 1,200 (millions) from 1.2 (billions).
+// The "units" key, shared by the report and the lenses: the model declares the dataset's
+// unit (rule 12) and the units_match gate checks it, so a bridge in the wrong scale is
+// caught instead of read as a 1,000× valuation.
 const UNITS_JSON_LINE = `  "units": "<billions|millions|thousands|units — the scale of EVERY monetary figure in the bridges below (shares on the same scale)>",`;
 
-// Printed under every JSON template (report and lenses). Since 2026-10 every scenario
-// declares a bridge in every mode, for every method, so the arithmetic is checkable even
-// without pasted data; the rule fixes what the bridge means per method family, because
-// an equity-value method run through an EV bridge subtracts net debt twice.
+// Printed under every JSON template (report and lenses). Every scenario declares a bridge,
+// for every method, so the arithmetic is checkable; the rule fixes what the bridge means
+// per method family, because an equity-value method run through an EV bridge subtracts
+// net debt twice.
 const BRIDGE_RULE = `**Bridge rule.** The bridge always reads (multiple × driverValue − netDebt − minorities) / shares, or intrinsicPerShare directly when "multiple" is omitted.
 - EV methods (EV/EBITDA, DCF on FCFF): driverValue = EBITDA or the enterprise value you derived; netDebt and minorities as reported for THAT scenario.
 - Equity-value methods (P/E, P/B, Residual Income, DDM, DCF on FCFE): driverValue = the EQUITY driver (net income, book value, DPS, FCFE), "netDebt": 0 and "minorities": 0 (the driver is already an equity figure), "multiple" = the equity multiple (P/E, P/B) or omitted (RI, DDM, FCFE).
@@ -130,15 +130,9 @@ Never subtract net debt from a value that is already equity.`;
 
 // One scenario's JSON template line — the SAME contract shape for the base Deep Value
 // report and every analyst lens, so lib/grounding/postcheck.ts can verify a lens's own
-// numbers, not just the base report's. `bridge` is requested in every mode (until
-// 2026-10 it was Grounded-only, which left Quick reports with nothing to check);
-// `probability` is unconditional (rigor check 18).
-function scenarioJsonLine(
-  name: "bull" | "base" | "bear",
-  mosPercent: number,
-  grounding: GroundingPromptContext | undefined
-): string {
-  const unit = bridgeUnitPhrases(grounding);
+// numbers, not just the base report's. `probability` is unconditional (rigor check 18).
+function scenarioJsonLine(name: "bull" | "base" | "bear", mosPercent: number): string {
+  const unit = BRIDGE_UNIT;
   return `  "${name}": {
     "fairValue": <buy target after ${mosPercent}% MoS>,
     "probability": <0..1 — bull+base+bear should sum to ≈1>,
@@ -160,10 +154,10 @@ function scenarioJsonLine(
 // verify the cross-check's OWN arithmetic and same-basis-ness — added after a live run
 // (Webuild) showed the cross-check can be exactly where an unverified basis mismatch
 // surfaces even when the PRIMARY method (a DCF there) has no `multiple` at all for the
-// basis_same gate to check. Requested in every mode, like the scenario bridges.
+// basis_same gate to check.
 // The assumptions are in percentage points: "%" alone let the model write 0.085.
-function assumptionsCrossCheckJson(grounding: GroundingPromptContext | undefined): string {
-  const unit = bridgeUnitPhrases(grounding);
+function assumptionsCrossCheckJson(): string {
+  const unit = BRIDGE_UNIT;
   return `  "assumptions": { "wacc": <percentage points, e.g. 8.5 — or null>, "roic": <percentage points, on invested capital, not ROE — or null>, "terminalGrowth": <percentage points — or null> },
   "crossCheck": {
     "method": "<a SECOND method, structurally different from the primary one, from the same list as \\"method\\" — e.g. DDM, EV/RAB, SOTP>",
@@ -197,38 +191,33 @@ function dateClauseFor(currentDate: string): string {
  * System prompt instructing Claude to:
  * 1. Identify sector via web search
  * 2. Pick the appropriate valuation method
- * 3. Source all financial data via web search
+ * 3. Take the historical figures from the dataset, web search for what it cannot hold
  * 4. Compute bull/base/bear fair values, a 3×3 sensitivity and the dividend path
  * 5. Finish the research, then write the full Markdown report after the
  *    <!--report--> line, and emit the JSON block as the very last thing
  *
  * @param language - Report language (e.g. "English", "Italiano")
  * @param currentDate - Today's date string injected from the server (e.g. "May 7, 2026")
+ * @param grounding - The dataset context. The system prompt carries only the rules for
+ *   using it (DATASET_RULES_BLOCK); the figures go in the user prompt.
  */
 export function buildDeepValueSystemPrompt({
   language = "English",
   currentDate = "",
   mosPercent = 0,
-  grounding,
 }: {
   language?: string;
   currentDate?: string;
   mosPercent?: number;
-  // Presence alone gates GROUNDED_RULES_BLOCK — the system prompt only needs to know
-  // Grounded mode is active, not the actual figures (those go in the user prompt via
-  // formatGroundingForPrompt). Undefined (Quick) leaves the prompt byte-identical.
-  grounding?: GroundingPromptContext;
-} = {}): string {
+  // Required, unread here: a system prompt is never built without the dataset its rules
+  // refer to.
+  grounding: GroundingPromptContext;
+}): string {
   const dateClause = dateClauseFor(currentDate);
-  const groundedRulesClause = grounding ? `\n${GROUNDED_RULES_BLOCK}\n` : "";
-  // Grounded mode rescopes Step 2 instead of leaving the Quick-mode "gather via web
-  // search" wording in place: read literally, it contradicts the Grounded rules that
-  // forbid re-searching historical data the user already provided.
-  const step2Intro = grounding
-    ? `## Step 2 — Gather financial data
-The historical financials and multiples are PROVIDED in the user message (see the Grounded mode rules after this step) — take every historical figure below from there. Use web search only for what was published after that data's coverage period, for what it does not contain (e.g. the risk-free rate, beta), and for qualitative context. Cover the last 5 years where available, minimum 3 if data is limited:`
-    : `## Step 2 — Gather financial data via web search
-Search for the most recent annual financial data (last 5 years where available, minimum 3 if data is limited):`;
+  // Step 2 is rescoped, not "gather via web search": read literally, that wording would
+  // contradict the dataset rules that forbid re-collecting the history already provided.
+  const step2Intro = `## Step 2 — Gather financial data
+The historical financials and multiples are PROVIDED in the user message (see the dataset rules after this step) — take every historical figure below from there. Use web search only for what was published after that data's coverage period, for what it does not contain (e.g. the risk-free rate, beta), and for qualitative context. Cover the last 5 years where available, minimum 3 if data is limited:`;
 
   return `You are a professional financial analyst. Your task is to perform a fully autonomous investment valuation of a stock.
 ${dateClause}
@@ -262,7 +251,8 @@ ${step2Intro}
 - Beta (or estimate from sector peers if not available)
 
 Do not fabricate numbers. If a data point is unavailable after searching, state it explicitly and use a conservative estimate with clear disclosure.
-${groundedRulesClause}
+
+${DATASET_RULES_BLOCK}
 ## Step 3 — Compute 3 scenarios (Bull / Base / Bear)
 Apply the chosen method with three scenario sets. For each scenario compute:
 - Intrinsic fair value per share
@@ -276,7 +266,7 @@ Apply the chosen method with three scenario sets. For each scenario compute:
 
 **Sensitivity (mandatory).** Choose the two levers that move your BASE value most — the valuation lever (multiple, WACC, cost of equity, cap rate) and the operating driver (EBITDA/FCF/DPS of the driver year, or terminal growth) — and recompute the base-case intrinsic value per share on a 3×3 grid (low/base/high for each lever, the base of each lever being exactly what your base case uses). The centre cell IS your base intrinsic value: if it is not, your base case is not what you say it is. Report the grid in section 6 as a Markdown table and in the JSON "sensitivity" field.
 
-**Dividend path (mandatory when the company pays a dividend).** State the latest complete fiscal year's total ordinary DPS (interim + final, specials excluded) and the company's stated payout policy, then project the annual DPS for the next three fiscal years under each scenario, consistent with that scenario's cash generation (rigor check 15: a dividend that FCF cannot cover is a risk, not a support). Report it in section 4 under "Dividend outlook" and in the JSON "dividends" field; emit "dividends": null for a non-payer.
+**Dividend path (mandatory when the company pays a dividend).** State the latest complete fiscal year's total ordinary DPS (interim + final, specials excluded) and the company's stated payout policy, then project the annual ORDINARY DPS for the next three fiscal years under each scenario, on the same basis as that latest DPS (interim + final, specials excluded), consistent with that scenario's cash generation (rigor check 15: a dividend that FCF cannot cover is a risk, not a support). Report it in section 4 under "Dividend outlook" and in the JSON "dividends" field; emit "dividends": null for a non-payer.
 
 **Units.** Every monetary figure inside the bridges (driverValue, netDebt, minorities) is on ONE scale, declared once in "units"; shares are on the same scale (millions of currency ⇔ millions of shares). Per-share values (fairValue, intrinsicPerShare, DPS) are plain currency units.
 
@@ -294,16 +284,16 @@ After section 10, as the very LAST thing you output, emit the JSON block below �
   "sector": "<sector name, max 80 characters>",
   "currency": "<ISO 4217 code, 3 letters>",
 ${UNITS_JSON_LINE}
-${scenarioJsonLine("bull", mosPercent, grounding)},
-${scenarioJsonLine("base", mosPercent, grounding)},
-${scenarioJsonLine("bear", mosPercent, grounding)},
-${assumptionsCrossCheckJson(grounding)},
+${scenarioJsonLine("bull", mosPercent)},
+${scenarioJsonLine("base", mosPercent)},
+${scenarioJsonLine("bear", mosPercent)},
+${assumptionsCrossCheckJson()},
   "sensitivity": {
     "leverA": { "name": "<the primary lever, e.g. \\"EV/EBITDA exit multiple\\" or \\"WACC\\">", "values": [<low>, <base>, <high>] },
     "leverB": { "name": "<the operating driver, e.g. \\"EBITDA 2026e\\" or \\"terminal growth\\">", "values": [<low>, <base>, <high>] },
     "intrinsicPerShare": [[<a1b1>, <a1b2>, <a1b3>], [<a2b1>, <BASE — must equal base.bridge.intrinsicPerShare>, <a2b3>], [<a3b1>, <a3b2>, <a3b3>]]
   },
-  "dividends": null | { "policy": "<one sentence>", "lastDps": <total ordinary DPS of the latest complete fiscal year>, "path": [ { "year": <next FY end year>, "bull": <DPS>, "base": <DPS>, "bear": <DPS> }, { "year": <+1> ... }, { "year": <+2> ... } ] }
+  "dividends": null | { "policy": "<one sentence>", "lastDps": <total ordinary DPS of the latest complete fiscal year>, "path": [ { "year": <next FY end year>, "bull": <DPS>, "base": <DPS>, "bear": <DPS> }, { "year": <+1> ... }, { "year": <+2> ... } ] } — every "path" DPS is the annual ORDINARY DPS, on the same basis as lastDps (interim + final, specials excluded)
 }
 \`\`\`
 
@@ -364,12 +354,13 @@ A concise synthesis: is this stock attractively valued at the current price? Sum
 Rules:
 - Write the entire report in ${language} — every word, header, and disclaimer. Use ONLY the writing system of ${language}: never emit stray characters from another script (e.g. no CJK/Chinese/Japanese/Korean characters when the language is not one of those). If a foreign-script word slips in, replace it with its ${language} equivalent.
 - Cite your sources (e.g. "According to [source]...")
-- Close section 10 with the line "⚠️ This report is for informational purposes only and does not constitute financial advice.", then emit the JSON block; nothing after its closing fence.
+- Close section 10 with this disclaimer, written in ${language}: "⚠️ This report is for informational purposes only and does not constitute financial advice.", then emit the JSON block; nothing after its closing fence.
 - Do not write anything before the \`${REPORT_START_MARKER}\` line, and nothing after the JSON block's closing fence`;
 }
 
 /**
- * Minimal user message — Claude sources all financial data autonomously via web search.
+ * User message: the ticker, the authoritative price and the dataset section (raw paste,
+ * extract, row sources, anchors, warnings).
  *
  * @param currentDate - Today's date string injected from the server (e.g. "May 7, 2026")
  */
@@ -388,20 +379,19 @@ export function buildDeepValueUserPrompt({
   language: string;
   currentDate?: string;
   mosPercent?: number;
-  // The Grounded data section (raw paste + extract + anchors + warnings), appended
-  // after the base prompt. Undefined (Quick) appends nothing — byte-identical output.
-  grounding?: GroundingPromptContext;
+  // The dataset section (raw paste + extract + row sources + anchors + warnings), appended
+  // after the base prompt.
+  grounding: GroundingPromptContext;
 }): string {
   const dateClause = currentDate ? ` Today's date: ${currentDate}.` : "";
   const mosClause = mosPercent > 0
     ? ` Apply a margin of safety of ${mosPercent}% to all fair values (buy target = intrinsic value × ${(1 - mosPercent / 100).toFixed(2)}).`
     : "";
-  const groundingSection = grounding ? `\n\n${formatGroundingForPrompt(grounding)}` : "";
-  // Same rescoping as Step 2 of the system prompt: in Grounded mode the historical data is
-  // below, so "find the financial data via web search" would contradict the Grounded rules.
-  const dataInstruction = grounding
-    ? "Take the historical financial data from the authoritative data below; use web search only for what was published after its coverage period, for what it does not contain, and for qualitative context. Then choose"
-    : "Use web search to find the financial data, choose";
+  const groundingSection = `\n\n${formatGroundingForPrompt(grounding)}`;
+  // Same rescoping as Step 2 of the system prompt: the historical data is below, so "find
+  // the financial data via web search" would contradict the dataset rules.
+  const dataInstruction =
+    "Take the historical financial data from the authoritative data below; use web search only for what was published after its coverage period, for what it does not contain, and for qualitative context. Then choose";
   return `Analyze ${ticker}. Current price: ${currentPrice.toFixed(2)} ${currency} — this is the authoritative live market price. Use it as the current price for all upside/downside math; do NOT replace it with web-searched quotes, which are frequently delayed or stale.${dateClause}${mosClause}
 
 ${dataInstruction} the appropriate valuation method, compute the fair values for bull/base/bear scenarios, and produce the report in ${language} following the required format.${groundingSection}`;
@@ -495,9 +485,8 @@ These are the defects prior reviews have repeatedly missed. Check each explicitl
 6. **Deterministic gates (when provided).** If the user message includes a "DETERMINISTIC GATES" section, it was computed in code from the report's own declared numbers, not your judgment. You must address every gate marked FAIL explicitly in your critique — you may not ignore it.
 `;
 
-// Grounded-only addition to ANALYST_STRUCTURAL_CHECKS, appended as item 7 only when the
-// lens has pasted data: the basis ratio it refers to exists only in the Grounded anchors,
-// and rendering it in Quick mode would point the lens at a section that isn't there.
+// Item 7 of ANALYST_STRUCTURAL_CHECKS, in every lens: the basis ratio it refers to is in
+// the dataset's anchors, which every lens now receives.
 const ANALYST_BASIS_CHECK = `7. **Basis reconciliation.** Before judging any multiple — the report's or your own — check it against the BASIS RECONCILIATION section of the user message. A historical or peer multiple may be applied to, or ranked against, only an EBITDA/EV on the same basis. If the report applies a provider-basis multiple to a statement-basis EBITDA (or the reverse) without the stated basis ratio, quantify the per-share effect; if the section states the basis is unverifiable, every multiple-vs-history comparison in the report is unverified — say so.
 `;
 
@@ -509,9 +498,9 @@ const ANALYST_BASIS_CHECK = `7. **Basis reconciliation.** Before judging any mul
  * @param currentDate - Today's date string injected from the server
  * @param mosPercent - Margin of safety to apply to the analyst's own fair values,
  *   so its JSON buy targets are directly comparable to the base analysis's.
- * @param blindFirst - Grounded-mode-only two-phase contract (commit blind, then reconcile
- *   against the report) — never set without `grounding`. The SAME system prompt is reused
- *   across both turns (the model sees this once; only the user message differs —
+ * @param blindFirst - The two-phase contract (commit blind, then reconcile against the
+ *   report), which the verify route always uses. The SAME system prompt is reused across
+ *   both turns (the model sees this once; only the user message differs —
  *   buildAnalystBlindUserPrompt, then buildAnalystReconcileUserPrompt), so it must
  *   describe both phases up front.
  */
@@ -520,45 +509,42 @@ export function buildAnalystSystemPrompt({
   language = "English",
   currentDate = "",
   mosPercent = 0,
-  grounding,
   blindFirst = false,
 }: {
   angle?: AnalystAngle;
   language?: string;
   currentDate?: string;
   mosPercent?: number;
-  // Presence gates GROUNDED_RULES_BLOCK, same as buildDeepValueSystemPrompt — the lens
-  // reads the actual data (extract + anchors + warnings) from the user prompt via
-  // formatGroundingForPrompt, re-read server-side through readAnalysisGrounding (the
-  // analysis's dataset, or its legacy groundingJson).
-  grounding?: GroundingPromptContext;
+  // Required, unread here, as in buildDeepValueSystemPrompt: the lens reads the data
+  // (extract + anchors + warnings) from the user prompt, re-read server-side through
+  // readAnalysisGrounding (the analysis's dataset, or its legacy groundingJson).
+  grounding: GroundingPromptContext;
   blindFirst?: boolean;
-} = {}): string {
+}): string {
   const cfg = ANGLE_CONFIG[angle];
   const dateClause = dateClauseFor(currentDate);
   const focusList = cfg.focus.map((f, i) => `${i + 1}. ${f}`).join("\n");
-  const groundedRulesClause = grounding ? `\n${GROUNDED_RULES_BLOCK}\n` : "";
-  // In Grounded mode the pasted historical figures are authoritative, so the lens checks the
-  // report against them instead of re-searching the web for data it already has (re-searching
-  // would reintroduce the unreconciled web numbers the paste exists to replace).
-  const spotCheckClause = grounding
-    ? "Use web search only for what the pasted data cannot cover: figures newer than its coverage and qualitative context. The pasted historical figures are authoritative, so spot-check the report's load-bearing figures (revenue, margins, FCF/EBITDA, net debt, shares, growth rate, discount rate, terminal assumptions) against them, not against the web."
-    : "Use web search to spot-check the most load-bearing figures (revenue, margins, FCF/EBITDA, net debt, shares, growth rate, discount rate, terminal assumptions) against primary sources.";
+  // The dataset's historical figures are authoritative, so the lens checks the report
+  // against them instead of re-searching the web for data it already has (re-searching
+  // would reintroduce the unreconciled web numbers the dataset exists to replace).
+  const spotCheckClause =
+    "Use web search only for what the dataset cannot hold: figures newer than `meta.latestPeriodLabel`, restatements and qualitative context. The dataset's historical figures are authoritative, so spot-check the report's load-bearing figures (revenue, margins, FCF/EBITDA, net debt, shares, growth rate, discount rate, terminal assumptions) against them, not against the web.";
   const jsonBlocksPhrase = blindFirst
     ? "the two valuation blocks above (one in Phase 1, one in Phase 2)"
     : "the valuation block above";
   // The closing rules describe the critique turn. A blind-first review also has a Phase 1
   // that opens with its JSON and puts the rationale AFTER the fence, so unscoped rules gave
-  // that turn two opposite orders (2026-10-29). The single-phase text stays as it was.
-  const disclaimer = `"⚠️ This review is for informational purposes only and does not constitute financial advice."`;
+  // that turn two opposite orders (2026-10-29). The disclaimer is asked in the critique's
+  // language: an English literal ended an Italian critique in English (fixed 2026-11-09).
+  const disclaimer = `this disclaimer, written in ${language}: "⚠️ This review is for informational purposes only and does not constitute financial advice."`;
   const critiqueBounds = `Do not write anything before the \`${CRITIQUE_START_MARKER}\` line, and nothing after the JSON block's closing fence.`;
   const closingRules = blindFirst
     ? `- Phase 1: the JSON block opens your answer and the rationale follows it; no critique marker, no disclaimer.
-- Phase 2: close the critique with the line ${disclaimer}, then emit the final JSON block. ${critiqueBounds}`
-    : `- Close the critique with the line ${disclaimer}, then emit the JSON block.
+- Phase 2: close the critique with ${disclaimer}, then emit the final JSON block. ${critiqueBounds}`
+    : `- Close the critique with ${disclaimer}, then emit the JSON block.
 - ${critiqueBounds}`;
-  // Skeptic-only, unconditional (a kill price doesn't require pasted data — see the
-  // hardened persona above). Feeds the kill_price gate (lib/grounding/postcheck.ts).
+  // Skeptic-only, in both phases (see the hardened persona above). Feeds the kill_price
+  // gate (lib/grounding/postcheck.ts).
   const killPriceLine =
     angle === "skeptic"
       ? `,\n  "killPrice": <the price below which your thesis is dead — REQUIRED; null ONLY if your critique explicitly states you could not construct one>,\n  "killPriceNote": "<ONLY when killPrice is null: one sentence on why no kill price can be given — omit this key otherwise>"`
@@ -576,10 +562,10 @@ This review runs across two user messages — you will not always have the repor
   "sector": "<sector name>",
   "currency": "<ISO currency code, e.g. USD, EUR>",
 ${UNITS_JSON_LINE}
-${scenarioJsonLine("bull", mosPercent, grounding)},
-${scenarioJsonLine("base", mosPercent, grounding)},
-${scenarioJsonLine("bear", mosPercent, grounding)},
-${assumptionsCrossCheckJson(grounding)}${killPriceLine}
+${scenarioJsonLine("bull", mosPercent)},
+${scenarioJsonLine("base", mosPercent)},
+${scenarioJsonLine("bear", mosPercent)},
+${assumptionsCrossCheckJson()}${killPriceLine}
 }
 \`\`\`
 
@@ -591,10 +577,10 @@ ${assumptionsCrossCheckJson(grounding)}${killPriceLine}
   "sector": "<sector name>",
   "currency": "<ISO currency code, e.g. USD, EUR>",
 ${UNITS_JSON_LINE}
-${scenarioJsonLine("bull", mosPercent, grounding)},
-${scenarioJsonLine("base", mosPercent, grounding)},
-${scenarioJsonLine("bear", mosPercent, grounding)},
-${assumptionsCrossCheckJson(grounding)}${killPriceLine},
+${scenarioJsonLine("bull", mosPercent)},
+${scenarioJsonLine("base", mosPercent)},
+${scenarioJsonLine("bear", mosPercent)},
+${assumptionsCrossCheckJson()}${killPriceLine},
   "revisions": [{ "scenario": "<bull|base|bear>", "from": <your Phase-1 fairValue for this scenario>, "to": <your Phase-2 fairValue>, "reason": "<the specific fact or arithmetic error that justifies the change — required for every entry>" }]
 }
 \`\`\`
@@ -613,10 +599,10 @@ Write the critique first, opening with the exact line \`${CRITIQUE_START_MARKER}
   "sector": "<sector name>",
   "currency": "<ISO currency code, e.g. USD, EUR>",
 ${UNITS_JSON_LINE}
-${scenarioJsonLine("bull", mosPercent, grounding)},
-${scenarioJsonLine("base", mosPercent, grounding)},
-${scenarioJsonLine("bear", mosPercent, grounding)},
-${assumptionsCrossCheckJson(grounding)}${killPriceLine}
+${scenarioJsonLine("bull", mosPercent)},
+${scenarioJsonLine("base", mosPercent)},
+${scenarioJsonLine("bear", mosPercent)},
+${assumptionsCrossCheckJson()}${killPriceLine}
 }
 \`\`\`
 
@@ -635,7 +621,9 @@ Read the report provided in the user message and critically stress-test it. ${sp
 Focus your review on:
 ${focusList}
 
-${ANALYST_STRUCTURAL_CHECKS}${grounding ? ANALYST_BASIS_CHECK : ""}${groundedRulesClause}
+${ANALYST_STRUCTURAL_CHECKS}${ANALYST_BASIS_CHECK}
+${DATASET_RULES_BLOCK}
+
 ${valuationSection}
 
 Rules:
@@ -682,10 +670,10 @@ export function buildAnalystUserPrompt({
   // JUDGMENT, and the anchors/extract already give it that; the extra line-item detail
   // would triple the input cost across 3 Opus xhigh passes for no proportional benefit
   // (deliberate, reversible choice — see doc/guide/valutazione.md § 5).
-  grounding?: GroundingPromptContext;
-  // The deterministic gates on the BASE report (formatGatesForPrompt), with or without a
-  // dataset. Absent (not empty) when unavailable, same convention as
-  // buildAnalystReconcileUserPrompt — so a call without it renders the prompt unchanged.
+  grounding: GroundingPromptContext;
+  // The deterministic gates on the BASE report (formatGatesForPrompt). Absent (not empty)
+  // when unavailable, same convention as buildAnalystReconcileUserPrompt — so a call
+  // without it renders the prompt unchanged.
   gatesText?: string;
 }): string {
   void angle; // lens is applied in the system prompt; kept in the signature for symmetry.
@@ -697,11 +685,9 @@ export function buildAnalystUserPrompt({
   const mosClause = mosPercent > 0
     ? ` Apply a margin of safety of ${mosPercent}% to your own fair values in the JSON block (buy target = intrinsic value × ${(1 - mosPercent / 100).toFixed(2)}).`
     : "";
-  const groundingSection = grounding ? `\n\n${formatGroundingForPrompt(grounding)}` : "";
+  const groundingSection = `\n\n${formatGroundingForPrompt(grounding)}`;
   const gatesSection = gatesText ? `\n\n${gatesText}` : "";
-  const spotCheckUserClause = grounding
-    ? "spot-check key figures against the pasted data, using web search only for newer or qualitative facts"
-    : "spot-check key figures via web search";
+  const spotCheckUserClause = "spot-check key figures against the dataset, using web search only for newer or qualitative facts";
   return `Independently review the following Deep Value report on ${ticker}.${dateClause}${priceClause}${mosClause} Scrutinize its numbers and assumptions through your lens, ${spotCheckUserClause}, commit to your own bull/base/bear valuation in the JSON block, and give your verdict in ${language} following the required format.
 
 --- REPORT UNDER REVIEW ---
@@ -714,9 +700,7 @@ ${reportMd}
  * buildAnalystUserPrompt carries EXCEPT the report. The absence of
  * `reportMd` in this signature IS the point: the lens commits to its own bull/base/bear
  * from the extract/anchors alone, before it has seen the report's conclusion, so its
- * Phase-1 number cannot anchor to it. Grounded-mode only — `grounding` is required here,
- * unlike the optional param on the Quick-mode builders above (blindFirst is never set
- * without grounding, so there is never a call site without it).
+ * Phase-1 number cannot anchor to it.
  */
 export function buildAnalystBlindUserPrompt({
   ticker,

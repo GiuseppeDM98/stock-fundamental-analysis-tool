@@ -47,7 +47,7 @@ function controllableStream() {
   };
 }
 
-function renderPanel(overrides: { initialResult?: string | null; currentPrice?: number | null; initialBlind?: string | null } = {}) {
+function renderPanel(overrides: { initialResult?: string | null; currentPrice?: number | null; initialBlind?: string | null; hasDataset?: boolean } = {}) {
   return render(
     <AnalystPanel
       analysisId="a1"
@@ -59,6 +59,7 @@ function renderPanel(overrides: { initialResult?: string | null; currentPrice?: 
       initialFinal={{ skeptic: { bull: 98, base: 87, bear: 76 } }}
       initialResult={{ skeptic: overrides.initialResult ?? null }}
       groundingExtract={null}
+      hasDataset={overrides.hasDataset ?? true}
       currentPrice={overrides.currentPrice ?? null}
       currency="EUR"
       priceSource="live"
@@ -120,6 +121,7 @@ describe("AnalystPanel blind card during a run", () => {
         initialFinal={{}}
         initialResult={{}}
         groundingExtract={extract}
+        hasDataset
         currentPrice={2.2}
         currency="EUR"
         priceSource="live"
@@ -297,6 +299,7 @@ describe("AnalystPanel after a reload reads the FINAL JSON from *ResultJson", ()
         initialFinal={{ skeptic: { bull: 98, base: 87, bear: 76 } }}
         initialResult={{ skeptic: JSON.stringify(FINAL) }}
         groundingExtract={null}
+        hasDataset
         currentPrice={80}
         currency="EUR"
         priceSource="analysis"
@@ -314,6 +317,24 @@ describe("AnalystPanel after a reload reads the FINAL JSON from *ResultJson", ()
     expect(screen.queryByText(translations.en.groundingGateSensitivityCenter, { exact: false })).not.toBeInTheDocument();
     expect(screen.queryByText(translations.en.groundingGateDividendCoverage, { exact: false })).not.toBeInTheDocument();
     expect(screen.getByText(translations.en.valuationChecksPriceAtAnalysis)).toBeInTheDocument();
+  });
+
+  it("without a dataset disables every Run, says why, keeps the saved lens readable and calls nothing", () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    renderPanel({ hasDataset: false });
+
+    expect(screen.getByText(translations.en.analystNeedsDataset)).toBeInTheDocument();
+    // The Skeptic has a saved critique (Re-run), the other two lenses have none (Run).
+    const buttons = [screen.getByRole("button", { name: translations.en.analystReviewRerun }), ...screen.getAllByRole("button", { name: translations.en.analystRunButton })];
+    expect(buttons).toHaveLength(3);
+    for (const button of buttons) {
+      expect(button).toBeDisabled();
+      fireEvent.click(button);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId("critique")).toHaveTextContent("old critique");
+    vi.unstubAllGlobals();
   });
 
   it("a re-run that fails before Phase 1 brings the persisted blind card and critique back", async () => {

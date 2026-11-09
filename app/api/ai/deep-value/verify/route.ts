@@ -1,7 +1,8 @@
 // POST /api/ai/deep-value/verify — one independent analyst-panel pass over a completed
 // report. A fresh-context Opus pass that reviews the saved Deep Value report through one
-// LENS (skeptic / optimist / quality — see `angle`): it stress-tests numbers/assumptions
-// and spot-checks figures via web search. It streams the plain-Markdown critique followed
+// LENS (skeptic / optimist / quality — see `angle`), blind-first on the analysis's
+// dataset: it commits to its own valuation from the data before it reads the report, then
+// stress-tests the report against it. It streams the plain-Markdown critique followed
 // by a closing JSON block with the analyst's OWN bull/base/bear valuation (same
 // MoS-adjusted unit as the base analysis, so the base + every analyst can be averaged into
 // a consensus); research chatter before the critique's start marker never reaches the
@@ -27,7 +28,6 @@ import { resolveAiSettings, aiModelIdSchema } from "@/lib/ai/ai-preferences";
 import {
   runStreamWithToolLoop,
   buildPromptCacheParam,
-  DEEP_RESEARCH_MAX_TOOL_ITERATIONS,
   GROUNDED_MAX_TOOL_ITERATIONS,
   RECONCILE_MAX_TOOL_ITERATIONS,
 } from "@/lib/ai/tool-loop";
@@ -74,10 +74,10 @@ const requestSchema = z.object({
   model: aiModelIdSchema.optional(),
   effort: z.enum(AI_EFFORT_LEVELS).optional(),
   thinking: z.boolean().optional(),
-  // When present, grounds this lens the same way as the base analysis: the route
-  // re-reads the analysis's dataset (never trusts a client-sent copy) rather
-  // than accepting the payload in the body, which would be 100-200KB per lens.
-  analysisId: z.string().min(1).optional(),
+  // The saved analysis under review, required since 2026-11-09: the route re-reads its
+  // dataset (never trusts a client-sent copy, which would also be 100-200KB per lens), its
+  // MoS and its saved result for the gates. A lens runs only on an analysis with a dataset.
+  analysisId: z.string({ error: "analysisId is required" }).min(1, "analysisId is required"),
 });
 
 type SavedBase = { reportMd: string; resultJson: string | null; priceAtAnalysis: number | null; createdAt: Date };
@@ -85,8 +85,7 @@ type SavedBase = { reportMd: string; resultJson: string | null; priceAtAnalysis:
 /**
  * The deterministic gates on the BASE report, formatted for the lens's user message
  * (ANALYST_STRUCTURAL_CHECKS #6 in lib/ai/deep-value-prompts.ts — "the lens must address
- * every FAIL explicitly"). Every analysis gets them, with or without pasted data: without
- * it the dataset gates read "no dataset". Checked against the live price when the quote
+ * every FAIL explicitly"), on the analysis's dataset. Checked against the live price when the quote
  * resolved, else against the price saved with the analysis — and then the text says so,
  * so the lens never takes it for the current price.
  * @returns undefined when there is no price at all or the base JSON has no full triple.
@@ -143,6 +142,22 @@ export async function POST(request: Request) {
       day: "numeric",
     });
 
+    // Ground this lens the same way as the base analysis, re-read from the DB (never
+    // the request body). The saved analysis's own mosPercent is authoritative, so it
+    // overrides whatever the client sent — avoids the lens computing its fair values at a
+    // stale client-side MoS.
+    const analysis = await db.analysis.findFirst({
+      where: { id: body.analysisId, userId: session.user.id },
+      select: { datasetId: true, groundingJson: true, mosPercent: true, reportMd: true, priceAtAnalysis: true, resultJson: true, createdAt: true },
+    });
+    if (!analysis) return NextResponse.json({ error: "analysis not found" }, { status: 404 });
+    // One path since 2026-11-09: a lens commits blind on the analysis's data, so an older
+    // analysis without one (a report that gathered its own figures) is re-run with a
+    // dataset instead; the UI disables Run on it.
+    if (analysis.datasetId == null && analysis.groundingJson == null) {
+      return NextResponse.json({ error: "analysis has no dataset: re-run it with one" }, { status: 400 });
+    }
+
     // Fetch the authoritative live price so the reviewer treats it as ground truth
     // instead of "correcting" it with stale web-searched quotes (a real failure mode:
     // it once flagged a correct price as overstated using month-old quotes). Best-effort
@@ -157,40 +172,30 @@ export async function POST(request: Request) {
       // Non-fatal — omit the authoritative-price clause and let the review run.
     }
 
-    // Ground this lens the same way as the base analysis, re-read from the DB (never
-    // the request body). The saved analysis's own mosPercent is authoritative
-    // once we're reading the row anyway, so it overrides whatever the client sent —
-    // avoids the lens computing its fair values at a stale client-side MoS.
-    let groundingContext: GroundingPromptContext | undefined;
-    let effectiveMosPercent = body.mosPercent;
-    // Deterministic gates on the BASE report's own declared bridge (buildBaseGatesText),
-    // for the lens's user message in every branch below. Undefined without a saved row, a
-    // full triple or any price — the prompts then simply omit the section.
-    let baseGatesText: string | undefined;
-    if (body.analysisId) {
-      const analysis = await db.analysis.findFirst({
-        where: { id: body.analysisId, userId: session.user.id },
-        select: { datasetId: true, groundingJson: true, mosPercent: true, reportMd: true, priceAtAnalysis: true, resultJson: true, createdAt: true },
-      });
-      if (analysis) {
-        effectiveMosPercent = analysis.mosPercent;
-        // A malformed or partial stored extract reads as none: the review proceeds ungrounded.
-        const grounding = await readAnalysisGrounding(session.user.id, analysis);
-        if (grounding) {
-          try {
-            // Lenses get extract + anchors + warnings, never the raw paste — see the doc
-            // comment on buildAnalystUserPrompt's `grounding` param for why.
-            groundingContext = buildGroundingPromptContext([], grounding.extract, currentPrice ?? null, currency, grounding.warnings);
-          } catch {
-            // Anchors that cannot be built on this extract: proceed ungrounded, as above.
-          }
-        }
-        baseGatesText = buildBaseGatesText(analysis, groundingContext?.extract ?? null, effectiveMosPercent, currentPrice, currency);
+    const effectiveMosPercent = analysis.mosPercent;
+    const grounding = await readAnalysisGrounding(session.user.id, analysis);
+    let groundingContext: GroundingPromptContext | null = null;
+    if (grounding) {
+      try {
+        // Lenses get extract + anchors + warnings, never the raw paste — see the doc
+        // comment on buildAnalystUserPrompt's `grounding` param for why.
+        groundingContext = buildGroundingPromptContext([], grounding.extract, currentPrice ?? null, currency, grounding.warnings);
+      } catch {
+        // Anchors that cannot be built on this extract: answered below, like a missing one.
       }
     }
+    // A dataset that is gone (deleted, another user's) or no longer parses: the lens has
+    // nothing to commit to blind, and running it without the data would bring back the
+    // ungrounded review the single path removed.
+    if (!groundingContext) {
+      return NextResponse.json({ error: "the analysis's dataset could not be read: re-run the analysis with a new one" }, { status: 400 });
+    }
+    // Deterministic gates on the BASE report's own declared bridge (buildBaseGatesText),
+    // for the lens's user message in turn 2. Undefined without a full triple or any price
+    // — the prompts then simply omit the section.
+    const baseGatesText = buildBaseGatesText(analysis, groundingContext.extract, effectiveMosPercent, currentPrice, currency);
 
-    // Grounded ⇒ blind-first: the lens commits blind, THEN sees the report.
-    // Never true without grounding — there is no independent data to commit to otherwise.
+    // A dataset ⇒ blind-first: the lens commits blind, THEN sees the report.
     const blindFirst = groundingContext != null;
 
     const angle = body.angle as (typeof ANALYST_ANGLES)[number];
@@ -228,97 +233,9 @@ export async function POST(request: Request) {
     const readable = new ReadableStream({
       async start(controller) {
         try {
-          if (!blindFirst) {
-            // Ungrounded — the single-turn review. Kept separate from the blind-first path
-            // on purpose: without pasted data a lens has nothing to commit to blind.
-            const userPrompt = buildAnalystUserPrompt({
-              angle,
-              ticker: body.ticker,
-              reportMd: body.reportMd,
-              language: body.language,
-              currentDate,
-              currentPrice,
-              currency,
-              mosPercent: effectiveMosPercent,
-              grounding: groundingContext,
-              gatesText: baseGatesText,
-            });
-
-            // Text before the critique marker is reasoning the model writes between
-            // web-search calls: dropped, as in the Deep Value route. `forwarded` mirrors
-            // what reached the client, so a cut-off review can tell whether it stopped
-            // inside the closing JSON block.
-            const gate = createStreamGate(CRITIQUE_START_MARKER);
-            let forwarded = "";
-            const forward = (text: string) => {
-              if (!text) return;
-              forwarded += text;
-              controller.enqueue(new TextEncoder().encode(text));
-            };
-
-            const { stopReason, hitIterationCap, servedBy } = await runStreamWithToolLoop(
-              client,
-              {
-                model: aiSettings.model,
-                // 16k was too low: with xhigh adaptive thinking + web search, the reasoning
-                // tokens (which count toward max_tokens) consumed almost the whole budget
-                // before the visible critique finished, so a real review truncated mid-word
-                // with stop_reason "max_tokens". Matched to the Deep Value route's 64k for a
-                // wide anti-truncation margin. Ceiling, not target — normal replies still
-                // stop at end_turn and cost the same. Streaming, so no HTTP-timeout risk.
-                max_tokens: 64000,
-                thinking: thinkingParam,
-                output_config: buildEffortConfig(aiSettings.effort),
-                system: systemPrompt,
-                tools: buildWebSearchTools(aiSettings.model),
-                messages: [{ role: "user", content: userPrompt }],
-              },
-              (text) => forward(gate.push(text)),
-              // Ungrounded here means groundingContext is always undefined — always the
-              // heavy research cap (the rescoped GROUNDED cap only applies to the
-              // blind-first branch below now).
-              DEEP_RESEARCH_MAX_TOOL_ITERATIONS
-            );
-
-            // Failsafe: if the model never wrote the critique marker (e.g. it opened
-            // straight into prose), flush the buffered text so the critique is not
-            // swallowed — and say so in the log.
-            const rest = gate.flush();
-            forward(rest);
-            if (!gate.opened()) console.warn("[verify] critique marker never arrived; flushed", rest.length);
-
-            // Surface a hard token-cap cutoff instead of truncating silently — a clean
-            // mid-word cut is indistinguishable from a normal end. Mirrors /api/ai/advisor.
-            if (stopReason === "max_tokens") {
-              // A cut inside the closing JSON block leaves its fence open: close it, so the
-              // parser returns null on the broken block and stripJsonBlock hides it.
-              if (stripTrailingOpenJsonFence(forwarded) !== forwarded) forward("\n```\n");
-              const note = isItalian
-                ? "_[Revisione troncata: raggiunto il limite di lunghezza. Riavviala per rigenerarla.]_"
-                : "_[Review truncated: length limit reached. Re-run it to regenerate.]_";
-              controller.enqueue(new TextEncoder().encode(`\n\n${note}`));
-            } else if (stopReason === "refusal") {
-              const note = isItalian
-                ? "_[Il modello ha rifiutato questa revisione. Riavviala o scegli un altro modello.]_"
-                : "_[The model declined this review. Re-run it or pick another model.]_";
-              controller.enqueue(new TextEncoder().encode(`\n\n${note}`));
-            } else if (hitIterationCap) {
-              const note = isItalian
-                ? "_[Revisione interrotta: troppi cicli di ricerca web. Riavviala per rigenerarla.]_"
-                : "_[Review stopped: too many web search rounds. Re-run it to regenerate.]_";
-              controller.enqueue(new TextEncoder().encode(`\n\n${note}`));
-            }
-            // The server-side refusal fallback (Sonnet 5.5) wrote this review with another
-            // model: name it, so the saved critique is not attributed to the requested one.
-            if (servedBy) {
-              controller.enqueue(new TextEncoder().encode(`\n\n${fallbackNote(aiSettings.model, servedBy, isItalian)}`));
-            }
-            return;
-          }
-
-          // Grounded ⇒ blind-first, two turns. Flush the phase marker
-          // immediately — also flushes response headers, which matters against a timeout
-          // on a route that can now legitimately run for minutes.
+          // Blind-first, two turns. Flush the phase marker immediately — also flushes
+          // response headers, which matters against a timeout on a route that can
+          // legitimately run for minutes.
           controller.enqueue(new TextEncoder().encode(ANALYST_PHASE_MARKERS.blind));
 
           const blindUserPrompt = buildAnalystBlindUserPrompt({
@@ -328,7 +245,7 @@ export async function POST(request: Request) {
             currentPrice,
             currency,
             mosPercent: effectiveMosPercent,
-            grounding: groundingContext!,
+            grounding: groundingContext,
           });
 
           const turn1 = await runStreamWithToolLoop(
@@ -336,8 +253,8 @@ export async function POST(request: Request) {
             {
               model: aiSettings.model,
               // Ceiling, not target: Phase 1 is a JSON block + a ≤200-word rationale, not
-              // a full critique — capped below the single-phase 64k since this turn's
-              // thinking gets replayed as input into turn 2 (it can't be stripped).
+              // a full critique — capped below turn 2's 64k since this turn's thinking
+              // gets replayed as input into turn 2 (it can't be stripped).
               max_tokens: 32000,
               thinking: thinkingParam,
               output_config: buildEffortConfig(aiSettings.effort),
@@ -404,8 +321,11 @@ export async function POST(request: Request) {
 
           controller.enqueue(new TextEncoder().encode(ANALYST_PHASE_MARKERS.reconcile));
 
-          // Same gate as the single-phase branch. Turn 2 only: the blind block and the
-          // phase markers above are written by this route, not by the model.
+          // Text before the critique marker is reasoning the model writes between
+          // web-search calls: dropped, as in the Deep Value route. Turn 2 only: the blind
+          // block and the phase markers above are written by this route, not by the model.
+          // `forwarded` mirrors what reached the client, so a cut-off review can tell
+          // whether it stopped inside the closing JSON block.
           const gate = createStreamGate(CRITIQUE_START_MARKER);
           let forwarded = "";
           const forward = (text: string) => {
@@ -418,6 +338,10 @@ export async function POST(request: Request) {
             client,
             {
               model: aiSettings.model,
+              // 16k was too low: with xhigh adaptive thinking + web search, the reasoning
+              // tokens (which count toward max_tokens) consumed almost the whole budget
+              // before the visible critique finished. Matched to the Deep Value route's
+              // 64k. Ceiling, not target — streaming, so no HTTP-timeout risk.
               max_tokens: 64000,
               thinking: thinkingParam,
               output_config: buildEffortConfig(aiSettings.effort),
