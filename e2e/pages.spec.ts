@@ -185,12 +185,38 @@ test("/analyze opens on A's recent dataset for the ticker, and Use confirms it w
   expect(forbiddenCalls).toEqual([]);
 });
 
-test("a Quick analysis (no dataset) gets the deterministic checks card, read from its leading fence", async ({ page }) => {
-  const row = await queryOne<{ groundingJson: string | null; resultJson: string | null }>(
-    "SELECT groundingJson, resultJson FROM Analysis WHERE id = ? AND resultJson IS NULL",
+test("/analyze reuses A's recent web dataset for the ticker, with each row's web source", async ({ page, forbiddenCalls }) => {
+  const row = await queryOne<{ ticker: string; origin: string }>("SELECT ticker, origin FROM FinancialDataset WHERE id = ?", [IDS.datasetOrnt]);
+  expect(row).toEqual({ ticker: TICKERS.panel, origin: "web" });
+
+  await page.goto(`/analyze?ticker=${TICKERS.panel}`);
+  const section = page.getByTestId("dataset-section");
+  await expect(section.getByText(/^Dataset from .+ \(web\)$/)).toBeVisible();
+  await expect(section.getByTestId("dataset-table-income").getByRole("row").nth(1).getByText("🌐 ir.ornitorinco.example")).toHaveCount(3);
+  await expect(section.getByRole("button", { name: "Add pasted data" })).toBeVisible();
+  expect(forbiddenCalls).toEqual([]);
+});
+
+test("/analyze without a dataset offers the web research and keeps Deep Value disabled", async ({ page, forbiddenCalls }) => {
+  expect(await count("SELECT COUNT(*) AS n FROM FinancialDataset WHERE userId = ? AND ticker = ?", [USER_A.id, TICKERS.watchOnly])).toBe(0);
+
+  await page.goto(`/analyze?ticker=${TICKERS.watchOnly}`);
+  const section = page.getByTestId("dataset-section");
+  // Never clicked: /api/ai/** is forbidden in the e2e.
+  await expect(section.getByRole("button", { name: "Search the web for the data" })).toBeVisible();
+  await expect(section.getByRole("button", { name: "Add pasted data" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Deep Analysis (AI)" })).toBeDisabled();
+  await expect(page.getByText("Prepare or research a dataset first", { exact: true })).toBeVisible();
+  expect(forbiddenCalls).toEqual([]);
+});
+
+test("an analysis saved without a dataset gets the checks card from its leading fence, and its lenses cannot run", async ({ page }) => {
+  const row = await queryOne<{ datasetId: string | null; groundingJson: string | null; resultJson: string | null }>(
+    "SELECT datasetId, groundingJson, resultJson FROM Analysis WHERE id = ? AND resultJson IS NULL",
     [IDS.analysisPanel]
   );
   expect(row, "the panel row has no resultJson column: the card is built from the fence").toBeTruthy();
+  expect(row!.datasetId).toBeNull();
   expect(row!.groundingJson).toBeNull();
 
   await page.goto(`/analyses/${IDS.analysisPanel}`);
@@ -201,6 +227,13 @@ test("a Quick analysis (no dataset) gets the deterministic checks card, read fro
   await expect(page.getByText("— bear 130.00 · price 150.00", { exact: true })).toBeVisible();
   await expect(page.getByText("— bear 130.00 · base 180.00 · bull 220.00", { exact: true })).toBeVisible();
   await expect(page.getByText("— missing 2,3,4,5,6,7,9,10", { exact: true })).toBeVisible();
+
+  // Every lens has a saved critique, still readable, and a disabled Re-run.
+  await expect(page.getByText("Re-run the analysis with a dataset to use the lenses", { exact: true })).toBeVisible();
+  const rerun = page.getByRole("button", { name: "Re-run" });
+  await expect(rerun).toHaveCount(3);
+  for (const button of await rerun.all()) await expect(button).toBeDisabled();
+  await expect(page.getByText(DECOY.skepticCritique)).toBeVisible();
 });
 
 test("when the live quote fails, the saved page reads the price at analysis everywhere and says so", async ({ page }) => {

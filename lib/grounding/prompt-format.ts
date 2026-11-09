@@ -4,6 +4,7 @@
 // any reconciliation warnings. Pure, no server-only — same category as the rest of
 // lib/grounding/*.
 import type { GroundingBlock, GroundingBlockKind, GroundedFinancials } from "@/types/grounding";
+import { sourceHost, type DataSource } from "@/types/dataset";
 import { computeMultipleStats, computeValuationGrid, computeMarketImplied, computeImpliedExpectations } from "@/lib/grounding/anchors";
 import type { MultipleStats, MultipleKey, ValuationGrid, MarketImplied, ImpliedExpectations } from "@/lib/grounding/anchors";
 import { computeBasisReconciliation, type BasisReconciliation } from "@/lib/grounding/basis";
@@ -27,6 +28,10 @@ export type GroundingPromptContext = {
   marketImplied: MarketImplied;
   impliedExpectations: ImpliedExpectations | null;
   warnings: ReconciliationWarning[];
+  // The web research's own notes (the EBITDA definition it used, the gaps it found), read
+  // from the dataset row; null for a paste, and for the lenses (readAnalysisGrounding
+  // returns the extract and the warnings only).
+  researchNotes: string | null;
 };
 
 const KIND_LABEL: Record<GroundingBlockKind, string> = {
@@ -64,12 +69,64 @@ function formatRawBlocks(blocks: GroundingBlock[]): string | null {
   return `--- AUTHORITATIVE FINANCIAL DATA (user-provided) ---\n${sections.join("\n\n")}\n--- END AUTHORITATIVE FINANCIAL DATA ---`;
 }
 
-// Where each row came from is for the UI (the source chips): the prompt gets the numbers.
+// The JSON carries the numbers; where each row came from is printed once, as plain lines,
+// in the ROW SOURCES section (formatRowSources) — a URL per field would bloat the extract.
 const PROVENANCE_KEYS = new Set(["sources", "source", "datasetMeta"]);
 
-function formatExtract(extract: GroundedFinancials): string {
+function formatExtract(extract: GroundedFinancials, researchNotes: string | null): string {
   const json = JSON.stringify(extract, (key, value) => (PROVENANCE_KEYS.has(key) ? undefined : value), 2);
-  return `--- STRUCTURED EXTRACT (machine-parsed, human-confirmed) ---\n\`\`\`json\n${json}\n\`\`\`\n--- END STRUCTURED EXTRACT ---`;
+  const notes = researchNotes ? `Research notes: ${researchNotes}\n` : "";
+  return `--- STRUCTURED EXTRACT (transcribed or researched, previewed by the user) ---\n${notes}\`\`\`json\n${json}\n\`\`\`\n--- END STRUCTURED EXTRACT ---`;
+}
+
+/** One source as the prompt names it: `paste` (no block number: the editor's order means
+ *  nothing to the model), a web source by its host, `, UNVERIFIED` when the research never
+ *  opened that URL. */
+function sourceLabel(source: DataSource, mixed = false): string {
+  const name = source.kind === "paste" ? "paste" : (sourceHost(source.url) ?? source.title ?? "web");
+  return `${name}${mixed ? " + another source" : ""}${source.verified ? "" : ", UNVERIFIED"}`;
+}
+
+/**
+ * Where each row of the extract came from, one line per row: financials per statement,
+ * historical multiples, estimates and peer multiples. A row without a source (an older
+ * analysis read from groundingJson has none at all) gets no line; with no line at all the
+ * section is omitted. The rules block (rule 11) tells the model what UNVERIFIED means.
+ */
+export function formatRowSources(extract: GroundedFinancials): string | null {
+  const lines: string[] = [];
+  for (const row of extract.financials) {
+    // `sources` is missing on an extract saved before rows carried one.
+    const sources = row.sources as typeof row.sources | undefined;
+    if (!sources) continue;
+    const parts = [
+      sources.income ? `income: ${sourceLabel(sources.income, sources.mixed.income)}` : null,
+      sources.balance ? `balance: ${sourceLabel(sources.balance, sources.mixed.balance)}` : null,
+      sources.cashFlow ? `cash flow: ${sourceLabel(sources.cashFlow, sources.mixed.cashFlow)}` : null,
+    ].filter((p): p is string => p != null);
+    if (parts.length > 0) lines.push(`FY${row.fiscalYear} — ${parts.join("; ")}`);
+  }
+  for (const row of extract.multiples) {
+    if (row.source) lines.push(`FY${row.fiscalYear} multiples: ${sourceLabel(row.source)}`);
+  }
+  for (const row of extract.estimates) {
+    if (row.source) lines.push(`FY${row.fiscalYear} estimates: ${sourceLabel(row.source)}`);
+  }
+  for (const peer of extract.peers) {
+    for (const row of peer.multiples) {
+      if (row.source) lines.push(`Peer ${peer.ticker} FY${row.fiscalYear} multiples: ${sourceLabel(row.source)}`);
+    }
+  }
+  if (lines.length === 0) return null;
+  return `--- ROW SOURCES (where each row of the extract came from) ---\n${lines.join("\n")}\n--- END ROW SOURCES ---`;
+}
+
+/** The historical-multiples rows the statistics are built on (any of the keys
+ *  computeMultipleStats reads) whose web source the research never opened. */
+function unverifiedAnchorYears(extract: GroundedFinancials): number[] {
+  return extract.multiples
+    .filter((m) => m.source != null && !m.source.verified && (m.evEbitda != null || m.evSales != null || m.pe != null || m.pb != null))
+    .map((m) => m.fiscalYear);
 }
 
 /**
@@ -259,7 +316,9 @@ function formatImpliedExpectations(exp: ImpliedExpectations | null): string | nu
 }
 
 function formatAnchors(ctx: GroundingPromptContext): string {
+  const unverifiedYears = unverifiedAnchorYears(ctx.extract);
   const parts = [
+    unverifiedYears.length > 0 ? `Anchor inputs include UNVERIFIED multiples (years: ${unverifiedYears.join(", ")})` : null,
     formatBasisReconciliation(ctx.basis),
     formatStats(ctx.stats, ctx.basis),
     formatCurrentPeerMultiples(ctx.extract),
@@ -287,26 +346,30 @@ function formatWarnings(warnings: ReconciliationWarning[]): string | null {
 }
 
 /**
- * Composes the Grounded data block injected into the Deep Value user prompt: the raw
- * paste (truth — may hold line items the extract couldn't capture, e.g. segment detail or
- * working capital for a DCF), the structured extract (the derived artifact the anchors
- * are built from), the deterministic anchors (basis reconciliation leads, then stats/
- * peers/grid/market-implied/implied-expectations), and any reconciliation warnings. On
- * conflict between the raw text and the extract, the raw text wins: a
- * conflict there means the extractor erred, which is exactly why the human preview
- * (grounding-preview.tsx) exists before this text ever reaches the model. (The actual
- * RULE text for this — "raw text wins" — lives in the static GROUNDED_RULES_BLOCK,
- * lib/ai/deep-value-prompts.ts, not here: this module only carries the per-request DATA.)
+ * Composes the dataset block injected into the Deep Value user prompt: the raw paste
+ * (truth — may hold line items the extract couldn't capture, e.g. segment detail or
+ * working capital for a DCF; absent for a web dataset and for the lenses), the structured
+ * extract (the derived artifact the anchors are built from), the source of each row, the
+ * deterministic anchors (basis reconciliation leads, then stats/peers/grid/market-implied/
+ * implied-expectations), and any reconciliation warnings. On conflict between the raw
+ * text and the extract, the raw text wins: a conflict there means the extractor erred,
+ * which is exactly why the human preview (grounding-preview.tsx) exists before this text
+ * ever reaches the model. (The RULE texts — "raw text wins", what UNVERIFIED means — live
+ * in the static DATASET_RULES_BLOCK, lib/ai/deep-value-prompts.ts, not here: this module
+ * only carries the per-request DATA.)
  *
- * The ANCHORS section is ALWAYS present (never omitted) once Grounded mode is active
- * at all — even with zero historical multiples, formatBasisReconciliation's UNVERIFIABLE
- * variant still fires: an unverifiable basis is information the model must be told
- * loudly, never left to silence.
+ * The ANCHORS section is ALWAYS present (never omitted) — even with zero historical
+ * multiples, formatBasisReconciliation's UNVERIFIABLE variant still fires: an
+ * unverifiable basis is information the model must be told loudly, never left to silence.
  */
 export function formatGroundingForPrompt(ctx: GroundingPromptContext): string {
-  const sections = [formatRawBlocks(ctx.blocks), formatExtract(ctx.extract), formatAnchors(ctx), formatWarnings(ctx.warnings)].filter(
-    (s): s is string => s != null
-  );
+  const sections = [
+    formatRawBlocks(ctx.blocks),
+    formatExtract(ctx.extract, ctx.researchNotes),
+    formatRowSources(ctx.extract),
+    formatAnchors(ctx),
+    formatWarnings(ctx.warnings),
+  ].filter((s): s is string => s != null);
   return sections.join("\n\n");
 }
 
@@ -341,13 +404,16 @@ export function formatGatesForPrompt(gates: Gate[]): string {
  * @param storedWarnings The dataset's own warnings, from its extraction run (a failed
  *   block, two blocks in conflict): no recomputation can find them again, so they join the
  *   recomputed ones, once each.
+ * @param researchNotes The web research's notes (StoredDataset.research?.notes), printed
+ *   at the head of the extract: they say, for one, whether the EBITDA is adjusted.
  */
 export function buildGroundingPromptContext(
   blocks: GroundingBlock[],
   extract: GroundedFinancials,
   currentPrice: number | null,
   currency: string,
-  storedWarnings: ReconciliationWarning[] = []
+  storedWarnings: ReconciliationWarning[] = [],
+  researchNotes: string | null = null
 ): GroundingPromptContext {
   const basis = computeBasisReconciliation(extract);
   const currencyWarning = currentPrice != null ? checkCurrencyMismatch(extract, currency) : null;
@@ -361,6 +427,7 @@ export function buildGroundingPromptContext(
     marketImplied: currentPrice != null ? computeMarketImplied(currentPrice, currency, extract, basis) : null,
     impliedExpectations: currentPrice != null ? computeImpliedExpectations(currentPrice, currency, extract, basis) : null,
     warnings: dedupeWarnings([...storedWarnings, ...recomputed]),
+    researchNotes,
   };
 }
 

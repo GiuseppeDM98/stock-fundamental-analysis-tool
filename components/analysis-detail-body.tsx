@@ -42,6 +42,8 @@ type Props = {
   mosPercent: number;
   priceAtAnalysis: number | null;
   groundingExtract: GroundedFinancials | null;
+  // Saved on a dataset (datasetId or a legacy groundingJson): the lenses run only then.
+  hasDataset: boolean;
   position: OpenPosition | null;
   initialCritiques: Partial<Record<AnalystAngle, string | null>>;
   initialBlind: Partial<Record<AnalystAngle, string | null>>;
@@ -98,6 +100,7 @@ function ValuationBody({
   mosPercent,
   priceAtAnalysis,
   groundingExtract,
+  hasDataset,
   position,
   initialCritiques,
   initialBlind,
@@ -182,6 +185,7 @@ function ValuationBody({
         initialResult={initialResult}
         initialFinal={initialFinal}
         groundingExtract={groundingExtract}
+        hasDataset={hasDataset}
         currentPrice={ready?.value ?? null}
         currency={ready?.currency ?? result.currency}
         priceSource={ready?.source ?? "live"}

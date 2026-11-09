@@ -36,6 +36,17 @@ export type RowSources = {
 
 export type StatementKind = "income" | "balance" | "cashFlow";
 
+/** The host a web source is named by (the UI chip and the prompt's row sources), without
+ *  "www."; null for a missing or malformed URL. */
+export function sourceHost(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
 /** Frozen, for comparisons and tests only: a row that needs sources gets its own object
  *  from emptyRowSources(), since the merge writes into it. */
 export const EMPTY_ROW_SOURCES: Readonly<RowSources> = Object.freeze({

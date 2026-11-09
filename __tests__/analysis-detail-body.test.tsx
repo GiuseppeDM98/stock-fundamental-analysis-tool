@@ -41,6 +41,7 @@ function renderBody(overrides: Partial<BodyProps> = {}) {
     mosPercent: 25,
     priceAtAnalysis: 142,
     groundingExtract: null,
+    hasDataset: true,
     position: { totalShares: 20, weightedAvgCost: 140, currency: "USD" },
     initialCritiques: {},
     initialBlind: {},
