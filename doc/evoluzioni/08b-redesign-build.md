@@ -33,7 +33,7 @@ Un'app coerente con la direzione approvata nella 08a su TUTTE le pagine (hub, an
 - **D-74** (owner, 2026-10-19, dal tagliando): a serie implementata ogni modello Claude dell'app è della serie 5.5, che sia Opus, Sonnet o Haiku; la migrazione sta in questa spec, l'ultima della serie, non in una spec nuova. D-9 resta: Deep Value e lenti partono al più alto fra il default globale e `xhigh`, ora su Opus 5.5.
 - Adottata, ribaltabile (D-74): Haiku 5.5 entra nel catalogo come scelta dell'utente, senza diventare il fallback di nessuna route; l'estrazione Grounded resta su Sonnet 5.5 `medium` (`EXTRACT_AI_SETTINGS` in `app/api/ai/grounding/extract/route.ts`, `doc/guide/valutazione.md` § 6.2), e lo stadio di ricerca su Sonnet 5.5 `high` su Anthropic (`RESEARCH_AI_SETTINGS` in `lib/ai/ai-preferences.ts`), qualunque default Claude scelga l'utente.
 - Adottata, ribaltabile (D-74): nessun DDL. Il default di schema `claude-opus-4-8` resta e si legge tramite l'alias (cambiarlo su SQLite ricostruisce `User`); il commento in `prisma/schema.prisma` lo dice, e § 8 ha il `SELECT` e l'`UPDATE` facoltativo.
-- **T-30**: stati AI di `/analyze` via visual (`/analyze` vuoto e `/register` in `PAGES`) + dettaglio + run reale.
+- **T-30**: stati AI di `/analyze` via visual (`/analyze` vuoto, in `PAGES` dal 2026-11-09, e `/register`) + dettaglio + run reale.
 - Adottata, ribaltabile: la stampa segue la decisione D-58… della 08a (light o dark) e viene rivalutata dal finish-reviewer sulle 2 pagine print del visual.
 - Adottata, ribaltabile: i colori PWA (`manifest.ts`, `icon.tsx`, `public/icons/*.svg`, `viewport.themeColor`) seguono la palette nuova; `README.md:76` aggiornata con il colore finale del marker «Sold».
 
@@ -73,7 +73,7 @@ Un'app coerente con la direzione approvata nella 08a su TUTTE le pagine (hub, an
 | component | `valuation-ruler.test.tsx` | `role="img"`, `aria-label` con verdetto e prezzo; senza prezzo → `rulerAriaNoPrice`; tabella sr-only senza antenato `role="img"`; `compact` senza tabella | togliere `role` |
 | component | `language-cookie.test.tsx` (provider vero) | `setLanguage("it")` scrive `document.cookie` con `sfa_language=it` e `documentElement.lang === "it"`; localStorage `it` + cookie assente → cookie riscritto | togliere la scrittura del cookie |
 | e2e | `pages.spec.ts` | `request.get("/login", { headers: { cookie: "sfa_language=it" } })` → HTML grezzo contiene `<html lang="it"`; senza cookie `lang="en"`; ogni pagina a 390 px: `scrollWidth <= 390`; ogni grafico e il righello hanno `role="img"` | togliere `cookies()` in layout → rosso; un `w-[500px]` → rosso |
-| visual | tutte le pagine + 2 print + `/analyze` + `/register` | baseline nuova, giro owner | — |
+| visual | tutte le pagine (con `/analyze`, dal 2026-11-09) + 2 print + `/register` | baseline nuova, giro owner | — |
 | unit | `ai-settings-alias.test.ts` (+3) | `normalizeAiModelId("claude-opus-4-8") === "claude-opus-5-5"`; `"claude-sonnet-5"` → `claude-sonnet-5-5`; `claude-haiku-5-5` identità | togliere una voce dall'alias |
 | unit | `ai-client.test.ts` (+) | Opus 5.5 con thinking off → `adaptive` a ogni effort; Haiku 5.5 off a `high` → `disabled`, a `xhigh` → `adaptive`; `usesServerSideFallback` vero per Opus 5.5 e Sonnet 5.5, falso per Haiku 5.5 | mandare `disabled` a Opus 5.5 |
 
@@ -87,7 +87,7 @@ Un'app coerente con la direzione approvata nella 08a su TUTTE le pagine (hub, an
 | D | email: `renderWatchlistDigestHtml` con i `DigestItem` del seed scritta in `.e2e/digest.html` (nessun invio) e aperta nel browser | come dichiarato |
 | E | — (nessuna autorizzazione nuova) | — |
 | Run reale (T-30) | una Deep Value sull'isolato: pannello live in streaming con il nuovo design (≈ 0,5 $) | come dichiarato |
-| Run reale (D-74) | sull'isolato, ≈ 1 $ in tutto: una Deep Value Quick su Opus 5.5 a `xhigh`; un Advisor su Sonnet 5.5; un lookup earnings su Haiku 5.5, come default globale di A impostato via `PATCH /api/settings/ai` mandando prima il VECCHIO id `claude-opus-4-8` (la riga `User` legge `claude-opus-5-5`: l'alias regge) e poi `claude-haiku-5-5`, ripristinato in G; poi lo sweep dell'effort: la stessa Deep Value a `high` e a `xhigh` su Opus 5.5, con durata, costo e verdetto nel messaggio del commit | nessun 400; `stop_reason` atteso; la ricerca web di Haiku 5.5 risponde |
+| Run reale (D-74) | sull'isolato, ≈ 1 $ in tutto: una Deep Value su un dataset seminato (il solo percorso dal 2026-11-09) su Opus 5.5 a `xhigh`; un Advisor su Sonnet 5.5; un lookup earnings su Haiku 5.5, come default globale di A impostato via `PATCH /api/settings/ai` mandando prima il VECCHIO id `claude-opus-4-8` (la riga `User` legge `claude-opus-5-5`: l'alias regge) e poi `claude-haiku-5-5`, ripristinato in G; poi lo sweep dell'effort: la stessa Deep Value a `high` e a `xhigh` su Opus 5.5, con durata, costo e verdetto nel messaggio del commit | nessun 400; `stop_reason` atteso; la ricerca web di Haiku 5.5 risponde |
 | F | giro owner su TUTTE le pagine, desktop e phone, EN e IT, più le 2 stampe e l'email renderizzata: al massimo 5 cose per pagina, dette prima | — |
 | G | ripristino | — |
 

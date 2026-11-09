@@ -85,7 +85,7 @@ describe("formatGroundingForPrompt", () => {
 
   it("states the UNVERIFIABLE basis reconciliation when kE is null", () => {
     const text = formatGroundingForPrompt(buildContext());
-    expect(text).toContain("UNVERIFIABLE: the pasted multiples table lacks EV/Revenue");
+    expect(text).toContain("UNVERIFIABLE: the dataset's multiples table lacks EV/Revenue");
   });
 
   it("states the market-implied dual reading with the CONTROL-not-input reminder, using the real computed numbers", () => {
@@ -167,6 +167,9 @@ describe("formatGroundingForPrompt — basis-verified fixture (Iren-shaped)", ()
     expect(text).toContain("kE = 0.83");
     expect(text).toContain("FORBIDDEN to apply the raw table multiple (median 7.1x)");
     expect(text).toContain("same-basis equivalent is 5.9x");
+    // The dataset may be a web research with no paste at all (wording fixed 2026-11-09).
+    expect(text).toContain("the EBITDA underlying the dataset's multiples table is 17% LOWER than the EBITDA in\nthe dataset's income statement.");
+    expect(text).not.toContain("pasted");
   });
 
   it("labels the EV/EBITDA stats with both the same-basis and provider-basis lines", () => {
@@ -204,7 +207,9 @@ describe("buildGroundingPromptContext", () => {
     expect(ctx.marketImplied).toBeNull();
     expect(ctx.warnings).toContainEqual({ code: "currency_mismatch", severity: "warn", fiscalYear: null, detail: "EUR vs USD" });
     const text = formatGroundingForPrompt(ctx);
-    expect(text).toContain("Market-implied: NOT computed — currency mismatch between the pasted statements and the quote (EUR vs USD)");
+    expect(text).toContain("Market-implied: NOT computed — currency mismatch between the dataset's statements and the quote (EUR vs USD)");
+    expect(text).toContain("Do not divide the current price by the dataset's per-share or EBITDA figures");
+    expect(text).not.toContain("pasted");
     expect(text).toContain("currency_mismatch — EUR vs USD"); // the warnings section, too
   });
 });
@@ -267,8 +272,11 @@ describe("formatGroundingForPrompt — basis confidence and EV-bridge statements
   });
 
   it("states the EV bridge is ASSUMED when kB can't be estimated", () => {
-    const text = formatGroundingForPrompt(buildContext()); // no marketCap / pe / pb anywhere
-    expect(text).toContain("EV bridge basis: ASSUMED, not verified (kB treated as 1)");
+    // No marketCap / pe / pb anywhere, and no raw blocks: a web dataset reads the same.
+    const text = formatGroundingForPrompt(buildContext({ blocks: [] }));
+    expect(text).toContain("EV bridge basis: ASSUMED, not verified (kB treated as 1) — the dataset lacks the Market Cap / Enterprise Value");
+    expect(text).not.toContain("the paste");
+    expect(text).not.toContain("pasted");
   });
 
   it("states an observed kB and that the provider-basis reads already scale the bridge by it", () => {

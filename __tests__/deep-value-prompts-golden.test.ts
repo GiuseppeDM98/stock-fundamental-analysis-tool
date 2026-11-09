@@ -65,7 +65,7 @@ describe("Deep Value report prompts on a dataset — golden", () => {
 
 describe("Analyst lens prompts on a dataset — golden", () => {
   it.each(ANALYST_ANGLES)("(3) %s system prompt, blind-first", (angle) => {
-    expect(buildAnalystSystemPrompt({ angle, language: "Italiano", currentDate: CURRENT_DATE, mosPercent: MOS, grounding: CONTEXT, blindFirst: true })).toMatchSnapshot();
+    expect(buildAnalystSystemPrompt({ angle, language: "Italiano", currentDate: CURRENT_DATE, mosPercent: MOS, grounding: CONTEXT })).toMatchSnapshot();
   });
 
   it("(4) Phase 1 user prompt (no report)", () => {

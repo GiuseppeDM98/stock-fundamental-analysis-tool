@@ -1,4 +1,4 @@
-// Pure helpers for the Grounded paste editor (components/grounding-input.tsx) — which
+// Pure helpers for the paste editor (components/grounding-input.tsx) — which
 // blocks are worth sending to the extraction route, and how to map the route's per-block
 // failure positions back onto what the user actually sees.
 import type { GroundingBlock } from "@/types/grounding";

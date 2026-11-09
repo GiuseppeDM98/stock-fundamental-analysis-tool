@@ -102,8 +102,8 @@ export async function POST(request: Request) {
     // default 10-round cap could exhaust itself mid-research on a DeepSeek run, returning
     // the last tool_use call instead of a final answer — the route then finds no ```json
     // block and 502s ("AI returned no parseable result"), reproduced in production
-    // (2026-08-24). Reuse the same higher cap as Deep Value/verify rather than inventing a
-    // separate knob for a route with much lighter research needs. On Claude the cap counts
+    // (2026-08-24). Reuse the research stage's higher cap (Deep Value's too until
+    // 2026-11-09) rather than inventing a separate knob for a route with much lighter research needs. On Claude the cap counts
     // the resumes after a `pause_turn`, one iteration each.
     const { message: response, stopReason, hitIterationCap } = await runCreateWithToolLoop(
       client,

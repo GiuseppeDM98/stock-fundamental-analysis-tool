@@ -3,6 +3,7 @@
  * words, so the right record is proven on screen) with the database rows it must reflect.
  * Read-only: nothing here mutates data, and every AI action button is left unclicked.
  */
+import type { Page } from "@playwright/test";
 import { test, expect } from "./support/test";
 import { count, queryAll, queryOne } from "./support/db";
 import { DECOY, IDS, TICKERS, USER_A } from "./support/fixtures";
@@ -129,6 +130,16 @@ test("grounded analysis detail renders the report from its stored result and the
   await expect(page.getByTestId("dataset-table-balance").getByRole("row").nth(1).getByText("—")).toHaveCount(5);
 });
 
+/** A saved analysis whose extract the page read: every lens can run, with its model selector
+ *  and no hint (only the disabled case was covered until 2026-11-09). */
+async function expectLensesRunnable(page: Page) {
+  await expect(page.getByText("Re-run the analysis with a dataset to use the lenses", { exact: true })).toHaveCount(0);
+  await expect(page.getByTitle("AI model")).toHaveCount(1);
+  const run = page.getByRole("button", { name: /^(Run|Re-run)$/ });
+  await expect(run).toHaveCount(3);
+  for (const button of await run.all()) await expect(button).toBeEnabled();
+}
+
 test("an older grounded analysis still reads its extract from groundingJson", async ({ page }) => {
   const row = await queryOne<{ datasetId: string | null; groundingJson: string | null }>(
     "SELECT datasetId, groundingJson FROM Analysis WHERE id = ?",
@@ -146,6 +157,7 @@ test("an older grounded analysis still reads its extract from groundingJson", as
   const income = page.getByTestId("dataset-table-income");
   await expect(income.getByRole("row").nth(2)).toContainText("1,000");
   await expect(income.getByRole("row").nth(1).getByText("—")).toHaveCount(5);
+  await expectLensesRunnable(page);
 });
 
 test("an analysis on a web dataset shows each row's web source by host, and the unverified one as such", async ({ page }) => {
@@ -169,6 +181,7 @@ test("an analysis on a web dataset shows each row's web source by host, and the 
   const multiples = page.getByTestId("dataset-table-multiples");
   await expect(multiples.getByRole("row").nth(1).getByText("🌐 data.example")).toHaveCount(4);
   await expect(multiples.getByRole("row").nth(1).getByText("· unverified")).toHaveCount(4);
+  await expectLensesRunnable(page);
 });
 
 test("/analyze opens on A's recent dataset for the ticker, and Use confirms it with no AI call", async ({ page, forbiddenCalls }) => {
@@ -233,6 +246,8 @@ test("an analysis saved without a dataset gets the checks card from its leading 
   const rerun = page.getByRole("button", { name: "Re-run" });
   await expect(rerun).toHaveCount(3);
   for (const button of await rerun.all()) await expect(button).toBeDisabled();
+  // Nothing can run, so there is no model to pick (2026-11-09).
+  await expect(page.getByTitle("AI model")).toHaveCount(0);
   await expect(page.getByText(DECOY.skepticCritique)).toBeVisible();
 });
 

@@ -1,5 +1,5 @@
-// Formats the Grounded Deep Value payload into the sections injected into the Deep Value
-// user prompt: the basis reconciliation, the raw paste, the structured extract, the
+// Formats the financial dataset into the sections injected into the Deep Value and lens
+// user prompts: the basis reconciliation, the raw paste, the structured extract, the
 // deterministic anchors (same-basis stats/grid/market-implied/implied-expectations), and
 // any reconciliation warnings. Pure, no server-only — same category as the rest of
 // lib/grounding/*.
@@ -29,8 +29,8 @@ export type GroundingPromptContext = {
   impliedExpectations: ImpliedExpectations | null;
   warnings: ReconciliationWarning[];
   // The web research's own notes (the EBITDA definition it used, the gaps it found), read
-  // from the dataset row; null for a paste, and for the lenses (readAnalysisGrounding
-  // returns the extract and the warnings only).
+  // from the dataset row, for the report and its lenses alike; null for a paste and for an
+  // older analysis's legacy groundingJson.
   researchNotes: string | null;
 };
 
@@ -144,13 +144,13 @@ function formatBasisReconciliation(basis: BasisReconciliation): string {
 
 /**
  * The kB half of the reconciliation, always stated: the provider's EV may carry bridge
- * items (leases, pensions, associates) our net debt + minorities don't, and when the paste
+ * items (leases, pensions, associates) our net debt + minorities don't, and when the dataset
  * can't show it either way the model must be told the bridge is ASSUMED equal, not
  * verified — silence would read as "checked and fine".
  */
 function formatEvBridgeBasis(basis: BasisReconciliation): string {
   if (basis.evBridgeConfidence === "assumed" || basis.kB == null) {
-    return `EV bridge basis: ASSUMED, not verified (kB treated as 1) — the paste lacks the Market Cap / Enterprise Value (or P/E, P/B) data needed to check that the provider's EV bridges to equity through the same items as the statement's net debt + minorities (leases, pensions and associates can differ). Any provider-basis multiple below inherits this assumption; say so if your valuation leans on it.`;
+    return `EV bridge basis: ASSUMED, not verified (kB treated as 1) — the dataset lacks the Market Cap / Enterprise Value (or P/E, P/B) data needed to check that the provider's EV bridges to equity through the same items as the statement's net debt + minorities (leases, pensions and associates can differ). Any provider-basis multiple below inherits this assumption; say so if your valuation leans on it.`;
   }
   const source = basis.evBridgeConfidence === "observed" ? "observed from reported Market Cap / Enterprise Value" : "inferred from P/E or P/B";
   if (basis.evBridgeSameBasis) {
@@ -164,7 +164,7 @@ function formatEvBridgeBasis(basis: BasisReconciliation): string {
 function formatEbitdaBasis(basis: BasisReconciliation): string {
   if (basis.kE == null) {
     return `--- BASIS RECONCILIATION (computed in code) ---
-UNVERIFIABLE: the pasted multiples table lacks EV/Revenue (and Enterprise Value), so the EBITDA
+UNVERIFIABLE: the dataset's multiples table lacks EV/Revenue (and Enterprise Value), so the EBITDA
 basis underlying those multiples cannot be recovered. The historical distribution below is
 therefore on an UNKNOWN basis relative to the income statement.
 You MUST treat any multiple-vs-EBITDA comparison as unverified, say so explicitly in the
@@ -191,8 +191,8 @@ Confidence: low (n=${basis.kEn}, spread ${(basis.kESpread ?? 0).toFixed(2)}) —
   return `--- BASIS RECONCILIATION (computed in code — NOT your judgment) ---
 The historical multiples table and the income statement are NOT on the same EBITDA basis.
 Basis ratio kE = ${basis.kE.toFixed(2)} (median over ${basis.kEn} fiscal years, spread ${(basis.kESpread ?? 0).toFixed(2)}, confidence: ${basis.confidence}).
-This means: the EBITDA underlying the pasted multiples table is ${pctMagnitude.toFixed(0)}% ${direction} than the EBITDA in
-the pasted income statement.
+This means: the EBITDA underlying the dataset's multiples table is ${pctMagnitude.toFixed(0)}% ${direction} than the EBITDA in
+the dataset's income statement.
 
 CONSEQUENCE — this is not optional:
 - The historical EV/EBITDA distribution below has ALREADY been rescaled by kE. The p25/median/p75
@@ -266,7 +266,7 @@ function formatMarketImplied(marketImplied: MarketImplied, exp: ImpliedExpectati
         }`
       : " / basis unverified — no provider-basis read available";
   // The concrete callback to rigor item 10 — the
-  // static GROUNDED_RULES_BLOCK states the RULE, this sentence carries the actual number
+  // static DATASET_RULES_BLOCK states the RULE, this sentence carries the actual number
   // so the model can't treat the anchoring instruction as abstract.
   // When the reverse-engineered read exists, point at it: the gap alone ("market 5.5x,
   // me 7.1x") invites rhetoric; asking what the price REQUIRES turns it into a claim about
@@ -288,7 +288,7 @@ function formatMarketImpliedAbsence(ctx: GroundingPromptContext): string | null 
   if (ctx.marketImplied) return null;
   const mismatch = ctx.warnings.find((w) => w.code === "currency_mismatch");
   if (!mismatch) return null;
-  return `Market-implied: NOT computed — currency mismatch between the pasted statements and the quote (${mismatch.detail}). Do not divide the current price by the pasted per-share or EBITDA figures without first converting them to the quote currency at a stated FX rate; if you cannot, say the price-implied control is unavailable.`;
+  return `Market-implied: NOT computed — currency mismatch between the dataset's statements and the quote (${mismatch.detail}). Do not divide the current price by the dataset's per-share or EBITDA figures without first converting them to the quote currency at a stated FX rate; if you cannot, say the price-implied control is unavailable.`;
 }
 
 /**
@@ -376,8 +376,8 @@ export function formatGroundingForPrompt(ctx: GroundingPromptContext): string {
 /**
  * Renders the deterministic gates already run against the BASE report's own declared
  * bridge, for injection into every analyst-lens call that sees the report (the
- * single-phase prompt, its degraded fallback, the reconcile turn of blind-first; with or
- * without a dataset since 2026-10-29), so the lens must address every failed gate. Lives
+ * reconcile turn, or the review prompt that replaces it when Phase 1 degraded; since
+ * 2026-10-29, and on a dataset only since 2026-11-09), so the lens must address every failed gate. Lives
  * here, not in GroundingPromptContext, because it needs the base report's own JSON — which
  * doesn't exist yet when buildGroundingPromptContext runs (pre-generation preview / the
  * base run itself).

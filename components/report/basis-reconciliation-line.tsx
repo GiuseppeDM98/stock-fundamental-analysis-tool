@@ -16,8 +16,8 @@ const CONFIDENCE_KEY: Record<BasisReconciliation["confidence"], keyof Translatio
 
 type Props = {
   basis: BasisReconciliation;
-  /** Pre-run only: when kE is unverifiable, tell the user which column to add to the paste.
-   *  Pointless after the run, when the paste can no longer change. */
+  /** The paste editor's preview only: when kE is unverifiable, tell the user which column to
+   *  add to the paste. Pointless after the run, and on a dataset with no paste to edit. */
   showPasteHint?: boolean;
 };
 

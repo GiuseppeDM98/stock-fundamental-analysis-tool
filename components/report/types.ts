@@ -38,8 +38,7 @@ export type Scenario = {
 };
 
 /** The model's own valuation-lever inputs — feeds the roic_vs_wacc gate. Optional/nullable
- *  throughout: unvalidated LLM output, absent on Quick-mode reports that predate this
- *  field. Every lever is in PERCENTAGE POINTS (8.5 = 8.5%), as the prompt states: the
+ *  throughout: unvalidated LLM output, absent on reports that predate this field. Every lever is in PERCENTAGE POINTS (8.5 = 8.5%), as the prompt states: the
  *  sanitizer nulls a value outside [-50, 100], which is how a fraction (0.085) or a
  *  basis-point figure (850) shows up. */
 export type ValuationAssumptions = {
@@ -55,8 +54,8 @@ export type CrossCheck = {
   method: string; // e.g. "DDM" | "EV/RAB" | "SOTP" — different from the primary `method`
   intrinsicPerShare: number; // BASE scenario, pre-MoS
   reconciliation: string; // 1-2 sentences: why the two methods diverge
-  /** The cross-check's OWN value bridge — requested in every mode since 2026-10 (only
-   *  Grounded before), with `multiple` omitted when the cross-check method has none (e.g.
+  /** The cross-check's OWN value bridge — requested of every report since 2026-10 (only
+   *  of the ones with a dataset before), with `multiple` omitted when the cross-check method has none (e.g.
    *  DDM). Lets lib/grounding/postcheck.ts verify
    *  the cross-check's own arithmetic and same-basis-ness, the same way it does for
    *  bull/base/bear. `intrinsicPerShare` is deliberately NOT
@@ -74,7 +73,7 @@ export type SensitivityLever = { name: string; values: [number, number, number] 
  *  centre cell [1][1] must equal the BASE intrinsic value — the prompt demands it and the
  *  sensitivity_center gate (lib/grounding/postcheck.ts) checks it, plus a monotonic centre
  *  row and column.
- *  The model's own grid, with levers of its choosing — distinct from the Grounded anchors'
+ *  The model's own grid, with levers of its choosing — distinct from the dataset anchors'
  *  grid, which the code computes on historical multiples as a control. */
 export type Sensitivity = {
   leverA: SensitivityLever;

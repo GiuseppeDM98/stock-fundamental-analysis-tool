@@ -23,3 +23,16 @@ describe("i18n keys", () => {
     expect(translations.it[key]?.trim()).toBeTruthy();
   });
 });
+
+// Shown on any dataset — web, paste or merged — so they name the dataset, never a paste
+// (a web-only dataset read "not estimable from the paste" until 2026-11-09).
+const DATASET_WIDE_KEYS: (keyof Translations)[] = ["groundingKbAssumed", "groundingWedgeCaveat"];
+
+describe("i18n keys shown on every dataset", () => {
+  it.each(DATASET_WIDE_KEYS)("%s names the dataset, not a paste, in EN and IT", (key) => {
+    expect(translations.en[key]).toMatch(/dataset/);
+    expect(translations.en[key]).not.toMatch(/paste/i);
+    expect(translations.it[key]).toMatch(/dataset/);
+    expect(translations.it[key]).not.toMatch(/incoll/i);
+  });
+});

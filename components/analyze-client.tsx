@@ -61,8 +61,8 @@ export function AnalyzeClient() {
   const [errorMessage, setErrorMessage] = useState("");
   const [quote, setQuote] = useState<QuoteResponse | null>(null);
   const [mosPercent, setMosPercent] = useState(25);
-  // Lifted from DatasetSection and threaded into the Deep Value POST body below — a
-  // confirmed dataset switches that run into Grounded mode; null/unconfirmed stays Quick.
+  // Lifted from DatasetSection and threaded into the Deep Value POST body below as its
+  // datasetId: null/unconfirmed keeps Generate disabled (one path since 2026-11-09).
   const [dataset, setDataset] = useState<{ id: string; extract: GroundedFinancials } | null>(null);
   // Tracks whether client-side hydration has completed to prevent localStorage reads during SSR
   const [isHydrated, setIsHydrated] = useState(false);
@@ -111,8 +111,8 @@ export function AnalyzeClient() {
   }, [mosPercent, isHydrated]);
 
   /**
-   * Fetches the live quote for a ticker. Deep Value sources its own financials,
-   * so the quote (price + name + currency) is all this page needs.
+   * Fetches the live quote for a ticker: the price, name and currency this page shows and
+   * Deep Value reads. The financials come from the dataset (DatasetSection), never Yahoo.
    *
    * @param nextTicker - Stock ticker symbol to load
    */

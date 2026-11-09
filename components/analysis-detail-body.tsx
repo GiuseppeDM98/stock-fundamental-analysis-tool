@@ -42,8 +42,6 @@ type Props = {
   mosPercent: number;
   priceAtAnalysis: number | null;
   groundingExtract: GroundedFinancials | null;
-  // Saved on a dataset (datasetId or a legacy groundingJson): the lenses run only then.
-  hasDataset: boolean;
   position: OpenPosition | null;
   initialCritiques: Partial<Record<AnalystAngle, string | null>>;
   initialBlind: Partial<Record<AnalystAngle, string | null>>;
@@ -100,7 +98,6 @@ function ValuationBody({
   mosPercent,
   priceAtAnalysis,
   groundingExtract,
-  hasDataset,
   position,
   initialCritiques,
   initialBlind,
@@ -185,7 +182,11 @@ function ValuationBody({
         initialResult={initialResult}
         initialFinal={initialFinal}
         groundingExtract={groundingExtract}
-        hasDataset={hasDataset}
+        // A lens runs blind-first on the extract this page read, the one the verify route
+        // re-reads: with none (no dataset, or one that no longer validates) Run is disabled
+        // instead of failing with the route's 400. Until 2026-11-09 it read the columns,
+        // so an unreadable dataset left Run enabled.
+        hasDataset={groundingExtract != null}
         currentPrice={ready?.value ?? null}
         currency={ready?.currency ?? result.currency}
         priceSource={ready?.source ?? "live"}

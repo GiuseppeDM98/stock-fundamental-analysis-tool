@@ -80,7 +80,16 @@ difetti di codice scelti dall'owner — il D&A salvato col segno della pagina, g
 dataset merged, il modello di riserva non registrato, rumore floating nella riscalatura, un avviso
 ripetuto — e tre buchi di test, dodici mutanti uccisi (uno, sopravvissuto al primo giro, ha rafforzato il suo fixture); un
 punto che la spec prescriveva contro una decisione dell'owner (D-104) corretto nel codice, con D-107 e
-D-108 nel § 3.11 dell'indice; i nomi nuovi che le spec vive devono usare scritti come scelte ribaltabili).
+D-108 nel § 3.11 dell'indice; i nomi nuovi che le spec vive devono usare scritti come scelte ribaltabili)
+e quello della 05b (2026-11-09, branch `chore/retire-spec-05b`, `git log --diff-filter=D --
+doc/evoluzioni/05b-percorso-unico-dataset.md`: workflow Opus in sola lettura, 6 lettori + 3 verificatori su
+172 voci, 76 segnalate e 2 smentite; id unici per gruppo (`UI-`, `PR-`, `RT-`, `DEC-`, `DOC-`, `CON-`), così i
+verdetti si abbinano per id e non per posizione; tre difetti di codice — testi del modello e della UI che
+nominavano un paste su un dataset web, la fusione di un paste che lasciava confermato il dataset
+precedente, un secondo clic sulla conferma che salvava un secondo paste — e tre buchi di test,
+diciassette mutanti uccisi; sette punti aperti decisi dall'owner a gruppi di quattro, D-110…D-116 nel
+§ 3.13 dell'indice, fra cui un parametro rimasto solo per i test tolto con il suo ramo; il golden
+invariato; la lettura di Turso in sola `SELECT` negata nella sessione e lasciata nella riga di stato).
 Ogni riferimento nel codice a un documento ritirato si riscrive in loco perché il perché resti in piedi
 da solo, tenendo le date.
 
@@ -169,11 +178,11 @@ CANCELLI: `npm run ci:local` (= `npm run test` → `npm run typecheck` → build
 quest'ordine; il visual (`npm run e2e:visual`) non è un cancello ma va rilanciato prima/dopo se il
 ritiro tocca una pagina. Il build di verifica si fa SEMPRE sull'ambiente isolato (`.env` punta a
 Turso di produzione).
-LIMITI (misurati il 2026-10-30, al ritiro della 05a): `CLAUDE.md` 36.673 caratteri su un tetto di 40.000, nella
+LIMITI (misurati il 2026-11-09, al ritiro della 05b): `CLAUDE.md` 37.656 caratteri su un tetto di 40.000, nella
 misura della regola 3 dell'indice (caratteri Unicode senza CR, mai `wc -c`): ogni spec dichiara nel
 § 9 i caratteri aggiunti e tolti, e la voce Last Updated sostituisce la precedente — la catena
 regge solo se ogni spec rispetta il suo saldo, quindi si rimisura a ogni ritiro; `AGENTS.md` 599 righe (dalla 02 il tetto è 600 righe, poi saldo zero,
-D-22); le guide in `doc/guide/` hanno un tetto di 400 righe per file (`valutazione.md` 280, D-57: oltre, la
+D-22); le guide in `doc/guide/` hanno un tetto di 400 righe per file (`valutazione.md` 283, D-57: oltre, la
 spec che sfora spezza per tema); `DESIGN.md` 312 righe e `PRODUCT.md` 55 righe, rigenerati nella 08b
 (DESIGN.md solo dalla skill). Se sfori, NON tagliare in chiusura: dimmelo e proponi lo scorporo come
 sessione a parte.

@@ -79,8 +79,9 @@ model Analysis {
   qualityValuationMethod String?
   qualityCritiqueMd      String?
   // Blind-first commitment — the lens's OWN bull/base/bear JSON (DeepValueResult, plus
-  // killPrice for the Skeptic), committed BEFORE it ever saw the report. Null until a blind-first (Grounded) lens run
-  // completes Phase 1 successfully; never set for a Quick-mode or degraded-Phase-1 run.
+  // killPrice for the Skeptic), committed BEFORE it ever saw the report. Null until a lens run
+  // completes Phase 1 successfully; never set for a degraded-Phase-1 run, nor for a lens
+  // run without a dataset (possible until 2026-11-09).
   // Persisted ALONGSIDE the existing *FairValue* columns (which hold the FINAL,
   // post-reconciliation triple and remain what feeds the consensus/ruler/watchlist/digest,
   // so no historical row or downstream consumer changes meaning), one flat column per lens
@@ -89,8 +90,8 @@ model Analysis {
   reviewBlindJson    String?
   optimistBlindJson  String?
   qualityBlindJson   String?
-  // The financial dataset the analysis was grounded on; null for Quick-mode analyses and
-  // for those saved before the dataset table. Deleting the dataset keeps the analysis.
+  // The financial dataset the analysis was grounded on; null for analyses saved without one
+  // (before 2026-11-09) and for those saved before the dataset table. Deleting the dataset keeps the analysis.
   datasetId        String?
   dataset          FinancialDataset? @relation(fields: [datasetId], references: [id], onDelete: SetNull)
   // Legacy, read-only: analyses saved before the dataset table carry the confirmed

@@ -144,6 +144,15 @@ describe("POST /api/ai/deep-value/verify — blind-first on the analysis's datas
     expect(prompt).not.toContain("RAW PASTE");
   });
 
+  it("gives the lens the research notes of a web dataset, as the report had them", async () => {
+    const research = { model: "claude-sonnet-5-5", servedBy: null, effort: "high", searches: 4, fetches: 2, durationMs: 1000, unverifiedSources: [], notes: "EBITDA is the company's adjusted figure" };
+    datasetFindFirst.mockResolvedValue({ ...DATASET_ROW, researchJson: JSON.stringify(research) });
+    blindFirstStreams(`${BLIND}\nrationale`, ["<!--critique-->Critique\n", FINAL]);
+    await (await POST(review())).text();
+
+    expect(userPromptOf(0)).toContain("Research notes: EBITDA is the company's adjusted figure");
+  });
+
   it("runs two turns under the two-phase system prompt: blind on the data, then the report", async () => {
     blindFirstStreams(`${BLIND}\nrationale`, ["<!--critique-->Critique\n", FINAL]);
     await (await POST(review())).text();
@@ -185,6 +194,18 @@ describe("POST /api/ai/deep-value/verify — blind-first on the analysis's datas
     blindFirstStreams("prose, no fence", ["<!--critique-->Critique\n", FINAL]);
     await (await POST(review())).text();
     expect(userPromptOf(1)).toContain("--- DETERMINISTIC GATES ON THE BASE REPORT");
+  });
+
+  it("a degraded Phase 1 costs no third turn: turn 2 is the report review, under the same system prompt", async () => {
+    blindFirstStreams("prose, no fence", ["<!--critique-->Critique\n", FINAL]);
+    const body = await (await POST(review())).text();
+
+    expect(runStreamMock).toHaveBeenCalledTimes(2);
+    expect(systemPromptOf(1)).toBe(systemPromptOf(0));
+    expect(userPromptOf(1)).toContain("--- REPORT UNDER REVIEW ---");
+    expect(userPromptOf(1)).toContain("STRUCTURED EXTRACT");
+    // No blind commitment is forwarded, so no blind card and no blindJson.
+    expect(body).not.toContain("```json-blind");
   });
 
   it("keeps the degraded-Phase-1 note visible when turn 2 is cut inside its fence", async () => {

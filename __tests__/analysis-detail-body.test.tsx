@@ -15,6 +15,7 @@ vi.mock("@/components/analyst-panel", () => ({
 }));
 
 import AnalysisDetailBody from "@/components/analysis-detail-body";
+import { makeExtract, makeFinancialsRow, makeMeta } from "./grounding-test-helpers";
 
 // Round, invented figures: intrinsic 220 / 180 / 130 at MoS 25 → buy targets 165 / 135 / 97.5.
 const RESULT: DeepValueResult = {
@@ -41,7 +42,6 @@ function renderBody(overrides: Partial<BodyProps> = {}) {
     mosPercent: 25,
     priceAtAnalysis: 142,
     groundingExtract: null,
-    hasDataset: true,
     position: { totalShares: 20, weightedAvgCost: 140, currency: "USD" },
     initialCritiques: {},
     initialBlind: {},
@@ -130,5 +130,15 @@ describe("AnalysisDetailBody — one price for the whole page", () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Deterministic checks" })).not.toBeInTheDocument();
     await waitFor(() => expect(lastPanelProps()).toMatchObject({ currentPrice: null }));
+  });
+
+  it("lets the lenses run only on the extract the page read: none (an unreadable dataset included) disables them", () => {
+    stubQuote({ ok: false, status: 503 });
+    renderBody({ groundingExtract: null });
+    expect(lastPanelProps()).toMatchObject({ hasDataset: false });
+
+    const extract = makeExtract({ meta: makeMeta({ reportingCurrency: "USD" }), financials: [makeFinancialsRow({ fiscalYear: 2025 })] });
+    renderBody({ groundingExtract: extract });
+    expect(lastPanelProps()).toMatchObject({ hasDataset: true, groundingExtract: extract });
   });
 });

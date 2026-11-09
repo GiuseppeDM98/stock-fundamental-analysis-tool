@@ -18,7 +18,7 @@
  * web-search turns count toward it; the old 6000 had been sized for the Sonnet 5.5 `medium`
  * route fallback, which a valid stored default never reaches (2026-10-19). It must stay
  * under the SDK's non-streaming limit (~21.3k tokens: above it `messages.create` throws before
- * sending anything) — past that, the route has to stream like the Grounded extraction.
+ * sending anything) — past that, the route has to stream like the paste extraction.
  */
 export const EARNINGS_MAX_TOKENS = 16000;
 
