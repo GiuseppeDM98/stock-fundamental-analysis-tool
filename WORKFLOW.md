@@ -150,6 +150,10 @@ time limit; never an endless wait. The repo writes that wait **once**, in a help
 import, never again in each script. And stopping the background task kills the shell, not the tree
 beneath it (`npx → tsx → node → Chromium`): a window is closed by its root with the whole tree, then the
 count says zero.
+**Once the owner confirms an item, the agent closes its windows** (2026-11-13, «after my confirmation of a
+test the windows of that case you close them yourself»): the owner never has to close a window to move on.
+The helper closes its browser on SIGTERM, so the agent stops it by its root, checks the count at zero and
+only then opens the next item; the owner closing a window by hand still ends the helper, never an error.
 
 ### Standard phases, when they make sense
 
