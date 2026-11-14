@@ -206,6 +206,7 @@ The rules above are the standard. This section is the local translation of oblig
 
 | Purpose | Command |
 | --- | --- |
+| Collaudo count (first gate) | `node ~/.claude/processi-collaudo.mjs` — zero collaudo trees and forgotten services (the Next `dev`/`start` server), or the gates do not start (§ 2) |
 | Unit/component tests (Vitest, jsdom; `e2e/` is excluded) | `npm run test` (`npm run test:watch` to iterate) |
 | Type-check everything (app, `__tests__/`, `e2e/`, `scripts/`) | `npm run typecheck` (= `tsc --noEmit -p .`) |
 | Type-check + production build | `npm run build` (= `prisma generate && next build`) |
@@ -219,7 +220,7 @@ The rules above are the standard. This section is the local translation of oblig
 
 ### Gates — local CI (`npm run ci:local`)
 
-The gates before a session's commit, in this order, with no lint stage (`next lint` is deprecated here; the type-check is the static gate). `scripts/ci-local.sh` runs them fail-fast, and a red stops the closing ritual:
+The gates before a session's commit, in this order, with no lint stage (`next lint` is deprecated here; the type-check is the static gate). `scripts/ci-local.sh` runs them fail-fast, and a red stops the closing ritual. Before stage 1 comes the collaudo count, `node ~/.claude/processi-collaudo.mjs`: zero, or the gates do not start.
 
 1. `npm run test`
 2. `npm run typecheck`
