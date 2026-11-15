@@ -121,7 +121,9 @@ disappear. The verification is done together, in chat, one phase at a time.
    the OK and then walk the owner onto the dev server **with the fixtures still alive**: exact URLs,
    under which identity, and at most **five** things to look at — for each one, what must happen and
    what would be the bug. **The tour starts at the owner's go, not when the work is ready**
-   (2026-10-05): finish everything that needs no eyes, say it is ready, and wait. Where obligation 4
+   (2026-10-05): finish everything that needs no eyes, say it is ready, and wait. **A tour the spec
+   plans is always done, and before the commit** (2026-11-14): never offered as optional, never
+   traded for green tests, and never begun without the owner's go. Where obligation 4
    allows it, **open the page for the owner, already authenticated** — but one item per message and
    one page at a time, waiting for the outcome before opening the next; two pages together only
    when the item is a comparison (the same URL under two identities), saying which window is which.
