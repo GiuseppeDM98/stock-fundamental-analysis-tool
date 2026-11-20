@@ -5,7 +5,7 @@ argument-hint: TICKER [TICKER...] — es. "TRN.MI UCG.MI" oppure "REC.MI --solo-
 
 Genera una o più analisi Deep Value per: **$ARGUMENTS**
 
-> **Sospeso dal merge della spec 02 di `doc/evoluzioni/` fino al riallineamento dopo la 08b** (D-76, `doc/evoluzioni/00-INDICE.md § 3.5`). Se la 02 è già in `develop` (`grep -n "^| 2 " doc/evoluzioni/00-INDICE.md` ne dà lo stato), fermati e dillo all'utente: le regole qui sotto descrivono il contratto precedente e salverebbero su Turso righe nel formato superato. La 05b (ritirata il 2026-11-09) ne ha aggiornato il testo, stadio 1 compreso, ma la sua prima run reale è rinviata a quella passata (D-109): finché non gira, è un testo mai eseguito.
+> **Sospeso dal 2026-10-29 fino al riallineamento a fine serie, dopo il redesign** (decisione dell'owner del 2026-10-20; lo stato nell'ordine della serie, `doc/evoluzioni/00-INDICE.md` § 5, finché l'indice vive). Dal 2026-10-29 l'app scrive il report prima e il JSON in coda, con `resultJson`; dal 2026-11-20 la riga la scrive solo il server, a fasi: le regole qui sotto descrivono il contratto precedente e salverebbero su Turso righe nel formato superato. Fermati e dillo all'utente. Il testo è stato aggiornato il 2026-11-09 (stadio 1 compreso), ma la sua prima run reale è rinviata a quel riallineamento: finché non gira, è un testo mai eseguito.
 
 Le produci tu (non l'endpoint dell'app), ma sotto il **contratto di prompt vero dell'app**, e le salvi su Turso in modo che siano indistinguibili da una run generata dall'applicazione.
 
@@ -33,14 +33,14 @@ Prendilo con `yahoo-finance2`, la stessa fonte di `getQuote()`. È il prezzo che
 ```js
 import YahooFinance from "yahoo-finance2";
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
-const q = await yf.quote(ticker);   // NON yf.quote() sul default export: v3 richiede `new`
+const q = await yf.quote(ticker);   // NON yf.quote() sul default export: yahoo-finance2 dalla versione 3 richiede `new`
 ```
 
 ### 1b — Stadio 1: il dataset dalla ricerca web
 
 Dal 2026-11-09 ogni analisi parte da un dataset finanziario, come su `/analyze`: prima dei prompt il comando costruisce il dataset web con le **stesse funzioni e nella stessa sequenza** di `app/api/ai/research/route.ts` (leggila prima di scrivere lo script; è un `.mts` in `out/` come al passo 2):
 
-1. `researchAiSettings(userId, override)` — il provider dell'utente decide (Sonnet 5.5 `high` su Anthropic, il modello DeepSeek dell'utente su DeepSeek: chiedi prima di ogni run DeepSeek). `override` è `undefined`, salvo che l'utente nomini per questa run un modello o un effort: allora `{ model, effort, thinking }`, lo stesso oggetto che la route riceve come `aiSettings` nel body (C-10: dell'override conta solo il modello).
+1. `researchAiSettings(userId, override)` — il provider dell'utente decide (Sonnet 5.5 `high` su Anthropic, il modello DeepSeek dell'utente su DeepSeek: chiedi prima di ogni run DeepSeek). `override` è `undefined`, salvo che l'utente nomini per questa run un modello o un effort: allora `{ model, effort, thinking }`, lo stesso oggetto che la route riceve come `aiSettings` nel body (dell'override la route della ricerca legge solo il modello: `researchAiSettings`, `lib/ai/ai-preferences.ts`).
 2. `runStreamWithToolLoop(getAiClient(settings.model), { model: settings.model, max_tokens: 64000, thinking: buildThinkingParam(true, settings.model, settings.effort), output_config: buildEffortConfig(settings.effort), system: buildResearchSystemPrompt({ currentDate }), tools: buildResearchTools(settings.model), messages: [{ role: "user", content: buildResearchUserPrompt({ ticker, companyName, exchange, quoteCurrency }) }], ...buildPromptCacheParam(settings.model) }, () => {}, DEEP_RESEARCH_MAX_TOOL_ITERATIONS, { fetchBudget: RESEARCH_MAX_FETCHES })`, con `companyName`/`exchange`/`quoteCurrency` = `shortName`/`exchange`/`currency` della quote del passo 1. `messages` è un array di messaggi, non di stringhe. Senza il quinto argomento un run DeepSeek non può fare fetch (il budget vale 0).
 3. I controlli di stop della route, nello stesso ordine: cap delle iterazioni, `max_tokens`, `refusal`, `tool_use` → fermati e riporta, non salvare nulla.
 4. `lastJsonFence(result.text)` → `JSON.parse` → `preprocessResearchOutput`; `hasNoFinancialRows` **prima** di `researchOutputSchema.safeParse`. Righe finanziarie assenti o `safeParse` fallito → fermati e riporta, non salvare nulla.

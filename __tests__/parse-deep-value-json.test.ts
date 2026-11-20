@@ -105,6 +105,12 @@ describe("parseBlindJson — the persisted commitment column", () => {
     expect(parseBlindJson("42")).toBeNull();
   });
 
+  it("drops a rationale that is not a string: a number or an object never reaches the reconcile turn", () => {
+    const base = { method: "DCF", sector: "", currency: "EUR" };
+    expect(parseBlindJson(JSON.stringify({ ...base, rationale: 42 }))!).not.toHaveProperty("rationale");
+    expect(parseBlindJson(JSON.stringify({ ...base, rationale: { text: "Net debt." } }))!).not.toHaveProperty("rationale");
+  });
+
   it("caps the rationale at 2500 characters", () => {
     const long = parseBlindJson(JSON.stringify({ method: "DCF", sector: "", currency: "EUR", rationale: "x".repeat(3000) }))!;
     expect(long.rationale).toHaveLength(2500);

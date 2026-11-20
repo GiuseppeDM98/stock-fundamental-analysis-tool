@@ -32,7 +32,7 @@ legge più le colonne, con un dump FUORI dal repo prima (`~/backups/stock-analys
 la query degli otto conteggi della sua § 8 prima e dopo; la 02 (`add_analysis_result_json`, 10
 `ADD COLUMN`, non ripetibile) va applicata PRIMA del deploy e solo dopo che la 01 è stata applicata a
 Turso; la 04 (`add_financial_dataset`, che ricostruisce `Analysis`) PRIMA del deploy con dump e
-conteggi; la 05c (`add_analysis_run_status`, 3 `ADD COLUMN` su `Analysis`, default `done`) PRIMA del deploy,
+conteggi; la 05c (`add_analysis_run_status`, 4 `ADD COLUMN` su `Analysis` con `priceCurrency`, default `done`) PRIMA del deploy,
 con il controllo `SELECT runStatus, count(*) FROM Analysis GROUP BY runStatus` della sua § 8; 03, 05a,
 05b, 06, 07a, 07b, 08a, 08b non hanno DDL. La prova che il DDL è stato speso è la
 query di lettura della § 8 della spec (PRAGMA/SELECT) con l'esito atteso, eseguita da te in sola
@@ -89,7 +89,15 @@ nominavano un paste su un dataset web, la fusione di un paste che lasciava confe
 precedente, un secondo clic sulla conferma che salvava un secondo paste — e tre buchi di test,
 diciassette mutanti uccisi; sette punti aperti decisi dall'owner a gruppi di quattro, D-110…D-116 nel
 § 3.13 dell'indice, fra cui un parametro rimasto solo per i test tolto con il suo ramo; il golden
-invariato; la lettura di Turso in sola `SELECT` negata nella sessione e lasciata nella riga di stato).
+invariato; la lettura di Turso in sola `SELECT` negata nella sessione e lasciata nella riga di stato)
+e quello della 05c (2026-11-20, branch `chore/retire-spec-05c`, `git log --diff-filter=D --
+doc/evoluzioni/05c-corsa-a-fasi.md`: workflow Opus in sola lettura, 6 lettori + 3 verificatori su 225 voci,
+45 segnalate e 13 smentite; nessun difetto di comportamento, ma una mutazione dichiarata dalla spec che
+sopravviveva (ogni fixture rimetteva la riga che la mascherava) e altri tre buchi di test, sette mutanti
+uccisi; il DDL riletto su Turso in sola `SELECT`/`PRAGMA` con `@libsql/client`; `AGENTS.md`, a 601 righe,
+scorporato nel ritiro stesso per decisione dell'owner con `prompts/05_SLIM_AGENTS.md` di claude-config
+(D-122: tre guide di dominio, 499 righe); le etichette di `.claude/commands/deep-value.md` riscritte in loco
+(D-124); la prima run in produzione rinviata a fine serie, D-123).
 Ogni riferimento nel codice a un documento ritirato si riscrive in loco perché il perché resti in piedi
 da solo, tenendo le date.
 
@@ -178,11 +186,10 @@ CANCELLI: `npm run ci:local` (= `npm run test` → `npm run typecheck` → build
 quest'ordine; il visual (`npm run e2e:visual`) non è un cancello ma va rilanciato prima/dopo se il
 ritiro tocca una pagina. Il build di verifica si fa SEMPRE sull'ambiente isolato (`.env` punta a
 Turso di produzione).
-LIMITI (misurati il 2026-11-09, al ritiro della 05b): `CLAUDE.md` 37.656 caratteri su un tetto di 40.000, nella
+LIMITI (misurati il 2026-11-20, al ritiro della 05c): `CLAUDE.md` 38.494 caratteri su un tetto di 40.000, nella
 misura della regola 3 dell'indice (caratteri Unicode senza CR, mai `wc -c`): ogni spec dichiara nel
 § 9 i caratteri aggiunti e tolti, e la voce Last Updated sostituisce la precedente — la catena
-regge solo se ogni spec rispetta il suo saldo, quindi si rimisura a ogni ritiro; `AGENTS.md` 599 righe (dalla 02 il tetto è 600 righe, poi saldo zero,
-D-22); le guide in `doc/guide/` hanno un tetto di 400 righe per file (`valutazione.md` 283, D-57: oltre, la
+regge solo se ogni spec rispetta il suo saldo, quindi si rimisura a ogni ritiro; `AGENTS.md` 499 righe (dalla 02 il tetto è 600 righe, D-22; scorporato il 2026-11-20, D-122); le guide in `doc/guide/` hanno un tetto di 400 righe per file (`valutazione.md` 310, `portafoglio.md` 68, `monitor.md` 50, `yahoo.md` 30, `dipendenze.md` 31; D-57: oltre, la
 spec che sfora spezza per tema); `DESIGN.md` 312 righe e `PRODUCT.md` 55 righe, rigenerati nella 08b
 (DESIGN.md solo dalla skill). Se sfori, NON tagliare in chiusura: dimmelo e proponi lo scorporo come
 sessione a parte.

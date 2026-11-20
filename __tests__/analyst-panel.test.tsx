@@ -245,6 +245,18 @@ describe("AnalystPanel — a lens in two phases written by the server", () => {
     await waitFor(() => expect(screen.getByText("2.50")).toBeInTheDocument());
   });
 
+  it("a Phase 2 cut offers Retry phase 2 even when the row cannot be read back", async () => {
+    fetchMock
+      .mockResolvedValueOnce(sseOk([{ type: "stage", stage: "blind" }, { type: "done", blind: NEW_BLIND, degraded: false }]))
+      .mockResolvedValueOnce(sseOk([{ type: "stage", stage: "reconcile" }, { type: "text", text: "Half a critique" }]));
+    vi.mocked(fetchAnalysis).mockRejectedValue(new TypeError("Failed to fetch"));
+    renderPanel();
+    fireEvent.click(screen.getByText(en.analystReviewRerun));
+
+    expect(await screen.findByText(en.lensCut.replace("{phase}", "2"))).toBeInTheDocument();
+    expect(screen.getByText(en.lensRetryPhase2)).toBeInTheDocument();
+  });
+
   it("a re-run that fails before Phase 1 brings the persisted blind card and critique back", async () => {
     fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
     vi.mocked(fetchAnalysis).mockRejectedValue(new TypeError("Failed to fetch"));
