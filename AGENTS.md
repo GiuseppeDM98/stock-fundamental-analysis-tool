@@ -20,6 +20,9 @@ One file per domain, read before touching that domain; AGENTS.md keeps the stub,
 
 - `doc/guide/dipendenze.md` — the dependency audit: date, framework version, every open advisory with the owner's decision. Compare `npm audit` with it at session start (WORKFLOW.md rule 8); upgrades are a session of their own.
 - `doc/guide/valutazione.md` — Deep Value, analyst panel, the financial dataset (web or paste), AI providers: the output contract field by field, routes, persistence, lenses, gates, model and effort settings. The AGENTS.md stub under "AI Integration" keeps the invariants.
+- `doc/guide/portafoglio.md` — the portfolio tracker: `Position`, tax display, FX, dividends from Borsa Italiana, closing a position, WAC/DCA aggregation, the add-purchase prefill
+- `doc/guide/monitor.md` — Vercel cron jobs (route pattern, idempotency, DST-proof schedule, Hobby limits) and the watchlist digest (no AI, earnings note, portfolio-aware copy)
+- `doc/guide/yahoo.md` — the yahoo-finance2 adapter: deprecated modules, the time-series call, mixed schema, native-currency quotes
 
 ---
 
@@ -218,29 +221,12 @@ Use `ReactDOM.createPortal(modal, document.body)` for any modal. The `.card` cla
 
 ## Yahoo Finance Integration
 
-### Critical: Deprecated Modules (Nov 2024)
+- `incomeStatementHistory`, `cashflowStatementHistory` and `balanceSheetHistory` return empty entries: use `fundamentalsTimeSeries` for every income, cashflow and balance-sheet figure.
+- Yahoo returns `number | { raw: number }`: always read through `extractRawNumber()`, and null-check `yahooFinance.quote()` and `assetProfile`.
+- A quote is in the stock's native currency (`GBp` is not `GBP`): weigh it against a saved value only through `sameCurrency` / `comparablePrice`, never convert.
+- `validateResult: false` on `quoteSummary` changes the return type to `{}`: avoid it.
 
-`incomeStatementHistory`, `cashflowStatementHistory`, and **`balanceSheetHistory`** all return empty entries (only `maxAge` + `endDate`, no financial data). Use `fundamentalsTimeSeries` instead for all income, cashflow, and balance sheet data.
-
-```typescript
-yahooFinance.fundamentalsTimeSeries(ticker, { period1, period2, type: "annual", module: "all" }, { validateResult: false });
-// Income/cashflow fields: totalRevenue, EBIT (uppercase!), netIncome, freeCashFlow, date (Date object)
-// Balance sheet fields: totalAssets, currentAssets, currentLiabilities, longTermDebt,
-//   stockholdersEquity (or commonStockEquity), retainedEarnings, cashAndCashEquivalents,
-//   grossProfit, ordinarySharesNumber
-yahooFinance.quoteSummary(ticker, { modules: ["summaryDetail", "defaultKeyStatistics", "financialData", "earningsTrend", "assetProfile"] });
-```
-
-**`validateResult: false` on `quoteSummary` changes return type to `{}`** — requires `as Promise<any>` cast everywhere. Avoid adding it unless strictly necessary; the standard call without it works fine for all active modules.
-
-### Key Gotchas
-- **Mixed schema**: Yahoo returns `number | { raw: number }` — always use `extractRawNumber()`
-- **TYPE: UNKNOWN records**: Use `{ validateResult: false }` + filter by `totalRevenue != null`
-- **EBIT field name**: Uppercase `EBIT` in fundamentalsTimeSeries, fallback to `operatingIncome`
-- **TTM margin vs historical**: prefer 5yr average over TTM for cyclical companies
-- **`assetProfile` null for non-US tickers**: always guard with `assetProfile?.sector ?? null`
-- **`yahooFinance.quote()` returns undefined**: always null-check — `if (!quote) throw new Error(...)`
-- **Quote prices are in the stock's native currency**: ENI.MI price is in EUR, AAPL in USD, an LSE line often in GBp (pence). Don't assume USD, and weigh a quote against a saved value only through `sameCurrency` (`comparablePrice`, `lib/report/latest-analysis.ts`): `GBp` is not `GBP`, and there is no conversion. `Intl.NumberFormat` does read `GBp` as `GBP`, so a pence quote formatted as currency shows `£7,000.00` (2026-10-29, not fixed).
+The rest — the time-series call and its field names, the TYPE: UNKNOWN records, EBIT, TTM vs 5-year margin, the pence formatting bug — in doc/guide/yahoo.md.
 
 ---
 
@@ -272,38 +258,12 @@ Pure functions that compute derived state from props (e.g., `getExitSignal()`) s
 
 ## Vercel Cron Jobs
 
-Defined in `vercel.json` at project root. Vercel sends a **GET** request (not POST) with `Authorization: Bearer <CRON_SECRET>` injected automatically from the project's env vars.
+- Vercel cron sends a **GET** (not POST) with `Authorization: Bearer <CRON_SECRET>`; every cron route must check it and return 401 otherwise.
+- Cron handlers must be idempotent (Vercel retries): check `takenAt >= startOfDay UTC` before writing, using the UTC date, never local time.
+- Schedules are fixed UTC with no timezone support: for a fixed local time (`Europe/Rome`) add two entries on the same route and let the handler skip the non-matching hour; two firings a day are expected, not a duplicate.
+- Hobby limit: each entry may resolve to at most once per 24h (`0 * * * *` fails the deploy).
 
-```json
-{ "crons": [{ "path": "/api/cron/my-job", "schedule": "0 20 * * 1-5" }] }
-```
-
-**Route pattern:**
-```typescript
-export async function GET(request: Request) {
-  if (request.headers.get("Authorization") !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  // ... do work
-  return NextResponse.json({ ok: true });
-}
-```
-
-**Idempotency guard** (important for Vercel retries): query `takenAt >= startOfDay UTC` before writing, skip if found. Use UTC date (`new Date().toISOString().slice(0, 10)`) — not local time.
-
-**Timezone note**: schedule crons away from midnight UTC to avoid date boundary ambiguity. 20:00 UTC = after EU + US market close and well within the same calendar day for European users.
-
-**DST-proof scheduling (fixed local time, no fixed UTC offset)**: Vercel Cron schedules are fixed UTC with no timezone support, but `Europe/Rome` (and most non-UTC zones) shifts by an hour between CET/CEST twice a year — a single fixed UTC cron drifts by an hour relative to local time across that switch. Pattern: add **two** cron entries pointing at the same route, one for each UTC offset the target zone can have, then have the handler itself decide whether to actually run:
-```typescript
-function isTargetLocalHour(hour: number, timeZone: string): boolean {
-  const localHour = new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", hourCycle: "h23" }).format(new Date());
-  return localHour === String(hour);
-}
-// route: if (!isTargetLocalHour(8, "Europe/Rome")) return NextResponse.json({ ok: true, skipped: true });
-```
-Two cron entries firing the same route on the same day is expected, not a duplicate — only the one matching local time actually runs the work. See `/api/cron/watchlist-analysis` (fires at `06:00` + `07:00` UTC, Mon-Fri only, to land on 08:00 `Europe/Rome` year-round — the schedule strings are `0 6 * * 1-5` / `0 7 * * 1-5`, same `1-5` weekday restriction as `portfolio-snapshot`; no point emailing a digest on a day the market is closed).
-
-**Vercel Hobby plan cron limits (verified July 2026)**: the once-daily restriction is **per cron-job entry** (a single schedule can't resolve to more than once per 24h — `0 * * * *` fails deployment), not a cap on how many times a route gets hit. Two separate entries pointing at the same route, each firing once a day at a different time (the DST-proof pattern above), are two compliant jobs. Total entries per project are capped at 100 on every plan including Hobby (raised from 2 in Jan 2026) — this project uses 3 (`portfolio-snapshot` + 2× `watchlist-analysis`), nowhere near the limit.
+The rest — route pattern, the DST-proof handler check, the Hobby plan limits — in doc/guide/monitor.md.
 
 ---
 
@@ -321,68 +281,12 @@ Never export server-only functions from the same file as client helpers — Next
 
 ## Portfolio Tracker
 
-- `Position` model: `id, userId, ticker, isin, companyName, purchasePrice, shares, currency, purchasedAt, notes, capitalGainsTaxRate` — `isin` is optional (Borsa Italiana dividends); `capitalGainsTaxRate Float?` is an optional % (e.g. 26.0), set at position creation, used client-side to compute estimated taxes and net P&L on both unrealized **and realized** gains.
-- **Tax display rules**: taxes are computed per-position/per-lot via the shared pure helper `estimateCapitalGainsTax(pnl, taxRate)` (`lib/portfolio-math.ts`) — 0 on a loss or missing rate, else `pnl * rate/100`; never averaged, `SummaryBar` loops positions/closed lots individually (in aggregated rows, `capitalGainsTaxRate` comes from `purchases[0]`, same user = same rate across DCA). Applies equally to unrealized (open positions) and **realized** gains (`ClosedPositionsSection` per closed lot, `SummaryBar`'s "Realized P&L" cell via `hint`) — `realizedPnlNative()` itself stays pure/gross; net is always a display-time subtraction, never persisted.
-- **Tax-estimate display gates on the portfolio-level total, not a single winning row**: a winning position/lot can make `estimateCapitalGainsTax` return `> 0` while the overall unrealized (or realized) total is a net loss because other positions drag it down — showing an estimated tax next to a net loss reads as wrong. `SummaryBar` gates each "Est. tax / Net" line on `total > 0 && totalTax > 0` (`hasTaxEstimate`, `hasRealizedTaxEstimate`), never on the accumulated tax alone.
-- Types: `Position`, `CreatePositionRequest`, `AggregatedPosition`, `SnapshotPoint`, `SnapshotEntry`, `SnapshotData` — all in `types/portfolio.ts`
-- Client helpers in `lib/portfolio.ts` — same pattern as `lib/analyses.ts`; includes `fetchSnapshots()` for chart data
-- Live prices fetched client-side via `/api/quote/[ticker]` in parallel for all unique tickers
-- FX conversion via `frankfurter.app` (free, no API key): `GET https://api.frankfurter.app/latest?base=EUR&symbols=USD,GBP,...`
-  - Response: `{ rates: { USD: 1.08, GBP: 0.85 } }` — 1 EUR = X units of currency
-  - To convert amount in USD to EUR: `usdAmount / rates.USD`
-- Summary bar only renders when at least one live price + FX rate is resolved — fails silently otherwise
+- Tax is estimated per position/lot with `estimateCapitalGainsTax(pnl, taxRate)` (`lib/portfolio-math.ts`), never averaged; net is a display-time subtraction, never persisted. The "Est. tax / Net" lines show only when the portfolio-level total is a net gain (`total > 0 && totalTax > 0`), not because one row wins.
+- Dividends (`lib/dividends.ts`): read the **Pagamento** column, never Stacco; dates are DD/MM/YY; prefer Div. Ass. over Div. Cda; any failure returns `null` and must never block a snapshot.
+- `closePosition()` (`lib/positions.ts`) returns a result union, never throws; a partial sale splits the lot in one `$transaction`; realized P&L is recorded exactly once by the `realizedRecorded` flag, never by a time window (a sale can be backdated).
+- WAC/DCA is client-side `aggregateByTicker` over the flat `Position[]`; "+ Purchase" prefills identity fields only (companyName, currency, isin, capitalGainsTaxRate), never price, shares or date.
 
-### Dividend Tracking (Borsa Italiana)
-
-`lib/dividends.ts` (server-only) fetches and parses the Borsa Italiana dividend page for a given ISIN. Called during snapshot creation for positions with a non-null `isin`.
-
-**Real HTML structure** (verified 2026-05-11) — columns differ from what the site documents:
-```
-Headers: Azioni | Div. Cda | Div. Ass. | Divisa | Stacco | Pagamento | Tipo Dividendo
-                  idx=1       idx=2       idx=3    idx=4    idx=5
-```
-- Dates are in **DD/MM/YY** (2-digit year) — not DD/MM/YYYY. Use `year.slice(2)` when building the target date.
-- **Div. Ass.** (assembly-approved) is preferred over **Div. Cda** (board proposal); fall back to Div. Cda when Ass. is empty.
-- Currency is `"EURO"` not `"EUR"` — normalize via map before storing.
-- We check the **Pagamento** column (payment date), never Stacco (ex-div date).
-- Failures (network, parse error, structure change) return `null` silently — snapshot must never be blocked by a dividend check failure.
-
-### Close Position (full/partial sale) — result-union + record-exactly-once
-
-`closePosition(userId, id, req)` in `lib/positions.ts` (server-only) closes a `Position` by setting `closedAt`/`sellPrice`. It returns a discriminated union instead of throwing, so the route (`app/api/positions/[id]/route.ts`, `PATCH`) stays a thin controller that maps the result to an HTTP status:
-
-```typescript
-export type CloseResult =
-  | { ok: true; positions: NonNullable<PositionRow>[] }
-  | { ok: false; status: 404 | 400; error: string };
-```
-
-- **Full close** (no `sharesToSell`, or it covers the whole lot within `EPS = 1e-9` float tolerance): a single `update` sets `closedAt`/`sellPrice`.
-- **Partial close**: splits the lot in one `$transaction` — the open row shrinks by the sold shares, a new row is `create`d for the sold shares carrying `closedAt`/`sellPrice`. This preserves realized P&L on the sold slice while the remainder keeps being valued as an open holding (WAC recomputes automatically since aggregation is a pure re-derivation over open positions).
-- **Where it shows**: closed positions render in an archived "Closed positions" section, apart from the open list; their realized P&L (`realizedPnlNative()`, `holdingDays()`, `estimateCapitalGainsTax()` in `lib/portfolio-math.ts`, pure and shared client+server) rolls into the SummaryBar's "Realized" figure, gross with a net-of-tax `hint` when the rate is set.
-- **Record realized P&L exactly once, not via a time window**: `sellDate`/`closedAt` can be backdated (the user closing a position today for a sale that happened last week). `lib/portfolio-snapshots.ts` uses a `realizedRecorded` boolean flag set in the same transaction as the snapshot write, instead of "closed in the last N days" — a window would silently miss a backdated sale and leave the cost/value drop on the chart unexplained. Prefer this pattern anywhere a snapshot/cron job needs to account for an event exactly once regardless of when its timestamp falls.
-
-### WAC/DCA Aggregation Pattern
-
-Client-side aggregation of flat `Position[]` by ticker — no DB involvement:
-
-```typescript
-// aggregateByTicker: pure function, called on each render, no extra state
-function aggregateByTicker(positions: Position[]): AggregatedPosition[] {
-  // groups by ticker, sorts purchases oldest→newest, computes:
-  //   totalShares = Σ shares
-  //   totalCost   = Σ purchasePrice × shares
-  //   weightedAvgCost = totalCost / totalShares  (WAC)
-}
-```
-
-Key invariants:
-- `SummaryBar` receives the flat `Position[]` — math is identical (Σ cost / Σ value), no need to pass aggregated data
-- Deleting a purchase from drill-down triggers a re-render; `aggregateByTicker` re-derives WAC automatically with no extra state
-- Single-purchase tickers render identically to the old flat row (no expand toggle)
-- P&L on the aggregated row: `(currentPrice − WAC) × totalShares`
-
-**Modal-prefill pattern for "add another purchase" on an existing ticker**: `AggregatedPositionRow`'s "+ Purchase" button calls a parent handler that derives a `Partial<CreatePositionRequest>` from the aggregated row (`companyName`/`currency`/`isin`/`capitalGainsTaxRate` — taken from `sorted[0]`, same source as the aggregated display) and stores it in a `prefill` state; `AddPositionModal` spreads it (`...prefill`) into its `useState<CreatePositionRequest>` initializer. Only spread the *identity* fields — leave `purchasePrice`/`shares`/`purchasedAt`/`notes` at their normal blank/today defaults, since it's a new buy, not an edit. Because `aggregateByTicker` groups by the raw ticker string, this prefill is the main defense against a company-name/currency typo on a follow-on purchase silently splitting the aggregation for that ticker.
+The rest — the `Position` model and types, FX via frankfurter.app, the Borsa Italiana HTML structure, the `CloseResult` union, the WAC/DCA invariants and the modal-prefill pattern — in doc/guide/portafoglio.md.
 
 ---
 
@@ -430,15 +334,9 @@ App supports EN and IT via `context/language-context.tsx` + `lib/i18n/translatio
 
 ### Watchlist is cadence-agnostic — weekdays for everyone, no AI in the cron
 
-The watchlist/email digest **never runs AI** — it's a read-model over the user's latest saved Deep Value `Analysis` per ticker (`lib/watchlist-analysis.ts`, `import "server-only"`) plus a live price. The Vercel Cron (`app/api/cron/watchlist-analysis`) fires **Mon-Fri at 08:00 `Europe/Rome`** (two UTC-fixed cron entries, each restricted to `1-5`, + an in-handler local-time check — see "DST-proof scheduling" below) for all users with `watchlistEnabled`. No weekend runs — markets are closed, so a Saturday/Sunday email would just repeat Friday's numbers. There is no per-user frequency setting and no run history (the dead column and table were dropped on 2026-10-28).
+The watchlist digest never runs AI: it reads the latest saved analysis per ticker plus a live price, Mon-Fri at 08:00 `Europe/Rome`, with no per-user frequency. The portfolio-aware copy batches one position query per user and uses `aggregateOpenLots()`, deliberately not `aggregateByTicker()`.
 
-`email.ts`'s `sendWatchlistDigest()` renders a card-per-ticker ledger-themed email per `DigestItem`: price, Δ% vs. buy target, an open-position line when held, a next/last-earnings note (see below), a static "below buy target" note, a Bear/Base/Bull table split by Analysis / one row per analyst lens that ran (`Scettico`/`Rialzista`/`Qualità`, via `DigestItem.analysts`) / Consensus, buy target, and the analysis date. `watchlist-analysis.ts` computes the per-lens/consensus numbers via `grossUpToIntrinsic` + `presentAnalysts`/`meanTriple` (`lib/report/consensus.ts`) — same helpers the ruler uses, so the email and the UI never disagree on the math.
-
-**Earnings note in the digest — read-only, never triggers the AI lookup.** `runWatchlistAnalysisForUserInternal` batches one `db.earningsEstimate.findMany` per user (same N+1-avoidance shape as the position query above) and threads `nextEarningsDate`/`earningsConfidence` onto each `DigestItem` — `null` when the user never ran the on-demand AI lookup for that ticker (see "On-demand structured AI lookup" below); the cron itself never calls the model. `email.ts`'s `earningsNote()` renders one of three cases purely from that stored date compared to today: **today** ("Risultati finanziari oggi"), a **future** date ("Mancano N giorni ai prossimi risultati"), or a **past** date ("Sono passati N giorni dai risultati attesi — aggiorna la data"). The past case relies on a property of the AI contract: `POST /api/earnings` only ever persists a *future* date or `null` (see the earnings-prompt rules), so a stored date that has since slipped into the past is simply evidence the user hasn't refreshed it since — no separate "last earnings" field is needed.
-
-**Portfolio-aware digest copy — batch the position query once per user, not once per item.** `runWatchlistAnalysisForUserInternal` fetches `db.position.findMany({ where: { userId, closedAt: null }, select: { ticker, shares, purchasePrice, currency } })` **once**, before the per-watchlist-item loop, and groups the rows into a `Map<ticker, lots[]>` — the established N+1-avoidance shape already used for the `watchlistItem` fetch itself. Each ticker's lots are aggregated via `aggregateOpenLots()` (`lib/portfolio-math.ts`, pure — sums shares/cost, returns `{ totalShares, weightedAvgCost } | null`, `null` guards the zero-shares/div-by-zero case) and the result is threaded onto `DigestItem` as `holdingShares`/`holdingWeightedAvgCost`, with `holdingCurrency` (the lots' one currency, `null` when they mix). `buildCard()` in `email.ts` uses this to (a) render an "In portafoglio: N az. · PMC · P&L%" line whenever a holding exists, independent of buy/watch status, the P&L only on a price in `holdingCurrency`, and (b) swap the under-target note's copy — "valuta se incrementare la posizione" when already held vs. the generic "potenziale opportunità di acquisto" otherwise — so the email never frames topping up an existing position as a brand-new buy decision.
-
-**`aggregateOpenLots()` is deliberately NOT the same function as `aggregateByTicker()`** (the client-only WAC aggregator in `components/portfolio-list.tsx`). The client version needs the full `Position[]` shape (`companyName`/`currency`/per-purchase drill-down for the UI); the digest only needs `{ shares, purchasePrice }` (plus each lot's `currency`, read beside it) for a lean server-side query. Don't force these into one abstraction — different consumers, different shapes, and merging them would mean either the DB query selects unused columns or the pure function grows UI-only fields it doesn't need. Revisit only if a third consumer with the same *narrow* shape shows up (Rule of Three).
+The rest — digest card, earnings note, portfolio-aware copy, why two aggregators — in doc/guide/monitor.md.
 
 ### Tailwind dynamic classes require static strings for purging
 
@@ -588,7 +486,7 @@ t: (key: keyof Translations) => string;
 
 30. **Dependency security: `package.json` carries `overrides` that must be kept, and vitest 4 needs npm 11 to install.** Four transitive packages are pinned past their parent's exact pin because no parent release fixes them: `next` > `postcss` (next pins 8.4.31), `@prisma/config` > `deepmerge-ts` 8, `mysql2` (only used by Prisma's own dev tooling) and `postcss-selector-parser` 7 (now only because `@tailwindcss/typography` pins 6.0.10; report rendering through 7.1.6 was checked identical). Removing any one brings its advisories back (checked individually on 2026-10-11, when `npm audit` was at 0; the open advisories and the owner's decisions live in `doc/guide/dipendenze.md` — WORKFLOW.md rule 8). After `npm audit fix`, if `node_modules/next/node_modules/postcss` is back at 8.4.31, delete that lockfile entry and reinstall. npm 10.9.2 crashes (`Cannot read properties of null (reading 'edgesOut')`) while resolving vitest 4's peer set, even on an empty project; install with `npx -y npm@11 install`, which writes a lockfile npm 10 and Vercel read fine. After a pull that moved the lockfile, `npm ls zod` (or any upgraded package) says whether `node_modules` is stale: an old zod 3 made 19 extraction tests fail on a clean `develop` (2026-10-30); `npx -y npm@11 ci` realigns it to the lockfile, then `npx prisma generate`. zod 4 since 2026-10-28 (Zod errors are `err.issues`, not `err.errors`); an object-level `.refine` can still run after one of its fields failed, so guard lookups inside it (`app/api/settings/ai/route.ts`, covered by `__tests__/settings-ai-patch.test.ts`).
 
-31. **Testing tooling traps.** (a) `e2e/` is Playwright territory: `vitest.config.ts` excludes it, and Vitest 4 needs `oxc: { jsx: { runtime: "automatic" } }` there because `tsconfig` keeps `"jsx": "preserve"` for Next, otherwise no `.tsx` component can be loaded in a test. (b) JSX inside `vi.mock` factories works under Vitest 4 with the oxc automatic runtime (`analyst-panel`, `deep-value-panel-watchlist`, `analyses-list-positions` tests, 2026-10-29); the old createElement-only rule was a Vitest 3 limitation. A mutation proof on a CRLF file must match `\r\n`, or the replace silently misses and the test "survives" (2026-10-29). (c) The e2e webServer shares `.next` with `next dev`/`next build`; never run the suite while either runs from the same checkout. (d) `e2e/support/test.ts` fails any test that calls `/api/ai/**`, `POST /api/earnings` or `POST /api/watchlist/run`: those cost money, so AI paths are covered by unit tests with mocks, never by e2e. (e) Visual baselines are generated per session and gitignored; they hold for one UTC day because seeded dates are relative to today.
+31. **Testing tooling traps.** (a) `e2e/` is Playwright territory: `vitest.config.ts` excludes it, and Vitest 4 needs `oxc: { jsx: { runtime: "automatic" } }` there because `tsconfig` keeps `"jsx": "preserve"` for Next, otherwise no `.tsx` component can be loaded in a test. (b) JSX inside `vi.mock` factories works under Vitest 4 with the oxc automatic runtime (`analyst-panel`, `deep-value-panel-watchlist`, `analyses-list-positions` tests, 2026-10-29); the old createElement-only rule was a Vitest 3 limitation. A mutation proof on a CRLF file must match `\r\n`, or the replace silently misses and the test "survives" (2026-10-29). (c) The e2e webServer shares `.next` with `next dev`/`next build`; never run the suite while either runs from the same checkout. (d) `e2e/support/test.ts` fails any test that calls `/api/ai/**`, `POST /api/earnings` or `POST /api/watchlist/run`: those cost money, so AI paths are covered by unit tests with mocks, never by e2e. (e) Visual baselines are generated per session and gitignored; they hold for one UTC day because seeded dates are relative to today. (f) A fixture that reaches the expected outcome by a second path masks the mutation of the first: a lens test whose refetched row carried the commitment resumed at Phase 2 even with `resumeFrom = from`, so the declared mutation survived; pin each path with a case where the other is closed (2026-11-20, `__tests__/use-lens-run.test.tsx`, the reconcile whose row cannot be read).
 
 32. **Tailwind 4 setup and its traps.** `app/globals.css` uses `@import "tailwindcss" source(none)` plus explicit `@source` for `app/`, `components/`, `lib/` (automatic detection would also scan the Markdown docs and emit CSS for class names mentioned there); tokens (`bg`/`card`/`accent`/`muted`/`success`/`warning`/`danger`) live in `@theme inline` mapped to `var(--…)`; `tailwind.config.ts` survives only for the typography `prose-report` variant, loaded with `@config`. The v4 defaults that changed the look are pinned back: Tailwind 3's hex palette (`app/tailwind-v3-palette.css`; v4's OKLCH is more saturated on P3 screens), the v3 line-heights in `@theme` (a `text-[10px]` inside `text-xs` otherwise shrinks), default border/placeholder/cursor/table-cell/date-input base styles, and `@custom-variant hover` (v4 no longer fires `hover:` on touch). `.card` lives in `@layer components`, `body` in `@layer base`, `.tap`/`.rtable` in `@layer utilities`, so they win or lose against utilities exactly as in v3. `prose-invert` now overrides `prose-report`, so the report colours also set the `--tw-prose-invert-*` variables. v4 renamed utilities (`rounded`→`rounded-sm`, `shadow-sm`→`shadow-xs`, `outline-none`→`outline-hidden`, `flex-shrink-0`→`shrink-0`, `ring`→`ring-3`): the official upgrade tool missed `rounded-tl/tr-sm` and `rounded`/`shadow` inside template literals, so grep for them after any bulk class change. Visual safety net: `npm run e2e:visual` (18 screens + 4 print variants, tolerance 0.01); regenerate baselines before a styling change, never to make a failure pass. Browser floor: Safari 16.4+, Chrome/Edge 111+, Firefox 128+.
 

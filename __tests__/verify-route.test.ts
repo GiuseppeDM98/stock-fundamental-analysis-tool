@@ -211,6 +211,18 @@ describe("POST /api/ai/deep-value/verify — phase blind", () => {
     expect(done?.type === "done" && done.blind?.base.fairValue).toBe(9);
   });
 
+  it("a new Phase 1 on a lens that already has a critique writes through saveLensBlind, with the block sanitized", async () => {
+    // The store clears the old critique in the same update; the route must never skip it.
+    analysisFindFirst.mockResolvedValue(analysisRow({ reviewMd: "An older critique" }));
+    blindTurn("```json\n" + JSON.stringify({ ...BLIND_OBJECT, killPrice: "1.5" }) + "\n```\nNet debt dominates.");
+    await events(await POST(blindPhase()));
+    expect(saveLensBlind).toHaveBeenCalledTimes(1);
+    const written = saveLensBlind.mock.calls[0][3];
+    expect(written.base.fairValue).toBe(9);
+    // A kill price the model wrote as a string is not a number the panel may plot.
+    expect(written.killPrice).toBeNull();
+  });
+
   it("a Phase 1 without a usable commitment, or a refused one, clears the blind column and says degraded", async () => {
     blindTurn("prose, no fence");
     expect((await events(await POST(blindPhase()))).at(-1)).toEqual({ type: "done", blind: null, degraded: true });
@@ -320,6 +332,17 @@ describe("POST /api/ai/deep-value/verify — phase reconcile", () => {
     expect(written.critiqueMd).toBe("Critique\n");
     expect(written.result.base.fairValue).toBe(10);
     expect(evs.at(-1)).toEqual({ type: "done" });
+  });
+
+  it("a final JSON without bear still reaches saveLensFinal, incomplete, so the store clears the lens's numbers", async () => {
+    const noBear = '```json\n{"method":"DCF","sector":"S","currency":"EUR","bull":{"fairValue":12},"base":{"fairValue":10}}\n```';
+    reconcileTurn(["<!--critique-->Critique\n", noBear]);
+    await events(await POST(reconcilePhase()));
+    expect(saveLensFinal).toHaveBeenCalledTimes(1);
+    const written = saveLensFinal.mock.calls[0][3];
+    expect(written.critiqueMd).toBe("Critique\n");
+    expect(written.result.base.fairValue).toBe(10);
+    expect(written.result.bear).toBeUndefined();
   });
 
   it("closes a JSON fence cut by max_tokens, notes it, and writes no result", async () => {

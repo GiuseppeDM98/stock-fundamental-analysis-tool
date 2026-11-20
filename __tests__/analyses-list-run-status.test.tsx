@@ -19,6 +19,12 @@ vi.mock("@/lib/earnings-client", () => ({
   fetchEarnings: vi.fn(async () => []),
   refreshEarnings: vi.fn(),
 }));
+// The real chain, spied: which saves the evolution reads is the point.
+const evolutionSpy = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/report/evolution", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/report/evolution")>();
+  return { ...real, computeEvolutionChain: (...args: Parameters<typeof real.computeEvolutionChain>) => { evolutionSpy(...args); return real.computeEvolutionChain(...args); } };
+});
 vi.mock("@/components/report/valuation-ruler", () => ({
   ValuationRuler: () => null,
   ComparisonTable: () => null,
@@ -117,6 +123,34 @@ describe("AnalysesList — rows whose run has not finished", () => {
     expect(within(line).getByText(en.analysisCut, { exact: false })).toBeInTheDocument();
     expect(within(line).getByText(en.analysisRelaunch).closest("a")).toHaveAttribute("href", "/analyze?ticker=NSCA");
     expect(within(line).queryByText(en.analysisRetry)).not.toBeInTheDocument();
+  });
+
+  it("a failed run without its dataset offers Run again towards a fresh /analyze, not Retry", async () => {
+    fetchAnalysesMock.mockResolvedValue([pending({ runStatus: "failed", datasetId: null }), done()]);
+    render(<AnalysesList />);
+
+    const line = await waitFor(() => {
+      const [only] = statusLines();
+      expect(only).toBeDefined();
+      return only;
+    });
+    expect(within(line).getByText(en.analysisRelaunch).closest("a")).toHaveAttribute("href", "/analyze?ticker=NSCA");
+    expect(within(line).queryByText(en.analysisRetry)).not.toBeInTheDocument();
+  });
+
+  it("the evolution reads the finished saves only: a failed run between them is not a step", async () => {
+    evolutionSpy.mockClear();
+    fetchAnalysesMock.mockResolvedValue([
+      done({ id: "an-new", createdAt: "2026-11-10T00:00:00.000Z" }),
+      pending({ id: "an-cut", runStatus: "failed", fairValueBull: 30, fairValueBase: 25, fairValueBear: 20, createdAt: "2026-11-05T00:00:00.000Z" }),
+      done({ id: "an-old", fairValueBase: 11 }),
+    ]);
+    render(<AnalysesList />);
+
+    await waitFor(() => expect(evolutionSpy).toHaveBeenCalled());
+    for (const [saves] of evolutionSpy.mock.calls) {
+      expect((saves as SavedAnalysis[]).map((a) => a.id)).toEqual(["an-new", "an-old"]);
+    }
   });
 
   it("a ticker with only unfinished rows shows the status line alone, no card", async () => {

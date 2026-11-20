@@ -557,7 +557,7 @@ See [LICENSE.md](LICENSE.md) for details.
 
 - 🐛 **Bug Reports**: [Open an issue](https://github.com/GiuseppeDM98/stock-fundamental-analysis-tool/issues/new?template=bug_report.md)
 - 💡 **Feature Requests**: [Open an issue](https://github.com/GiuseppeDM98/stock-fundamental-analysis-tool/issues/new?template=feature_request.md)
-- 📚 **Documentation**: See [CLAUDE.md](CLAUDE.md) (project state) and [AGENTS.md](AGENTS.md) (code patterns)
+- 📚 **Documentation**: See [CLAUDE.md](CLAUDE.md) (project state) and [AGENTS.md](AGENTS.md) (code patterns), with one guide per domain in [doc/guide/](doc/guide/) (valuation, portfolio, monitor, Yahoo, dependencies)
 - 💬 **Discussions**: [GitHub Discussions](https://github.com/GiuseppeDM98/stock-fundamental-analysis-tool/discussions)
 
 ---

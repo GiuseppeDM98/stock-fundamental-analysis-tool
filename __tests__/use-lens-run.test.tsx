@@ -77,6 +77,21 @@ describe("useLensRun", () => {
     expect(result.current.state).toEqual({ kind: "failed", error: "The AI service is busy.", retryable: true, resumeFrom: "reconcile" });
   });
 
+  it("a reconcile that fails while the row cannot be read still resumes at reconcile, never at the start", async () => {
+    // The row read is the only other path to "reconcile": with it failing, the phase in
+    // progress alone must decide (2026-11-20: every other case masked it with a stored commitment).
+    fetchMock
+      .mockResolvedValueOnce(sseOk([{ type: "stage", stage: "blind" }, { type: "done", blind: BLIND, degraded: false }]))
+      .mockResolvedValueOnce(jsonResponse(503, { error: "The AI service is busy." }));
+    vi.mocked(fetchAnalysis).mockRejectedValue(new TypeError("Failed to fetch"));
+    const { result } = renderLens();
+
+    await act(async () => {
+      await result.current.start();
+    });
+    expect(result.current.state).toEqual({ kind: "failed", error: "The AI service is busy.", retryable: true, resumeFrom: "reconcile" });
+  });
+
   it("a blind phase cut after the server wrote the commitment resumes at reconcile", async () => {
     fetchMock.mockResolvedValueOnce(sseOk([{ type: "stage", stage: "blind" }]));
     vi.mocked(fetchAnalysis).mockResolvedValue({ id: "a1", reviewMd: null, reviewBlindJson: JSON.stringify(BLIND) } as never);

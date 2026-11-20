@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Current project state and context for AI assistants. Implementation patterns & gotchas live in [AGENTS.md](AGENTS.md).
+Current project state and context for AI assistants. Implementation patterns & gotchas live in [AGENTS.md](AGENTS.md), domain detail in `doc/guide/` (listed in AGENTS.md § Guides).
 
 > **Before starting any work, read [WORKFLOW.md](WORKFLOW.md)**: the standing session rules (explicit approval before any commit, one branch and one commit per session, Italian replies, guided verification). They live in the repo, not in agent memory.
 
@@ -10,7 +10,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: November 20, 2026 — **Spec 05c (staged AI runs) implemented** on `feature/staged-ai-runs`: every AI call of a valuation is its own request, written by the server and retried from its phase; no client writes an analysis (the guide, § 2.9). Collaudo done and closed: B–E automatic, the real run (research, Deep Value, three lenses, a kill and a retry per phase) and the Phase-2 cache fix verified. Three phases are still past 300 s on Hobby (Known Issues): spec 05d (phases split by role, effort capped at `high`, the index D-117…D-119) is the next to write. Open: the deploy, the Turso migration `add_analysis_run_status` before it, Fluid compute ON, the production checks of 02…05c.
+**Last Updated**: November 20, 2026 — **Spec 05c (staged AI runs) retired** on `chore/retire-spec-05c` (in production on `2329e2d`, migration `add_analysis_run_status` applied to Turso before the deploy, Fluid compute ON): every AI call of a valuation is its own request, written by the server and retried from its phase (the guide, § 2.9). The retirement added the tests its verification found missing (a Phase-2 resume, the lens writes, the blind rationale, the evolution and «Run again» on /analyses) and moved the portfolio, cron/digest and Yahoo blocks of AGENTS.md to `doc/guide/` (601 → 499 lines); no app code changed, so the signals stand. Next: write spec 05d (phases split by role, effort capped at `high`, the index D-117…D-119). Open, by the owner's choice at the end of the series: the first production run and the production checks of 02…05c.
 
 ---
 
@@ -79,7 +79,7 @@ Full detail: [doc/guide/valutazione.md](doc/guide/valutazione.md).
 - Per-row daily change (`regularMarketChange%`), capital-gains tax + net P&L on gains only. Add-position modal (portal), ISIN auto-fill for same ticker. **"+ Purchase"** button on each aggregated row pre-fills ticker/companyName/currency/isin/capitalGainsTaxRate for a follow-on buy (date/price/shares stay blank). Live prices via `/api/quote/[ticker]` (parallel at mount).
 - **Portfolio ↔ Analyses**: each row shows "N saved analyses ▼" (date, MoS%, buy target + intrinsic, link). Via `Promise.all([fetchPositions, fetchAnalyses, fetchDividendTotals])`.
 - **Exit signal**: `getExitSignal(price, quoteCurrency, analyses)` (`lib/report/latest-analysis.ts`) — `price >= intrinsicBase` of `verdictBasis()` on the latest analysis with values, on a quote in its currency only → amber `⚠ At Fair Value` pill + always-visible "Re-analyze →". **Monitor only**: both buttons → clean `/analyze?ticker=X` (no position params). Hold/exit reasoning → Advisor.
-- **Close position (full/partial sale)**: `PATCH /api/positions/[id]` → `closePosition()` (`lib/positions.ts`); a partial sale splits the lot, closed positions sit in an archived "Closed positions" section and their realized P&L rolls into the SummaryBar (AGENTS.md § Close Position).
+- **Close position (full/partial sale)**: `PATCH /api/positions/[id]` → `closePosition()` (`lib/positions.ts`); a partial sale splits the lot, closed positions sit in an archived "Closed positions" section and their realized P&L rolls into the SummaryBar (doc/guide/portafoglio.md § Close Position).
 - **Dividends Received**: `GET /api/portfolio/dividends` → `loadDividendTotals()` sums every snapshot's per-position `dividendPaidEur`, not the chart's 90-day window.
 - **P&L history chart**: Recharts line of value vs cost over time (from `PortfolioSnapshot`, placeholder <2 snapshots), with a legend. Green markers = dividend day; amber markers = capital deployed (`costEur` delta > €50); **violet `#a78bfa` "Sold" markers** = a close event, so a value/cost drop reads as a tracked sale, not an unexplained crash (registered as an intentional design-system event color in `.impeccable/config.json`). `SnapshotChartPoint = SnapshotPoint & { capitalDelta? }`.
 
@@ -100,7 +100,7 @@ Full detail: [doc/guide/valutazione.md](doc/guide/valutazione.md).
 ### Watchlist + Email Digest (`/watchlist`)
 - **Card-per-ticker** (`watchlist-client.tsx`): compact (ticker · price · verdict · mini ruler) → same **`ValuationRuler`** + **`ComparisonTable`** as `/analyses`, keyed off `latestAnalyses: Record<ticker, SavedAnalysis>`. **Buy target uses the item's own MoS%** (intrinsic reconstructed from the analysis or, once an analyst lens has run, the consensus — then re-derived with the item's MoS). "Analyze" → `/analyze?ticker=X`.
 - `WatchlistItem`: `id, userId, ticker, companyName, mosPercent, notes, addedAt` — `@@unique([userId, ticker])`. User-level `watchlistEnabled` toggle (cron skips when false). Manual trigger `POST /api/watchlist/run` (rate-limited 24h via `lastManualWatchlistRun`).
-- **Cron: weekdays for everyone, no AI** — `GET /api/cron/watchlist-analysis`, Mon-Fri at 08:00 `Europe/Rome` (two UTC entries + an in-handler hour check); reads the latest saved analysis and consensus per ticker, plus a read-only next/last-earnings note (AGENTS.md § Watchlist is cadence-agnostic, § Vercel Cron Jobs).
+- **Cron: weekdays for everyone, no AI** — `GET /api/cron/watchlist-analysis`, Mon-Fri at 08:00 `Europe/Rome` (two UTC entries + an in-handler hour check); reads the latest saved analysis and consensus per ticker, plus a read-only next/last-earnings note (doc/guide/monitor.md § Watchlist is cadence-agnostic, § Vercel Cron Jobs).
 - **Email** via Resend (`lib/email.ts`, lazily init): ledger-themed card per ticker — price, Δ% vs buy target (source-labeled "(analisi)"/"(consenso)" per `item.consensusBase !== null`), Bear/Base/Bull split into Analysis / one row per analyst lens that ran (`Scettico`/`Rialzista`/`Qualità`) / Consensus, buy target, analysis date, native currency. `DigestItem.analysts: {angle,bear,base,bull}[]` carries the per-lens intrinsic values. `adjustedBase`/`status`/`upside` (`lib/watchlist-analysis.ts`) prefer the consensus over the base analysis once a lens has run, matching the UI.
 - **Portfolio-aware digest copy**: `runWatchlistAnalysisForUserInternal` batches one `Position` query per user (`closedAt: null`) and aggregates open lots per ticker via `aggregateOpenLots()` (`lib/portfolio-math.ts`, pure — total shares + weighted-avg cost). Each `DigestItem` carries `holdingShares`/`holdingWeightedAvgCost` (both `null` when no open position). The email shows an "In portafoglio: N az. · PMC · P&L%" line whenever a holding exists — regardless of buy/watch status — and the under-target note reads "valuta se incrementare la posizione" instead of "potenziale opportunità di acquisto" when the ticker is already held, so the copy never frames topping up an existing position as a fresh buy.
 
@@ -153,7 +153,8 @@ lib/
   ai/ai-preferences.ts       # server-only: resolveAiSettings() — override > stored > fallback, effort-clamped; researchAiSettings()
   ai/tool-loop.ts            # server-only: runStreamWithToolLoop/runCreateWithToolLoop — shared client-side tool loop (DeepSeek web search + web fetch within fetchBudget)
   ai/stream-gate.ts          # createStreamGate(): forward only after the start marker
-  ai/sse.ts  sse-reader.ts   # staged-run SSE events: server channel / client reader
+  ai/sse.ts                  # server-only: the staged-run SSE channel (createSseChannel, sseResponse)
+  sse-reader.ts              # pure: forEachSseEvent, the client reader of those events
   ai/run-outcome.ts          # classifyRunEnd(): how a model turn ends a run
   analyses-store.ts          # server-only: the run's row — start/resume/finish/fail, lens blind/final writes
   report/run-status.ts       # pure: isDone/canRetry/isStale (330 s, 20 min)
@@ -256,11 +257,12 @@ Things the series deliberately left out, one line each (added by the spec that l
 - No serialization of DeepSeek's parallel web searches under the Search API's 5 requests per second: a 429 reaches the model as a tool_result and no log prints it; serialize once one is seen (spec 01, deferred again at spec 05a's retirement, 2026-10-30).
 - No incremental refresh of a web dataset (only the latest fiscal year): a new research run redoes every year (spec 05a, 2026-10-30).
 - No prompt caching of the dataset across a report and its three lenses: their system prompts differ, so the dataset would first have to lead a shared prefix (spec 05b, 2026-11-09).
+- No notification (email) when a run ends after its tab was closed: the status line on /analyses is the only signal (spec 05c, 2026-10-27).
 
 ---
 
 ## Next Priorities
-The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (twelve specs, 01…08b with 05c added 2026-10-27, one session each, in order; 01, 02 and 03 retired 2026-10-29, 04 and 05a on 2026-10-30, 05b on 2026-11-09); its index `00-INDICE.md` holds the series' state and the owner's decisions; after 08b, one `/deep-value` realignment pass (D-76).
+The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (twelve specs, 01…08b with 05c added 2026-10-27, one session each, in order; 01, 02 and 03 retired 2026-10-29, 04 and 05a on 2026-10-30, 05b on 2026-11-09, 05c on 2026-11-20; 05d to write next); its index `00-INDICE.md` holds the series' state and the owner's decisions; after 08b, one `/deep-value` realignment pass (D-76).
 1. Caching layer for `/api/quote`.
 2. Per-ticker yield-on-cost in the exit signal (needs per-position dividend exposure via snapshots).
 
