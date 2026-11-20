@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { translations } from "@/lib/i18n/translations";
-import { ANALYST_PHASE_MARKERS, CRITIQUE_START_MARKER, sanitizeDeepValueResult } from "@/lib/report/parse-deep-value-json";
+import type { AiRunEvent } from "@/types/ai-run";
 
 vi.mock("@/lib/ai-settings-client", () => ({
   fetchAiSettings: vi.fn(() => new Promise(() => {})),
 }));
 vi.mock("@/lib/analyses", () => ({
-  updateAnalystOpinion: vi.fn(async () => undefined),
+  fetchAnalysis: vi.fn(),
 }));
 vi.mock("@/components/ai-settings-control", () => ({
   AiSettingsControl: () => "AI model selector",
@@ -17,8 +17,11 @@ vi.mock("@/components/report/report-body", () => ({
 }));
 
 import AnalystPanel from "@/components/analyst-panel";
-import { updateAnalystOpinion } from "@/lib/analyses";
+import { fetchAnalysis } from "@/lib/analyses";
 import { makeExtract, makeMeta, makeFinancialsRow } from "./grounding-test-helpers";
+import { sseOk } from "./sse-test-helpers";
+
+const en = translations.en;
 
 const OLD_BLIND = JSON.stringify({
   method: "EV/EBITDA",
@@ -30,31 +33,46 @@ const OLD_BLIND = JSON.stringify({
 });
 
 const NEW_BLIND = { method: "EV/EBITDA", sector: "Utilities", currency: "EUR", bull: { fairValue: 3.1 }, base: { fairValue: 2.6 }, bear: { fairValue: 1.9 } };
+const NEW_FINAL = { method: "EV/EBITDA", sector: "U", currency: "EUR", bull: { fairValue: 3 }, base: { fairValue: 2.5 }, bear: { fairValue: 1.8 } };
 
-// A response body the test feeds chunk by chunk, so assertions can run mid-stream.
-function controllableStream() {
+/** A response whose SSE events the test sends one by one, so assertions can run mid-stream. */
+function controllableSse() {
   let controller!: ReadableStreamDefaultController<Uint8Array>;
   const body = new ReadableStream<Uint8Array>({
     start(c) {
       controller = c;
     },
   });
-  const encoder = new TextEncoder();
   return {
-    body,
-    push: (text: string) => controller.enqueue(encoder.encode(text)),
+    response: { ok: true, status: 200, body, headers: new Headers(), json: async () => ({}) },
+    send: (event: AiRunEvent) => controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`)),
     close: () => controller.close(),
   };
 }
 
-function renderPanel(overrides: { initialResult?: string | null; currentPrice?: number | null; initialBlind?: string | null; hasDataset?: boolean } = {}) {
+/** The row as GET /api/analyses/a1 returns it after a Skeptic run. */
+const skepticRow = (overrides: Record<string, unknown> = {}) => ({
+  id: "a1",
+  reviewMd: "Critique.",
+  reviewBlindJson: JSON.stringify({ ...NEW_BLIND, rationale: "Net debt." }),
+  reviewResultJson: JSON.stringify(NEW_FINAL),
+  reviewFairValueBull: 3,
+  reviewFairValueBase: 2.5,
+  reviewFairValueBear: 1.8,
+  ...overrides,
+});
+
+const bodyOf = (fetchMock: ReturnType<typeof vi.fn>, call: number) => JSON.parse((fetchMock.mock.calls[call][1] as RequestInit).body as string);
+
+function renderPanel(
+  overrides: { initialResult?: string | null; currentPrice?: number | null; initialBlind?: string | null; initialCritique?: string | null; hasDataset?: boolean } = {}
+) {
   return render(
     <AnalystPanel
       analysisId="a1"
       ticker="IRE.MI"
-      reportMd="# Report"
       mosPercent={0}
-      initialCritiques={{ skeptic: "old critique" }}
+      initialCritiques={{ skeptic: overrides.initialCritique === undefined ? "old critique" : overrides.initialCritique }}
       initialBlind={{ skeptic: overrides.initialBlind === undefined ? OLD_BLIND : overrides.initialBlind }}
       initialFinal={{ skeptic: { bull: 98, base: 87, bear: 76 } }}
       initialResult={{ skeptic: overrides.initialResult ?? null }}
@@ -67,42 +85,73 @@ function renderPanel(overrides: { initialResult?: string | null; currentPrice?: 
   );
 }
 
-describe("AnalystPanel blind card during a run", () => {
-  let stream: ReturnType<typeof controllableStream>;
+describe("AnalystPanel — a lens in two phases written by the server", () => {
+  const fetchMock = vi.fn();
 
   beforeEach(() => {
-    stream = controllableStream();
-    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, body: stream.body })));
+    fetchMock.mockReset();
+    vi.mocked(fetchAnalysis).mockReset().mockResolvedValue(skepticRow() as never);
+    vi.stubGlobal("fetch", fetchMock);
   });
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it("drops the previous run's card on re-run and shows the new one as soon as Phase 1 parses", async () => {
+  it("drops the previous card on re-run, shows the new one when Phase 1 ends, and reads the final numbers from the row", async () => {
+    const blind = controllableSse();
+    const reconcile = controllableSse();
+    fetchMock.mockResolvedValueOnce(blind.response).mockResolvedValueOnce(reconcile.response);
     renderPanel();
     expect(screen.getByText("88.22")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText(translations.en.analystReviewRerun));
+    fireEvent.click(screen.getByText(en.analystReviewRerun));
     // The persisted card from the previous run is gone before the new run sends anything.
     await waitFor(() => expect(screen.queryByText("88.22")).not.toBeInTheDocument());
 
     await act(async () => {
-      stream.push(ANALYST_PHASE_MARKERS.blind);
-      stream.push("```json-blind\n" + JSON.stringify(NEW_BLIND) + "\n```\n");
-      stream.push(ANALYST_PHASE_MARKERS.reconcile);
+      blind.send({ type: "stage", stage: "blind" });
     });
-
-    // Stream still open (turn 2 running) — the new blind card is already on screen, with
-    // its final column still pending.
-    await waitFor(() => expect(screen.getByText("2.60")).toBeInTheDocument());
-    expect(screen.getAllByText("…")).toHaveLength(3);
-    expect(screen.queryByText("87.00")).not.toBeInTheDocument();
+    // The phase label comes from the stage event.
+    expect(screen.getByText(en.analystPhaseBlind)).toBeInTheDocument();
 
     await act(async () => {
-      stream.push('```json\n{"method":"EV/EBITDA","sector":"U","currency":"EUR","bull":{"fairValue":3},"base":{"fairValue":2.5},"bear":{"fairValue":1.8}}\n```\nCritique.');
-      stream.close();
+      blind.send({ type: "done", blind: NEW_BLIND, degraded: false });
+      blind.close();
     });
+    // Phase 2 running: the new blind card is already on screen, its final column pending.
+    await waitFor(() => expect(screen.getByText("2.60")).toBeInTheDocument());
+    expect(screen.getAllByText("…")).toHaveLength(3);
+
+    await act(async () => {
+      reconcile.send({ type: "stage", stage: "reconcile" });
+      reconcile.send({ type: "text", text: "Critique so far" });
+    });
+    expect(screen.getByText(en.analystPhaseReconcile)).toBeInTheDocument();
+    expect(screen.getByTestId("critique").textContent).toContain("Critique so far");
+
+    await act(async () => {
+      reconcile.send({ type: "done" });
+      reconcile.close();
+    });
+    // The numbers come from the row the server wrote, re-read once the run ended.
     await waitFor(() => expect(screen.getByText("2.50")).toBeInTheDocument());
+    expect(fetchAnalysis).toHaveBeenCalledWith("a1");
+    expect(screen.getByTestId("critique").textContent).toBe("Critique.");
+    expect(screen.getByText(en.analystReviewRerun)).toBeInTheDocument();
+  });
+
+  it("sends phase blind then phase reconcile on the row, without the report, at xhigh before the default loads", async () => {
+    fetchMock
+      .mockResolvedValueOnce(sseOk([{ type: "stage", stage: "blind" }, { type: "done", blind: NEW_BLIND, degraded: false }]))
+      .mockResolvedValueOnce(sseOk([{ type: "stage", stage: "reconcile" }, { type: "done" }]));
+    renderPanel();
+    fireEvent.click(screen.getByText(en.analystReviewRerun));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/ai/deep-value/verify");
+    expect(bodyOf(fetchMock, 0)).toMatchObject({ analysisId: "a1", angle: "skeptic", phase: "blind", effort: "xhigh" });
+    expect(bodyOf(fetchMock, 1)).toMatchObject({ analysisId: "a1", phase: "reconcile" });
+    expect(bodyOf(fetchMock, 0)).not.toHaveProperty("reportMd");
   });
 
   it("evaluates the kill_price gate on the FINAL skeptic JSON and shows it with the blind gates", async () => {
@@ -110,11 +159,20 @@ describe("AnalystPanel blind card during a run", () => {
       meta: makeMeta({ reportingCurrency: "EUR" }),
       financials: [makeFinancialsRow({ fiscalYear: 2025, ebitda: 1000, netDebt: 2000, minorityInterest: 100, sharesDiluted: 300 })],
     });
+    vi.mocked(fetchAnalysis).mockResolvedValue(
+      skepticRow({
+        reviewBlindJson: JSON.stringify({ ...NEW_BLIND, killPrice: 1.5 }),
+        // The final JSON drops the kill price without explaining why.
+        reviewResultJson: JSON.stringify({ ...NEW_BLIND, killPrice: null, revisions: [] }),
+      }) as never
+    );
+    fetchMock
+      .mockResolvedValueOnce(sseOk([{ type: "stage", stage: "blind" }, { type: "done", blind: { ...NEW_BLIND, killPrice: 1.5 }, degraded: false }]))
+      .mockResolvedValueOnce(sseOk([{ type: "stage", stage: "reconcile" }, { type: "text", text: "Critique." }, { type: "done" }]));
     render(
       <AnalystPanel
         analysisId="a1"
         ticker="IRE.MI"
-        reportMd="# Report"
         mosPercent={0}
         initialCritiques={{}}
         initialBlind={{}}
@@ -128,16 +186,7 @@ describe("AnalystPanel blind card during a run", () => {
       />
     );
     // ANALYST_ANGLES order puts the Skeptic first.
-    fireEvent.click(screen.getAllByText(translations.en.analystRunButton)[0]);
-
-    await act(async () => {
-      stream.push(ANALYST_PHASE_MARKERS.blind);
-      stream.push("```json-blind\n" + JSON.stringify({ ...NEW_BLIND, killPrice: 1.5 }) + "\n```\n");
-      stream.push(ANALYST_PHASE_MARKERS.reconcile);
-      // The final JSON drops the kill price without explaining why.
-      stream.push('```json\n' + JSON.stringify({ ...NEW_BLIND, killPrice: null, revisions: [] }) + '\n```\nCritique.');
-      stream.close();
-    });
+    fireEvent.click(screen.getAllByText(en.analystRunButton)[0]);
 
     const finalGate = await screen.findByText(/Final · Kill price declared/);
     expect(finalGate.textContent).toContain("✗");
@@ -145,113 +194,68 @@ describe("AnalystPanel blind card during a run", () => {
     expect(screen.getByText(/^✓ Kill price declared — 1\.50/)).toBeInTheDocument();
   });
 
-  it("clears the lens's numbers, without throwing, when the final JSON lacks a scenario", async () => {
-    vi.mocked(updateAnalystOpinion).mockClear();
+  it("says the final JSON was incomplete when the row came back without the lens's numbers", async () => {
+    vi.mocked(fetchAnalysis).mockResolvedValue(
+      skepticRow({ reviewResultJson: null, reviewFairValueBull: null, reviewFairValueBase: null, reviewFairValueBear: null }) as never
+    );
+    fetchMock
+      .mockResolvedValueOnce(sseOk([{ type: "stage", stage: "blind" }, { type: "done", blind: NEW_BLIND, degraded: false }]))
+      .mockResolvedValueOnce(sseOk([{ type: "stage", stage: "reconcile" }, { type: "done" }]));
     renderPanel();
-    fireEvent.click(screen.getByText(translations.en.analystReviewRerun));
+    fireEvent.click(screen.getByText(en.analystReviewRerun));
 
-    await act(async () => {
-      stream.push(ANALYST_PHASE_MARKERS.blind);
-      stream.push("```json-blind\n" + JSON.stringify(NEW_BLIND) + "\n```\n");
-      stream.push(ANALYST_PHASE_MARKERS.reconcile);
-      const { bear: _bear, ...noBear } = NEW_BLIND;
-      stream.push("```json\n" + JSON.stringify(noBear) + "\n```\nCritique.");
-      stream.close();
-    });
-
-    await waitFor(() => expect(updateAnalystOpinion).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(updateAnalystOpinion).mock.calls[0][1]).toMatchObject({
-      angle: "skeptic",
-      fairValueBull: null,
-      fairValueBase: null,
-      fairValueBear: null,
-      valuationMethod: null,
-      resultJson: null,
-    });
-    expect(screen.getByText(translations.en.deepValueIncompleteJson)).toBeInTheDocument();
+    expect(await screen.findByText(en.deepValueIncompleteJson)).toBeInTheDocument();
     // The blind card no longer waits on a final column that will never come.
     expect(screen.queryAllByText("…")).toHaveLength(0);
   });
 
-  it("saves the critique without its marker or JSON, and the final JSON as resultJson", async () => {
-    vi.mocked(updateAnalystOpinion).mockClear();
-    renderPanel();
-    fireEvent.click(screen.getByText(translations.en.analystReviewRerun));
+  it("a commitment on the row with no critique offers Retry phase 2, which sends only reconcile and keeps the card", async () => {
+    fetchMock.mockResolvedValueOnce(sseOk([{ type: "stage", stage: "reconcile" }, { type: "done" }]));
+    vi.mocked(fetchAnalysis).mockResolvedValue(skepticRow({ reviewBlindJson: OLD_BLIND }) as never);
+    renderPanel({ initialCritique: null });
 
-    const finalJson = { ...NEW_BLIND, units: "millions", assumptions: { wacc: 8, roic: 10, terminalGrowth: 2 } };
-    await act(async () => {
-      // A single-phase review: critique first, opened by the marker, JSON last. The route
-      // drops the marker; a repeat that slipped through must still not be saved.
-      stream.push(`${CRITIQUE_START_MARKER}Critique body.\n\n`);
-      stream.push("```json\n" + JSON.stringify(finalJson) + "\n```");
-      stream.close();
-    });
+    expect(screen.getByText("88.22")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: en.analystRunButton }).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByText(en.lensRetryPhase2));
+    // The card stays while Phase 2 runs.
+    expect(screen.getByText("88.22")).toBeInTheDocument();
 
-    await waitFor(() => expect(updateAnalystOpinion).toHaveBeenCalledTimes(1));
-    const sent = vi.mocked(updateAnalystOpinion).mock.calls[0][1];
-    expect(sent.resultJson).toBe(JSON.stringify(sanitizeDeepValueResult(finalJson)));
-    expect(sent.critiqueMd).toBe("Critique body.\n\n");
-    expect(sent.critiqueMd).not.toContain(CRITIQUE_START_MARKER);
-    expect(sent.fairValueBase).toBe(2.6);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(bodyOf(fetchMock, 0).phase).toBe("reconcile");
+    await waitFor(() => expect(screen.getByText(en.analystReviewRerun)).toBeInTheDocument());
   });
 
-  it("shows Re-run only once the save has settled, so a reload in between cannot drop the lens", async () => {
-    vi.mocked(updateAnalystOpinion).mockClear();
-    let settle!: () => void;
-    vi.mocked(updateAnalystOpinion).mockImplementationOnce(
-      () => new Promise((resolve) => (settle = () => resolve(undefined as never)))
-    );
+  it("a Phase 2 cut offers to retry Phase 2 alone", async () => {
+    fetchMock
+      .mockResolvedValueOnce(sseOk([{ type: "stage", stage: "blind" }, { type: "done", blind: NEW_BLIND, degraded: false }]))
+      // Stage, then the stream ends with no terminal event: the function was cut.
+      .mockResolvedValueOnce(sseOk([{ type: "stage", stage: "reconcile" }, { type: "text", text: "Half a critique" }]));
+    vi.mocked(fetchAnalysis).mockResolvedValue(skepticRow({ reviewMd: null, reviewResultJson: null }) as never);
     renderPanel();
-    fireEvent.click(screen.getByText(translations.en.analystReviewRerun));
+    fireEvent.click(screen.getByText(en.analystReviewRerun));
 
-    await act(async () => {
-      stream.push(`${CRITIQUE_START_MARKER}Critique body.\n\n`);
-      stream.push("```json\n" + JSON.stringify(NEW_BLIND) + "\n```");
-      stream.close();
-    });
+    expect(await screen.findByText(en.lensCut.replace("{phase}", "2"))).toBeInTheDocument();
+    expect(screen.getByText("2.60")).toBeInTheDocument();
 
-    await waitFor(() => expect(updateAnalystOpinion).toHaveBeenCalledTimes(1));
-    expect(screen.queryByText(translations.en.analystReviewRerun)).not.toBeInTheDocument();
-    await act(async () => settle());
-    expect(screen.getByText(translations.en.analystReviewRerun)).toBeInTheDocument();
+    fetchMock.mockResolvedValueOnce(sseOk([{ type: "stage", stage: "reconcile" }, { type: "done" }]));
+    vi.mocked(fetchAnalysis).mockResolvedValue(skepticRow() as never);
+    fireEvent.click(screen.getByText(en.lensRetryPhase2));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    expect(bodyOf(fetchMock, 2).phase).toBe("reconcile");
+    await waitFor(() => expect(screen.getByText("2.50")).toBeInTheDocument());
   });
 
-  it("still ends in Re-run when the save fails", async () => {
-    vi.mocked(updateAnalystOpinion).mockClear();
-    vi.mocked(updateAnalystOpinion).mockRejectedValueOnce(new Error("save failed"));
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+  it("a re-run that fails before Phase 1 brings the persisted blind card and critique back", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.mocked(fetchAnalysis).mockRejectedValue(new TypeError("Failed to fetch"));
     renderPanel();
-    fireEvent.click(screen.getByText(translations.en.analystReviewRerun));
+    expect(screen.getByText("88.22")).toBeInTheDocument();
 
-    await act(async () => {
-      stream.push(`${CRITIQUE_START_MARKER}Critique body.\n\n`);
-      stream.push("```json\n" + JSON.stringify(NEW_BLIND) + "\n```");
-      stream.close();
-    });
+    fireEvent.click(screen.getByText(en.analystReviewRerun));
 
-    await waitFor(() => expect(screen.getByText(translations.en.analystReviewRerun)).toBeInTheDocument());
-    expect(consoleError).toHaveBeenCalled();
-    consoleError.mockRestore();
-  });
-});
-
-describe("AnalystPanel effort before the global default loads", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("sends xhigh when fetchAiSettings has not answered", async () => {
-    const stream = controllableStream();
-    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, body: stream.body }));
-    vi.stubGlobal("fetch", fetchMock);
-    renderPanel();
-    fireEvent.click(screen.getByText(translations.en.analystReviewRerun));
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe("/api/ai/deep-value/verify");
-    expect(JSON.parse(init.body as string).effort).toBe("xhigh");
-    await act(async () => stream.close());
+    expect(await screen.findByText(en.lensCut.replace("{phase}", "1"))).toBeInTheDocument();
+    expect(screen.getByText("88.22")).toBeInTheDocument();
+    expect(screen.getByTestId("critique").textContent).toBe("old critique");
   });
 });
 
@@ -275,8 +279,8 @@ describe("AnalystPanel after a reload reads the FINAL JSON from *ResultJson", ()
     expect(screen.getByText(/a pangolin-sized regulatory cut/)).toBeInTheDocument();
     expect(screen.getByText(/Final · Kill price declared — 7\.90/)).toBeInTheDocument();
     // Lenses declare no sensitivity grid nor dividend path: the blind gates leave both out.
-    expect(screen.queryByText(translations.en.groundingGateSensitivityCenter, { exact: false })).not.toBeInTheDocument();
-    expect(screen.queryByText(translations.en.groundingGateDividendCoverage, { exact: false })).not.toBeInTheDocument();
+    expect(screen.queryByText(en.groundingGateSensitivityCenter, { exact: false })).not.toBeInTheDocument();
+    expect(screen.queryByText(en.groundingGateDividendCoverage, { exact: false })).not.toBeInTheDocument();
   });
 
   it("treats a stored blind commitment without a full triple as absent: no blind card, no crash", () => {
@@ -292,7 +296,6 @@ describe("AnalystPanel after a reload reads the FINAL JSON from *ResultJson", ()
       <AnalystPanel
         analysisId="a1"
         ticker="IRE.MI"
-        reportMd="# Report"
         mosPercent={0}
         initialCritiques={{ skeptic: "old critique" }}
         initialBlind={{}}
@@ -306,7 +309,7 @@ describe("AnalystPanel after a reload reads the FINAL JSON from *ResultJson", ()
       />
     );
 
-    expect(screen.getByText(translations.en.analystFinalCardTitle)).toBeInTheDocument();
+    expect(screen.getByText(en.analystFinalCardTitle)).toBeInTheDocument();
     expect(screen.getByText(/✓ Kill price declared — 7\.90/)).toBeInTheDocument();
     // The reader sees the gate's name, never its code.
     expect(screen.queryByText(/kill_price|scenario_order|horizon_consistent/)).not.toBeInTheDocument();
@@ -314,9 +317,9 @@ describe("AnalystPanel after a reload reads the FINAL JSON from *ResultJson", ()
     expect(screen.getByText(/a pangolin-sized regulatory cut/)).toBeInTheDocument();
     // Lenses declare no sensitivity grid nor dividend path: those gates are not listed (by
     // name: the card never prints a code, so a code would be absent anyway).
-    expect(screen.queryByText(translations.en.groundingGateSensitivityCenter, { exact: false })).not.toBeInTheDocument();
-    expect(screen.queryByText(translations.en.groundingGateDividendCoverage, { exact: false })).not.toBeInTheDocument();
-    expect(screen.getByText(translations.en.valuationChecksPriceAtAnalysis)).toBeInTheDocument();
+    expect(screen.queryByText(en.groundingGateSensitivityCenter, { exact: false })).not.toBeInTheDocument();
+    expect(screen.queryByText(en.groundingGateDividendCoverage, { exact: false })).not.toBeInTheDocument();
+    expect(screen.getByText(en.valuationChecksPriceAtAnalysis)).toBeInTheDocument();
   });
 
   it("without a dataset disables every Run, says why, keeps the saved lens readable and calls nothing", () => {
@@ -324,11 +327,11 @@ describe("AnalystPanel after a reload reads the FINAL JSON from *ResultJson", ()
     vi.stubGlobal("fetch", fetchMock);
     renderPanel({ hasDataset: false });
 
-    expect(screen.getByText(translations.en.analystNeedsDataset)).toBeInTheDocument();
+    expect(screen.getByText(en.analystNeedsDataset)).toBeInTheDocument();
     // Nothing can run, so there is no model to pick.
     expect(screen.queryByText("AI model selector")).not.toBeInTheDocument();
     // The Skeptic has a saved critique (Re-run), the other two lenses have none (Run).
-    const buttons = [screen.getByRole("button", { name: translations.en.analystReviewRerun }), ...screen.getAllByRole("button", { name: translations.en.analystRunButton })];
+    const buttons = [screen.getByRole("button", { name: en.analystReviewRerun }), ...screen.getAllByRole("button", { name: en.analystRunButton })];
     expect(buttons).toHaveLength(3);
     for (const button of buttons) {
       expect(button).toBeDisabled();
@@ -336,19 +339,6 @@ describe("AnalystPanel after a reload reads the FINAL JSON from *ResultJson", ()
     }
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.getByTestId("critique")).toHaveTextContent("old critique");
-    vi.unstubAllGlobals();
-  });
-
-  it("a re-run that fails before Phase 1 brings the persisted blind card and critique back", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("Failed to fetch"))));
-    renderPanel();
-    expect(screen.getByText("88.22")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByText(translations.en.analystReviewRerun));
-
-    await waitFor(() => expect(screen.getByText(translations.en.analystReviewError)).toBeInTheDocument());
-    expect(screen.getByText("88.22")).toBeInTheDocument();
-    expect(screen.getByTestId("critique").textContent).toBe("old critique");
     vi.unstubAllGlobals();
   });
 });

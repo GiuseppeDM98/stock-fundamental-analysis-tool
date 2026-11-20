@@ -115,6 +115,17 @@ model Analysis {
   reviewResultJson   String?
   optimistResultJson String?
   qualityResultJson  String?
+  // The run that produced this row (2026-10-27): on Vercel Hobby a function is stopped at
+  // 300 s, so the row is created when the valuation starts and finished by the server, never
+  // by the client. "running" past RUN_STALE_AFTER_MS without an update means the platform cut it.
+  runStatus        String    @default("done")
+  runStartedAt     DateTime?
+  // The product sentence of a failed run (never the provider's raw message).
+  runError         String?
+  // The currency of the quote priceAtAnalysis was read from (2026-10-29): an LSE quote in
+  // GBp under a report in GBP is a hundredfold off if read in the report's currency. Null on
+  // rows saved before the column: their price at analysis is then compared with nothing.
+  priceCurrency    String?
   createdAt        DateTime @default(now())
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 

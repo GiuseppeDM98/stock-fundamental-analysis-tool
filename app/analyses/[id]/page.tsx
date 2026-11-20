@@ -2,7 +2,8 @@ import { redirect, notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import AnalysisDetailBody from "@/components/analysis-detail-body";
-import { DetailBreadcrumb, DetailFooterActions } from "@/components/analysis-detail-chrome";
+import { DetailBreadcrumb, DetailFooterActions, DetailRunStatus } from "@/components/analysis-detail-chrome";
+import { isDone } from "@/lib/report/run-status";
 import { readAnalysisExtract } from "@/lib/datasets/store";
 import type { Triple } from "@/lib/report/valuation";
 import {
@@ -35,6 +36,27 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
 
   // 404 for missing or foreign rows — don't leak existence.
   if (!analysis || analysis.userId !== session.user.id) notFound();
+
+  // A row whose run has not finished (running, or cut) has no report yet: its status line in
+  // place of the report — no analyst panel, no PDF, no Re-run (2026-10-27).
+  if (!isDone(analysis)) {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-10">
+        <DetailBreadcrumb ticker={analysis.ticker} />
+        <DetailRunStatus
+          analysis={{
+            id: analysis.id,
+            ticker: analysis.ticker,
+            runStatus: analysis.runStatus as "running" | "failed",
+            runStartedAt: analysis.runStartedAt?.toISOString() ?? null,
+            runError: analysis.runError,
+            datasetId: analysis.datasetId,
+          }}
+        />
+        <DetailFooterActions ticker={analysis.ticker} finished={false} />
+      </main>
+    );
+  }
 
   // Check for an open portfolio position on this ticker (server-side, no extra round-trip).
   const positions = await db.position.findMany({
@@ -93,6 +115,7 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
         result={valuationMeta}
         mosPercent={analysis.mosPercent}
         priceAtAnalysis={analysis.priceAtAnalysis ?? null}
+        priceCurrency={analysis.priceCurrency ?? null}
         groundingExtract={groundingExtract}
         position={position}
         initialCritiques={{

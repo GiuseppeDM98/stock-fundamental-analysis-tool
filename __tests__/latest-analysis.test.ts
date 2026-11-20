@@ -54,6 +54,28 @@ describe("latestAnalysisWithValues", () => {
   it("should return null when no save carries a full triple", () => {
     expect(latestAnalysisWithValues([makeAnalysis({ fairValueBase: 80 })])).toBeNull();
   });
+
+  it("should skip a newest failed run even when it carries a full triple", () => {
+    const failed = makeAnalysis({ id: "failed", runStatus: "failed", ...VALUED, fairValueBase: 90 });
+    const older = makeAnalysis({ id: "old", runStatus: "done", ...VALUED });
+    expect(latestAnalysisWithValues([failed, older])?.id).toBe("old");
+    expect(verdictBasis(failed)).toBeNull();
+  });
+
+  it("should skip a newest running row with a triple, and return null when no row is done", () => {
+    const running = makeAnalysis({ id: "running", runStatus: "running", ...VALUED });
+    const older = makeAnalysis({ id: "old", ...VALUED });
+    expect(latestAnalysisWithValues([running, older])?.id).toBe("old");
+    expect(latestAnalysisWithValues([running, makeAnalysis({ id: "f", runStatus: "failed", ...VALUED })])).toBeNull();
+    expect(verdictBasis(running)).toBeNull();
+  });
+
+  it("should pick a row without a runStatus as before (the column's default is done)", () => {
+    const legacy = makeAnalysis({ id: "legacy", ...VALUED });
+    expect(legacy.runStatus).toBeUndefined();
+    expect(latestAnalysisWithValues([legacy])?.id).toBe("legacy");
+    expect(verdictBasis(legacy)?.source).toBe("analysis");
+  });
 });
 
 describe("verdictBasis", () => {

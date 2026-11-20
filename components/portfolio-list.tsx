@@ -14,6 +14,7 @@ import {
 } from "@/lib/portfolio";
 import { getExitSignal } from "@/lib/report/latest-analysis";
 import { fetchAnalyses } from "@/lib/analyses";
+import { isDone } from "@/lib/report/run-status";
 import { realizedPnlNative, holdingDays, estimateCapitalGainsTax } from "@/lib/portfolio-math";
 import type {
   Position,
@@ -1096,7 +1097,9 @@ export default function PortfolioList() {
         setPositions(posData);
 
         const map: Record<string, SavedAnalysis[]> = {};
-        for (const a of analysesData) {
+        // Finished analyses only: a run in progress or cut is neither counted in "N saved
+        // analyses" nor listed under it (2026-10-27).
+        for (const a of analysesData.filter(isDone)) {
           map[a.ticker] = [...(map[a.ticker] ?? []), a];
         }
         setAnalysesByTicker(map);

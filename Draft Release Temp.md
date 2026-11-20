@@ -8,6 +8,8 @@
 
 - **Analyst Panel — three independent second opinions** — on any saved analysis, run up to three independent AI passes, each through a distinct lens: **Skeptic** (red-teams the numbers and assumptions), **Optimist** (builds the constructive bull case), and **Quality** (stress-tests the moat and long-term durability). Each lens commits to its own Bull/Base/Bear valuation and a written critique, run on demand from the saved-analysis page. Every lens that has run is shown next to the base analysis on the valuation ruler and comparison table, along with a **consensus** — the average across the base analysis and every lens that ran — so you can see at a glance how much (and in which direction) independent reviewers disagree. Results are saved with the analysis, shown in a distinct panel with a **✓ Reviewed** badge on the list card, regenerable anytime, and included in the PDF export. (Replaces the earlier single "Analyst Review" red-team pass — the Skeptic lens is that same review, now joined by two more perspectives.)
 
+- Added **runs that survive a dropped connection**: the server saves each analysis as soon as it finishes, so nothing is lost if the connection drops, and a run that was cut can be retried from the step it reached (analyst lenses run in two short steps). Saved Analyses shows a run still in progress, or one that was interrupted, with its **Retry** button.
+
 - **Margin of Safety & dual fair value** — set a Margin of Safety (0–80%) and the report shows both the intrinsic fair value (what the stock is worth) and the MoS-discounted buy target, for each Bear/Base/Bull scenario. A valuation recap table at the end of every report lists current price vs. fair values with upside/downside.
 
 - **Download reports as PDF** — a **Download PDF** button on both a completed analysis and any saved analysis opens a clean print layout (navigation and buttons hidden, upside/downside and accent colors preserved) — choose "Save as PDF" to export.
@@ -211,7 +213,7 @@
 - Registration can be disabled via the `DISABLE_REGISTRATION=true` environment variable — useful to lock down the app after initial setup.
 - AI fair value targets are always computed server-side and cannot be manipulated by the client.
 - Updated the app's dependencies so no known vulnerabilities remain. It now needs Safari 16.4+, Chrome/Edge 111+ or Firefox 128+; older iPhones on iOS 16.3 or earlier will render it incorrectly.
-- Updated Next.js to 15.5.28, which fixes a critical remote code execution advisory in image optimization (GHSA-2464-fhr4-w9xw) and a denial of service in Server Actions (GHSA-p3m5-59mp-jv5r). Self-hosted deployments should update.
+- Updated Next.js to 15.5.29, which fixes a critical remote code execution advisory in image optimization (GHSA-2464-fhr4-w9xw), a denial of service in Server Actions (GHSA-p3m5-59mp-jv5r) and three moderate advisories (GHSA-7qx7-33qx-rqx2, GHSA-f3mh-rxg3-f5g2, GHSA-pc58-hwjq-p385). Self-hosted deployments should update.
 
 ## 📚 Documentation
 

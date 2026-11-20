@@ -54,6 +54,12 @@ export const ANALYSIS_LIST_SELECT = {
   optimistResultJson: true,
   qualityResultJson: true,
   datasetId: true,
+  // The run's state: selected, never filtered here (a select cannot filter) — the readers
+  // that weigh a valuation skip the rows that are not done.
+  runStatus: true,
+  runStartedAt: true,
+  runError: true,
+  priceCurrency: true,
   createdAt: true,
 } as const satisfies Record<keyof SavedAnalysis, true>;
 

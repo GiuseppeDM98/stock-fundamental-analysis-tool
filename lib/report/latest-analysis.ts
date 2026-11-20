@@ -8,11 +8,18 @@ import { consensusTriple } from "@/lib/report/consensus";
 import { grossUpToIntrinsic } from "@/lib/report/valuation";
 import { sameCurrency } from "@/lib/grounding/currency";
 
-/** The newest analysis that carries a full bull/base/bear triple, or null. */
+/** A row whose run did not finish (still running, or failed) is never a valuation, even when
+ *  it carries numbers: a retry resets them, and a failed run's figures were never reviewed
+ *  as a report (2026-10-27). Rows without a status are done (the column's default). */
+function isUnfinishedRun(a: SavedAnalysis): boolean {
+  return a.runStatus === "running" || a.runStatus === "failed";
+}
+
+/** The newest FINISHED analysis that carries a full bull/base/bear triple, or null. */
 export function latestAnalysisWithValues(analysesNewestFirst: SavedAnalysis[]): SavedAnalysis | null {
   return (
     analysesNewestFirst.find(
-      (a) => a.fairValueBear != null && a.fairValueBase != null && a.fairValueBull != null
+      (a) => !isUnfinishedRun(a) && a.fairValueBear != null && a.fairValueBase != null && a.fairValueBull != null
     ) ?? null
   );
 }
@@ -25,9 +32,9 @@ export type VerdictBasis = {
 
 /** The base value the verdict/zones/exit signal compare the price against: the analyst
  *  consensus when at least one lens ran, else the analysis's own base. Null without a
- *  base fair value. */
+ *  base fair value, and for a row whose run did not finish. */
 export function verdictBasis(a: SavedAnalysis): VerdictBasis | null {
-  if (a.fairValueBase == null) return null;
+  if (isUnfinishedRun(a) || a.fairValueBase == null) return null;
   const mos = (a.mosPercent ?? 0) / 100;
   const consensus = consensusTriple(a);
   const buyTargetBase = consensus ? consensus.base : a.fairValueBase;

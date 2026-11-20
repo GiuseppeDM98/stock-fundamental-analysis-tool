@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { pickBlindCommitment } from "@/lib/ai/blind-commitment";
-import { parseBlindJson, parseDeepValueJson, stripAnalystStreamArtifacts } from "@/lib/report/parse-deep-value-json";
+import { pickBlindCommitment, buildBlindAssistantTurn } from "@/lib/ai/blind-commitment";
+import { parseBlindJson } from "@/lib/report/parse-deep-value-json";
 
 const COMMITMENT = {
   method: "EV/EBITDA",
@@ -14,23 +14,17 @@ const COMMITMENT = {
 const block = (obj: unknown) => "```json\n" + JSON.stringify(obj, null, 2) + "\n```";
 
 describe("pickBlindCommitment", () => {
-  it("returns only the re-fenced commitment, dropping prose before and after it", () => {
-    const text = `Let me check the latest results first.\n\n${block(COMMITMENT)}\n\nRationale: the 2025 EBITDA supports a 6x multiple.`;
+  it("returns the commitment and the prose after it as the rationale, dropping the prose before", () => {
+    const text = `Let me check the latest results first.\n\n${block(COMMITMENT)}\n\nRationale: the 2025 EBITDA supports a 6x multiple.  `;
     const picked = pickBlindCommitment(text);
     expect(picked).not.toBeNull();
     expect(picked!.result.base.fairValue).toBe(2.6);
-    expect(picked!.fenced.startsWith("```json-blind\n")).toBe(true);
-    expect(picked!.fenced).not.toContain("Let me check");
-    expect(picked!.fenced).not.toContain("Rationale");
+    expect(picked!.rationale).toBe("Rationale: the 2025 EBITDA supports a 6x multiple.");
+    expect(picked!.rationale).not.toContain("Let me check");
   });
 
-  it("leaves nothing behind in the critique once the client strips stream artifacts", () => {
-    const picked = pickBlindCommitment(`preamble\n${block(COMMITMENT)}\nrationale`)!;
-    const stream = picked.fenced + "```json\n{\"base\":{\"fairValue\":2}}\n```\nCritique body.";
-    expect(parseBlindJson(stream)?.killPrice).toBe(1.5);
-    // The re-fenced block never collides with the FINAL block's parser.
-    expect(parseDeepValueJson(stream)?.base?.fairValue).toBe(2);
-    expect(stripAnalystStreamArtifacts(stream).startsWith("```json\n")).toBe(true);
+  it("caps the rationale at 2500 characters", () => {
+    expect(pickBlindCommitment(`${block(COMMITMENT)}\n${"x".repeat(3000)}`)!.rationale).toHaveLength(2500);
   });
 
   it("returns null when there is no JSON fence", () => {
@@ -48,6 +42,24 @@ describe("pickBlindCommitment", () => {
     const third = { ...COMMITMENT, base: { fairValue: 9.9 } };
     const picked = pickBlindCommitment(`${draft}\nretrying\n${block(second)}\nand\n${block(third)}`);
     expect(picked!.result.base.fairValue).toBe(2.7);
-    expect(picked!.fenced).not.toContain("9.9");
+  });
+});
+
+describe("buildBlindAssistantTurn", () => {
+  it("rebuilds the commitment as a JSON fence followed by its rationale, the rationale kept out of the JSON", () => {
+    const stored = parseBlindJson(JSON.stringify({ ...COMMITMENT, rationale: "Net debt dominates." }))!;
+    const turn = buildBlindAssistantTurn(stored as Parameters<typeof buildBlindAssistantTurn>[0], stored.rationale ?? "");
+    expect(turn.startsWith("```json\n")).toBe(true);
+    expect(turn.endsWith("\n```\n\nNet debt dominates.")).toBe(true);
+    const json = JSON.parse(turn.slice("```json\n".length, turn.indexOf("\n```")));
+    expect(json.base.fairValue).toBe(2.6);
+    expect(json.killPrice).toBe(1.5);
+    expect(json).not.toHaveProperty("rationale");
+  });
+
+  it("keeps the route's Phase-1 quote out of the JSON the model is shown", () => {
+    const stored = parseBlindJson(JSON.stringify({ ...COMMITMENT, rationale: "R.", phase1Quote: { price: 10, currency: "EUR" } }))!;
+    const turn = buildBlindAssistantTurn(stored as Parameters<typeof buildBlindAssistantTurn>[0], "R.");
+    expect(turn).not.toContain("phase1Quote");
   });
 });

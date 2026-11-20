@@ -13,6 +13,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useLanguage } from "@/context/language-context";
 import { fetchAnalyses } from "@/lib/analyses";
+import { isDone } from "@/lib/report/run-status";
 import type { WatchlistItem, WatchlistSettings } from "@/types/watchlist";
 import type { SavedAnalysis, AnalystAngle } from "@/types/analysis";
 import type { Translations } from "@/lib/i18n/translations";
@@ -711,7 +712,8 @@ export default function WatchlistClient() {
         // The API returns newest first; group per ticker keeping that order, then pick the
         // newest save with a full triple — the shared rule (lib/report/latest-analysis.ts).
         const groups = new Map<string, SavedAnalysis[]>();
-        for (const a of analyses) groups.set(a.ticker, [...(groups.get(a.ticker) ?? []), a]);
+        // Finished analyses only (a run in progress or cut has no valuation to weigh).
+        for (const a of analyses.filter(isDone)) groups.set(a.ticker, [...(groups.get(a.ticker) ?? []), a]);
         const latest: Record<string, SavedAnalysis> = {};
         for (const [ticker, groupNewestFirst] of groups) {
           const l = latestAnalysisWithValues(groupNewestFirst);

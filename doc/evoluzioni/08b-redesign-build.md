@@ -60,7 +60,7 @@ Un'app coerente con la direzione approvata nella 08a su TUTTE le pagine (hub, an
 - **DESIGN.md è generato**: non va scritto a mano (standard claude-config).
 - **Costo**: una run reale (T-30); nessun'altra AI.
 - **Position-blind**: non si tocca.
-- **Opus 5.5 e il thinking legato alla conversazione**: la verify route rigioca il turno 1 nel turno 2 così com'è (`messages` del loop, append-only) e resta così; nessuna modifica a un turno passato, o i blocchi di thinking si perdono.
+- **Opus 5.5 e il thinking legato alla conversazione**: dalla 05c (2026-11-20) la Fase 2 delle lenti è una richiesta nuova e non rigioca il turno 1: lo ricostruisce come turno assistant di solo testo (il JSON e la motivazione, `buildBlindAssistantTurn`), senza blocchi di thinking da preservare. Il vincolo non si applica più; le durate per fase vanno rimisurate su Opus 5.5 (guida § 2.9).
 - **Rifiuti**: Opus 5.5 e Sonnet 5.5 con `fallbacks: "default"`; Haiku 5.5 senza fallback lato server, quindi un suo rifiuto è finale e il messaggio della route lo dice come oggi.
 - **Costi**: Opus 5.5 costa meno di Opus 4.8; i costi stimati citati da README, AGENTS.md e `.claude/commands/deep-value.md` si rileggono.
 - **`vitest.setup.ts`** mocka il language context: `__tests__/language-cookie.test.tsx` apre con `vi.unmock("@/context/language-context")` e monta il provider vero.

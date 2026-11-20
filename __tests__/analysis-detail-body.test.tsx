@@ -41,6 +41,7 @@ function renderBody(overrides: Partial<BodyProps> = {}) {
     result: RESULT,
     mosPercent: 25,
     priceAtAnalysis: 142,
+    priceCurrency: "USD",
     groundingExtract: null,
     position: { totalShares: 20, weightedAvgCost: 140, currency: "USD" },
     initialCritiques: {},
@@ -108,6 +109,22 @@ describe("AnalysisDetailBody — one price for the whole page", () => {
     expect(screen.queryByText("Current Price")).not.toBeInTheDocument();
     expect(screen.getByText("P&L not shown: no live price in the position's currency")).toBeInTheDocument();
     expect(screen.queryByText(/\(\+?-?\d+\.\d%\)/)).not.toBeInTheDocument();
+  });
+
+  it("the price at analysis keeps the currency of its quote: GBp under a GBP report is a mismatch, GBP is not", async () => {
+    stubQuote({ ok: false, status: 503 });
+    const gbp = { result: { ...RESULT, currency: "GBP" }, priceAtAnalysis: 3.5, position: null };
+    const { unmount } = renderBody({ ...gbp, priceCurrency: "GBp" });
+    expect(
+      await screen.findByText("Distance from the price not shown: the price is in another currency than the report (GBp · GBP)")
+    ).toBeInTheDocument();
+    expect(lastPanelProps()).toMatchObject({ currentPrice: 3.5, currency: "GBp", priceSource: "analysis" });
+    unmount();
+
+    // Positive control: the same price in pounds is weighed.
+    renderBody({ ...gbp, priceCurrency: "GBP" });
+    expect(await screen.findByText("Price at analysis")).toBeInTheDocument();
+    expect(screen.queryByText(/Distance from the price not shown/)).not.toBeInTheDocument();
   });
 
   it("without a complete valuation block: the Markdown fallback, no quote fetch, no card, no panel", () => {

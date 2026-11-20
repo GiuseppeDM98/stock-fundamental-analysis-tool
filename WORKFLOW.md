@@ -275,7 +275,8 @@ Quotes are live in this mode, not stubbed. To show a missing provider key, add `
   - an analysis with all three analyst lenses (`/analyses/e2e_an_panel`, *ornitorinco*) plus an older save of the same ticker;
   - an old-format analysis with no JSON block (`/analyses/e2e_an_legacy`, *pangolino*);
   - open and closed positions (some taxed at 26%), 3 watchlist items, 6 portfolio snapshots, one earnings estimate, one advisor session (*tapiro*);
-  - a sacrificial analysis and position that `authorization.spec.ts` patches and deletes.
+  - a cut run (`e2e_an_cut`, failed, *Nasica Interrotta*, ticker NSCA with a web dataset and a watchlist item) and a run in progress (`e2e_an_live`), dated on the reference day: the tests that read their age freeze the clock;
+  - a sacrificial analysis and position that `authorization.spec.ts` deletes.
 - **B** — `e2e-b@example.test`, same password. Owns one analysis, one position and one dataset (`e2e_ds_user_b`) (*quokka*).
 
 Ids, decoys and stub prices live in `e2e/support/fixtures.ts`. **Roles**: the app has none; authorization is per-user data ownership, so the own-vs-someone-else's pair of §2 uses A and B.
@@ -296,7 +297,8 @@ The seeded tickers are invented and a manual run's quotes are live, so a page th
 
 - **Budget** (the owner's rule, 2026-10-29): Anthropic cost is not a constraint, so run every real check the collaudo needs; DeepSeek credit is low, so ask before any DeepSeek run. The ticker or paste and the OK for each run still come from the owner. Measured cost: about $4 for a Deep Value run at `xhigh`, $2 for one lens (`doc/guide/valutazione.md` § 2.1) and $0.4-1.3 for a research on Sonnet 5.5 (§ 5.3); the costs go in the commit message.
 - **Seeing what the model got**: the Anthropic SDK reads `ANTHROPIC_BASE_URL`, so a throwaway local proxy started with the dev server logs each call's model, effort, tokens, searches and prompt without a source edit. It never logs headers (the API key travels there), and it is deleted in phase G with the rest of the script.
-- **A driver waits for the save, not for the button**: a reload right after a run ends can still land before its PATCH (2026-10-29), so a script waits for the response of the request that persists the run.
+- **A driver waits for the phase's end event, not for the button**: the server writes the row before it sends `done` (since 2026-11-20 no client saves a run), so a script reloads only after that event.
+- **Export a real run's rows before any gate** (2026-11-20): `npm run e2e` and `ci:local` recreate `.e2e/e2e.db`, so the rows of a real collaudo on it are lost; dump them to the scratchpad first.
 
 ### What is still missing to honour obligations 4 and 5
 

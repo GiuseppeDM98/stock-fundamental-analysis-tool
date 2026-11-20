@@ -13,17 +13,17 @@ import { queryOne } from "./support/db";
 import { E2E_BASE_URL, STORAGE_STATE } from "./support/env";
 import { IDS, TICKERS } from "./support/fixtures";
 
-type AnalysisRow = { id: string; userId: string; reviewMd: string | null; reviewFairValueBase: number | null };
+type AnalysisRow = { id: string; userId: string; reviewMd: string | null; runStatus: string };
 type PositionRow = { id: string; userId: string; closedAt: string | null; sellPrice: number | null };
 
-const analysisRow = (id: string) => queryOne<AnalysisRow>("SELECT id, userId, reviewMd, reviewFairValueBase FROM Analysis WHERE id = ?", [id]);
+const analysisRow = (id: string) => queryOne<AnalysisRow>("SELECT id, userId, reviewMd, runStatus FROM Analysis WHERE id = ?", [id]);
 const positionRow = (id: string) => queryOne<PositionRow>("SELECT id, userId, closedAt, sellPrice FROM Position WHERE id = ?", [id]);
 
-const CRITIQUE_PATCH = { angle: "skeptic", critiqueMd: "e2e critique (marmotta)", fairValueBase: 1.9, fairValueBull: 2.2, fairValueBear: 1.5 };
 const CLOSE_PATCH = { sellPrice: 1.4, sellDate: "2026-10-01" };
 
 // Mutations are sequenced on the sacrificial rows: B's refused attempts run first, then A's
-// own PATCH, then A's own DELETE.
+// own DELETE. No client writes an analysis (the AI routes create and finish the rows since
+// 2026-10-27), so there is no analysis PATCH or POST to pair.
 test.describe.configure({ mode: "serial" });
 
 let asA: APIRequestContext;
@@ -44,7 +44,6 @@ test("unauthenticated API calls are refused with 401", async () => {
   const calls: Array<[string, string, unknown?]> = [
     ["GET", "/api/analyses"],
     ["GET", `/api/analyses/${IDS.analysisAuthz}`],
-    ["PATCH", `/api/analyses/${IDS.analysisAuthz}`, CRITIQUE_PATCH],
     ["DELETE", `/api/analyses/${IDS.analysisAuthz}`],
     ["GET", "/api/positions"],
     ["PATCH", `/api/positions/${IDS.positionAuthz}`, CLOSE_PATCH],
@@ -65,12 +64,11 @@ test("unauthenticated API calls are refused with 401", async () => {
   expect((await positionRow(IDS.positionAuthz))?.closedAt).toBeNull();
 });
 
-test("analysis: B cannot read, patch or delete A's analysis; the row is untouched", async () => {
+test("analysis: B cannot read or delete A's analysis; the row is untouched", async () => {
   const before = await analysisRow(IDS.analysisAuthz);
   expect(before?.userId).toBe("e2e_user_a");
 
   expect((await asB.get(`/api/analyses/${IDS.analysisAuthz}`)).status()).toBe(404);
-  expect((await asB.patch(`/api/analyses/${IDS.analysisAuthz}`, { data: CRITIQUE_PATCH })).status()).toBe(404);
   expect((await asB.delete(`/api/analyses/${IDS.analysisAuthz}`)).status()).toBe(404);
 
   // B's own list must not contain A's record either.
@@ -81,22 +79,29 @@ test("analysis: B cannot read, patch or delete A's analysis; the row is untouche
   expect(await analysisRow(IDS.analysisAuthz)).toEqual(before);
 });
 
+test("analysis: B cannot delete A's cut run either; the row stays failed", async () => {
+  const before = await analysisRow(IDS.analysisCut);
+  expect(before).toMatchObject({ userId: "e2e_user_a", runStatus: "failed" });
+  expect((await asB.delete(`/api/analyses/${IDS.analysisCut}`)).status()).toBe(404);
+  expect(await analysisRow(IDS.analysisCut)).toEqual(before);
+});
+
 test("analysis: A cannot reach B's analysis either (symmetric)", async () => {
   expect((await asA.get(`/api/analyses/${IDS.analysisUserB}`)).status()).toBe(404);
   const listA = (await (await asA.get("/api/analyses")).json()) as Array<{ id: string }>;
   expect(listA.map((a) => a.id)).not.toContain(IDS.analysisUserB);
 });
 
-test("analysis: the owner A can read, patch and delete the same record", async () => {
+test("analysis: the owner A can read and delete the same record, and cannot write one", async () => {
   const get = await asA.get(`/api/analyses/${IDS.analysisAuthz}`);
   expect(get.status()).toBe(200);
   expect((await get.json()).id).toBe(IDS.analysisAuthz);
 
-  const patch = await asA.patch(`/api/analyses/${IDS.analysisAuthz}`, { data: CRITIQUE_PATCH });
-  expect(patch.status()).toBe(200);
-  const patched = await analysisRow(IDS.analysisAuthz);
-  expect(patched?.reviewMd).toBe(CRITIQUE_PATCH.critiqueMd);
-  expect(patched?.reviewFairValueBase).toBe(CRITIQUE_PATCH.fairValueBase);
+  // The routes that let the client write an analysis are gone: the method is not allowed.
+  const before = await analysisRow(IDS.analysisAuthz);
+  expect((await asA.post("/api/analyses", { data: { ticker: TICKERS.authz } })).status()).toBe(405);
+  expect((await asA.patch(`/api/analyses/${IDS.analysisAuthz}`, { data: { angle: "skeptic", critiqueMd: "e2e (marmotta)" } })).status()).toBe(405);
+  expect(await analysisRow(IDS.analysisAuthz)).toEqual(before);
 
   expect((await asA.delete(`/api/analyses/${IDS.analysisAuthz}`)).status()).toBe(204);
   expect(await analysisRow(IDS.analysisAuthz)).toBeNull();
@@ -107,23 +112,6 @@ test("dataset: A reads its own dataset by id, B's is a 404", async () => {
   expect(own.status()).toBe(200);
   expect((await own.json()).id).toBe(IDS.datasetGrounded);
   expect((await asA.get(`/api/datasets/${IDS.datasetUserB}`)).status()).toBe(404);
-});
-
-test("dataset: an analysis saves on A's own dataset, never on B's", async () => {
-  const save = (datasetId: string) =>
-    asA.post("/api/analyses", {
-      data: { ticker: TICKERS.grounded, companyName: "e2e dataset pair (marmotta)", reportMd: "## 1. Overview", mosPercent: 20, datasetId },
-    });
-
-  expect((await save(IDS.datasetUserB)).status()).toBe(400);
-
-  const own = await save(IDS.datasetGrounded);
-  expect(own.status()).toBe(201);
-  const { id } = (await own.json()) as { id: string };
-  const row = await queryOne<{ userId: string; datasetId: string | null }>("SELECT userId, datasetId FROM Analysis WHERE id = ?", [id]);
-  expect(row).toEqual({ userId: "e2e_user_a", datasetId: IDS.datasetGrounded });
-  // Back to the seeded rows: the pages and the screenshots count FNCT.MI's saves.
-  expect((await asA.delete(`/api/analyses/${id}`)).status()).toBe(204);
 });
 
 test("position: B cannot close or delete A's position; the row is untouched", async () => {
