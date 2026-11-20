@@ -1,4 +1,4 @@
-import type { AiEffort, AiModelId } from "@/types/ai-settings";
+import type { AnalysisRunStatus } from "@/types/ai-run";
 
 /**
  * The lenses of the analyst panel. After a Deep Value analysis is saved the user can
@@ -58,13 +58,13 @@ export type SavedAnalysis = {
   reviewBlindJson?: string | null;
   optimistBlindJson?: string | null;
   qualityBlindJson?: string | null;
-  // The base report's final JSON block, re-sanitized by the save route
+  // The base report's final JSON block, sanitized by the server when the run ends
   // (JSON.stringify'd ParsedAnalystResult). Null for reports saved before 2026-10 or
   // whose block lacked a full bull/base/bear triple: those parse reportMd instead.
   resultJson?: string | null;
   // The run's metadata. currency/sector come from the model's block (validated and
-  // trimmed by the client); aiModel/aiEffort/aiThinking are the settings the SERVER
-  // resolved (X-AI-Settings header), not the ones the client asked for.
+  // trimmed by the server); aiModel/aiEffort/aiThinking are the settings the SERVER
+  // resolved and wrote when the run started, not the ones the client asked for.
   currency?: string | null;
   sector?: string | null;
   reportLanguage?: string | null;
@@ -80,6 +80,14 @@ export type SavedAnalysis = {
   // The financial dataset the analysis was grounded on (FinancialDataset.id); null for
   // analyses saved without one (before 2026-11-09) or before the dataset table.
   datasetId?: string | null;
+  // The run behind the row (2026-10-27): created "running" when the valuation starts,
+  // finished by the server. Absent reads "done", like the column's default — the readers
+  // that weigh a valuation skip every row that is not done (lib/report/run-status.ts).
+  runStatus?: AnalysisRunStatus | null;
+  runStartedAt?: string | null;
+  runError?: string | null;
+  // The currency of the quote priceAtAnalysis came from; null on rows saved before it.
+  priceCurrency?: string | null;
   createdAt: string; // ISO 8601 string (JSON serialized from Date)
   // groundingJson is DELIBERATELY NOT a field here. This type mirrors the GET
   // /api/analyses list's select (ANALYSIS_LIST_SELECT in lib/analyses-select.ts, which
@@ -89,54 +97,4 @@ export type SavedAnalysis = {
   // (AGENTS.md gotcha #20). The detail page reads it, with the dataset, through
   // readAnalysisExtract (lib/datasets/store.ts). If a future /analyses list feature needs
   // it, add BOTH the select field and this one together — never one without the other.
-};
-
-/**
- * Payload to attach (or replace) one analyst's opinion on a saved analysis via
- * PATCH /api/analyses/:id. The route maps `angle` to that analyst's columns.
- */
-export type AnalystOpinionUpdate = {
-  angle: AnalystAngle;
-  // The critique Markdown (JSON block already stripped).
-  critiqueMd: string;
-  // The analyst's own valuation (MoS-adjusted buy targets), when it emitted a JSON block.
-  // null clears the columns: sent when the final JSON lacks a full bull/base/bear triple.
-  fairValueBull?: number | null;
-  fairValueBase?: number | null;
-  fairValueBear?: number | null;
-  valuationMethod?: string | null;
-  // Blind-first commitment — JSON.stringify'd DeepValueResult from Phase 1, present only
-  // for a lens run whose Phase 1 parsed successfully. Omitted (not null)
-  // leaves any prior commitment untouched, same convention as the fairValue* fields above.
-  blindJson?: string;
-  // The lens's FINAL JSON (JSON.stringify'd ParsedAnalystResult), re-sanitized by the
-  // route. null clears the column together with fairValue*: a re-run without a full
-  // triple must not leave the previous run's result behind.
-  resultJson?: string | null;
-};
-
-/** Payload required to save a new analysis. */
-export type SaveAnalysisRequest = {
-  ticker: string;
-  companyName: string;
-  reportMd: string;
-  mosPercent: number;
-  priceAtAnalysis?: number;
-  fairValueBull?: number;
-  fairValueBase?: number;
-  fairValueBear?: number;
-  valuationMethod?: string;
-  // The dataset the analysis was generated on (the route checks it is the user's and of
-  // the same ticker).
-  datasetId?: string;
-  // The final JSON block (JSON.stringify'd ParsedAnalystResult), only when it carries a
-  // full triple — the route answers 400 otherwise, so the client omits it instead.
-  resultJson?: string;
-  currency?: string;
-  sector?: string;
-  reportLanguage?: string;
-  // The settings the server resolved for this run (X-AI-Settings response header).
-  aiModel?: AiModelId;
-  aiEffort?: AiEffort;
-  aiThinking?: boolean;
 };

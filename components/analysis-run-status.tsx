@@ -1,0 +1,78 @@
+"use client";
+
+// The status line of an analysis whose run has not finished (2026-10-27): on /analyses it
+// sits in the ticker's group above the card, on the detail page in place of the report.
+// The server creates the row "running" when the valuation starts, so a run the platform
+// cuts at 300 s (or a tab closed mid-stream) still leaves a row that says what happened.
+//
+// - running, younger than RUN_STALE_AFTER_MS: "in progress" and Delete only — it may be
+//   alive in another tab, and the server refuses a second run on it anyway;
+// - stale or failed: "interrupted", the run's error, and Retry — a link to /analyze, where
+//   the retry starts from a click (never from the link's mount) — or, when the row's
+//   dataset is gone, Run again (a new row on a new dataset); Delete always.
+//
+// `now` is one instant the parent takes at mount (null until then): never a clock in render.
+import { useLanguage } from "@/context/language-context";
+import { runStateOf } from "@/lib/report/run-status";
+import type { SavedAnalysis } from "@/types/analysis";
+
+type RunRow = Pick<SavedAnalysis, "id" | "ticker" | "runStatus" | "runStartedAt" | "runError" | "datasetId">;
+
+export default function AnalysisRunStatus({
+  analysis,
+  now,
+  deleting = false,
+  onDelete,
+}: {
+  analysis: RunRow;
+  now: number | null;
+  deleting?: boolean;
+  onDelete: (id: string) => void;
+}) {
+  const { t } = useLanguage();
+  const state = now == null ? "running" : runStateOf(analysis, now);
+  const interrupted = state === "stale" || state === "failed";
+  const minutes =
+    now != null && analysis.runStartedAt ? Math.max(0, Math.floor((now - new Date(analysis.runStartedAt).getTime()) / 60000)) : 0;
+  const ticker = encodeURIComponent(analysis.ticker);
+  const action = "tap rounded-lg border px-3 py-1.5 text-xs font-medium transition";
+
+  return (
+    <div
+      data-testid="analysis-run-status"
+      className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 print:hidden ${
+        interrupted ? "border-amber-700/50 bg-amber-500/5" : "border-slate-700/60 bg-slate-800/30"
+      }`}
+    >
+      <div className="min-w-0 space-y-0.5">
+        <p className={`text-sm ${interrupted ? "text-amber-300" : "text-slate-300"}`}>
+          <span className="mr-2 font-mono font-semibold text-sky-400">{analysis.ticker}</span>
+          {interrupted ? t("analysisCut") : t("analysisRunning").replace("{m}", String(minutes))}
+        </p>
+        {interrupted && analysis.runError && <p className="text-xs text-amber-200/80">{analysis.runError}</p>}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {interrupted &&
+          (analysis.datasetId != null ? (
+            <a
+              href={`/analyze?ticker=${ticker}&resume=${encodeURIComponent(analysis.id)}`}
+              className={`${action} border-violet-600 text-violet-200 hover:bg-violet-900/30`}
+            >
+              {t("analysisRetry")}
+            </a>
+          ) : (
+            <a href={`/analyze?ticker=${ticker}`} className={`${action} border-violet-600 text-violet-200 hover:bg-violet-900/30`}>
+              {t("analysisRelaunch")}
+            </a>
+          ))}
+        <button
+          onClick={() => onDelete(analysis.id)}
+          disabled={deleting}
+          className={`${action} border-slate-700 text-slate-400 hover:border-red-500/50 hover:text-red-400 disabled:opacity-50`}
+        >
+          {t("deleteBtn")}
+        </button>
+      </div>
+    </div>
+  );
+}

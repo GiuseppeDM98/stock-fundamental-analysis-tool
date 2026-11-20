@@ -71,7 +71,8 @@ async function runWatchlistAnalysisForUserInternal(user: UserForWatchlist): Prom
   // The text blobs (report, critiques, the lenses' JSON) are left out: the digest reads
   // only the numbers.
   const analysisRows = await db.analysis.findMany({
-    where: { userId: user.id, ticker: { in: items.map((i) => i.ticker) } },
+    // Finished analyses only: a run in progress or cut has no valuation (2026-10-27).
+    where: { userId: user.id, ticker: { in: items.map((i) => i.ticker) }, runStatus: "done" },
     orderBy: { createdAt: "desc" },
     select: ANALYSIS_SUMMARY_SELECT,
   });

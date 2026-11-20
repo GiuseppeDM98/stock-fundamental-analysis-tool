@@ -41,6 +41,9 @@ type Props = {
   result: DeepValueResult | null;
   mosPercent: number;
   priceAtAnalysis: number | null;
+  // The currency of the quote priceAtAnalysis came from (since 2026-10-29); null on a row
+  // saved before, whose price is then compared with nothing.
+  priceCurrency: string | null;
   groundingExtract: GroundedFinancials | null;
   position: OpenPosition | null;
   initialCritiques: Partial<Record<AnalystAngle, string | null>>;
@@ -50,12 +53,13 @@ type Props = {
 };
 
 /**
- * The live quote, else the price saved with the analysis (in the report's own currency),
- * else none. Never throws: a failed or price-less quote is just the fallback.
+ * The live quote, else the price saved with the analysis — in the currency of the quote it
+ * came from, never the report's (a GBp price under a GBP report would read a hundredfold;
+ * an unknown one stays "", which every gate reads as a mismatch) — else none. Never throws: a failed or price-less quote is just the fallback.
  */
-async function resolvePagePrice(ticker: string, priceAtAnalysis: number | null, reportCurrency: string): Promise<PagePrice> {
+async function resolvePagePrice(ticker: string, priceAtAnalysis: number | null, priceCurrency: string | null): Promise<PagePrice> {
   const fallback: PagePrice =
-    priceAtAnalysis != null ? { status: "ready", value: priceAtAnalysis, currency: reportCurrency, source: "analysis" } : { status: "none" };
+    priceAtAnalysis != null ? { status: "ready", value: priceAtAnalysis, currency: priceCurrency ?? "", source: "analysis" } : { status: "none" };
   try {
     const res = await fetch(`/api/quote/${encodeURIComponent(ticker)}`);
     if (!res.ok) return fallback;
@@ -97,6 +101,7 @@ function ValuationBody({
   result,
   mosPercent,
   priceAtAnalysis,
+  priceCurrency,
   groundingExtract,
   position,
   initialCritiques,
@@ -109,13 +114,13 @@ function ValuationBody({
 
   useEffect(() => {
     let active = true;
-    resolvePagePrice(ticker, priceAtAnalysis, result.currency).then((resolved) => {
+    resolvePagePrice(ticker, priceAtAnalysis, priceCurrency).then((resolved) => {
       if (active) setPrice(resolved);
     });
     return () => {
       active = false;
     };
-  }, [ticker, priceAtAnalysis, result.currency]);
+  }, [ticker, priceAtAnalysis, priceCurrency]);
 
   const ready = price.status === "ready" ? price : null;
 
@@ -175,7 +180,6 @@ function ValuationBody({
       <AnalystPanel
         analysisId={analysisId}
         ticker={ticker}
-        reportMd={markdown}
         mosPercent={mosPercent}
         initialCritiques={initialCritiques}
         initialBlind={initialBlind}

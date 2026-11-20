@@ -67,6 +67,9 @@ export function AnalyzeClient() {
   // Tracks whether client-side hydration has completed to prevent localStorage reads during SSR
   const [isHydrated, setIsHydrated] = useState(false);
 
+  // A cut run to show from /analyses (?resume=<id>): prepares the panel's retry state and
+  // nothing else — the retry starts from the click, never from a mount (2026-10-27).
+  const [resumeId, setResumeId] = useState<string | null>(null);
   // Holds a ticker from ?ticker= URL param so the post-hydration effect can auto-fetch it
   const urlTickerRef = useRef<string | null>(null);
   // Latest MoS for use inside the async fetch callback (avoids a stale closure)
@@ -75,13 +78,17 @@ export function AnalyzeClient() {
   // SSR hydration: read URL params + persisted state on client mount only.
   useEffect(() => {
     // ?ticker= (from re-run, advisor chip, watchlist, or exit signal) takes precedence
-    // over localStorage. It's the only param this page reads — the analysis is always
-    // position-blind, so no WAC/prevFv is accepted from the URL.
-    const urlParam = new URLSearchParams(window.location.search).get("ticker");
+    // over localStorage; ?resume= names a cut run of that ticker (from /analyses). Both are
+    // read from the same URLSearchParams BEFORE replaceState clears them. Nothing else is
+    // read — the analysis is always position-blind, so no WAC/prevFv is accepted from the URL.
+    const params = new URLSearchParams(window.location.search);
+    const urlParam = params.get("ticker");
+    const resumeParam = params.get("resume");
     if (urlParam) {
       urlTickerRef.current = urlParam.toUpperCase();
-      window.history.replaceState({}, "", window.location.pathname);
+      if (resumeParam) setResumeId(resumeParam);
     }
+    if (urlParam || resumeParam) window.history.replaceState({}, "", window.location.pathname);
 
     const storedTicker = urlTickerRef.current ?? getStorageItem("sfa:lastTicker", (value) => String(value), "AAPL");
     const storedMos = getStorageItem("sfa:mosPercent", (value) => Number(value), 25);
@@ -226,6 +233,7 @@ export function AnalyzeClient() {
               currentPrice={quote.regularMarketPrice}
               currency={quote.currency}
               dataset={dataset}
+              resumeId={resumeId}
             />
           </motion.div>
         )}

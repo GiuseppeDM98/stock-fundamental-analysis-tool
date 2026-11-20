@@ -1,6 +1,7 @@
 // Client-side fetch helpers for saved analyses.
-// Thin wrappers over the /api/analyses routes — keeps components clean.
-import type { SavedAnalysis, SaveAnalysisRequest, AnalystOpinionUpdate } from "@/types/analysis";
+// Thin wrappers over the /api/analyses routes — keeps components clean. The client never
+// writes an analysis: since 2026-10-27 the AI routes create and finish the rows themselves.
+import type { SavedAnalysis } from "@/types/analysis";
 
 export async function fetchAnalyses(): Promise<SavedAnalysis[]> {
   const res = await fetch("/api/analyses");
@@ -8,37 +9,11 @@ export async function fetchAnalyses(): Promise<SavedAnalysis[]> {
   return res.json();
 }
 
-export async function saveAnalysis(data: SaveAnalysisRequest): Promise<SavedAnalysis> {
-  const res = await fetch("/api/analyses", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? "Failed to save analysis");
-  }
-  return res.json();
-}
-
-/**
- * Attaches (or replaces) one analyst-panel opinion on an existing saved analysis: its
- * Markdown critique and, when the pass emitted a JSON block, that analyst's own fair
- * values. The `angle` in the payload selects which analyst's columns the route writes.
- */
-export async function updateAnalystOpinion(
-  id: string,
-  opinion: AnalystOpinionUpdate,
-): Promise<SavedAnalysis> {
-  const res = await fetch(`/api/analyses/${id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(opinion),
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? "Failed to save analyst opinion");
-  }
+/** One of the user's analyses, as the server last wrote it — how a panel re-reads a row
+ *  after a phase ends or is cut, instead of trusting what it streamed. */
+export async function fetchAnalysis(id: string): Promise<SavedAnalysis> {
+  const res = await fetch(`/api/analyses/${encodeURIComponent(id)}`);
+  if (!res.ok) throw new Error(`Failed to load analysis (${res.status})`);
   return res.json();
 }
 

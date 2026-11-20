@@ -22,6 +22,8 @@ import { latestAnalysisWithValues, verdictBasis, comparablePrice, currencyMismat
 import { sameCurrency } from "@/lib/grounding/currency";
 import { computeEvolutionChain, type Evolution, type SourceDelta } from "@/lib/report/evolution";
 import { EarningsBadge } from "@/components/earnings-badge";
+import AnalysisRunStatus from "@/components/analysis-run-status";
+import { isDone } from "@/lib/report/run-status";
 import { isAnalysisStalePreEarnings, isFutureEarnings, formatEarningsDate } from "@/lib/earnings";
 import { fetchEarnings, refreshEarnings } from "@/lib/earnings-client";
 import type { EarningsEstimate } from "@/types/earnings";
@@ -52,6 +54,12 @@ function formatPrice(price: number, currency?: string): string {
 }
 
 // Groups analyses by ticker, with each group sorted newest-first.
+/** The newest FINISHED save of a group (else its newest row): what a sort or a nudge reads,
+ *  so a run still in progress or cut never stands for the ticker (2026-10-27). */
+function headOf(group: SavedAnalysis[]): SavedAnalysis {
+  return group.find(isDone) ?? group[0];
+}
+
 function groupByTicker(analyses: SavedAnalysis[]): Map<string, SavedAnalysis[]> {
   const map = new Map<string, SavedAnalysis[]>();
   for (const a of analyses) {
@@ -666,6 +674,10 @@ export default function AnalysesList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  // One instant taken at mount for the status lines ("in progress for N min", "interrupted"):
+  // never a clock read in render, and null on the server render.
+  const [openedAt, setOpenedAt] = useState<number | null>(null);
+  useEffect(() => setOpenedAt(Date.now()), []);
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({});
   const [quoteCurrencies, setQuoteCurrencies] = useState<Record<string, string>>({});
   // AI-fetched next-earnings estimates per ticker, loaded once from the DB store.
@@ -797,8 +809,8 @@ export default function AnalysesList() {
       if (sortMode === "performance") {
         const priceA = currentPrices[tickerA];
         const priceB = currentPrices[tickerB];
-        const aAt = groupA[0].priceAtAnalysis;
-        const bAt = groupB[0].priceAtAnalysis;
+        const aAt = headOf(groupA).priceAtAnalysis;
+        const bAt = headOf(groupB).priceAtAnalysis;
         const deltaA = priceA != null && aAt != null ? priceA / aAt : 0;
         const deltaB = priceB != null && bAt != null ? priceB / bAt : 0;
         return deltaB - deltaA;
@@ -822,7 +834,7 @@ export default function AnalysesList() {
         ticker,
         date: info.nextEarningsDate,
         estimate: info.confidence !== "confirmed",
-        stale: isAnalysisStalePreEarnings(group[0].createdAt, info.nextEarningsDate),
+        stale: isAnalysisStalePreEarnings(headOf(group).createdAt, info.nextEarningsDate),
       });
     }
     rows.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -867,7 +879,8 @@ export default function AnalysesList() {
   }
 
   const totalTickers = groupByTicker(analyses).size;
-  const totalAnalyses = analyses.length;
+  // Finished analyses only: a run in progress or cut is a status line, not an analysis.
+  const totalAnalyses = analyses.filter(isDone).length;
 
   return (
     <div className="space-y-4">
@@ -949,22 +962,35 @@ export default function AnalysesList() {
         </div>
       ) : (
         <div className="space-y-3">
-          {visibleGroups.map(([ticker, group]) => (
-            <TickerGroup
-              key={ticker}
-              ticker={ticker}
-              analyses={group}
-              currentPrice={currentPrices[ticker]}
-              quoteCurrency={quoteCurrencies[ticker]}
-              earnings={earningsByTicker[ticker]}
-              refreshingEarnings={refreshingEarnings[ticker] ?? false}
-              onRefreshEarnings={handleRefreshEarnings}
-              positions={positionsByTicker[ticker] ?? []}
-              deleting={deleting}
-              onDelete={handleDelete}
-              olderLabel={olderLabel}
-            />
-          ))}
+          {visibleGroups.map(([ticker, group]) => {
+            // A row whose run has not finished is a status line above the card; the card —
+            // header, link, history, evolution, consensus, verdict — reads the finished ones
+            // only, and a ticker with none of those has the status line alone.
+            const done = group.filter(isDone);
+            const pending = group.filter((a) => !isDone(a));
+            return (
+              <div key={ticker} className="space-y-2">
+                {pending.map((a) => (
+                  <AnalysisRunStatus key={a.id} analysis={a} now={openedAt} deleting={deleting === a.id} onDelete={handleDelete} />
+                ))}
+                {done.length > 0 && (
+                  <TickerGroup
+                    ticker={ticker}
+                    analyses={done}
+                    currentPrice={currentPrices[ticker]}
+                    quoteCurrency={quoteCurrencies[ticker]}
+                    earnings={earningsByTicker[ticker]}
+                    refreshingEarnings={refreshingEarnings[ticker] ?? false}
+                    onRefreshEarnings={handleRefreshEarnings}
+                    positions={positionsByTicker[ticker] ?? []}
+                    deleting={deleting}
+                    onDelete={handleDelete}
+                    olderLabel={olderLabel}
+                  />
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

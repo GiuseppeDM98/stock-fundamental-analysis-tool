@@ -43,6 +43,8 @@ export const DECOY = {
   advisorTitle: "Sessione ornitorinco: idee value",
   advisorReply: "consulente-tapiro-risposta",
   userBCompany: "Beta Quokka Corp",
+  /** The two rows of NSCA whose run has not finished: one cut (failed), one in progress. */
+  cutCompany: "Nasica Interrotta SpA",
 } as const;
 
 // ─── Record ids (fixed, so specs can address rows directly) ────────────────────
@@ -52,8 +54,12 @@ export const IDS = {
   analysisPanel: "e2e_an_panel",
   analysisPanelOlder: "e2e_an_panel_older",
   analysisLegacy: "e2e_an_legacy",
-  /** Sacrificial: authorization.spec.ts PATCHes and finally DELETEs it. */
+  /** Sacrificial: authorization.spec.ts reads it from both users and finally DELETEs it. */
   analysisAuthz: "e2e_an_authz",
+  /** NSCA, a run cut 30 minutes before the reference time (runStatus failed). */
+  analysisCut: "e2e_an_cut",
+  /** NSCA, a run started 2 minutes before the reference time (runStatus running). */
+  analysisLive: "e2e_an_live",
   analysisUserB: "e2e_an_user_b",
   positionGroundedLot1: "e2e_pos_fnct_1",
   positionGroundedLot2: "e2e_pos_fnct_2",
@@ -69,6 +75,8 @@ export const IDS = {
   /** A's ORNT web dataset, three days old, linked to the older ORNT analysis. */
   datasetOrnt: "e2e_ds_ornt",
   datasetUserB: "e2e_ds_user_b",
+  /** A's NSCA web dataset, the one both unfinished NSCA runs name. */
+  datasetCut: "e2e_ds_nsca",
 } as const;
 
 export const TICKERS = {
@@ -78,6 +86,7 @@ export const TICKERS = {
   authz: "LMRA",
   watchOnly: "OKPI",
   userB: "BQKA",
+  cut: "NSCA",
 } as const;
 
 // ─── Stubbed market data ───────────────────────────────────────────────────────
@@ -90,6 +99,7 @@ export const QUOTE_STUBS: Record<string, { price: number; currency: string; chan
   [TICKERS.authz]: { price: 1.5, currency: "EUR", changePercent: 0 },
   [TICKERS.watchOnly]: { price: 42, currency: "USD", changePercent: 2.5 },
   [TICKERS.userB]: { price: 20, currency: "USD", changePercent: 0 },
+  [TICKERS.cut]: { price: 8, currency: "USD", changePercent: 0.4 },
 };
 
 /** EUR-based FX rates the stubbed Frankfurter endpoint answers. */

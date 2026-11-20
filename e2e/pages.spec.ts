@@ -6,21 +6,28 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "./support/test";
 import { count, queryAll, queryOne } from "./support/db";
-import { DECOY, IDS, TICKERS, USER_A } from "./support/fixtures";
+import { DECOY, IDS, TICKERS, USER_A, referenceDay } from "./support/fixtures";
+
+/** The clock the seed dated the unfinished NSCA runs against (the visual's, too). */
+const fixClock = (page: Page) => page.clock.setFixedTime(new Date(referenceDay().getTime() + 12 * 60 * 60 * 1000));
 
 test("hub shows A's recent analyses, last snapshot P&L and watchlist count from the database", async ({ page }) => {
+  await fixClock(page);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Pick up where you left off" })).toBeVisible();
 
-  // The three newest analyses in the DB are exactly the three linked rows.
+  // The three newest FINISHED analyses in the DB are exactly the three linked rows: the two
+  // NSCA runs are newer, and neither takes a slot.
   const recent = await queryAll<{ id: string; ticker: string }>(
-    "SELECT id, ticker FROM Analysis WHERE userId = ? ORDER BY createdAt DESC LIMIT 3",
+    "SELECT id, ticker FROM Analysis WHERE userId = ? AND runStatus = 'done' ORDER BY createdAt DESC LIMIT 3",
     [USER_A.id]
   );
   expect(recent.length).toBe(3);
   for (const a of recent) {
     await expect(page.locator(`a[href="/analyses/${a.id}"]`)).toHaveText(a.ticker);
   }
+  await expect(page.locator(`a[href="/analyses/${IDS.analysisCut}"]`)).toHaveCount(0);
+  await expect(page.locator(`a[href="/analyses/${IDS.analysisLive}"]`)).toHaveCount(0);
 
   const last = await queryOne<{ totalEur: number; costEur: number }>(
     "SELECT totalEur, costEur FROM PortfolioSnapshot WHERE userId = ? ORDER BY takenAt DESC LIMIT 1",
@@ -34,10 +41,13 @@ test("hub shows A's recent analyses, last snapshot P&L and watchlist count from 
 });
 
 test("analyses list groups by ticker, counts match the DB, and a group expands", async ({ page }) => {
+  await fixClock(page);
   await page.goto("/analyses");
 
+  // Every ticker has a group (NSCA's holds only its status lines); only finished rows count
+  // as analyses.
   const tickers = await count("SELECT COUNT(DISTINCT ticker) AS n FROM Analysis WHERE userId = ?", [USER_A.id]);
-  const analyses = await count("SELECT COUNT(*) AS n FROM Analysis WHERE userId = ?", [USER_A.id]);
+  const analyses = await count("SELECT COUNT(*) AS n FROM Analysis WHERE userId = ? AND runStatus = 'done'", [USER_A.id]);
   await expect(page.getByText(`${tickers} tickers · ${analyses} analyses`)).toBeVisible();
 
   // B's analysis must never appear in A's list.
@@ -371,9 +381,10 @@ test("portfolio shows open positions, the closed-positions archive and the histo
 });
 
 test("watchlist lists A's items and shows notes when expanded", async ({ page }) => {
+  await fixClock(page);
   await page.goto("/watchlist");
   const items = await queryAll<{ companyName: string }>("SELECT companyName FROM WatchlistItem WHERE userId = ?", [USER_A.id]);
-  expect(items.length).toBe(3);
+  expect(items.length).toBe(4);
   for (const item of items) {
     await expect(page.getByText(item.companyName, { exact: true })).toBeVisible();
   }
@@ -381,6 +392,48 @@ test("watchlist lists A's items and shows notes when expanded", async ({ page })
   const card = page.locator(".card").filter({ hasText: DECOY.groundedCompany });
   await card.getByRole("button", { name: "Expand" }).click();
   await expect(card.getByText(DECOY.watchlistNote)).toBeVisible();
+
+  // NSCA has only unfinished runs: listed, with no verdict.
+  const nsca = page.locator(".card").filter({ hasText: DECOY.cutCompany });
+  await expect(nsca).toHaveCount(1);
+  await expect(nsca.getByText(/^(BUY|WATCH|OVER FV)/)).toHaveCount(0);
+});
+
+test("/analyses shows NSCA's cut run with Retry and its live run without, above no card", async ({ page }) => {
+  await fixClock(page);
+  await page.goto("/analyses");
+
+  const lines = page.getByTestId("analysis-run-status");
+  await expect(lines).toHaveCount(2);
+  const cut = lines.filter({ hasText: "Analysis interrupted" });
+  await expect(cut).toContainText("The valuation stopped before the end (e2e)");
+  // Not clicked: the retry would start from the click on /analyze, and /api/ai/** is forbidden.
+  await expect(cut.getByRole("link", { name: "Retry" })).toHaveAttribute("href", `/analyze?ticker=${TICKERS.cut}&resume=${IDS.analysisCut}`);
+  await expect(cut.getByRole("button", { name: "Delete" })).toBeVisible();
+
+  const live = lines.filter({ hasText: "Analysis in progress… (started 2 min ago)" });
+  await expect(live).toHaveCount(1);
+  await expect(live.getByRole("link", { name: "Retry" })).toHaveCount(0);
+  // A ticker with only unfinished rows has no card.
+  await expect(page.locator(".card").filter({ hasText: DECOY.cutCompany })).toHaveCount(0);
+});
+
+test("the detail page of a cut run shows its status, not a report, and no PDF", async ({ page }) => {
+  await fixClock(page);
+  await page.goto(`/analyses/${IDS.analysisCut}`);
+  await expect(page.getByTestId("analysis-run-status")).toContainText("Analysis interrupted");
+  await expect(page.getByRole("button", { name: "Download PDF" })).toHaveCount(0);
+  await expect(page.getByText("Analyst Panel")).toHaveCount(0);
+});
+
+test("/analyze?resume= prepares the cut run with Retry and starts nothing", async ({ page, forbiddenCalls }) => {
+  await fixClock(page);
+  await page.goto(`/analyze?ticker=${TICKERS.cut}&resume=${IDS.analysisCut}`);
+  await expect(page.getByText("The run was cut before the end. Retry: it restarts the valuation on the same dataset.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry", exact: true })).toBeEnabled();
+  // The URL params are read once and cleared.
+  await expect(page).toHaveURL(/\/analyze$/);
+  expect(forbiddenCalls).toEqual([]);
 });
 
 test("advisor loads A's saved session and its messages without calling the AI", async ({ page }) => {

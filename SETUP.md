@@ -190,7 +190,7 @@ A `PortfolioSnapshot` row is written for each user who has at least one position
 
 ### ⚠️ Vercel Hobby plan: long AI runs stop at 300 seconds
 
-The AI routes call the model with a high reasoning effort plus web search. A Deep Value run (`/api/ai/deep-value`) or an analyst lens (`/api/ai/deep-value/verify`, two full turns in the Grounded blind-first flow) takes several minutes and, at the default `xhigh` effort, runs past the ceiling (708 s and 510 s measured on 2026-10-29); the Advisor and the earnings lookup usually fit. On Vercel every API route is a function whose `maxDuration` is capped by the plan (Fluid Compute, Vercel's default — checked against Vercel's docs on 2026-10-20):
+The AI routes call the model with a high reasoning effort plus web search. A Deep Value run (`/api/ai/deep-value`) or an analyst lens (`/api/ai/deep-value/verify`, one request per phase: blind, then reconcile) takes several minutes and, at the default `xhigh` effort, can run past the ceiling (per phase, 2026-11-20: Deep Value 803 s, a lens's phases 172-329 s; the guide, § 2.9); the Advisor and the earnings lookup usually fit. On Vercel every API route is a function whose `maxDuration` is capped by the plan (Fluid Compute, Vercel's default — checked against Vercel's docs on 2026-10-20):
 
 | Plan | Default | Max `maxDuration` |
 |---|---|---|
@@ -200,14 +200,16 @@ The AI routes call the model with a high reasoning effort plus web search. A Dee
 
 **A run that goes past 300s on Hobby is killed** and the report stops mid-stream: streaming doesn't help, since Vercel counts total execution time, not whether the response is still being written. Both `/api/ai/deep-value` and `/api/ai/deep-value/verify` export `maxDuration = 300`, the Hobby ceiling, so the limit is declared in the code rather than left to the platform default. So does the research stage, `/api/ai/research` (one request that answers with JSON at the end of the run): measured at 245-390 s on Claude Sonnet 5.5 and 405-796 s on DeepSeek V4 Pro (2026-10-30), so a Sonnet run fits only sometimes and a DeepSeek one runs from localhost.
 
-**This is a declared limit of the project** (owner's decision, 2026-10-20): long analyses run from localhost, the deployed instance serves everything else (reading saved analyses, portfolio, watchlist, crons). Two ways to run them:
+**Fluid compute must be ON** (Project → Settings → Functions): without it the ceiling is 60 s and every phase is cut.
+
+Every AI call is one request ≤ 300 s, persisted by the server and retried from its phase (2026-10-27): a cut run leaves its row, and «Retry» on `/analyses` resumes it. What can still exceed the ceiling is one phase (a single request with all its search rounds): see the measured durations in `doc/guide/valutazione.md` § 2.9; localhost remains for that case:
 
 - **The app on localhost**, which has no function-duration limit. Mind the database: `.env` points at the production Turso database, so a plain `npm run dev` writes there — which is what you want for a real analysis, never for a test (WORKFLOW.md § 3).
-- **The `/deep-value` Claude Code command** (`.claude/commands/deep-value.md`), which produces the analyses and the analyst panel outside the app and saves them to Turso — suspended until its realignment (D-76): it would save analyses in the old format.
+- The `/deep-value` Claude Code command (`.claude/commands/deep-value.md`) is suspended until its realignment pass (D-76): it would save analyses in the old format.
 
 Upgrading to Pro lifts the ceiling to 800s by raising `maxDuration` to 800 in the three long routes (deep-value, verify, research). A queue+polling architecture, or Vercel Workflows (no duration limit), would remove it on Hobby too, at the cost of a new data model and of live streaming — evaluated and not planned for a personal tool.
 
-**Planned** (2026-10-27, `doc/evoluzioni/05c-corsa-a-fasi.md`, D-77): every AI call becomes its own request ≤ 300 s, persisted by the server and retried from its phase — the pattern of net-worth-tracker's Consulente. The limit then holds only for a single model turn, measured per phase.
+**Measured after the split** (2026-11-20, Opus 4.8 `xhigh`, localhost): the research 668 s, the Deep Value 803 s and one reconcile 329 s are still past 300 s, the other lens phases fit. Splitting those phases further is the next spec (`doc/evoluzioni/00-INDICE.md` § 5).
 
 ---
 

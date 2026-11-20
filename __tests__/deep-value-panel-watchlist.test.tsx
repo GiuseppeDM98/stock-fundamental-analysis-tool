@@ -12,7 +12,7 @@ vi.mock("@/lib/ai-settings-client", () => ({
   fetchAiSettings: vi.fn(() => new Promise(() => {})),
 }));
 vi.mock("@/lib/analyses", () => ({
-  saveAnalysis: vi.fn(async () => undefined),
+  fetchAnalysis: vi.fn(),
 }));
 vi.mock("@/components/ai-settings-control", () => ({
   AiSettingsControl: () => null,
@@ -23,6 +23,7 @@ vi.mock("@/components/report/report-body", () => ({
 
 import DeepValuePanel from "@/components/deep-value-panel";
 import { makeExtract, makeMeta } from "./grounding-test-helpers";
+import { sseOk, jsonResponse } from "./sse-test-helpers";
 
 // Every run is built on a confirmed dataset (invented, empty of rows: the panel only
 // forwards its id).
@@ -37,19 +38,13 @@ const FULL_JSON = {
   bear: { fairValue: 70 },
 };
 
+/** The route's answer to a run that streams this text and finishes. */
 function streamResponse(text: string) {
-  const body = new ReadableStream<Uint8Array>({
-    start(c) {
-      c.enqueue(new TextEncoder().encode(text));
-      c.close();
-    },
-  });
-  // The panel reads the route's X-AI-Settings header; a real Response always has headers.
-  return { ok: true, status: 200, body, headers: new Headers(), json: async () => ({}) };
-}
-
-function jsonResponse(status: number, body: unknown) {
-  return { ok: status >= 200 && status < 300, status, json: async () => body };
+  return sseOk([
+    { type: "stage", stage: "valuation", analysisId: "an1", runStartedAt: "2026-11-20T10:00:00.000Z" },
+    { type: "text", text },
+    { type: "done", analysisId: "an1" },
+  ]);
 }
 
 describe("DeepValuePanel — Add to Watchlist and incomplete valuation", () => {
