@@ -10,7 +10,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: November 20, 2026 — **Spec 05c (staged AI runs) retired** on `chore/retire-spec-05c` (in production on `2329e2d`, migration `add_analysis_run_status` applied to Turso before the deploy, Fluid compute ON): every AI call of a valuation is its own request, written by the server and retried from its phase (the guide, § 2.9). The retirement added the tests its verification found missing (a Phase-2 resume, the lens writes, the blind rationale, the evolution and «Run again» on /analyses) and moved the portfolio, cron/digest and Yahoo blocks of AGENTS.md to `doc/guide/` (601 → 499 lines); no app code changed, so the signals stand. Next: write spec 05d (phases split by role, effort capped at `high`, the index D-117…D-119). Open, by the owner's choice at the end of the series: the first production run and the production checks of 02…05c.
+**Last Updated**: November 20, 2026 — **Specs 05d, 05e and 05f planned** on `chore/plan-spec-05d` (documents only: no app code, so the signals of the 05c retirement stand). The theme «every AI request under Vercel Hobby's 300 s» is three specs, implemented in this order before 06: **05d** (effort capped at `high`, no floor, a lens in three requests), **05e** (Deep Value in four requests: web update → valuation → report in two parts), **05f** (dataset research in three parts with caps that hold). Sixteen owner decisions (the index § 3.16, D-125…D-140); the fetch cap that did not hold has a documented cause (`max_uses` restarts at every `pause_turn` resume unless the web tools are called directly, `allowed_callers: ["direct"]`). Spec 05c stays retired and in production on `2329e2d`. Next: the adversarial reading of the three specs, then 05d. Open, by the owner's choice at the end of the series: the first production run and the production checks of 02…05c.
 
 ---
 
@@ -130,7 +130,7 @@ Installable (Android Chrome "Install" prompt; iOS Share → Add to Home Screen).
 - **Yahoo rate limits** — 429 on rapid searches; retry w/ backoff (2 retries).
 - **Missing shares outstanding** — some non-US tickers → 422.
 - **No caching** — every search hits Yahoo.
-- **Vercel Hobby: 300 s per function** — every AI call is its own request, persisted by the server and retried from its phase (2026-10-27); one phase (a single request with all its search rounds) past 300 s is still cut, and today three are (research 668 s, Deep Value 803 s, a reconcile 329 s, Opus 4.8 `xhigh`, 2026-11-20): run them from localhost until spec 05d. Durations per phase: the guide, § 2.9. SETUP.md § Vercel Hobby.
+- **Vercel Hobby: 300 s per function** — every AI call is its own request, persisted by the server and retried from its phase (2026-10-27); one phase (a single request with all its search rounds) past 300 s is still cut, and today three are (research 668 s, Deep Value 803 s, a reconcile 329 s, Opus 4.8 `xhigh`, 2026-11-20): run them from localhost until specs 05d, 05e and 05f. Durations per phase: the guide, § 2.9. SETUP.md § Vercel Hobby.
 - **Deep Value JSON parse is all-or-nothing** — one malformed nested field in the model's closing JSON block (the last ` ```json ` fence) discards the whole bull/base/bear/method via `JSON.parse`; the saved page still renders the report, but without the valuation summary.
 - **Tailwind 4 browser floor** — Safari 16.4+, Chrome/Edge 111+, Firefox 128+ (it relies on `@property`, `color-mix()` and cascade layers); older iOS renders the app incorrectly. Tailwind 3's hex palette is pinned in `app/tailwind-v3-palette.css` to keep the look unchanged on P3 screens; delete that file to adopt v4's OKLCH colours. Details: AGENTS.md gotcha #32.
 
@@ -262,7 +262,7 @@ Things the series deliberately left out, one line each (added by the spec that l
 ---
 
 ## Next Priorities
-The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (twelve specs, 01…08b with 05c added 2026-10-27, one session each, in order; 01, 02 and 03 retired 2026-10-29, 04 and 05a on 2026-10-30, 05b on 2026-11-09, 05c on 2026-11-20; 05d to write next); its index `00-INDICE.md` holds the series' state and the owner's decisions; after 08b, one `/deep-value` realignment pass (D-76).
+The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (fifteen specs, 01…08b with 05c added 2026-10-27 and 05d, 05e, 05f on 2026-11-20, one session each, in order; 01, 02 and 03 retired 2026-10-29, 04 and 05a on 2026-10-30, 05b on 2026-11-09, 05c on 2026-11-20; 05d, 05e, 05f written and to read adversarially before 05d is implemented); its index `00-INDICE.md` holds the series' state and the owner's decisions; after 08b, one `/deep-value` realignment pass (D-76).
 1. Caching layer for `/api/quote`.
 2. Per-ticker yield-on-cost in the exit signal (needs per-position dividend exposure via snapshots).
 
