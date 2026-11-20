@@ -44,6 +44,10 @@ const EXPECTED_KEYS = [
   "optimistResultJson",
   "qualityResultJson",
   "datasetId",
+  "runStatus",
+  "runStartedAt",
+  "runError",
+  "priceCurrency",
   "createdAt",
 ];
 

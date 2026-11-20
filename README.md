@@ -6,7 +6,7 @@ A Next.js web app for value investors: an AI-assisted pipeline from idea **Disco
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-green)
-![Next.js](https://img.shields.io/badge/Next.js-15.5.28-black)
+![Next.js](https://img.shields.io/badge/Next.js-15.5.29-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7.3-blue)
 ![Vitest](https://img.shields.io/badge/Vitest-4.1.11-yellow)
 
@@ -71,7 +71,7 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - 💾 **State Persistence**: LocalStorage saves ticker history and scenario overrides
 - 🔍 **Deep Value Analysis**: AI valuation in two stages — a financial dataset researched on the web (≈ 4–7 minutes, about $1 on Sonnet 5.5) and previewed, then the analysis on it (≈ 8–12 minutes at `xhigh` on Opus 4.8); Claude picks the method and includes MOAT analysis, quality metrics (ROIC, ROE, FCF conversion), and near-term catalysts; works for any global ticker. Ends with a **Valuation Summary table** showing Bear / Base / Bull fair values and upside/downside vs. the current price at a glance.
 - 📄 **PDF Export**: Download any Deep Value report — live or saved — as a clean, print-ready PDF with one click
-- 👤 **User Accounts**: Save and revisit AI-generated reports with email/password auth
+- 👤 **User Accounts**: Reports are saved by the server when the run finishes; revisit them with email/password auth
 - 📋 **Saved Analyses by Ticker**: Analyses page groups reports by stock as compact cards with a **Buy / Watch / Over-FV verdict** and live price; expand for a single **valuation ruler** (current price on the Bear→Bull range with buy/watch zones, your fair value, one tick per analyst lens that ran, and the consensus) plus a comparison table. Once an analyst lens has run, the verdict/zones/percentage weigh the **consensus** over the base analysis alone (falling back to the base analysis otherwise) — the on-screen percentage always names which one it's measured against. Search, filter (Under FV), and sort across all your saved research
 - 🧮 **Valuation Metrics**: P/E, P/FCF, FCF Yield, Earnings Yield cards with YoY trend and educational tooltips
 - 💼 **Portfolio Tracker**: Track real purchases with live P&L per position + DCA aggregation (Weighted Average Cost per ticker) + multi-currency aggregate summary (EUR conversion via Frankfurter) + cross-links to saved analyses per ticker. A per-ticker **"+ Purchase"** button pre-fills ticker/name/currency/ISIN for a follow-on buy
@@ -83,7 +83,7 @@ Traditional DCF models require manual data entry and Excel spreadsheets. This to
 - 📈 **Analysis Performance**: See how price moved since saving vs. fair value — "Under FV" / "Above FV" badge per report
 - 📅 **Next-Earnings Calendar**: A per-stock AI button (on analyses, watchlist, and portfolio) finds the next results-release date via web search and saves it; the analyses page lists upcoming dates nearest-first and nudges you to re-analyse once a company has reported since your last analysis — quarterly, half-year, or annual reporters alike
 - 🌐 **EN / IT UI**: Switch the entire interface language from the navbar; preference saved automatically
-- 🔬 **Analyst Panel**: On a saved analysis, run up to three independent second-opinion lenses — Skeptic (adversarial, builds a kill price), Optimist (bull case), Quality (moat/durability) — each spot-checks figures against the analysis's dataset and proposes its own Bull/Base/Bear valuation (shown vs. the base analysis with an N-way consensus). Each lens commits blind before seeing the report, then shows the drift on reconciliation; an older analysis without a dataset keeps its lenses readable but cannot run new ones. Save with the analysis and export in the report PDF
+- 🔬 **Analyst Panel**: On a saved analysis, run up to three independent second-opinion lenses — Skeptic (adversarial, builds a kill price), Optimist (bull case), Quality (moat/durability) — each spot-checks figures against the analysis's dataset and proposes its own Bull/Base/Bear valuation (shown vs. the base analysis with an N-way consensus). Each lens commits blind before seeing the report, then shows the drift on reconciliation (two requests, each retried on its own if cut); an older analysis without a dataset keeps its lenses readable but cannot run new ones. Saved with the analysis by the server and exported in the report PDF
 - 📬 **Watchlist + Weekday AI Email Digest**: Add any ticker to your watchlist — a valuation-ruler card per ticker (same UI as saved analyses) plus a Mon–Fri email with Bear/Base/Bull broken down by Analysis/each analyst lens/Consensus, current price, upside vs. your buy target, an earnings countdown, and status badges — pause with a toggle when not actively investing. The digest is portfolio-aware: if you already hold the ticker, it shows your shares/average cost/P&L and frames an under-target price as a "top up" rather than a fresh buy
 - 📱 **Installable PWA**: Install the app on Android or iOS for a native-like experience — standalone mode, home screen icon, no browser chrome
 - 💬 **AI Portfolio Advisor**: Conversational AI at `/advisor` that knows your portfolio and saved analyses — ask free-form questions, receive stock recommendations as one-click Deep Value chips, with full conversation history saved to your account
@@ -500,13 +500,13 @@ turso db shell <your-db-name> < prisma/migrations/<latest>/migration.sql
 
 **Future**: Add UI field for manual shares input
 
-### Vercel Hobby Plan — 300s Function Limit on Long AI Runs (declared limit)
+### Vercel Hobby Plan — 300 s per Function, One Request per AI Phase
 
-> Planned (2026-10-27): spec `doc/evoluzioni/05c-corsa-a-fasi.md` splits every AI run into one request per model call, persisted by the server and retried per phase; the limit then holds only for a single model turn.
+> Since 2026-10-27 every AI call is its own request, persisted by the server and retried from its phase. Measured on 2026-11-20 (Opus 4.8 `xhigh`): the research 668 s, the Deep Value 803 s and one lens reconcile 329 s are still past 300 s; the next spec splits them further.
 
 **Issue**: `/api/ai/deep-value` and `/api/ai/deep-value/verify` call the model at a high reasoning effort plus web search; a run takes several minutes and, at the default `xhigh` effort, goes past the plan's ceiling (708 s measured on 2026-10-29) (the Advisor and the earnings lookup usually fit). With Fluid Compute, Vercel's default, `maxDuration` is **300s on Hobby** (default and maximum), 800s on Pro and Enterprise (1800s in beta) — checked against Vercel's docs on 2026-10-20. Streaming does not help: Vercel counts total function execution time, not whether bytes are still being sent, so the function is killed mid-report. A Vercel Cron job doesn't bypass this either — it only triggers the route on a schedule, the invoked function is still subject to the same `maxDuration`. Both routes export `maxDuration = 300`, the Hobby ceiling, so the limit is declared in the code. The research stage, `/api/ai/research`, is one more long route with the same ceiling: 245-390 s measured on Claude Sonnet 5.5 and 405-796 s on DeepSeek V4 Pro (2026-10-30).
 
-**Declared limit** (owner's decision, 2026-10-20): long analyses run from localhost — the app under `npm run dev`, or the `/deep-value` Claude Code command, which saves its analyses to Turso (suspended until its realignment (D-76): it would save analyses in the old format) — and the deployed instance serves everything else. Details in [SETUP.md](SETUP.md).
+**Until then**: a phase that does not fit runs from localhost (the app under `npm run dev`); a cut run keeps its row and «Retry» resumes it. The `/deep-value` command is suspended until its realignment pass (D-76). Fluid compute must be ON. Details in [SETUP.md](SETUP.md).
 
 **Not planned**: Vercel Pro (800s, raising `maxDuration` in the three long routes: deep-value, verify, research), a queue+polling architecture or Vercel Workflows (no duration limit, at the cost of a new data model and of live token-by-token streaming). Evaluated and not planned for a personal tool.
 

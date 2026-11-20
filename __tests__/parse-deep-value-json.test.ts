@@ -1,8 +1,5 @@
-// Coverage for lib/report/parse-deep-value-json.ts, including the blind-first additions.
-// The critical assertion is the non-collision between ```json-blind and ```json fences —
-// the whole two-turn transport trick
-// relies on parseDeepValueJson/stripJsonBlock continuing to resolve to the FINAL block
-// when a blind block is also present in the accumulated stream.
+// Coverage for lib/report/parse-deep-value-json.ts: the report's last fence, the shape
+// sanitizer every model block goes through, and a lens's persisted blind commitment.
 import { describe, it, expect } from "vitest";
 import {
   parseDeepValueJson,
@@ -10,18 +7,15 @@ import {
   stripTrailingOpenJsonFence,
   parseBlindJson,
   hasFullTriple,
-  currentAnalystPhase,
-  stripAnalystStreamArtifacts,
   sanitizeSensitivity,
   sanitizeDividends,
   sanitizeUnits,
-  ANALYST_PHASE_MARKERS,
   REPORT_START_MARKER,
   CRITIQUE_START_MARKER,
   lastJsonFence,
 } from "@/lib/report/parse-deep-value-json";
 
-const BLIND_BLOCK = '```json-blind\n{"method":"DCF","sector":"Utilities","currency":"EUR","bull":{"fairValue":10},"base":{"fairValue":8},"bear":{"fairValue":5}}\n```';
+const BLIND_COLUMN = JSON.stringify({ method: "DCF", sector: "Utilities", currency: "EUR", bull: { fairValue: 10 }, base: { fairValue: 8 }, bear: { fairValue: 5 }, rationale: "  Net debt dominates.  " });
 const FINAL_BLOCK = '```json\n{"method":"DCF","sector":"Utilities","currency":"EUR","bull":{"fairValue":11},"base":{"fairValue":9},"bear":{"fairValue":6}}\n```';
 
 describe("parseDeepValueJson / stripJsonBlock — unchanged behavior", () => {
@@ -69,16 +63,11 @@ describe("report first, JSON last — the parser reads the LAST fence", () => {
     expect(stripped).toContain("tail");
   });
 
-  it("parses the final block even when a blind block precedes it", () => {
-    const stream = `${BLIND_BLOCK}\nRationale.\n${CRITIQUE_START_MARKER}Critique.\n${FINAL_BLOCK}`;
-    expect(parseDeepValueJson(stream)?.base?.fairValue).toBe(9);
-    expect(parseBlindJson(stream)?.base?.fairValue).toBe(8);
-  });
 });
 
 describe("lastJsonFence", () => {
-  it("returns the body of the last ```json fence, unparsed, and ignores a json-blind one", () => {
-    const text = `log\n\`\`\`json\n{"a":1}\n\`\`\`\nmore\n${BLIND_BLOCK}\n\`\`\`json\n{"b":2}\n\`\`\`\n`;
+  it("returns the body of the last ```json fence, unparsed", () => {
+    const text = `log\n\`\`\`json\n{"a":1}\n\`\`\`\nmore\n\`\`\`json\n{"b":2}\n\`\`\`\n`;
     expect(lastJsonFence(text)).toBe('{"b":2}');
     expect(lastJsonFence("no fence here")).toBeNull();
     // Unparseable content still comes back: the caller's schema judges it.
@@ -101,76 +90,37 @@ describe("stripTrailingOpenJsonFence", () => {
     expect(stripTrailingOpenJsonFence("plain prose")).toBe("plain prose");
   });
 
-  it("treats a closed blind fence as closed", () => {
-    const stream = `${BLIND_BLOCK}\n${CRITIQUE_START_MARKER}Critique so far`;
-    expect(stripTrailingOpenJsonFence(stream)).toBe(stream);
-  });
 });
 
-describe("```json-blind does NOT collide with the ```json fence", () => {
-  it("parseDeepValueJson resolves to the FINAL block when both a blind and a final block are present", () => {
-    const rationale = "Blind rationale text.";
-    const stream = `${ANALYST_PHASE_MARKERS.blind}${BLIND_BLOCK}\n${rationale}\n${ANALYST_PHASE_MARKERS.reconcile}${FINAL_BLOCK}\nFinal critique.`;
-    const parsed = parseDeepValueJson(stream);
-    expect(parsed?.base?.fairValue).toBe(9); // the FINAL block's value, not the blind one's (8)
+describe("parseBlindJson — the persisted commitment column", () => {
+  it("reads the column, its rationale trimmed", () => {
+    const parsed = parseBlindJson(BLIND_COLUMN)!;
+    expect(parsed.base?.fairValue).toBe(8);
+    expect(parsed.rationale).toBe("Net debt dominates.");
   });
 
-  it("stripJsonBlock removes only the FINAL block, leaving the blind fence untouched", () => {
-    const stream = `${BLIND_BLOCK}\nRationale.\n${FINAL_BLOCK}\nCritique.`;
-    const stripped = stripJsonBlock(stream);
-    expect(stripped).toContain("```json-blind");
-    expect(stripped).not.toContain('"fairValue":11'); // the final block's own marker value is gone
-    expect(stripped).toContain("Critique.");
+  it("returns null for an empty column, a non-JSON one or JSON that is not an object", () => {
+    expect(parseBlindJson("")).toBeNull();
+    expect(parseBlindJson("{ not json")).toBeNull();
+    expect(parseBlindJson("42")).toBeNull();
   });
 
-  // Reading the LAST fence makes the case above pass even if the blind fence matched; this
-  // is the case where a collision would change the result (a lens cut before its final block).
-  it("parseDeepValueJson ignores a blind fence when no final block follows", () => {
-    expect(parseDeepValueJson(BLIND_BLOCK)).toBeNull();
-    const cut = `${ANALYST_PHASE_MARKERS.blind}${BLIND_BLOCK}\nRationale.\n${ANALYST_PHASE_MARKERS.reconcile}${CRITIQUE_START_MARKER}Critique cut mid-`;
-    expect(parseDeepValueJson(cut)).toBeNull();
+  it("caps the rationale at 2500 characters", () => {
+    const long = parseBlindJson(JSON.stringify({ method: "DCF", sector: "", currency: "EUR", rationale: "x".repeat(3000) }))!;
+    expect(long.rationale).toHaveLength(2500);
   });
 
-  it("parseBlindJson parses only the blind block, ignoring a final block later in the same text", () => {
-    const stream = `${BLIND_BLOCK}\nRationale.\n${FINAL_BLOCK}\nCritique.`;
-    expect(parseBlindJson(stream)?.base?.fairValue).toBe(8);
+  it("reads the quote Phase 1 worked on, null included; an invalid one is left out", () => {
+    const base = { method: "DCF", sector: "", currency: "EUR" };
+    expect(parseBlindJson(JSON.stringify({ ...base, phase1Quote: { price: 10, currency: "EUR" } }))!.phase1Quote).toEqual({ price: 10, currency: "EUR" });
+    expect(parseBlindJson(JSON.stringify({ ...base, phase1Quote: null }))!.phase1Quote).toBeNull();
+    expect(parseBlindJson(JSON.stringify({ ...base, phase1Quote: { price: -1, currency: "EUR" } }))!).not.toHaveProperty("phase1Quote");
+    expect(parseBlindJson(JSON.stringify(base))!).not.toHaveProperty("phase1Quote");
   });
 
-  it("parseBlindJson returns null when no blind block is present", () => {
-    expect(parseBlindJson(FINAL_BLOCK)).toBeNull();
-  });
-});
-
-describe("currentAnalystPhase", () => {
-  it("returns null before any marker has appeared", () => {
-    expect(currentAnalystPhase("some partial stream text")).toBeNull();
-  });
-
-  it("returns 'blind' once the blind marker has appeared", () => {
-    expect(currentAnalystPhase(`${ANALYST_PHASE_MARKERS.blind}${BLIND_BLOCK}`)).toBe("blind");
-  });
-
-  it("returns 'reconcile' once the reconcile marker appears after the blind one", () => {
-    const stream = `${ANALYST_PHASE_MARKERS.blind}${BLIND_BLOCK}\n${ANALYST_PHASE_MARKERS.reconcile}`;
-    expect(currentAnalystPhase(stream)).toBe("reconcile");
-  });
-});
-
-describe("stripAnalystStreamArtifacts", () => {
-  it("removes both phase markers and the blind fence, leaving the final block + critique intact", () => {
-    const stream = `${ANALYST_PHASE_MARKERS.blind}${BLIND_BLOCK}\nRationale.\n${ANALYST_PHASE_MARKERS.reconcile}${FINAL_BLOCK}\nFinal critique.`;
-    const cleaned = stripAnalystStreamArtifacts(stream);
-    expect(cleaned).not.toContain(ANALYST_PHASE_MARKERS.blind);
-    expect(cleaned).not.toContain(ANALYST_PHASE_MARKERS.reconcile);
-    expect(cleaned).not.toContain("```json-blind");
-    // stripJsonBlock still needs to run separately to remove the FINAL block for display —
-    // this function only clears the blind-turn artifacts.
-    expect(stripJsonBlock(cleaned)).toBe("Rationale.\nFinal critique.");
-  });
-
-  it("is a no-op on a plain (non-blind-first) stream", () => {
-    const stream = `${FINAL_BLOCK}\nCritique.`;
-    expect(stripAnalystStreamArtifacts(stream)).toBe(stream);
+  it("never keeps a quote the model wrote in its own block", () => {
+    const block = "```json\n" + JSON.stringify({ method: "DCF", sector: "", currency: "EUR", phase1Quote: { price: 99, currency: "EUR" } }) + "\n```";
+    expect(parseDeepValueJson(block)!).not.toHaveProperty("phase1Quote");
   });
 });
 
@@ -266,11 +216,10 @@ describe("parseDeepValueJson — shape sanitization (untrusted model JSON)", () 
     expect(parseDeepValueJson("```json\nnull\n```")).toBeNull();
     expect(parseDeepValueJson("```json\n[1, 2]\n```")).toBeNull();
     expect(parseDeepValueJson('```json\n"text"\n```')).toBeNull();
-    expect(parseBlindJson("```json-blind\n42\n```")).toBeNull();
   });
 
-  it("sanitizes the blind block the same way", () => {
-    const parsed = parseBlindJson("```json-blind\n" + JSON.stringify({ method: "DCF", sector: "", currency: "EUR", base: { fairValue: 2, bridge: 7 }, killPrice: 1 }) + "\n```")!;
+  it("sanitizes the blind commitment the same way", () => {
+    const parsed = parseBlindJson(JSON.stringify({ method: "DCF", sector: "", currency: "EUR", base: { fairValue: 2, bridge: 7 }, killPrice: 1 }))!;
     expect(parsed.base).toEqual({ fairValue: 2 });
     expect(parsed.killPrice).toBe(1);
   });

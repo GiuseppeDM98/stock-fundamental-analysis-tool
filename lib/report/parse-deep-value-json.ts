@@ -29,7 +29,25 @@ import type {
  *  `bear`, 2026-10-11). Consumers that dereference `.bull/.base/.bear` must narrow through
  *  hasFullTriple first — the compiler refuses a bare dereference on this type. */
 export type ParsedAnalystResult = Omit<AnalystResult, "bull" | "base" | "bear"> &
-  Partial<Pick<AnalystResult, "bull" | "base" | "bear">>;
+  Partial<Pick<AnalystResult, "bull" | "base" | "bear">> & {
+    // A lens's blind commitment carries the short rationale the model wrote after its JSON
+    // (persisted with it since 2026-10-27, so Phase 2 can be sent the commitment it
+    // reasons from). Never present on a report.
+    rationale?: string;
+    // The quote Phase 1 worked on (null: the quote failed), written by the verify route next to
+    // the commitment and read back by parseBlindJson only — never kept from a model block.
+    phase1Quote?: Phase1Quote;
+  };
+
+/** The live quote a lens's Phase 1 was built on. Phase 2 reuses it (2026-11-20): the price
+ *  sits in the system prompt's market-implied anchors, so a quote that moved between the two
+ *  requests changed the prefix and the prompt cache never served Phase 2 (a few cents
+ *  during market hours were enough). */
+export type Phase1Quote = { price: number; currency: string } | null;
+
+/** The longest rationale kept: a margin over the 200 words the prompt asks for, in any of
+ *  the product's languages. */
+export const RATIONALE_MAX_CHARS = 2500;
 
 /** The ONLY door to any consumer that needs the full triple (ReportShell, the save request,
  *  the analyst PATCH, the gates). */
@@ -279,18 +297,9 @@ export function sanitizeDeepValueResult(raw: unknown): ParsedAnalystResult | nul
   if (typeof raw.killPriceNote === "string" && raw.killPriceNote.trim()) result.killPriceNote = raw.killPriceNote.trim();
   const revisions = sanitizeRevisions(raw.revisions);
   if (revisions) result.revisions = revisions;
+  if (typeof raw.rationale === "string" && raw.rationale.trim()) result.rationale = raw.rationale.trim().slice(0, RATIONALE_MAX_CHARS);
 
   return result;
-}
-
-function parseFencedBlock(text: string, re: RegExp): ParsedAnalystResult | null {
-  const match = text.match(re);
-  if (!match) return null;
-  try {
-    return sanitizeDeepValueResult(JSON.parse(match[1]));
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -321,25 +330,8 @@ export function lastJsonFence(text: string): string | null {
 }
 
 /**
- * A client-sent result blob (Analysis.resultJson / *ResultJson), re-read through the same
- * sanitizer as the stream. Shared by the save routes, which store what this returns and
- * never the client's own text.
- * @returns the JSON.stringify'd sanitized result when it carries a full bull/base/bear
- *   triple; null when the text is not JSON, not an object, or incomplete.
- */
-export function sanitizeResultJson(text: string): string | null {
-  try {
-    const result = sanitizeDeepValueResult(JSON.parse(text));
-    return hasFullTriple(result) ? JSON.stringify(result) : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Remove EVERY fenced ```json block and every occurrence of the start markers, so only the
- * human-readable Markdown is rendered. The ```json-blind fence of a blind-first stream is
- * left alone (stripAnalystStreamArtifacts handles it). No-op on plain prose.
+ * human-readable Markdown is rendered. No-op on plain prose.
  */
 export function stripJsonBlock(text: string): string {
   return text
@@ -361,53 +353,31 @@ export function stripTrailingOpenJsonFence(text: string): string {
   return close === -1 ? text.slice(0, open) : text;
 }
 
-// Blind-first analyst lenses fence the Phase-1
-// commitment as ```json-blind, deliberately NOT ```json — that string does not match
-// JSON_BLOCK_RE_GLOBAL above (there is no literal "```json\n" substring inside
-// "```json-blind\n"), so parseDeepValueJson (the last ```json fence) keeps resolving to the
-// Phase-2 FINAL block and stripJsonBlock leaves the blind fence alone. Dedicated tests in
-// __tests__/parse-deep-value-json.test.ts pin this non-collision both ways — blind + final
-// resolves to the final block, and a blind fence alone parses to null (the case where a
-// collision would show); they are the only thing holding this trick together.
-const BLIND_JSON_BLOCK_RE = /```json-blind\n([\s\S]*?)\n```/;
-
 /**
- * Parse the Phase-1 (blind) commitment out of a blind-first analyst stream.
- * @returns the sanitized result, or null if no blind block is present or it is malformed.
+ * A lens's persisted blind commitment (the *BlindJson column: a bare JSON object, its
+ * rationale included) read back through the same sanitizer as every model block.
+ * @returns the sanitized result, or null when the column is empty, not JSON or not an object.
  */
-export function parseBlindJson(text: string): ParsedAnalystResult | null {
-  return parseFencedBlock(text, BLIND_JSON_BLOCK_RE);
-}
-
-/** Phase markers the verify route enqueues around the blind-first turn boundary — never
- *  forwarded as visible text, only used by the client to switch the streaming status
- *  label (see currentAnalystPhase below). */
-export const ANALYST_PHASE_MARKERS = {
-  blind: "<!--analyst:phase=blind-->",
-  reconcile: "<!--analyst:phase=reconcile-->",
-} as const;
-
-/**
- * Which blind-first phase the stream is currently in, based on the LAST marker seen so
- * far — null when neither marker has appeared yet (a non-blind-first review, or the blind
- * turn hasn't started enqueuing).
- */
-export function currentAnalystPhase(text: string): "blind" | "reconcile" | null {
-  const blindIdx = text.lastIndexOf(ANALYST_PHASE_MARKERS.blind);
-  const reconcileIdx = text.lastIndexOf(ANALYST_PHASE_MARKERS.reconcile);
-  if (reconcileIdx > blindIdx) return "reconcile";
-  if (blindIdx !== -1) return "blind";
-  return null;
-}
-
-/**
- * Strips the phase markers and the ```json-blind fence (Phase-1 commitment + rationale)
- * from a blind-first stream, leaving only the FINAL JSON block + critique for
- * stripJsonBlock to then process normally. No-op on a stream with neither artifact.
- */
-export function stripAnalystStreamArtifacts(text: string): string {
-  return text
-    .replace(ANALYST_PHASE_MARKERS.blind, "")
-    .replace(ANALYST_PHASE_MARKERS.reconcile, "")
-    .replace(/```json-blind\n[\s\S]*?\n```\n?/, "");
+export function parseBlindJson(json: string): ParsedAnalystResult | null {
+  if (!json) return null;
+  let raw: unknown;
+  try {
+    raw = JSON.parse(json);
+  } catch {
+    return null;
+  }
+  const result = sanitizeDeepValueResult(raw);
+  if (!result) return null;
+  // Read here, from the column the route wrote, and not in the shared sanitizer: a model
+  // block that named a quote must never set the price a phase works on.
+  const quote = (raw as { phase1Quote?: unknown }).phase1Quote;
+  if (quote === null) {
+    result.phase1Quote = null;
+  } else if (quote != null && typeof quote === "object") {
+    const { price, currency } = quote as { price?: unknown; currency?: unknown };
+    if (typeof price === "number" && Number.isFinite(price) && price > 0 && typeof currency === "string" && currency.length <= 10) {
+      result.phase1Quote = { price, currency };
+    }
+  }
+  return result;
 }

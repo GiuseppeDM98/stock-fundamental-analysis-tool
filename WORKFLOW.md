@@ -51,9 +51,10 @@
    fixture, an E2E decoy or a seed carries amounts like 2500, 1120, 50: the owner's real data never
    enters the repo, not even as an expected value. If § 3 provides a copy of real data for the
    guided tour, it serves the tour only and phase G removes it.
-   **Nothing of the owner's real data in a tracked file** (2026-09-20, 2026-10-15): a draft, a
-   critique, a screenshot, a fixture or an example sentence takes invented figures and generic
-   names, never an amount, an account or a family detail copied from the real data. In a public
+   **Nothing of the owner's real data in a tracked file** (2026-09-20, 2026-10-15; code comments
+   too since 2026-11-15): a draft, a code comment, a critique, a screenshot, a fixture or an example sentence takes
+   invented figures and generic names, never an amount, a holding, an account, a date the data
+   starts or a family detail copied from the real data — «seen live» and the lesson, not the figure. In a public
    repo this has no exception. A private repo may waive it, or narrow it, only by saying so in § 3
    with the owner's decision and its date; public data that is not the owner's (a listed company's
    published accounts) is not the owner's data.
@@ -63,8 +64,9 @@
    fixes to apply and in what order (through rule 5).
 
 8. **Dependencies: compare at session start, upgrade in a session of their own** (2026-10-26). If
-   the repo has a lockfile, the first thing a session does is run the package manager's audit
-   (`npm audit --json`, `pnpm audit --json`, …) and compare it with `doc/guide/dipendenze.md`,
+   the repo has a lockfile, the first thing a session does is install from it with every server
+   stopped (`npm ci`, `pnpm install --frozen-lockfile`; 2026-11-17: the audit reads the lock, not
+   what is installed), then run the package manager's audit (`npm audit --json`, `pnpm audit --json`, …) and compare it with `doc/guide/dipendenze.md`,
    which records the date of the last audit, the framework version and every open advisory with
    the owner's decision (accepted because dev-only, waiting for version X, to upgrade). The answer
    is one line: «dipendenze: invariate dal <data>» or «N avvisi nuovi: …». A new advisory is
@@ -84,6 +86,12 @@
    line). The closing prompt writes every entry into its destination and deletes the file before
    the single commit; a note that names no destination is lost. A `SESSION_NOTES.md` still on the
    remote means a session was not closed.
+
+10. **The commit's «Model: … · effort …» line is read from the spec, never asked** (2026-11-18). A
+    session that implements a spec writes the model and the effort the spec names (its prompt, or its
+    row in the series index); the session that retires it writes the SAME pair as the implementation
+    (its commit's line, `git log`). The owner is asked only when there is no spec behind the session,
+    or when the session ran at a model or effort other than the spec's.
 
 ---
 
@@ -121,7 +129,9 @@ disappear. The verification is done together, in chat, one phase at a time.
    the OK and then walk the owner onto the dev server **with the fixtures still alive**: exact URLs,
    under which identity, and at most **five** things to look at — for each one, what must happen and
    what would be the bug. **The tour starts at the owner's go, not when the work is ready**
-   (2026-10-05): finish everything that needs no eyes, say it is ready, and wait. Where obligation 4
+   (2026-10-05): finish everything that needs no eyes, say it is ready, and wait. **A tour the spec
+   plans is always done, and before the commit** (2026-11-14): never offered as optional, never
+   traded for green tests, and never begun without the owner's go. Where obligation 4
    allows it, **open the page for the owner, already authenticated** — but one item per message and
    one page at a time, waiting for the outcome before opening the next; two pages together only
    when the item is a comparison (the same URL under two identities), saying which window is which.
@@ -141,6 +151,17 @@ darker grey), with a title saying where to look; before talking about it, it che
 headless screenshot of the same page. The message says «Comparison N of M», what changes and which
 side is which; the window rules of obligation 5 apply (one item per message, closed and counted before
 the next).
+
+**A window ends by itself, and is closed by its tree** (2026-11-09). The script that opens a visible
+browser for the owner exits when the owner closes the **page** — closing a driven window closes the page,
+not the browser, so `browser.on("disconnected")` alone never fires —, when the browser goes, or after a
+time limit; never an endless wait. The repo writes that wait **once**, in a helper the throwaway scripts
+import, never again in each script. And stopping the background task kills the shell, not the tree
+beneath it (`npx → tsx → node → Chromium`): a window is closed by its root with the whole tree, then the
+count says zero.
+**Once the owner confirms an item, the agent closes its windows** (2026-11-13): the owner never has to close a window to move on.
+The helper closes its browser on SIGTERM, so the agent stops it by its root, checks the count at zero and
+only then opens the next item; the owner closing a window by hand still ends the helper, never an error.
 
 ### Standard phases, when they make sense
 
@@ -163,6 +184,16 @@ resource** (the test — must fail), with the same identical file or record.
 
 Restore any configuration that was changed, remove fixtures and test attachments, delete the script,
 and **record the outcome somewhere that survives the session** (`CLAUDE.md` or equivalent).
+
+**No collaudo script outlives its session** (2026-11-09; the services too, 2026-11-13). `node ~/.claude/processi-collaudo.mjs` counts the
+trees of `scripts/collaudo-*` alive in the repo, and the services a session starts and forgets (the Firebase
+emulators with their JVM, the Next.js `dev`/`start` servers), and says whose they are: this session's (closed with
+`--chiudi`), another open session's (never touched), or nobody's known (named to the owner, closed with
+`--chiudi --anche-ignote` only on their yes). The count is the **first gate** of every repo's gate list:
+zero, or the gates do not start. The standard `settings.json` runs it with `--hook` at `SessionEnd`, so a
+session that ends closes its own windows and servers (a service gets SIGTERM first: the emulators export on
+exit); one that dies without ending is caught by the next gate, and by the same count at the start of every
+session (`prompts/01_SESSION_START.md`): what is alive then belongs to no session that is running now.
 *A verification that was not recorded counts as not done.*
 
 **The outcome is one line, the signals are not** (2026-10-19). In `CLAUDE.md` the session's status
@@ -183,6 +214,7 @@ The rules above are the standard. This section is the local translation of oblig
 
 | Purpose | Command |
 | --- | --- |
+| Collaudo count (first gate) | `node ~/.claude/processi-collaudo.mjs` — zero collaudo trees and forgotten services (the Next `dev`/`start` server), or the gates do not start (§ 2) |
 | Unit/component tests (Vitest, jsdom; `e2e/` is excluded) | `npm run test` (`npm run test:watch` to iterate) |
 | Type-check everything (app, `__tests__/`, `e2e/`, `scripts/`) | `npm run typecheck` (= `tsc --noEmit -p .`) |
 | Type-check + production build | `npm run build` (= `prisma generate && next build`) |
@@ -196,7 +228,7 @@ The rules above are the standard. This section is the local translation of oblig
 
 ### Gates — local CI (`npm run ci:local`)
 
-The gates before a session's commit, in this order, with no lint stage (`next lint` is deprecated here; the type-check is the static gate). `scripts/ci-local.sh` runs them fail-fast, and a red stops the closing ritual:
+The gates before a session's commit, in this order, with no lint stage (`next lint` is deprecated here; the type-check is the static gate). `scripts/ci-local.sh` runs them fail-fast, and a red stops the closing ritual. Before stage 1 comes the collaudo count, `node ~/.claude/processi-collaudo.mjs`: zero, or the gates do not start.
 
 1. `npm run test`
 2. `npm run typecheck`
@@ -243,7 +275,8 @@ Quotes are live in this mode, not stubbed. To show a missing provider key, add `
   - an analysis with all three analyst lenses (`/analyses/e2e_an_panel`, *ornitorinco*) plus an older save of the same ticker;
   - an old-format analysis with no JSON block (`/analyses/e2e_an_legacy`, *pangolino*);
   - open and closed positions (some taxed at 26%), 3 watchlist items, 6 portfolio snapshots, one earnings estimate, one advisor session (*tapiro*);
-  - a sacrificial analysis and position that `authorization.spec.ts` patches and deletes.
+  - a cut run (`e2e_an_cut`, failed, *Nasica Interrotta*, ticker NSCA with a web dataset and a watchlist item) and a run in progress (`e2e_an_live`), dated on the reference day: the tests that read their age freeze the clock;
+  - a sacrificial analysis and position that `authorization.spec.ts` deletes.
 - **B** — `e2e-b@example.test`, same password. Owns one analysis, one position and one dataset (`e2e_ds_user_b`) (*quokka*).
 
 Ids, decoys and stub prices live in `e2e/support/fixtures.ts`. **Roles**: the app has none; authorization is per-user data ownership, so the own-vs-someone-else's pair of §2 uses A and B.
@@ -264,7 +297,8 @@ The seeded tickers are invented and a manual run's quotes are live, so a page th
 
 - **Budget** (the owner's rule, 2026-10-29): Anthropic cost is not a constraint, so run every real check the collaudo needs; DeepSeek credit is low, so ask before any DeepSeek run. The ticker or paste and the OK for each run still come from the owner. Measured cost: about $4 for a Deep Value run at `xhigh`, $2 for one lens (`doc/guide/valutazione.md` § 2.1) and $0.4-1.3 for a research on Sonnet 5.5 (§ 5.3); the costs go in the commit message.
 - **Seeing what the model got**: the Anthropic SDK reads `ANTHROPIC_BASE_URL`, so a throwaway local proxy started with the dev server logs each call's model, effort, tokens, searches and prompt without a source edit. It never logs headers (the API key travels there), and it is deleted in phase G with the rest of the script.
-- **A driver waits for the save, not for the button**: a reload right after a run ends can still land before its PATCH (2026-10-29), so a script waits for the response of the request that persists the run.
+- **A driver waits for the phase's end event, not for the button**: the server writes the row before it sends `done` (since 2026-11-20 no client saves a run), so a script reloads only after that event.
+- **Export a real run's rows before any gate** (2026-11-20): `npm run e2e` and `ci:local` recreate `.e2e/e2e.db`, so the rows of a real collaudo on it are lost; dump them to the scratchpad first.
 
 ### What is still missing to honour obligations 4 and 5
 

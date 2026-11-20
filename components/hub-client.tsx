@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { useLanguage } from "@/context/language-context";
 import { fetchAnalyses } from "@/lib/analyses";
+import { isDone } from "@/lib/report/run-status";
 import { fetchSnapshots } from "@/lib/portfolio";
 import { formatCurrency } from "@/lib/format";
 import type { Translations } from "@/lib/i18n/translations";
@@ -118,7 +119,9 @@ function RecentActivity({ t }: { t: (key: keyof Translations) => string }) {
       .catch(() => setWatchCount(0));
   }, []);
 
-  const recent = (analyses ?? []).slice(0, 3); // fetchAnalyses returns newest-first
+  // fetchAnalyses returns newest-first, every row: a run still in progress or cut is not an
+  // analysis to show here, so the filter comes before the three (2026-10-27).
+  const recent = (analyses ?? []).filter(isDone).slice(0, 3);
   const last = snapshots && snapshots.length > 0 ? snapshots[snapshots.length - 1] : null;
   const pnl = last ? last.totalEur - last.costEur : null;
   const pnlPct = last && last.costEur > 0 && pnl != null ? (pnl / last.costEur) * 100 : null;

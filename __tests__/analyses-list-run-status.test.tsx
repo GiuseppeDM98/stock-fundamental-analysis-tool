@@ -1,0 +1,138 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import { translations } from "@/lib/i18n/translations";
+import type { SavedAnalysis } from "@/types/analysis";
+
+const fetchAnalysesMock = vi.fn();
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
+vi.mock("@/lib/analyses", () => ({
+  fetchAnalyses: () => fetchAnalysesMock(),
+  deleteAnalysis: vi.fn(),
+}));
+vi.mock("@/lib/portfolio", () => ({
+  fetchPositions: vi.fn(async () => []),
+}));
+vi.mock("@/lib/earnings-client", () => ({
+  fetchEarnings: vi.fn(async () => []),
+  refreshEarnings: vi.fn(),
+}));
+vi.mock("@/components/report/valuation-ruler", () => ({
+  ValuationRuler: () => null,
+  ComparisonTable: () => null,
+}));
+
+import AnalysesList from "@/components/analyses-list";
+
+const en = translations.en;
+const NOW = new Date("2026-11-20T12:00:00.000Z");
+const minutesAgo = (m: number) => new Date(NOW.getTime() - m * 60_000).toISOString();
+
+// Invented, round figures.
+const done = (overrides: Partial<SavedAnalysis> = {}): SavedAnalysis => ({
+  id: "an-done",
+  ticker: "NSCA",
+  companyName: "Nasica Co",
+  reportMd: "",
+  mosPercent: 25,
+  priceAtAnalysis: 10,
+  fairValueBull: 15,
+  fairValueBase: 12,
+  fairValueBear: 9,
+  valuationMethod: "DCF",
+  runStatus: "done",
+  createdAt: "2026-11-01T00:00:00.000Z",
+  ...overrides,
+});
+const pending = (overrides: Partial<SavedAnalysis>): SavedAnalysis => ({
+  id: "an-pending",
+  ticker: "NSCA",
+  companyName: "Nasica Interrotta SpA",
+  reportMd: "",
+  mosPercent: 25,
+  datasetId: "ds1",
+  runStatus: "running",
+  runStartedAt: minutesAgo(2),
+  createdAt: minutesAgo(2),
+  ...overrides,
+});
+
+describe("AnalysesList — rows whose run has not finished", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(NOW);
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, json: async () => ({}) })));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  const statusLines = () => screen.queryAllByTestId("analysis-run-status");
+
+  it("a run in progress is a status line above the card, with Delete only; the card reads the finished save", async () => {
+    fetchAnalysesMock.mockResolvedValue([pending({}), done()]);
+    render(<AnalysesList />);
+
+    const line = await waitFor(() => {
+      const [only] = statusLines();
+      expect(only).toBeDefined();
+      return only;
+    });
+    expect(within(line).getByText(en.analysisRunning.replace("{m}", "2"), { exact: false })).toBeInTheDocument();
+    expect(within(line).queryByText(en.analysisRetry)).not.toBeInTheDocument();
+    expect(within(line).getByText(en.deleteBtn)).toBeInTheDocument();
+    // The card's header comes from the finished save, not the newest row.
+    expect(screen.getByText("Nasica Co")).toBeInTheDocument();
+    // One finished analysis in the count, not two.
+    expect(screen.getByText(new RegExp(`1 ${en.analysesCountLabel}`))).toBeInTheDocument();
+  });
+
+  it("a failed run with its dataset says interrupted, with Retry towards /analyze?resume= and Delete", async () => {
+    fetchAnalysesMock.mockResolvedValue([pending({ id: "an-cut", runStatus: "failed", runError: "Stopped early." }), done()]);
+    render(<AnalysesList />);
+
+    const line = await waitFor(() => {
+      const [only] = statusLines();
+      expect(only).toBeDefined();
+      return only;
+    });
+    expect(within(line).getByText(en.analysisCut, { exact: false })).toBeInTheDocument();
+    expect(within(line).getByText("Stopped early.")).toBeInTheDocument();
+    expect(within(line).getByText(en.analysisRetry).closest("a")).toHaveAttribute("href", "/analyze?ticker=NSCA&resume=an-cut");
+    expect(within(line).getByText(en.deleteBtn)).toBeInTheDocument();
+  });
+
+  it("a run left running past 20 minutes reads interrupted; without its dataset it offers Run again", async () => {
+    fetchAnalysesMock.mockResolvedValue([pending({ runStartedAt: minutesAgo(21), datasetId: null })]);
+    render(<AnalysesList />);
+
+    const line = await waitFor(() => {
+      const [only] = statusLines();
+      expect(only).toBeDefined();
+      return only;
+    });
+    expect(within(line).getByText(en.analysisCut, { exact: false })).toBeInTheDocument();
+    expect(within(line).getByText(en.analysisRelaunch).closest("a")).toHaveAttribute("href", "/analyze?ticker=NSCA");
+    expect(within(line).queryByText(en.analysisRetry)).not.toBeInTheDocument();
+  });
+
+  it("a ticker with only unfinished rows shows the status line alone, no card", async () => {
+    fetchAnalysesMock.mockResolvedValue([pending({ runStatus: "failed" })]);
+    render(<AnalysesList />);
+
+    await waitFor(() => expect(statusLines()).toHaveLength(1));
+    expect(screen.queryByText("Nasica Interrotta SpA")).not.toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`0 ${en.analysesCountLabel}`))).toBeInTheDocument();
+  });
+
+  it("finished rows alone render exactly as before: no status line", async () => {
+    fetchAnalysesMock.mockResolvedValue([done(), done({ id: "an-older", createdAt: "2026-10-01T00:00:00.000Z" })]);
+    render(<AnalysesList />);
+
+    await waitFor(() => expect(screen.getByText("Nasica Co")).toBeInTheDocument());
+    expect(statusLines()).toHaveLength(0);
+  });
+});

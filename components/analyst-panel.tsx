@@ -4,28 +4,25 @@
 //
 // After an analysis is saved, the user can run up to three independent second-opinion
 // passes over it — a skeptic (red-team), an optimist (bull case) and a quality lens —
-// each streaming from /api/ai/deep-value/verify with its `angle`. Each pass writes a
-// critique and closes it with its own bull/base/bear valuation (the JSON block last); on
-// completion the slot persists both via PATCH /api/analyses/:id (updateAnalystOpinion).
+// each from /api/ai/deep-value/verify with its `angle`, in two requests (the blind commitment,
+// then the critique) that the server writes to the row as each ends (components/use-lens-run.ts,
+// since 2026-10-27). Each pass writes a critique and closes it with its own bull/base/bear
+// valuation (the JSON block last).
 // The base analysis plus every analyst run are averaged into the consensus shown on the
 // analyses list and watchlist.
 //
 // Each analyst is on-demand (its own button) — never auto-run: each is an Opus xhigh + web
 // search pass that costs real tokens and takes minutes (510 s for the Skeptic on 2026-10-29).
 import { useEffect, useMemo, useState, useRef } from "react";
+import { useLensRun, type LensRunState } from "@/components/use-lens-run";
 import { useLanguage } from "@/context/language-context";
 import { APP_TO_AI_LANGUAGE } from "@/lib/i18n/translations";
-import { updateAnalystOpinion } from "@/lib/analyses";
 import {
-  parseDeepValueJson,
   parseBlindJson,
   stripJsonBlock,
   stripTrailingOpenJsonFence,
-  stripAnalystStreamArtifacts,
-  currentAnalystPhase,
   hasFullTriple,
   sanitizeDeepValueResult,
-  type ParsedAnalystResult,
 } from "@/lib/report/parse-deep-value-json";
 import ReportBody from "@/components/report/report-body";
 import AnalystBlindCard from "@/components/report/analyst-blind-card";
@@ -33,14 +30,14 @@ import AnalystFinalCard from "@/components/report/analyst-final-card";
 import { AiSettingsControl } from "@/components/ai-settings-control";
 import { fetchAiSettings } from "@/lib/ai-settings-client";
 import { DEFAULT_AI_SETTINGS, deepValueDefaultEffort, type AiSettings } from "@/types/ai-settings";
-import type { AnalystAngle } from "@/types/analysis";
+import type { AnalystAngle, SavedAnalysis } from "@/types/analysis";
+import type { LensPhase } from "@/types/ai-run";
+import { ANALYST_COLUMNS } from "@/lib/report/consensus";
 import { ANALYST_ANGLES } from "@/types/analysis";
 import type { AnalystResult } from "@/components/report/types";
 import type { Triple } from "@/lib/report/valuation";
 import type { GroundedFinancials } from "@/types/grounding";
 import { checkValuationBridges, type GateCode } from "@/lib/grounding/postcheck";
-
-type Status = "idle" | "loading" | "streaming" | "done" | "error";
 
 // Lenses declare neither a sensitivity grid nor a dividend path (guide § 3.1): those two
 // gates would only ever read "unavailable" on a lens's JSON, so neither card shows them.
@@ -73,8 +70,6 @@ function parseStoredResult(raw: string | null): AnalystResult | null {
 type PanelProps = {
   analysisId: string;
   ticker: string;
-  // The report Markdown WITHOUT its JSON block — what each analyst critiques.
-  reportMd: string;
   // Margin of safety of the saved analysis — so each analyst emits its own fair values in
   // the same (MoS-adjusted) unit, making them directly comparable and averageable.
   mosPercent: number;
@@ -107,7 +102,6 @@ type PanelProps = {
 export default function AnalystPanel({
   analysisId,
   ticker,
-  reportMd,
   mosPercent,
   initialCritiques,
   initialBlind,
@@ -163,7 +157,6 @@ export default function AnalystPanel({
             description={angleDesc(angle)}
             analysisId={analysisId}
             ticker={ticker}
-            reportMd={reportMd}
             mosPercent={mosPercent}
             initialCritiqueMd={initialCritiques[angle] ?? null}
             initialBlindJson={initialBlind[angle] ?? null}
@@ -188,7 +181,6 @@ type SlotProps = {
   description: string;
   analysisId: string;
   ticker: string;
-  reportMd: string;
   mosPercent: number;
   initialCritiqueMd: string | null;
   initialBlindJson: string | null;
@@ -202,13 +194,36 @@ type SlotProps = {
   aiSettings: AiSettings;
 };
 
+/** What the row holds for one lens — the server's last write, and the source after a run. */
+type StoredLens = {
+  critique: string | null;
+  blindJson: string | null;
+  resultJson: string | null;
+  finalTriple: Triple | null;
+};
+
+function storedLensOf(row: SavedAnalysis, angle: AnalystAngle): StoredLens {
+  const c = ANALYST_COLUMNS[angle];
+  const cell = (key: string) => (row as unknown as Record<string, unknown>)[key];
+  const str = (key: string) => (typeof cell(key) === "string" && cell(key) ? (cell(key) as string) : null);
+  const num = (key: string) => (typeof cell(key) === "number" ? (cell(key) as number) : null);
+  const bull = num(c.bull);
+  const base = num(c.base);
+  const bear = num(c.bear);
+  return {
+    critique: str(c.critique),
+    blindJson: str(c.blind),
+    resultJson: str(c.result),
+    finalTriple: bull != null && base != null && bear != null ? { bull, base, bear } : null,
+  };
+}
+
 function AnalystSlot({
   angle,
   label,
   description,
   analysisId,
   ticker,
-  reportMd,
   mosPercent,
   initialCritiqueMd,
   initialBlindJson,
@@ -223,34 +238,54 @@ function AnalystSlot({
 }: SlotProps) {
   const { language: globalLanguage, t } = useLanguage();
 
-  const [critique, setCritique] = useState<string>(initialCritiqueMd ?? "");
-  // If a critique already exists we start "done"; otherwise idle until run.
-  const [status, setStatus] = useState<Status>(initialCritiqueMd ? "done" : "idle");
-  // Blind-first streaming phase (drives the phase label) — null before a run and on a
-  // response with no phase marker.
-  const [phase, setPhase] = useState<"blind" | "reconcile" | null>(null);
-  // The lens's OWN parsed commitments from the run started in this session. liveBlind is
-  // set mid-stream, as soon as the Phase-1 block parses; liveFinal once the stream ends.
-  const [liveBlind, setLiveBlind] = useState<AnalystResult | null>(null);
-  // The final JSON may lack a scenario: every read of its numbers goes through hasFullTriple.
-  const [liveFinal, setLiveFinal] = useState<ParsedAnalystResult | null>(null);
-  // Once a run starts in this session the persisted initial* values are superseded, even
-  // before the new run has produced anything: otherwise a re-run would keep showing the
-  // previous run's blind card (and its final column) until the new Phase 1 parsed.
+  // The lens as the row holds it: the props at mount, the row re-read after each run.
+  const [stored, setStored] = useState<StoredLens>({
+    critique: initialCritiqueMd,
+    blindJson: initialBlindJson,
+    resultJson: initialResultJson,
+    finalTriple: initialFinalTriple,
+  });
+  // The run started in this session: its commitment (from Phase 1's done) and its critique
+  // as it streams. Once a run starts the stored values are superseded, even before the new
+  // run has produced anything: otherwise a re-run would keep showing the previous run's
+  // blind card until the new Phase 1 ended.
   const [hasLiveRun, setHasLiveRun] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
+  const [liveBlind, setLiveBlind] = useState<AnalystResult | null>(null);
+  const [liveCritique, setLiveCritique] = useState("");
+  const liveBlindRef = useRef<AnalystResult | null>(null);
+  // A run finished here: only then is a missing final JSON news worth a line.
+  const [ranHere, setRanHere] = useState(false);
 
-  const blindResult: AnalystResult | null = useMemo(() => {
-    if (hasLiveRun) return liveBlind;
-    return parseStoredResult(initialBlindJson);
-  }, [hasLiveRun, liveBlind, initialBlindJson]);
+  // A stored critique → done; a stored commitment with no critique after it → Phase 2 is
+  // left to run (a Phase 1 already paid is not paid again).
+  const initialState: LensRunState = initialCritiqueMd ? { kind: "done" } : parseBlindJson(initialBlindJson ?? "") ? { kind: "resumable" } : { kind: "idle" };
+  const lens = useLensRun(
+    analysisId,
+    angle,
+    aiSettings,
+    APP_TO_AI_LANGUAGE[globalLanguage] ?? "English",
+    {
+      ticker,
+      onBlind: (blind) => {
+        liveBlindRef.current = blind;
+        setLiveBlind(blind);
+      },
+      onText: (chunk) => setLiveCritique((prev) => prev + chunk),
+      onRow: (row) => setStored(storedLensOf(row, angle)),
+    },
+    initialState
+  );
+  const { state } = lens;
 
-  // The lens's FINAL JSON — from the live run or, after a reload, from *ResultJson. Only a
-  // full triple counts: a partial one is "incomplete", never numbers to check or show.
-  const finalResult: AnalystResult | null = useMemo(() => {
-    if (hasLiveRun) return hasFullTriple(liveFinal) ? liveFinal : null;
-    return parseStoredResult(initialResultJson);
-  }, [hasLiveRun, liveFinal, initialResultJson]);
+  const storedBlind = useMemo(() => parseStoredResult(stored.blindJson), [stored.blindJson]);
+  const blindResult: AnalystResult | null = hasLiveRun ? liveBlind : storedBlind;
+
+  // The lens's FINAL JSON, from the row: the server writes it when Phase 2 ends, and the
+  // panel re-reads the row then. Only a full triple counts.
+  const finalResult: AnalystResult | null = useMemo(
+    () => (hasLiveRun ? null : parseStoredResult(stored.resultJson)),
+    [hasLiveRun, stored.resultJson]
+  );
 
   // A row saved before *ResultJson existed still has its *FairValue* columns: the drift
   // column falls back to those.
@@ -258,10 +293,11 @@ function AnalystSlot({
     ? { bear: finalResult.bear.fairValue, base: finalResult.base.fairValue, bull: finalResult.bull.fairValue }
     : hasLiveRun
       ? null
-      : initialFinalTriple;
-  // A finished live run whose final JSON is missing or lacks a scenario: the critique is
-  // shown and saved, the lens's numbers are cleared — and the slot says so.
-  const finalIncomplete = hasLiveRun && status === "done" && !hasFullTriple(liveFinal);
+      : stored.finalTriple;
+  // A finished lens whose final JSON is missing or lacks a scenario: the critique is shown,
+  // the lens's numbers were cleared by the server — and the slot says so.
+  const critique = hasLiveRun ? liveCritique : (stored.critique ?? "");
+  const finalIncomplete = ranHere && state.kind === "done" && !hasLiveRun && !finalResult && !stored.finalTriple;
 
   const revisions = finalResult?.revisions;
 
@@ -274,13 +310,12 @@ function AnalystSlot({
     return postCheck?.gates.filter((g) => !LENS_UNDECLARED_GATES.includes(g.code));
   }, [blindResult, groundingExtract, currentPrice, currency, mosPercent]);
 
-  // The gates of the FINAL (post-reconciliation) JSON, from the live run or from
-  // *ResultJson — the blind gates above only ever see the Phase-1 commitment, so a lens
-  // that dropped or changed its kill price after reading the report would otherwise go
-  // unchecked. Display-only. kill_price is present only when the final JSON carries a
-  // kill-price key (the Skeptic's contract). A JSON that explains itself via killPriceNote
-  // but omits killPrice is checked as a declared null, so the note is weighed instead of
-  // the gate silently disappearing.
+  // The gates of the FINAL (post-reconciliation) JSON — the blind gates above only ever see
+  // the Phase-1 commitment, so a lens that dropped or changed its kill price after reading
+  // the report would otherwise go unchecked. Display-only. kill_price is present only when
+  // the final JSON carries a kill-price key (the Skeptic's contract). A JSON that explains
+  // itself via killPriceNote but omits killPrice is checked as a declared null, so the note
+  // is weighed instead of the gate silently disappearing.
   const finalGates = useMemo(() => {
     if (!finalResult || currentPrice == null) return undefined;
     const checked = "killPriceNote" in finalResult && !("killPrice" in finalResult) ? { ...finalResult, killPrice: null } : finalResult;
@@ -288,150 +323,63 @@ function AnalystSlot({
   }, [finalResult, groundingExtract, currentPrice, currency, mosPercent]);
   const finalKillPriceGate = finalGates?.find((g) => g.code === "kill_price");
 
-  async function handleRun() {
-    // The route answers 400 without a dataset: the button is disabled, this is the backstop.
+  /** Starts the lens from `from` — only ever from a click. */
+  async function run(from: LensPhase) {
+    // The route answers 400 without a dataset: the buttons are disabled, this is the backstop.
     if (!hasDataset) return;
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    setCritique("");
-    setStatus("loading");
-    setPhase(null);
+    // A Phase 2 alone reasons from the commitment already on the row: keep its card.
+    const seed = from === "reconcile" ? storedBlind : null;
+    liveBlindRef.current = seed;
+    setLiveBlind(seed);
+    setLiveCritique("");
     setHasLiveRun(true);
-    setLiveBlind(null);
-    setLiveFinal(null);
-
-    // Declared outside the try: the catch needs to know whether this run got as far as a
-    // blind commitment worth keeping on screen.
-    let blindParsed: AnalystResult | null = null;
-    try {
-      const res = await fetch("/api/ai/deep-value/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ticker,
-          reportMd,
-          angle,
-          language: APP_TO_AI_LANGUAGE[globalLanguage] ?? "English",
-          mosPercent,
-          model: aiSettings.model,
-          effort: aiSettings.effort,
-          thinking: aiSettings.thinking,
-          // The route re-reads the analysis's grounding (its dataset, or the legacy
-          // groundingJson) server-side from this id — never
-          // sent as a payload here (it would be 100-200KB per lens).
-          analysisId,
-        }),
-        signal: controller.signal,
-      });
-
-      if (!res.ok || !res.body) throw new Error(`Request failed (${res.status})`);
-
-      setStatus("streaming");
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let done = false;
-      let accumulated = "";
-
-      while (!done) {
-        const { value, done: streamDone } = await reader.read();
-        done = streamDone;
-        if (value) {
-          accumulated += decoder.decode(value, { stream: !streamDone });
-          setCritique(accumulated);
-          setPhase(currentAnalystPhase(accumulated));
-          // Show the blind card the moment Phase 1 parses — turn 2 can run for minutes,
-          // and the blind commitment is the part worth seeing early.
-          // The blind card needs all three scenarios; a partial Phase 1 is not shown.
-          if (!blindParsed) {
-            const blind = parseBlindJson(accumulated);
-            if (hasFullTriple(blind)) {
-              blindParsed = blind;
-              setLiveBlind(blind);
-            }
-          }
-        }
-      }
-
-      // Persist the critique (blind fence/phase markers + FINAL JSON block all stripped)
-      // plus this analyst's own fair values, and — for a blind-first run whose Phase 1
-      // parsed — the blind commitment. Null-safe throughout: a save failure is non-fatal,
-      // the critique is still shown; re-run to retry.
-      const parsed = parseDeepValueJson(accumulated);
-      setLiveFinal(parsed);
-      // Without a full triple the lens's numbers — and its result blob — are sent as null,
-      // not omitted: the previous run's must not survive next to this run's critique
-      // (2026-10-28).
-      const full = hasFullTriple(parsed);
-      try {
-        await updateAnalystOpinion(analysisId, {
-          angle,
-          critiqueMd: stripJsonBlock(stripAnalystStreamArtifacts(accumulated)),
-          fairValueBull: full ? parsed.bull.fairValue : null,
-          fairValueBase: full ? parsed.base.fairValue : null,
-          fairValueBear: full ? parsed.bear.fairValue : null,
-          // Trimmed to the route's limit: a verbose model string must not fail the save.
-          valuationMethod: full ? parsed.method.slice(0, 40) : null,
-          blindJson: blindParsed ? JSON.stringify(blindParsed) : undefined,
-          resultJson: full ? JSON.stringify(parsed) : null,
-        });
-      } catch (saveErr) {
-        console.error(`Failed to persist ${angle} opinion:`, saveErr);
-      }
-      // "done" only once the save has settled, failed or not: the Re-run button used to
-      // appear while the PATCH was in flight, and a reload in that window lost the lens.
-      setStatus("done");
-    } catch (err) {
-      // Aborted by a newer run of this slot: that run owns the state now — resetting it
-      // here would hide the very run that superseded this one.
-      if (abortRef.current !== controller) return;
-      // Nothing of this run worth showing yet: the persisted card and critique come back,
-      // instead of an empty slot until the next reload.
-      if (!blindParsed) {
-        setHasLiveRun(false);
-        setCritique(initialCritiqueMd ?? "");
-      }
-      if ((err as Error).name === "AbortError") {
-        setStatus("idle");
-        return;
-      }
-      setStatus("error");
+    const end = await lens.start(from);
+    if (end == null) return;
+    // Done: the row (re-read by the hook) is the source of every number from here.
+    if (end.kind === "done") {
+      setRanHere(true);
+      setHasLiveRun(false);
+      return;
     }
+    // Failed before any commitment of this run: the persisted card and critique come back,
+    // instead of an empty slot until the next reload.
+    if (!liveBlindRef.current) setHasLiveRun(false);
   }
 
-  const isRunning = status === "loading" || status === "streaming";
+  const isRunning = state.kind === "running";
+  const runButton = "tap shrink-0 rounded-lg border border-violet-500/40 px-3 py-1.5 text-xs font-medium text-violet-300 transition hover:border-violet-400 hover:bg-violet-500/10 disabled:cursor-not-allowed disabled:opacity-40 print:hidden";
 
   return (
     <div className={`rounded-lg border border-slate-700/60 bg-slate-900/40 p-4 ${critique ? "print:break-inside-avoid" : "print:hidden"}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <h4 className="text-sm font-semibold text-slate-100">{label}</h4>
-          {status === "idle" && <p className="mt-0.5 text-xs text-slate-400 print:hidden">{description}</p>}
+          {state.kind === "idle" && <p className="mt-0.5 text-xs text-slate-400 print:hidden">{description}</p>}
         </div>
 
-        {status === "idle" && (
-          <button
-            onClick={handleRun}
-            disabled={!hasDataset}
-            title={hasDataset ? undefined : t("analystNeedsDataset")}
-            className="tap shrink-0 rounded-lg border border-violet-500/40 px-3 py-1.5 text-xs font-medium text-violet-300 transition hover:border-violet-400 hover:bg-violet-500/10 disabled:cursor-not-allowed disabled:opacity-40 print:hidden"
-          >
-            {t("analystRunButton")}
-          </button>
+        {(state.kind === "idle" || state.kind === "resumable") && (
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {state.kind === "resumable" && (
+              <button onClick={() => run("reconcile")} disabled={!hasDataset} title={hasDataset ? undefined : t("analystNeedsDataset")} className={runButton}>
+                {t("lensRetryPhase2")}
+              </button>
+            )}
+            <button onClick={() => run("blind")} disabled={!hasDataset} title={hasDataset ? undefined : t("analystNeedsDataset")} className={runButton}>
+              {t("analystRunButton")}
+            </button>
+          </div>
         )}
 
         {isRunning && (
           <span className="flex shrink-0 items-center gap-2 text-xs text-violet-300 print:hidden">
             <span className="h-3 w-3 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />
-            {phase === "blind" ? t("analystPhaseBlind") : phase === "reconcile" ? t("analystPhaseReconcile") : t("analystReviewRunning")}
+            {state.phase === "blind" ? t("analystPhaseBlind") : t("analystPhaseReconcile")}
           </span>
         )}
 
-        {status === "done" && critique && (
+        {state.kind === "done" && critique && (
           <button
-            onClick={handleRun}
+            onClick={() => run("blind")}
             disabled={!hasDataset}
             title={hasDataset ? undefined : t("analystNeedsDataset")}
             className="tap shrink-0 rounded-lg border border-violet-500/40 px-2.5 py-1 text-xs font-medium text-violet-300 transition hover:border-violet-400 hover:bg-violet-500/10 disabled:cursor-not-allowed disabled:opacity-40 print:hidden"
@@ -441,23 +389,23 @@ function AnalystSlot({
         )}
       </div>
 
-      {status === "error" && (
-        <div className="mt-3 flex items-center gap-3 print:hidden">
-          <p className="text-sm text-red-400">{t("analystReviewError")}</p>
-          <button
-            onClick={handleRun}
-            disabled={!hasDataset}
-            title={hasDataset ? undefined : t("analystNeedsDataset")}
-            className="tap rounded-lg border border-violet-500/40 px-3 py-1 text-xs font-medium text-violet-300 transition hover:border-violet-400 hover:bg-violet-500/10 disabled:cursor-not-allowed disabled:opacity-40"
-          >
+      {state.kind === "failed" && (
+        <div className="mt-3 flex flex-wrap items-center gap-3 print:hidden">
+          <p className="text-sm text-red-400">{state.error}</p>
+          {state.retryable && (
+            <button onClick={() => run(state.resumeFrom)} disabled={!hasDataset} className={runButton}>
+              {state.resumeFrom === "reconcile" ? t("lensRetryPhase2") : t("deepValueRetry")}
+            </button>
+          )}
+          <button onClick={() => run("blind")} disabled={!hasDataset} className={runButton}>
             {t("analystRunButton")}
           </button>
         </div>
       )}
 
-      {/* The blind card appears as soon as Phase 1 parses, offsetting the two-turn wait —
-          the final column fills in once turn 2 completes, while it's still streaming
-          below, or immediately on mount from a persisted commitment. */}
+      {/* The blind card appears as soon as Phase 1 ends, offsetting the two-phase wait —
+          the final column fills in once Phase 2 is written, or immediately on mount from a
+          persisted commitment. */}
       {blindResult && (
         <AnalystBlindCard
           blind={blindResult}
@@ -487,15 +435,9 @@ function AnalystSlot({
 
       {critique && (
         <div className="mt-3">
-          {status === "streaming" && (
-            <span className="mb-2 inline-block h-3 w-1.5 animate-pulse bg-violet-400 print:hidden" />
-          )}
+          {isRunning && <span className="mb-2 inline-block h-3 w-1.5 animate-pulse bg-violet-400 print:hidden" />}
           {/* The final JSON closes the critique: while streaming its fence is still open. */}
-          <ReportBody
-            markdown={stripJsonBlock(
-              stripAnalystStreamArtifacts(status === "streaming" ? stripTrailingOpenJsonFence(critique) : critique)
-            )}
-          />
+          <ReportBody markdown={stripJsonBlock(isRunning ? stripTrailingOpenJsonFence(critique) : critique)} />
         </div>
       )}
     </div>

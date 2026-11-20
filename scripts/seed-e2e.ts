@@ -329,6 +329,16 @@ function orntWebDataset(createdAt: Date): FinancialDataset {
   };
 }
 
+/** The NSCA web dataset: a minimal copy of the ORNT one with its own numbers and ticker. */
+function nscaWebDataset(createdAt: Date): FinancialDataset {
+  const ornt = orntWebDataset(createdAt);
+  return {
+    ...ornt,
+    financials: ornt.financials.map((row) => ({ ...row, revenue: row.revenue == null ? null : row.revenue / 2, sharesDiluted: 40 })),
+    datasetMeta: { ...ornt.datasetMeta, ticker: TICKERS.cut },
+  };
+}
+
 // Analyst-panel analysis (ORNT, USD, DCF, MoS 25%): intrinsic 220/180/130 → buy targets.
 const PANEL_RESULT: DeepValueResult = {
   method: "DCF",
@@ -387,7 +397,7 @@ export async function seedE2eDatabase(url: string = E2E_DB_URL): Promise<Date> {
     await db.user.create({ data: { id: USER_B.id, email: USER_B.email, passwordHash } });
 
     await seedDatasets(db, today);
-    await seedAnalyses(db);
+    await seedAnalyses(db, today);
     await seedPositions(db);
     await seedWatchlist(db);
     await seedSnapshots(db, today);
@@ -479,6 +489,23 @@ async function seedDatasets(db: PrismaClient, today: Date): Promise<void> {
       createdAt: orntAt,
     },
   });
+  const nscaAt = daysFrom(today, -1);
+  await db.financialDataset.create({
+    data: {
+      id: IDS.datasetCut,
+      userId: USER_A.id,
+      ticker: TICKERS.cut,
+      origin: "web",
+      currency: "USD",
+      units: "millions",
+      coverageLabel: "FY2025",
+      dataJson: JSON.stringify(nscaWebDataset(nscaAt)),
+      blocksJson: null,
+      warningsJson: "[]",
+      researchJson: JSON.stringify(ORNT_RESEARCH),
+      createdAt: nscaAt,
+    },
+  });
   const userBAt = daysFrom(today, -1);
   await db.financialDataset.create({
     data: {
@@ -497,15 +524,19 @@ async function seedDatasets(db: PrismaClient, today: Date): Promise<void> {
   });
 }
 
-async function seedAnalyses(db: PrismaClient): Promise<void> {
+async function seedAnalyses(db: PrismaClient, today: Date): Promise<void> {
+  // Every finished row says so explicitly (the column's default is "done" too): a row
+  // written without it would pass for finished by accident.
   await db.analysis.create({
     data: {
       id: IDS.analysisGrounded,
       userId: USER_A.id,
+      runStatus: "done",
       ticker: TICKERS.grounded,
       companyName: DECOY.groundedCompany,
       mosPercent: 20,
       priceAtAnalysis: 10.9,
+      priceCurrency: "EUR",
       fairValueBull: GROUNDED_RESULT.bull.fairValue,
       fairValueBase: GROUNDED_RESULT.base.fairValue,
       fairValueBear: GROUNDED_RESULT.bear.fairValue,
@@ -538,10 +569,12 @@ async function seedAnalyses(db: PrismaClient): Promise<void> {
     data: {
       id: IDS.analysisGroundingLegacy,
       userId: USER_A.id,
+      runStatus: "done",
       ticker: TICKERS.grounded,
       companyName: DECOY.groundedCompany,
       mosPercent: 20,
       priceAtAnalysis: 10.4,
+      priceCurrency: "EUR",
       fairValueBull: GROUNDED_RESULT.bull.fairValue,
       fairValueBase: GROUNDED_RESULT.base.fairValue,
       fairValueBear: GROUNDED_RESULT.bear.fairValue,
@@ -559,10 +592,12 @@ async function seedAnalyses(db: PrismaClient): Promise<void> {
     data: {
       id: IDS.analysisPanelOlder,
       userId: USER_A.id,
+      runStatus: "done",
       ticker: TICKERS.panel,
       companyName: DECOY.panelCompany,
       mosPercent: 25,
       priceAtAnalysis: 128,
+      priceCurrency: "USD",
       fairValueBull: PANEL_OLDER_RESULT.bull.fairValue,
       fairValueBase: PANEL_OLDER_RESULT.base.fairValue,
       fairValueBear: PANEL_OLDER_RESULT.bear.fairValue,
@@ -582,10 +617,12 @@ async function seedAnalyses(db: PrismaClient): Promise<void> {
     data: {
       id: IDS.analysisPanel,
       userId: USER_A.id,
+      runStatus: "done",
       ticker: TICKERS.panel,
       companyName: DECOY.panelCompany,
       mosPercent: 25,
       priceAtAnalysis: 142,
+      priceCurrency: "USD",
       fairValueBull: PANEL_RESULT.bull.fairValue,
       fairValueBase: PANEL_RESULT.base.fairValue,
       fairValueBear: PANEL_RESULT.bear.fairValue,
@@ -619,6 +656,7 @@ async function seedAnalyses(db: PrismaClient): Promise<void> {
     data: {
       id: IDS.analysisLegacy,
       userId: USER_A.id,
+      runStatus: "done",
       ticker: TICKERS.legacy,
       companyName: DECOY.legacyCompany,
       mosPercent: 0,
@@ -631,6 +669,7 @@ async function seedAnalyses(db: PrismaClient): Promise<void> {
     data: {
       id: IDS.analysisAuthz,
       userId: USER_A.id,
+      runStatus: "done",
       ticker: TICKERS.authz,
       companyName: DECOY.authzCompany,
       mosPercent: 20,
@@ -648,6 +687,7 @@ async function seedAnalyses(db: PrismaClient): Promise<void> {
     data: {
       id: IDS.analysisUserB,
       userId: USER_B.id,
+      runStatus: "done",
       ticker: TICKERS.userB,
       companyName: DECOY.userBCompany,
       mosPercent: 20,
@@ -658,6 +698,41 @@ async function seedAnalyses(db: PrismaClient): Promise<void> {
       currency: USER_B_RESULT.currency,
       reportMd: deepValueReport(USER_B_RESULT, "## 1. Overview\n\nUser B's only analysis (quokka)."),
       createdAt: new Date("2026-09-01T10:00:00Z"),
+    },
+  });
+  // Two NSCA runs that have not finished, dated against the visual's fixed clock
+  // (referenceDay() + 12h): one cut 30 minutes before it (failed, retryable from
+  // /analyses), one started 2 minutes before it (in progress, no Retry).
+  const reference = new Date(today.getTime() + 12 * 60 * 60 * 1000);
+  const cutAt = new Date(reference.getTime() - 30 * 60 * 1000);
+  const liveAt = new Date(reference.getTime() - 2 * 60 * 1000);
+  await db.analysis.create({
+    data: {
+      id: IDS.analysisCut,
+      userId: USER_A.id,
+      ticker: TICKERS.cut,
+      companyName: DECOY.cutCompany,
+      mosPercent: 25,
+      datasetId: IDS.datasetCut,
+      reportMd: "",
+      runStatus: "failed",
+      runError: "The valuation stopped before the end (e2e)",
+      runStartedAt: cutAt,
+      createdAt: cutAt,
+    },
+  });
+  await db.analysis.create({
+    data: {
+      id: IDS.analysisLive,
+      userId: USER_A.id,
+      ticker: TICKERS.cut,
+      companyName: DECOY.cutCompany,
+      mosPercent: 25,
+      datasetId: IDS.datasetCut,
+      reportMd: "",
+      runStatus: "running",
+      runStartedAt: liveAt,
+      createdAt: liveAt,
     },
   });
 }
@@ -688,6 +763,8 @@ async function seedWatchlist(db: PrismaClient): Promise<void> {
       { userId: USER_A.id, ticker: TICKERS.grounded, companyName: DECOY.groundedCompany, mosPercent: 0.2, notes: DECOY.watchlistNote, addedAt: new Date("2026-09-16T08:00:00Z") },
       { userId: USER_A.id, ticker: TICKERS.panel, companyName: DECOY.panelCompany, mosPercent: 0.25, addedAt: new Date("2026-09-21T08:00:00Z") },
       { userId: USER_A.id, ticker: TICKERS.watchOnly, companyName: DECOY.watchlistOnlyCompany, mosPercent: 0.3, addedAt: new Date("2026-09-25T08:00:00Z") },
+      // Only unfinished runs on this ticker: the watchlist shows it with no verdict.
+      { userId: USER_A.id, ticker: TICKERS.cut, companyName: DECOY.cutCompany, mosPercent: 0.25, addedAt: new Date("2026-09-27T08:00:00Z") },
     ],
   });
 }

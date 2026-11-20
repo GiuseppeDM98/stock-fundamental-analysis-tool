@@ -43,11 +43,6 @@ export type Translations = {
   analyzeBtn: string;
   cancelBtn: string;
   savingState: string;
-  savedState: string;
-  retrySave: string;
-  saveReport: string;
-  viewSavedAnalyses: string;
-  errorFailedSaveReport: string;
   rerun: string;
   downloadPdf: string;
 
@@ -189,8 +184,20 @@ export type Translations = {
   signInToAnalyze: string;
   deepValueTitle: string;
   deepValueDesc: string;
-  deepValueEmptyResponse: string;
   deepAnalysisBtn: string;
+  // A staged run (2026-10-27): the row is written by the server, a cut run is retried.
+  deepValueCut: string;
+  deepValueRetry: string;
+  deepValueRetryIn: string;
+  deepValueOpenSaved: string;
+  deepValueRelaunch: string;
+  lensCut: string;
+  lensRetryPhase2: string;
+  analysisRunning: string;
+  analysisCut: string;
+  analysisRetry: string;
+  analysisRelaunch: string;
+  analysisGone: string;
 
   // ─── Scenario panels ────────────────────────────────────────────────────────
   scenarioControls: string;
@@ -408,8 +415,6 @@ export type Translations = {
   // ─── Analyst Review (Deep Value red-team pass) ────────────────────────────
   analystReviewTitle: string;
   analystReviewButton: string;
-  analystReviewRunning: string;
-  analystReviewError: string;
   analystReviewSavedDesc: string;
   analystReviewSavedNote: string;
   analystReviewBadge: string;
@@ -710,11 +715,6 @@ const en: Translations = {
   analyzeBtn: "Analyze",
   cancelBtn: "Cancel",
   savingState: "Saving…",
-  savedState: "✓ Saved",
-  retrySave: "Retry save",
-  saveReport: "Save Report",
-  viewSavedAnalyses: "View Saved Analyses →",
-  errorFailedSaveReport: "Failed to save. Please try again.",
   rerun: "Re-run",
   downloadPdf: "Download PDF",
 
@@ -850,8 +850,19 @@ const en: Translations = {
   signInToAnalyze: "to generate AI analyses and save your reports.",
   deepValueTitle: "Deep Value Analysis",
   deepValueDesc: "Claude picks the valuation method on the dataset above, searching the web only for what is newer",
-  deepValueEmptyResponse: "The AI didn't return a result — it may have run out of research rounds. Try again, possibly with a different model.",
   deepAnalysisBtn: "Deep Analysis (AI)",
+  deepValueCut: "The run was cut before the end. Retry: it restarts the valuation on the same dataset.",
+  deepValueRetry: "Retry",
+  deepValueRetryIn: "Retry available in {s} s",
+  deepValueOpenSaved: "Open the saved report →",
+  deepValueRelaunch: "Run a new analysis",
+  lensCut: "Phase {phase} was cut before the end. Retry: it restarts from that phase.",
+  lensRetryPhase2: "Retry phase 2",
+  analysisRunning: "Analysis in progress… (started {m} min ago)",
+  analysisCut: "Analysis interrupted",
+  analysisRetry: "Retry",
+  analysisRelaunch: "Run again",
+  analysisGone: "This analysis was deleted",
 
   // Scenario panels
   scenarioControls: "Scenario controls",
@@ -1068,8 +1079,6 @@ const en: Translations = {
   // Analyst Review (Deep Value red-team pass)
   analystReviewTitle: "Analyst Review",
   analystReviewButton: "Run Analyst Review",
-  analystReviewRunning: "Reviewing…",
-  analystReviewError: "Review failed. Try again.",
   analystReviewSavedDesc: "Get an independent second opinion on this analysis. Once generated, it is saved alongside the report.",
   analystReviewSavedNote: "Saved with this analysis",
   analystReviewBadge: "Reviewed",
@@ -1370,11 +1379,6 @@ const it: Translations = {
   analyzeBtn: "Analizza",
   cancelBtn: "Annulla",
   savingState: "Salvataggio…",
-  savedState: "✓ Salvato",
-  retrySave: "Riprova",
-  saveReport: "Salva Report",
-  viewSavedAnalyses: "Vedi Analisi Salvate →",
-  errorFailedSaveReport: "Salvataggio fallito. Riprova.",
   rerun: "Ripeti",
   downloadPdf: "Scarica PDF",
 
@@ -1510,8 +1514,19 @@ const it: Translations = {
   signInToAnalyze: "per generare analisi AI e salvare i report.",
   deepValueTitle: "Analisi Deep Value",
   deepValueDesc: "Claude sceglie il metodo di valutazione sul dataset qui sopra e cerca sul web solo ciò che è più recente",
-  deepValueEmptyResponse: "L'AI non ha restituito un risultato — potrebbe aver esaurito i cicli di ricerca. Riprova, magari con un modello diverso.",
   deepAnalysisBtn: "Analisi Profonda (AI)",
+  deepValueCut: "La corsa si è interrotta prima della fine. Riprova: rifà la valutazione sullo stesso dataset.",
+  deepValueRetry: "Riprova",
+  deepValueRetryIn: "Riprova disponibile fra {s} s",
+  deepValueOpenSaved: "Apri il report salvato →",
+  deepValueRelaunch: "Rilancia",
+  lensCut: "La fase {phase} si è interrotta prima della fine. Riprova: riparte da quella fase.",
+  lensRetryPhase2: "Riprova (Fase 2)",
+  analysisRunning: "Analisi in corso… (da {m} min)",
+  analysisCut: "Analisi interrotta",
+  analysisRetry: "Riprova",
+  analysisRelaunch: "Rilancia",
+  analysisGone: "Questa analisi è stata eliminata",
 
   // Scenario panels
   scenarioControls: "Parametri scenario",
@@ -1728,8 +1743,6 @@ const it: Translations = {
   // Analyst Review (Deep Value red-team pass)
   analystReviewTitle: "Revisione Analista",
   analystReviewButton: "Avvia Revisione Analista",
-  analystReviewRunning: "Revisione in corso…",
-  analystReviewError: "Revisione fallita. Riprova.",
   analystReviewSavedDesc: "Ottieni un secondo parere indipendente su questa analisi. Una volta generata, viene salvata insieme al report.",
   analystReviewSavedNote: "Salvata con questa analisi",
   analystReviewBadge: "Revisionata",

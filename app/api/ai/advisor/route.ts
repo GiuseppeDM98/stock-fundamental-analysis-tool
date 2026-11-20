@@ -80,7 +80,8 @@ export async function POST(request: Request) {
           },
         }),
         db.analysis.findMany({
-          where: { userId: session.user.id },
+          // Finished analyses only: a run in progress or cut has no valuation (2026-10-27).
+          where: { userId: session.user.id, runStatus: "done" },
           orderBy: { createdAt: "desc" },
           // Exclude full reportMd — context prompt only needs fair values.
           select: {
