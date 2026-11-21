@@ -7,7 +7,7 @@ A Next.js web app for value investors: an AI-assisted pipeline from idea **Disco
 ![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-green)
 ![Next.js](https://img.shields.io/badge/Next.js-15.5.29-black)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.7.3-blue)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.9.3-blue)
 ![Vitest](https://img.shields.io/badge/Vitest-4.1.11-yellow)
 
 ---
@@ -233,7 +233,7 @@ This accounts for model uncertainty and provides downside protection.
 |-------|------------|---------|
 | **Frontend** | React 19 + Next.js 15 | UI and client-side state |
 | **API Routes** | Next.js App Router | Server-side data fetching |
-| **Business Logic** | TypeScript (pure functions) | DCF calculations |
+| **Business Logic** | TypeScript (pure functions) | Deterministic valuation checks, consensus, portfolio math |
 | **Data Source** | yahoo-finance2 | Market quotes & fundamentals |
 | **Validation** | Zod | Request payload validation |
 | **Styling** | Tailwind CSS 4 | Dark theme UI (needs Safari 16.4+, Chrome 111+, Firefox 128+) |
@@ -247,38 +247,22 @@ This accounts for model uncertainty and provides downside protection.
 
 ```
 stock-fundamental-analysis-tool/
-├── app/                   # Next.js App Router
-│   ├── api/               # API route handlers
-│   │   ├── quote/[ticker]/route.ts
-│   │   ├── fundamentals/[ticker]/route.ts
-│   │   ├── valuation/[ticker]/route.ts
-│   │   ├── analyst-estimates/[ticker]/route.ts
-│   │   └── macro/risk-free-rate/route.ts
-│   ├── page.tsx           # Main page (delegates to DashboardClient)
-│   └── layout.tsx         # Root layout
-├── components/            # React components (all client-side)
-│   ├── dashboard-client.tsx
-│   ├── scenario-panel.tsx
-│   ├── fair-value-card.tsx
-│   ├── ticker-search.tsx
-│   └── fundamentals-charts.tsx
-├── lib/                   # Business logic
-│   ├── valuation/
-│   │   ├── dcf.ts         # DCF calculation engine
-│   │   └── scenario-presets.ts
-│   ├── yahoo-client.ts    # Yahoo Finance adapter
-│   └── format.ts          # Formatting utilities
-├── types/                 # TypeScript types
-│   ├── valuation.ts
-│   ├── market.ts
-│   └── fundamentals.ts
-├── __tests__/             # Test files
-│   ├── dcf.test.ts
-│   ├── scenario-presets.test.ts
-│   ├── yahoo-client.test.ts
-│   └── scenario-panel.test.tsx
+├── app/                   # Next.js App Router: Hub, /analyze, /analyses, /portfolio, /watchlist, /advisor, sign-in
+│   └── api/               # API route handlers (quote, analyses, datasets, positions, watchlist, earnings, ai/*, cron/*)
+├── components/            # React components (all client-side); report/ holds the shared report rendering
+├── lib/                   # Business logic (pure TypeScript)
+│   ├── ai/                # Prompt builders, provider client, the shared tool loop
+│   ├── grounding/         # Dataset anchors and the deterministic valuation checks
+│   ├── datasets/          # Financial dataset store, parsing and merge
+│   ├── report/            # Verdict, consensus, estimate evolution, run status
+│   └── yahoo-client.ts    # Yahoo Finance adapter
+├── types/                 # Shared TypeScript types
+├── prisma/                # Schema and migrations
+├── __tests__/             # Vitest unit, component and route tests
+├── e2e/                   # Playwright end-to-end suite (isolated database)
+├── doc/guide/             # One guide per domain
 ├── CLAUDE.md              # Project state for AI agents
-├── AGENTS.md              # Code patterns for AI agents
+├── AGENTS.md              # Code patterns for AI agents (the file tree is in its Directory Structure section)
 └── COMMENTS.md            # Commenting philosophy
 ```
 
@@ -305,7 +289,6 @@ npm run dev
 | `npm run dev` | Start development server on http://localhost:3000 |
 | `npm run build` | Type-check and build for production |
 | `npm run start` | Serve production build |
-| `npm run lint` | Run ESLint |
 | `npm run test` | Run all tests once |
 | `npm run test:watch` | Run tests in watch mode |
 | `npm run typecheck` | Type-check the whole project (app, tests, e2e, scripts) |
@@ -324,7 +307,7 @@ npm run test
 npm run test:watch
 
 # Specific test file
-npm run test dcf.test.ts
+npm run test evolution.test.ts
 
 # End-to-end (Playwright) on an isolated local database, never production
 npm run e2e
@@ -336,9 +319,9 @@ npm run ci:local
 The e2e tooling forces its own SQLite file (`.e2e/e2e.db`), stubs market data and blocks every AI call, so it costs nothing and cannot touch your Turso database. Details in [WORKFLOW.md](WORKFLOW.md).
 
 **Test Coverage:**
-- ✅ DCF calculation logic (deterministic outputs, constraint validation)
+- ✅ Deterministic valuation logic (the checks on the model's own numbers, consensus, estimate evolution, portfolio math)
 - ✅ Yahoo client utilities (data normalization, error handling)
-- ✅ Component behavior (input changes, callback invocation)
+- ✅ API routes with the AI calls mocked, and component behavior
 
 ---
 
@@ -346,93 +329,30 @@ The e2e tooling forces its own SQLite file (`.e2e/e2e.db`), stubs market data an
 
 ### GET /api/quote/[ticker]
 
-Fetch current market quote.
+Fetch the current market quote. It is the only route that calls Yahoo Finance; it answers 503 on a Yahoo rate limit and 400 on any other failure.
 
 **Response:**
 ```json
 {
   "ticker": "AAPL",
-  "price": 182.45,
+  "shortName": "Apple Inc.",
+  "currency": "USD",
+  "exchange": "NASDAQ",
+  "region": "US",
+  "regularMarketPrice": 182.45,
+  "regularMarketChange": 2.21,
+  "regularMarketChangePercent": 1.23,
   "marketCap": 2850000000000,
   "sharesOutstanding": 15634000000,
-  "exchange": "NASDAQ",
-  "region": "US"
+  "fetchedAt": "2026-11-21T09:30:00.000Z"
 }
 ```
 
-### GET /api/fundamentals/[ticker]
+`regularMarketChangePercent` is already a percentage (1.23 means +1.23%); `marketCap` and `sharesOutstanding` are `null` when Yahoo does not report them. The price is in the stock's own currency.
 
-Fetch up to 10-year historical fundamentals (via `fundamentalsTimeSeries`).
+### Other routes
 
-**Response:**
-```json
-{
-  "annual": [
-    {
-      "year": 2024,
-      "revenue": 391035000000,
-      "ebit": 123216000000,
-      "netIncome": 93736000000,
-      "fcf": 108807000000,
-      "operatingMargin": 0.3151,
-      "netMargin": 0.2397
-    }
-  ]
-}
-```
-
-### GET /api/analyst-estimates/[ticker]
-
-Fetch analyst estimates and smart scenario defaults.
-
-**Response:**
-```json
-{
-  "analystEstimates": {
-    "revenueGrowthNextYear": 0.08,
-    "revenueGrowth5Year": 0.12,
-    "operatingMargins": 0.30,
-    "targetMeanPrice": 245,
-    "numberOfAnalysts": 30
-  },
-  "smartScenarios": {
-    "bull": { "revenueGrowthYears1to5": 0.15, ... },
-    "base": { "revenueGrowthYears1to5": 0.12, ... },
-    "bear": { "revenueGrowthYears1to5": 0.06, ... }
-  }
-}
-```
-
-### POST /api/valuation/[ticker]
-
-Run DCF valuation with custom scenarios.
-
-**Request:**
-```json
-{
-  "mosPercent": 25,
-  "sharesOutstandingOverride": null,
-  "scenarios": {
-    "bull": { "revenueGrowthYears1to5": 0.20, ... },
-    "base": { "revenueGrowthYears1to5": 0.12, ... },
-    "bear": { "revenueGrowthYears1to5": 0.05, ... }
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "results": {
-    "bull": {
-      "fairValuePerShare": 245.30,
-      "fairValueAfterMos": 183.98,
-      "upsideVsPricePercent": 0.85
-    },
-    ...
-  }
-}
-```
+Saved analyses, financial datasets, positions, watchlist, earnings, AI settings, the AI routes under `/api/ai/` and the two cron routes are listed with their methods in [AGENTS.md](AGENTS.md) (API Route Pattern).
 
 ---
 
@@ -492,14 +412,6 @@ turso db shell <your-db-name> < prisma/migrations/<latest>/migration.sql
 
 **User Message**: "Rate limit reached. Retry in 30-60 seconds."
 
-### Missing Shares Outstanding
-
-**Issue**: Some non-US tickers don't expose shares outstanding
-
-**Workaround**: Use `sharesOutstandingOverride` parameter in valuation request
-
-**Future**: Add UI field for manual shares input
-
 ### Vercel Hobby Plan — 300 s per Function, One Request per AI Phase
 
 > Since 2026-10-27 every AI call is its own request, persisted by the server and retried from its phase. Measured on 2026-11-20 (Opus 4.8 `xhigh`): the research 668 s, the Deep Value 803 s and one lens reconcile 329 s are still past 300 s; the next spec splits them further.
@@ -557,7 +469,7 @@ See [LICENSE.md](LICENSE.md) for details.
 
 - 🐛 **Bug Reports**: [Open an issue](https://github.com/GiuseppeDM98/stock-fundamental-analysis-tool/issues/new?template=bug_report.md)
 - 💡 **Feature Requests**: [Open an issue](https://github.com/GiuseppeDM98/stock-fundamental-analysis-tool/issues/new?template=feature_request.md)
-- 📚 **Documentation**: See [CLAUDE.md](CLAUDE.md) (project state) and [AGENTS.md](AGENTS.md) (code patterns), with one guide per domain in [doc/guide/](doc/guide/) (valuation, portfolio, monitor, Yahoo, dependencies)
+- 📚 **Documentation**: See [CLAUDE.md](CLAUDE.md) (project state) and [AGENTS.md](AGENTS.md) (code patterns), with one guide per domain in [doc/guide/](doc/guide/) (Advisor, valuation, saved analyses, portfolio, monitor, Yahoo, app shell, dependencies)
 - 💬 **Discussions**: [GitHub Discussions](https://github.com/GiuseppeDM98/stock-fundamental-analysis-tool/discussions)
 
 ---

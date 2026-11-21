@@ -197,7 +197,7 @@ Nessun DDL. Deploy. Voce in CLAUDE.md § Last Updated (sostituisce la precedente
 ## 9. Documentazione
 
 - `doc/guide/valutazione.md § Dividendi`: modulo, regole dello yield, copertura condivisa col gate, D-45.
-- `CLAUDE.md` (misurare `wc -c` prima e dopo): «Next Priorities» (2) riscritta in «Yield-on-cost in the portfolio exit signal from received dividends (forward YoC now on the analysis page)» (D-46, +60); una riga in «Deep Value Analysis» per la card (≤ 200 caratteri); si compensa togliendo dalla stessa sezione la frase sul «Decision Panel» (ormai nella guida, −260). Saldo ≈ 0.
+- `CLAUDE.md` (un indice dal 2026-11-21, D-145; misurare prima e dopo con la misura della regola 3): «Next Priorities» (2) riscritta in «Yield-on-cost in the portfolio exit signal from received dividends (forward YoC now on the analysis page)» (D-46, +60); una riga nuova nella tabella «Current Features» per la card dei dividendi (nome, la domanda a cui risponde, il rimando a `doc/guide/valutazione.md § Dividendi`; ≤ 200 caratteri); le due righe di «Not yet present» del § 10 (T-21, ≈ +250). Saldo ≈ +510. Il comportamento della card sta nella guida (voce sopra), non in `CLAUDE.md`.
 - `AGENTS.md › Recharts Patterns` (saldo zero): la riga «chart tokens `--chart-*` in globals.css; grafici con `role=img` sul solo chart + tabella sr-only sorella; animazioni spente; `ResizeObserver` polyfill nei test» al posto della riga «overflow-x-auto on in-card tables» (che si sposta nel gotcha #8, già sulle tabelle).
 - `Draft Release Temp.md`: «Dividend outlook on every analysis with a dividend: history, CAGR, payout, FCF coverage, three-year path per scenario, forward yield and forward yield on cost».
 - Riga `> **Stato**` e indice § 5 aggiornati.

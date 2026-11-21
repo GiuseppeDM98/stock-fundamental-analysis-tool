@@ -1,0 +1,21 @@
+# Saved analyses — the `/analyses` list and its cards
+
+Read this before touching the list of saved analyses: `app/analyses/page.tsx`, `components/analyses-list.tsx` (`TickerGroup`, `EvolutionDiff`, the controls), `components/analysis-run-status.tsx` (the line of an unfinished run), `lib/analyses.ts` (client fetch helpers), `app/api/analyses/*`. The pieces it shares live elsewhere: the ruler, the verdict, the consensus and the one price rule in `doc/guide/valutazione.md` § 2.7 (`/analyses` is their reference implementation: regression-test it after touching them), the saved detail page in § 2.4, persistence and the columns in § 2.3 and § 3.1, the run status lines in § 2.9, the earnings badge in `doc/guide/monitor.md`. The block moved here from CLAUDE.md on 2026-11-21, when that file became an index.
+
+## The list — `/analyses`
+
+- **Grouped by ticker** (`analyses-list.tsx`); the newest finished save drives the card, an unfinished run shows as a status line above its ticker's card (valutazione.md § 2.9). View and delete here: no client writes an analysis (§ 2.3).
+- **Compact card**: ticker · company · method · "✓ Reviewed" (a lens ran) · live price · **BUY/WATCH/OVER-FV verdict** · thin `ValuationRuler`. `<EarningsBadge>` sits outside the header toggle (AGENTS.md gotcha #24).
+- **Expanded**: one **`ValuationRuler`** (bear→bull intrinsic axis, buy/watch/rich zones via `getVerdict`, price dot, one colored tick per analyst lens that ran + consensus diamond, legend); a **`ComparisonTable`** (Bull/Base/Bear × Analysis / each analyst / Consensus); a shared **Fair value ↔ Buy target** toggle driving both; an **`EvolutionDiff`** (≥2 saves) via `computeEvolutionChain` (a Δ per adjacent save across the whole history on the intrinsic scale, dated blocks labeled Analysis/Consensus with a metric subtitle — pure arithmetic, **never fed to a prompt**: valutazione.md § 2.6); a deterministic **"weak signal" pill** (`getSignalStrength`, `lib/report/signal.ts`) next to the verdict when the bull↔bear cone dwarfs the price-vs-FV edge; metadata + actions; collapsible history of the older saves.
+- **Controls**: search, "Under FV" filter, sort (recent/ticker/performance).
+- **Consensus** = mean of base + every analyst run, via `consensusTriple`/`presentAnalysts` (`lib/report/consensus.ts`). **The verdict/zones/percentage prefer this consensus over the base analysis alone** once any lens has run (fallback to the base analysis otherwise) — the base analysis's own tick still plots at its own value regardless, so disagreement between the two is visible on the ruler. The percentage line names its source: "(analisi)"/"(analysis)" or "(consenso)"/"(consensus)".
+- **"Upcoming earnings" strip** above the list (future dates, nearest-first) and the amber "New data since last analysis" pill: monitor.md § Next-earnings calendar.
+- **What a saved row holds**: `priceAtAnalysis`, `fairValue{Bull,Base,Bear}`, `valuationMethod`, plus the per-analyst columns, all nullable; every `*FairValue*` is a **MoS-adjusted buy target**, intrinsic = `stored / (1 - mos/100)` (valutazione.md § 1.3, § 2.3, § 3.1).
+
+## The saved detail page
+
+`app/analyses/[id]/page.tsx` + `components/analysis-detail-body.tsx`: valutazione.md § 2.4. **Open-position banner** (`components/open-position-banner.tsx`): server `db.position.findMany` (open lots, aggregated into one position) + the page's one client live price.
+
+## Tests
+
+`__tests__/analyses-list-positions.test.tsx`, `analyses-list-run-status.test.tsx`, `analyses-contract.test.ts`, `analyses-route.test.ts`, `evolution.test.ts`, `consensus.test.ts`, `signal.test.ts`; `e2e/pages.spec.ts` and the visual baselines cover the page.

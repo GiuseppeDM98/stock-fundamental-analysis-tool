@@ -65,8 +65,11 @@ Full reference for every variable in `.env`.
 | `NEXTAUTH_SECRET` | Yes | — | `openssl rand -hex 32` |
 | `NEXTAUTH_URL` | Yes | `http://localhost:3000` | Fixed value in local dev |
 | `ANTHROPIC_API_KEY` | Yes (for AI features) | — | [console.anthropic.com](https://console.anthropic.com) |
+| `DEEPSEEK_API_KEY` | No (only for the DeepSeek models, with their web search and fetch) | — | [platform.deepseek.com](https://platform.deepseek.com) |
 | `DISABLE_REGISTRATION` | No | `false` | Set to `"true"` to block new signups |
-| `CRON_SECRET` | Production / cron testing | — | `openssl rand -hex 32` |
+| `CRON_SECRET` | Production / cron testing (also set in the Vercel project settings) | — | `openssl rand -hex 32` |
+| `RESEND_API_KEY` | Only for the watchlist email digest | — | [resend.com](https://resend.com) |
+| `RESEND_FROM_EMAIL` | Only for the watchlist email digest | `onboarding@resend.dev` in dev | A sender on a domain verified in Resend, e.g. `watchlist@yourdomain.com` |
 
 ---
 
@@ -166,7 +169,7 @@ The portfolio snapshot cron runs automatically on Vercel every weekday at 20:00 
 2. With the dev server running, call the endpoint:
 
    ```bash
-   curl -X POST http://localhost:3000/api/cron/portfolio-snapshot \
+   curl http://localhost:3000/api/cron/portfolio-snapshot \
      -H "Authorization: Bearer dev-cron-secret-local"
    ```
 
@@ -217,9 +220,6 @@ Upgrading to Pro lifts the ceiling to 800s by raising `maxDuration` to 800 in th
 
 **429 errors from Yahoo Finance**
 Yahoo Finance rate-limits rapid requests. Wait 30 seconds and search again. The app retries twice with backoff automatically.
-
-**422 "Missing shares outstanding"**
-Some non-US tickers lack this field in Yahoo Finance. This is a data availability issue, not a setup problem.
 
 **Prisma error: table not found**
 You have not run the migrations yet. Run `npx prisma migrate dev` and restart the dev server.

@@ -144,8 +144,9 @@ Nessun DDL. Deploy insieme alla 07b (i link verso `/stocks/*` rispondono 404 fin
 ## 9. Documentazione
 
 - `doc/guide/valutazione.md § Riepilogo per ticker` (summary, prompt dell'Advisor, storico prezzo).
-- `CLAUDE.md` (misurare): API `/api/history` (+30); Hub: «recent» per ticker (+40); Advisor: «riceve il riepilogo deterministico per ticker (ultima analisi + consenso + verdetto + segnale + target watchlist)» al posto delle righe su «Context injection» e `formatAnalysis` (−300); Project Structure: `lib/stocks/`, `lib/cache/`, `lib/price-history.ts` (+120). Saldo ≈ −110.
-- `AGENTS.md` (saldo zero): nav prefix-match in una riga al posto della riga «Active nav link» di «Token Usage Rules»; «Mode-conditional DB fetch» cita `summaries`.
+- `CLAUDE.md` (un indice dal 2026-11-21, D-145; misurare con la misura della regola 3): «Project Structure», riga di `lib/`: `stocks/` e `cache/` fra le cartelle (+30); «Next Priorities» (1) con la nota «`createTtlMap` è pronto» (§ 10, +30). Saldo ≈ +60: la 07a non aggiunge una pagina, quindi nessuna riga di «Current Features».
+- `doc/guide/advisor.md`, voce «Context injection»: «riceve il riepilogo deterministico per ticker (ultima analisi + consenso + verdetto + segnale + target watchlist)» al posto della frase su `formatAnalysis`. `doc/guide/shell.md § Hub`: «recent» per ticker.
+- `AGENTS.md` (saldo zero): nav prefix-match in una riga al posto della riga «Active nav link» di «Token Usage Rules»; «Mode-conditional DB fetch» cita `summaries`. Sulle righe esistenti (nessuna riga nuova): `/api/history` nella riga «Endpoints» di § API Route Pattern; nell'albero di § Directory Structure `stocks/`, `cache/` e `price-history.ts` nella riga `shared`.
 - `README.md`: una riga sui link alla pagina titolo (attiva con la 07b).
 - `Draft Release Temp.md`: «The Advisor now reasons on a deterministic per-ticker summary (latest valuation, consensus, verdict, signal, watchlist target); price history API; ticker links everywhere».
 - Riga `> **Stato**` e indice § 5 aggiornati.

@@ -1,7 +1,7 @@
 # Prompt di ritiro di una spec in esercizio — serie `doc/evoluzioni/`
 
 > Generato il 2026-10-11 dal prompt `08_CREA_RITIRO_SPEC` di claude-config e rigenerato lo stesso giorno
-> dopo la lettura adversariale (dodici spec vive dal 2026-10-27: 01, 02, 03, 04, 05a, 05b, 05c, 06, 07a, 07b, 08a, 08b;
+> dopo la lettura adversariale (quindici spec vive dal 2026-11-20: 01, 02, 03, 04, 05a, 05b, 05c, 05d, 05e, 05f, 06, 07a, 07b, 08a, 08b;
 > decisioni D-21…D-57), con i parametri misurati sul repo a quella data. Chi lo usa dopo un ritiro
 > aggiorna i precedenti e le misure e lascia il corpo com'è (la regola di `08` dal 2026-10-14); si
 > rigenera solo se cambia il metodo; il ritiro dell'ultima spec porta via questo file con la cartella.
@@ -13,8 +13,8 @@ SPEC DA RITIRARE: doc/evoluzioni/NN-nome.md      <- l'unico punto da compilare
 Ritira la spec scritta qui sopra. Nel resto di questo prompt <SPEC> è quel percorso, <NN>
 il suo numero (anche con la lettera: `05a`, `07b`, `08a`) e <SLUG> il resto del nome senza
 «.md»: ricavali tu, non chiedermeli. Se il file non esiste, FERMATI e dimmelo prima di fare
-qualsiasi cosa. Le spec vive della serie sono dodici, nell'ordine: 01, 02, 03, 04, 05a, 05b,
-05c, 06, 07a, 07b, 08a, 08b (`00-INDICE.md § 5`); si ritirano in quest'ordine.
+qualsiasi cosa. Le spec vive della serie sono quindici, nell'ordine: 01, 02, 03, 04, 05a, 05b,
+05c, 05d, 05e, 05f, 06, 07a, 07b, 08a, 08b (`00-INDICE.md § 5`); si ritirano in quest'ordine.
 
 PREREQUISITO, da misurare e non da assumere: la spec è IN ESERCIZIO, cioè la PR della spec è
 mergiata in `develop` (`git log --merges --oneline develop | grep <SLUG>` o il numero di PR scritto
@@ -25,7 +25,7 @@ caso reale NON è un prerequisito: dove è a portata di giorni lo si cerca e lo 
 ma non lo si aspetta mai — ciò che l'uso vero insegnerà diventa feedback e poi una spec
 nuova, e quando il caso arriva si annota nella riga di stato della spec ritirata, come
 storia. Il collaudo della sessione di implementazione vale come prova della spec, non
-come segnale. DDL della serie (T-19, D-37, regola 12 dell'indice): quattro spec portano una migrazione e
+come segnale. DDL della serie (T-19, D-37, regola 12 dell'indice): sei spec portano una migrazione e
 ciascuna va promossa a `main` da sola, nell'ordine. La 01 porta una migrazione DISTRUTTIVA
 (`drop_watchlist_run_and_freq`, ricostruisce `User`) che va applicata DOPO il deploy del codice che non
 legge più le colonne, con un dump FUORI dal repo prima (`~/backups/stock-analysis/backup-<data>.sql`) e
@@ -33,8 +33,11 @@ la query degli otto conteggi della sua § 8 prima e dopo; la 02 (`add_analysis_r
 `ADD COLUMN`, non ripetibile) va applicata PRIMA del deploy e solo dopo che la 01 è stata applicata a
 Turso; la 04 (`add_financial_dataset`, che ricostruisce `Analysis`) PRIMA del deploy con dump e
 conteggi; la 05c (`add_analysis_run_status`, 4 `ADD COLUMN` su `Analysis` con `priceCurrency`, default `done`) PRIMA del deploy,
-con il controllo `SELECT runStatus, count(*) FROM Analysis GROUP BY runStatus` della sua § 8; 03, 05a,
-05b, 06, 07a, 07b, 08a, 08b non hanno DDL. La prova che il DDL è stato speso è la
+con il controllo `SELECT runStatus, count(*) FROM Analysis GROUP BY runStatus` della sua § 8; la 05e
+(`add_analysis_run_phases`, 3 `ADD COLUMN` su `Analysis`) PRIMA del deploy, con il controllo
+`SELECT runPhase, updateNotesMd, valuationMemo FROM Analysis LIMIT 1` della sua § 8; la 05f
+(`add_research_run`, tabella nuova `ResearchRun`) PRIMA del deploy e dopo la 05e, con
+`SELECT count(*) FROM ResearchRun` → 0; 03, 05a, 05b, 05d, 06, 07a, 07b, 08a, 08b non hanno DDL. La prova che il DDL è stato speso è la
 query di lettura della § 8 della spec (PRAGMA/SELECT) con l'esito atteso, eseguita da te in sola
 lettura (`turso auth login` prima, se la sessione CLI è scaduta). Se un
 criterio non regge, un segnale manca o uno script non è stato speso, FERMATI e dillo: una spec si
@@ -186,10 +189,11 @@ CANCELLI: `npm run ci:local` (= `npm run test` → `npm run typecheck` → build
 quest'ordine; il visual (`npm run e2e:visual`) non è un cancello ma va rilanciato prima/dopo se il
 ritiro tocca una pagina. Il build di verifica si fa SEMPRE sull'ambiente isolato (`.env` punta a
 Turso di produzione).
-LIMITI (misurati il 2026-11-20, al ritiro della 05c): `CLAUDE.md` 38.494 caratteri su un tetto di 40.000, nella
-misura della regola 3 dell'indice (caratteri Unicode senza CR, mai `wc -c`): ogni spec dichiara nel
+LIMITI (misurati il 2026-11-21, dopo lo snellimento di `CLAUDE.md`, D-145): `CLAUDE.md` 12.476 caratteri su un tetto di 40.000, nella
+misura della regola 3 dell'indice (caratteri Unicode senza CR, mai `wc -c`); è un indice: una spec vi
+scrive una riga per funzione e il dettaglio va nella guida (regola 3). Ogni spec dichiara nel
 § 9 i caratteri aggiunti e tolti, e la voce Last Updated sostituisce la precedente — la catena
-regge solo se ogni spec rispetta il suo saldo, quindi si rimisura a ogni ritiro; `AGENTS.md` 499 righe (dalla 02 il tetto è 600 righe, D-22; scorporato il 2026-11-20, D-122); le guide in `doc/guide/` hanno un tetto di 400 righe per file (`valutazione.md` 310, `portafoglio.md` 68, `monitor.md` 50, `yahoo.md` 30, `dipendenze.md` 31; D-57: oltre, la
+regge solo se ogni spec rispetta il suo saldo, quindi si rimisura a ogni ritiro; `AGENTS.md` 486 righe (dalla 02 il tetto è 600 righe, D-22; scorporato il 2026-11-20, D-122; dal 2026-11-21 tiene l'albero dei file, una riga per gruppo di file: un file nuovo entra nella riga del suo gruppo); le guide in `doc/guide/` hanno un tetto di 400 righe per file (`valutazione.md` 311, `portafoglio.md` 81, `monitor.md` 72, `yahoo.md` 36, `dipendenze.md` 31, `advisor.md` 16, `shell.md` 24, `analisi-salvate.md` 21; D-57: oltre, la
 spec che sfora spezza per tema); `DESIGN.md` 312 righe e `PRODUCT.md` 55 righe, rigenerati nella 08b
 (DESIGN.md solo dalla skill). Se sfori, NON tagliare in chiusura: dimmelo e proponi lo scorporo come
 sessione a parte.

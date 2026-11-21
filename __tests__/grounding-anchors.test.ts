@@ -4,7 +4,7 @@ import { computeBasisReconciliation } from "@/lib/grounding/basis";
 import { makeFinancialsRow, makeMultiplesRow, makeEstimateRow, makeExtract, makeMeta } from "./grounding-test-helpers";
 
 // A 10y EV/EBITDA series with a structural de-rating (early half ~4.4x, late half ~3.4x),
-// matching the Eni-shaped scenario described in CLAUDE.md.
+// an Eni-shaped scenario.
 const DERATING_MULTIPLES = [
   makeMultiplesRow({ fiscalYear: 2016, evEbitda: 4.6 }),
   makeMultiplesRow({ fiscalYear: 2017, evEbitda: 4.5 }),

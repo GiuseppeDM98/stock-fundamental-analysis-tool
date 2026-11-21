@@ -28,3 +28,9 @@ yahooFinance.quoteSummary(ticker, { modules: ["summaryDetail", "defaultKeyStatis
 - **`yahooFinance.quote()` returns undefined**: always null-check — `if (!quote) throw new Error(...)`
 - **Quote prices are in the stock's native currency**: ENI.MI price is in EUR, AAPL in USD, an LSE line often in GBp (pence). Don't assume USD, and weigh a quote against a saved value only through `sameCurrency` (`comparablePrice`, `lib/report/latest-analysis.ts`): `GBp` is not `GBP`, and there is no conversion. `Intl.NumberFormat` does read `GBp` as `GBP`, so a pence quote formatted as currency shows `£7,000.00` (2026-10-29, not fixed).
 
+### Blind spots of the quote route
+
+Moved here from CLAUDE.md § Known Issues on 2026-11-21, when that file became an index. `/api/quote/[ticker]` is the only Yahoo data route: it answers 503 on a rate limit and 400 on any other failure.
+
+- **Yahoo rate limits** — 429 on rapid searches; retry w/ backoff (2 retries).
+- **No caching** — every search hits Yahoo. A caching layer for `/api/quote` is CLAUDE.md § Next Priorities (1).

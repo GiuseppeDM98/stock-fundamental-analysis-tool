@@ -19,55 +19,42 @@ Next.js 15 stock fundamental analysis tool with AI-generated investment analysis
 One file per domain, read before touching that domain; AGENTS.md keeps the stub, the guide keeps the detail.
 
 - `doc/guide/dipendenze.md` — the dependency audit: date, framework version, every open advisory with the owner's decision. Compare `npm audit` with it at session start (WORKFLOW.md rule 8); upgrades are a session of their own.
+- `doc/guide/advisor.md` — the Advisor (`/advisor`): the two modes, what enters the prompt (portfolio, analyses, live prices), the grounding rules, ticker chips, chat sessions
 - `doc/guide/valutazione.md` — Deep Value, analyst panel, the financial dataset (web or paste), AI providers: the output contract field by field, routes, persistence, lenses, gates, model and effort settings. The AGENTS.md stub under "AI Integration" keeps the invariants.
-- `doc/guide/portafoglio.md` — the portfolio tracker: `Position`, tax display, FX, dividends from Borsa Italiana, closing a position, WAC/DCA aggregation, the add-purchase prefill
-- `doc/guide/monitor.md` — Vercel cron jobs (route pattern, idempotency, DST-proof schedule, Hobby limits) and the watchlist digest (no AI, earnings note, portfolio-aware copy)
-- `doc/guide/yahoo.md` — the yahoo-finance2 adapter: deprecated modules, the time-series call, mixed schema, native-currency quotes
+- `doc/guide/analisi-salvate.md` — the `/analyses` list: the card per ticker, the evolution diff, the controls, the open-position banner
+- `doc/guide/portafoglio.md` — the portfolio tracker: `Position`, tax display, FX, dividends from Borsa Italiana, closing a position, WAC/DCA aggregation, the add-purchase prefill, what the page shows (exit signal, dividends received, the P&L chart)
+- `doc/guide/monitor.md` — Vercel cron jobs (route pattern, idempotency, DST-proof schedule, Hobby limits), portfolio snapshots, the watchlist page and its digest (no AI, earnings note, portfolio-aware copy), the next-earnings calendar
+- `doc/guide/yahoo.md` — the yahoo-finance2 adapter: deprecated modules, the time-series call, mixed schema, native-currency quotes, the quote route's blind spots (rate limits, no caching)
+- `doc/guide/shell.md` — what surrounds the features: the Hub, the `/analyze` page, NavBar and language, accounts, the PWA
 
 ---
 
 ## Directory Structure
 
+One line per group of files (the tree lives here, not in CLAUDE.md, since 2026-11-21): a new file joins the line of its group, and the guide of its area (`doc/guide/`) opens with the files it covers.
+
 ```
-types/             # fundamentals.ts, market.ts, analysis.ts, auth.ts, portfolio.ts, watchlist.ts
-lib/               # Business logic and utilities (Yahoo quote adapter, AI prompts, snapshots, dividends, formatters)
-  ai/
-    deep-value-prompts.ts   # Prompt builders for streaming deep value analysis + Analyst Review (verify) — always position-blind
-    advisor-prompts.ts      # buildAdvisorSystemPrompt() — injects portfolio + analyses + live prices + GROUNDING_RULES_BLOCK
-    earnings-prompt.ts      # buildEarnings{System,User}Prompt() — next-earnings lookup (default model + web search), cadence-neutral
-  earnings.ts      # Pure: isFutureEarnings(), isAnalysisStalePreEarnings(), formatEarningsDate() — shared client (no server-only)
-  earnings-client.ts # Client fetch helpers: fetchEarnings() / refreshEarnings()
-  yahoo-client.ts  # Yahoo Finance API adapter
-  auth.ts          # Auth.js v5 config
-  db.ts            # Prisma singleton client
-  analyses.ts              # Client-side fetch helpers for saved analyses
-  portfolio.ts             # Client-side fetch helpers for positions + snapshots (fetchSnapshots)
-  portfolio-snapshots.ts   # Server-only snapshot logic (import "server-only")
-  dividends.ts             # Server-only: fetch + parse Borsa Italiana dividend table
-  watchlist-analysis.ts    # Server-only: per-user/all-users watchlist cron runner
-  email.ts                 # Resend email sender
-  format.ts                # Formatting utilities
-  positions.ts             # Server-only: closePosition() (full/partial position close)
-  portfolio-math.ts        # Pure: realizedPnlNative(), holdingDays(), estimateCapitalGainsTax(), aggregateOpenLots() — no server-only, shared client+server
-  report/
-    verdict.ts              # getVerdict() + VERDICT_BADGE/VERDICT_TEXT maps (shared: analyses + watchlist)
-    signal.ts               # getSignalStrength() — deterministic weak-signal flag (dispersion vs edge)
-    evolution.ts            # computeEvolution() + computeEvolutionChain() — deterministic estimate history
-    valuation.ts             # grossUpToIntrinsic() (shared: analyses + watchlist)
-components/        # React components (all client-side, all "use client")
-  report/          # Shared report-rendering pieces (types, method-badges, fair-value-cards,
-                   # recap-table, report-body, report-shell, valuation-ruler) — used identically
-                   # by the live Deep Value panel, the saved-analysis detail page, and the watchlist
-  download-pdf-button.tsx  # Client-only "Download PDF" button (window.print()), for use in server components
-app/api/           # API route handlers
+types/             # fundamentals, market, analysis, auth, portfolio, watchlist, earnings, dataset, grounding, ai-settings, ai-run (the staged-run events)
+lib/               # Business logic and utilities (Yahoo quote adapter, AI prompts, snapshots, dividends, formatters), by group:
+  ai/ (prompts)    # deep-value-prompts.ts (Deep Value + analyst-panel builders, buildAnalystSystemPrompt angle-parameterized — always position-blind) · advisor-prompts.ts (buildAdvisorSystemPrompt() + buildDiscoverySystemPrompt() — portfolio + analyses + live prices + GROUNDING_RULES_BLOCK) · earnings-prompt.ts (buildEarnings{System,User}Prompt() — next-earnings lookup, default model + web search, cadence-neutral) · grounding-extract-{prompt,schema}.ts (per-kind extraction prompt builders and schemas; Sonnet 5.5, no web search) · research-{prompt,schema,to-dataset}.ts + transcript-urls.ts (research stage: prompt, output schema, web dataset, verified sources) · blind-commitment.ts (a lens's Phase-1 commitment: picked from the text, rebuilt as the assistant turn)
+  ai/ (calls)      # server-only: client.ts (getAiClient/buildThinkingParam/buildEffortConfig/usesServerSideFallback/buildWebSearchTools/buildResearchTools) · ai-preferences.ts (resolveAiSettings() — override > stored > fallback, effort-clamped; researchAiSettings()) · tool-loop.ts (runStreamWithToolLoop/runCreateWithToolLoop — shared client-side tool loop: DeepSeek web search + web fetch within fetchBudget) · web-search-tool.ts (CUSTOM_WEB_SEARCH_TOOL/executeWebSearch() + CUSTOM_WEB_FETCH_TOOL/executeWebFetch(), DeepSeek Search/Fetch APIs) · sse.ts (the staged-run SSE channel: createSseChannel, sseResponse). Pure: fallback.ts (fallbackServedBy/prepareTurnForReplay/fallbackNote, Sonnet 5.5 refusal fallback) · error-status.ts (routeErrorStatus(): SDK error classes → 503/400 for the AI routes) · stream-gate.ts (createStreamGate(): forward only after the start marker) · run-outcome.ts (classifyRunEnd(): how a model turn ends a run) · deepseek-pricing.ts (DeepSeek peak/off-peak windows for the selector's badge)
+  report/          # pure: verdict.ts (getVerdict() + VERDICT_BADGE/VERDICT_TEXT maps; shared: analyses + watchlist) · signal.ts (getSignalStrength() — deterministic weak-signal flag, dispersion vs edge) · evolution.ts (computeEvolution() + computeEvolutionChain() — deterministic estimate history, no AI) · valuation.ts (grossUpToIntrinsic() + Triple type; shared: analyses + watchlist) · latest-analysis.ts (latestAnalysisWithValues/verdictBasis/watchlistBuyTarget/comparablePrice/getExitSignal — one verdict basis, one price rule) · consensus.ts (N-way consensus: consensusTriple/meanTriple/presentAnalysts + ANALYST_COLUMNS) · run-status.ts (isDone/canRetry/isRunStale/runStateOf; 330 s, 20 min) · parse-deep-value-json.ts (parser, sanitizer, markers: parseDeepValueJson, stripJsonBlock, hasFullTriple) · deep-value-run.ts (the run's frozen inputs, DeepValueRunInputs)
+  dataset          # grounding/ (pure: merge/basis/anchors/reconcile/postcheck/prompt-format/schema/currency — the dataset's prompt context + every analysis's gates) · grounding-client.ts (client helper: extractGrounding()) · grounding-{blocks,display,warnings}.ts (pure: paste-editor block helpers, checks-card derivations, extraction-run and quote warnings) · datasets/ (store.ts, server-only: save/latest/get, readAnalysisExtract/readAnalysisGrounding; parse.ts, merge-sources.ts, anchors-bundle.ts, pure) · dataset-client.ts (client helpers: createPasteDataset/createMergedDataset/fetchLatestDataset/fetchDataset/researchDataset)
+  analyses         # analyses.ts (client-side fetch helpers for saved analyses) · analyses-store.ts (server-only: the run's row — start/resume/finish/fail, lens blind/final writes) · analyses-select.ts (ANALYSIS_LIST_SELECT / ANALYSIS_SUMMARY_SELECT) · analysis-run-errors.ts (pure: the domain errors of a staged run, mapped to HTTP or SSE by the routes) · sse-reader.ts (pure: forEachSseEvent, the client reader of the staged-run events)
+  portfolio        # portfolio.ts (client-side fetch helpers for positions + snapshots, fetchSnapshots, + dividend totals) · portfolio-snapshots.ts (server-only snapshot logic, import "server-only") · portfolio-dividends.ts (server-only: loadDividendTotals() — whole-history dividends) · dividends.ts (server-only: fetch + parse Borsa Italiana dividend table) · positions.ts (server-only: closePosition(), full/partial position close) · portfolio-math.ts (pure: realizedPnlNative(), holdingDays(), estimateCapitalGainsTax(), aggregateOpenLots() — no server-only, shared client+server)
+  monitor          # watchlist-analysis.ts (server-only: per-user/all-users watchlist cron runner — the digest from saved analyses, no AI) · watchlist-mos.ts (pure: toWatchlistMosFraction() — WatchlistItem.mosPercent is a fraction) · email.ts (Resend email sender — sendWatchlistDigest()) · earnings.ts (pure: isFutureEarnings(), isAnalysisStalePreEarnings(), formatEarningsDate() — shared client, no server-only) · earnings-client.ts (client fetch helpers: fetchEarnings() / refreshEarnings())
+  shared           # yahoo-client.ts (Yahoo Finance API adapter: getQuote + extractRawNumber + mapFundamentalsFromTimeSeries) · auth.ts (Auth.js v5 config) · db.ts (Prisma singleton client) · format.ts (formatting utilities) · ticker.ts (pure: normalizeTicker/tickerSchema, trim + uppercase, max 20) · ai-settings-client.ts (client fetch helpers: fetchAiSettings() / updateAiSettings()) · i18n/translations.ts (EN/IT dictionary)
+components/        # React components (all client-side, all "use client"): hub-client, analyze-client, ticker-search, price-summary, deep-value-panel, dataset-section, grounding-input, analyses-list, analysis-detail-body (one price per saved page), analysis-detail-chrome, open-position-banner, analysis-run-status (unfinished row), analyst-panel (3-lens panel), use-lens-run (a lens's phases), ai-settings-control (per-run selector), ai-preferences-modal (global default), earnings-badge, portfolio-list, portfolio-history-chart, watchlist-client, advisor-client, nav-bar, page-header, login-form, register-form, session-provider, pwa-register, disclaimer-banner, download-pdf-button.tsx (client-only "Download PDF" button, window.print(), for use in server components)
+  report/          # Shared report-rendering pieces — used identically by the live Deep Value panel, the saved-analysis detail page, and the watchlist: types, method-badges, fair-value-cards, recap-table, report-body, report-shell, valuation-ruler (ValuationRuler + ComparisonTable), valuation-checks-card (the gates), basis-reconciliation-line, grounding-preview, dataset-tables, source-chip, analyst-blind-card (blind vs. final drift), analyst-final-card
+context/           # language-context.tsx (useLanguage())
+app/               # page.tsx (Hub), analyze/, login/, register/, analyses/ (list + [id] detail), portfolio/, watchlist/, advisor/, layout.tsx, manifest.ts, icon.tsx, globals.css, print.css, tailwind-v3-palette.css
+app/api/           # API route handlers — the list: § API Route Pattern › Endpoints
+public/            # sw.js (empty fetch handler, gotcha #23), icons/
 e2e/               # Playwright specs + support (env guard, fixtures, DB helper); never touches production — see WORKFLOW.md §3
 scripts/           # seed-e2e.ts (fixtures for the isolated DB), ci-local.sh (the local quality gate)
-app/analyses/      # Saved analyses list + detail pages
-app/portfolio/     # Portfolio tracker page
-app/watchlist/     # Watchlist page
 generated/prisma/  # Prisma 7 generated client (gitignored)
-prisma/            # Schema + migrations
-__tests__/         # Vitest tests
+prisma/            # Schema + migrations; vercel.json at the root holds the cron schedules
+__tests__/         # Vitest tests, one file per module or route (yahoo-client, evolution, consensus, portfolio-math, earnings, grounding-*, the route tests, the prompts golden)
 ```
 
 ### Placement Rules
@@ -389,10 +376,10 @@ Two patterns, pick by row complexity:
 Recharts `Tooltip` `payload` entries only contain values for fields bound to `<Line dataKey="...">`. To show additional data (e.g. `capitalDelta`, `dividendsEur`) in a custom tooltip, **inject those fields into the chart dataset** and read them from `payload[0].payload` (the raw data object):
 
 ```tsx
-type ChartPoint = SnapshotPoint & { capitalDelta?: number };
+type SnapshotChartPoint = SnapshotPoint & { capitalDelta?: number };
 
 // Enrich data before passing to LineChart
-const chartData: ChartPoint[] = snapshots.map((s, i) => ({
+const chartData: SnapshotChartPoint[] = snapshots.map((s, i) => ({
   ...s,
   capitalDelta: i > 0 && s.costEur - snapshots[i - 1].costEur > 50
     ? s.costEur - snapshots[i - 1].costEur
@@ -400,7 +387,7 @@ const chartData: ChartPoint[] = snapshots.map((s, i) => ({
 }));
 
 // In the custom tooltip component:
-const raw = payload[0]?.payload as ChartPoint | undefined;
+const raw = payload[0]?.payload as SnapshotChartPoint | undefined;
 // raw.capitalDelta is now accessible even though it's not a Line dataKey
 ```
 
@@ -488,7 +475,7 @@ t: (key: keyof Translations) => string;
 
 31. **Testing tooling traps.** (a) `e2e/` is Playwright territory: `vitest.config.ts` excludes it, and Vitest 4 needs `oxc: { jsx: { runtime: "automatic" } }` there because `tsconfig` keeps `"jsx": "preserve"` for Next, otherwise no `.tsx` component can be loaded in a test. (b) JSX inside `vi.mock` factories works under Vitest 4 with the oxc automatic runtime (`analyst-panel`, `deep-value-panel-watchlist`, `analyses-list-positions` tests, 2026-10-29); the old createElement-only rule was a Vitest 3 limitation. A mutation proof on a CRLF file must match `\r\n`, or the replace silently misses and the test "survives" (2026-10-29). (c) The e2e webServer shares `.next` with `next dev`/`next build`; never run the suite while either runs from the same checkout. (d) `e2e/support/test.ts` fails any test that calls `/api/ai/**`, `POST /api/earnings` or `POST /api/watchlist/run`: those cost money, so AI paths are covered by unit tests with mocks, never by e2e. (e) Visual baselines are generated per session and gitignored; they hold for one UTC day because seeded dates are relative to today. (f) A fixture that reaches the expected outcome by a second path masks the mutation of the first: a lens test whose refetched row carried the commitment resumed at Phase 2 even with `resumeFrom = from`, so the declared mutation survived; pin each path with a case where the other is closed (2026-11-20, `__tests__/use-lens-run.test.tsx`, the reconcile whose row cannot be read).
 
-32. **Tailwind 4 setup and its traps.** `app/globals.css` uses `@import "tailwindcss" source(none)` plus explicit `@source` for `app/`, `components/`, `lib/` (automatic detection would also scan the Markdown docs and emit CSS for class names mentioned there); tokens (`bg`/`card`/`accent`/`muted`/`success`/`warning`/`danger`) live in `@theme inline` mapped to `var(--…)`; `tailwind.config.ts` survives only for the typography `prose-report` variant, loaded with `@config`. The v4 defaults that changed the look are pinned back: Tailwind 3's hex palette (`app/tailwind-v3-palette.css`; v4's OKLCH is more saturated on P3 screens), the v3 line-heights in `@theme` (a `text-[10px]` inside `text-xs` otherwise shrinks), default border/placeholder/cursor/table-cell/date-input base styles, and `@custom-variant hover` (v4 no longer fires `hover:` on touch). `.card` lives in `@layer components`, `body` in `@layer base`, `.tap`/`.rtable` in `@layer utilities`, so they win or lose against utilities exactly as in v3. `prose-invert` now overrides `prose-report`, so the report colours also set the `--tw-prose-invert-*` variables. v4 renamed utilities (`rounded`→`rounded-sm`, `shadow-sm`→`shadow-xs`, `outline-none`→`outline-hidden`, `flex-shrink-0`→`shrink-0`, `ring`→`ring-3`): the official upgrade tool missed `rounded-tl/tr-sm` and `rounded`/`shadow` inside template literals, so grep for them after any bulk class change. Visual safety net: `npm run e2e:visual` (18 screens + 4 print variants, tolerance 0.01); regenerate baselines before a styling change, never to make a failure pass. Browser floor: Safari 16.4+, Chrome/Edge 111+, Firefox 128+.
+32. **Tailwind 4 setup and its traps.** `app/globals.css` uses `@import "tailwindcss" source(none)` plus explicit `@source` for `app/`, `components/`, `lib/` (automatic detection would also scan the Markdown docs and emit CSS for class names mentioned there); tokens (`bg`/`card`/`accent`/`muted`/`success`/`warning`/`danger`) live in `@theme inline` mapped to `var(--…)`; `tailwind.config.ts` survives only for the typography `prose-report` variant, loaded with `@config`. The v4 defaults that changed the look are pinned back: Tailwind 3's hex palette (`app/tailwind-v3-palette.css`; v4's OKLCH is more saturated on P3 screens), the v3 line-heights in `@theme` (a `text-[10px]` inside `text-xs` otherwise shrinks), default border/placeholder/cursor/table-cell/date-input base styles, and `@custom-variant hover` (v4 no longer fires `hover:` on touch). `.card` lives in `@layer components`, `body` in `@layer base`, `.tap`/`.rtable` in `@layer utilities`, so they win or lose against utilities exactly as in v3. `prose-invert` now overrides `prose-report`, so the report colours also set the `--tw-prose-invert-*` variables. v4 renamed utilities (`rounded`→`rounded-sm`, `shadow-sm`→`shadow-xs`, `outline-none`→`outline-hidden`, `flex-shrink-0`→`shrink-0`, `ring`→`ring-3`): the official upgrade tool missed `rounded-tl/tr-sm` and `rounded`/`shadow` inside template literals, so grep for them after any bulk class change. Visual safety net: `npm run e2e:visual` (18 screens + 4 print variants, tolerance 0.01); regenerate baselines before a styling change, never to make a failure pass. Browser floor: Safari 16.4+, Chrome/Edge 111+, Firefox 128+ (it relies on `@property`, `color-mix()` and cascade layers); older iOS renders the app incorrectly. Delete `app/tailwind-v3-palette.css` to adopt v4's OKLCH colours.
 
 33. **`WatchlistItem.mosPercent` is a fraction, `Analysis.mosPercent` a percent** — convert with `toWatchlistMosFraction()` (`lib/watchlist-mos.ts`); the Deep Value panel once sent 25 to a `max(0.8)` schema and every add failed.
 
@@ -496,4 +483,4 @@ t: (key: keyof Translations) => string;
 
 ---
 
-*For project state and roadmap, see [CLAUDE.md](CLAUDE.md).*
+*For project state and roadmap, see [CLAUDE.md](CLAUDE.md), the index of what exists and where it is documented.*
