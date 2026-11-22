@@ -12,7 +12,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: November 22, 2026 — **Spec 05f (the web research in three parts) implemented**, branch `feature/research-in-three-parts`: statements → market → estimates, each its own request with true caps (`allowed_callers: ["direct"]`), partial state in a `ResearchRun` row, «Continue without» on an optional part, a lost answer resumed through `GET ?runId=` (valutazione.md § 5.3). Migration `add_research_run` applied on Turso on 2026-11-22 (read check: 0 rows). Collaudo done on the isolated database with three real runs (measures: valutazione.md § 5.3, § 2.9); the owner's tour closed with nothing open. Open until the end of the series: the Vercel log check of the `[ai-run]` and `[research]` lines. Next: the retirement of 05f.
+**Last Updated**: November 22, 2026 — **Spec 05f (the web research in three parts) retired**, branch `chore/retire-spec-05f` (implemented in `805a2a8`, PR #81): `ResearchRun` re-read on Turso, read-only (0 rows, its columns, index and cascade). The verification found no behaviour defect; four test gaps closed (the estimates' caps and rounds in the route, the client's `lost` classification, failed statements with a run); D-156 refined by the owner: a run closed by the request in flight when the ticker changes keeps its dataset, offered on return (valutazione.md § 5.3); guide, README and index realigned on the measures. Only tests and documents changed, no app code. Open until the end of the series: the Vercel log check of the `[ai-run]` and `[research]` lines. Next: spec 06 (dividends).
 
 ---
 
@@ -141,7 +141,7 @@ Things the series deliberately left out, one line each (added by the spec that l
 ---
 
 ## Next Priorities
-The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (one session per spec, in order); its index `00-INDICE.md` holds the series' state, the retirement dates and the owner's decisions. Live: 05f (read adversarially on 2026-11-21; next), then 06, 07a, 07b, 08a, 08b; after 08b, one `/deep-value` realignment pass (D-76).
+The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (one session per spec, in order); its index `00-INDICE.md` holds the series' state, the retirement dates and the owner's decisions. Live: 06 (next), 07a, 07b, 08a, 08b; after 08b, one `/deep-value` realignment pass (D-76).
 1. Caching layer for `/api/quote`.
 2. Per-ticker yield-on-cost in the exit signal (needs per-position dividend exposure via snapshots).
 

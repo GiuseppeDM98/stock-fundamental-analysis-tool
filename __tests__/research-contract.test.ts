@@ -55,7 +55,7 @@ const PART_KEYS: Record<ResearchPart, string[]> = {
   estimates: ["notes", "sources", "estimates"],
 };
 
-/** The task line, the second line of each prompt. */
+/** The task line, the first line of each prompt. */
 const taskOf = (part: ResearchPart) => system(part).split("\n")[0];
 
 describe("research prompt ↔ schema contract, per part", () => {
