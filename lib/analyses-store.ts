@@ -214,28 +214,42 @@ export async function saveLensBlind(
 }
 
 /**
- * Writes a lens's critique and final valuation. Without a full triple the lens's numbers
- * and result are written null, not left alone: a re-run whose JSON came back incomplete
- * must not keep the previous run's values next to the new critique.
+ * Writes a lens's critique and clears its numbers in the same update: a new critique makes
+ * the previous final valuation stale, and "critique present, result absent" is how the panel
+ * knows the final numbers are still to run.
  * @returns rows touched.
  */
-export async function saveLensFinal(
-  id: string,
-  userId: string,
-  angle: AnalystAngle,
-  { critiqueMd, result }: { critiqueMd: string; result: ParsedAnalystResult | null }
-): Promise<number> {
+export async function saveLensCritique(id: string, userId: string, angle: AnalystAngle, critiqueMd: string): Promise<number> {
   const c = ANALYST_COLUMNS[angle];
-  const full = hasFullTriple(result);
   const data = {
     [c.critique]: critiqueMd,
-    [c.bull]: full ? result.bull.fairValue : null,
-    [c.base]: full ? result.base.fairValue : null,
-    [c.bear]: full ? result.bear.fairValue : null,
-    [c.method]: full ? result.method.slice(0, 40) : null,
-    [c.result]: full ? JSON.stringify(result) : null,
+    [c.bull]: null,
+    [c.base]: null,
+    [c.bear]: null,
+    [c.method]: null,
+    [c.result]: null,
   } as Prisma.AnalysisUpdateManyMutationInput;
   const { count } = await db.analysis.updateMany({ where: { id, userId }, data });
+  return count;
+}
+
+/**
+ * Writes a lens's final valuation next to the critique it answers.
+ * @param critiqueMd - The critique the final request read from the row: a row whose critique
+ *   is no longer that text (a new Phase 1 cleared it, or another tab wrote a new one) is not
+ *   touched, so numbers never sit next to a critique that did not produce them.
+ * @returns rows touched.
+ */
+export async function saveLensResult(id: string, userId: string, angle: AnalystAngle, critiqueMd: string, result: AnalystResult): Promise<number> {
+  const c = ANALYST_COLUMNS[angle];
+  const data = {
+    [c.bull]: result.bull.fairValue,
+    [c.base]: result.base.fairValue,
+    [c.bear]: result.bear.fairValue,
+    [c.method]: result.method.slice(0, 40),
+    [c.result]: JSON.stringify(result),
+  } as Prisma.AnalysisUpdateManyMutationInput;
+  const { count } = await db.analysis.updateMany({ where: { id, userId, [c.critique]: critiqueMd } as Prisma.AnalysisWhereInput, data });
   return count;
 }
 
@@ -248,6 +262,8 @@ export type LensRow = {
   reportLanguage: string | null;
   ticker: string;
   blindJson: string | null;
+  // The lens's own critique: the assistant turn the final request answers to.
+  critiqueMd: string | null;
   // For the base report's gates: its result column, the price saved with it (in the
   // quote's own currency) and the save date the prompt quotes when the quote fails.
   resultJson: string | null;
@@ -258,7 +274,7 @@ export type LensRow = {
 
 /** The row a lens phase runs on, or null when it is missing or another user's. */
 export async function readLensRow(id: string, userId: string, angle: AnalystAngle): Promise<LensRow | null> {
-  const blindColumn = ANALYST_COLUMNS[angle].blind;
+  const { blind: blindColumn, critique: critiqueColumn } = ANALYST_COLUMNS[angle];
   const row = (await db.analysis.findFirst({
     where: { id, userId },
     select: {
@@ -274,9 +290,11 @@ export async function readLensRow(id: string, userId: string, angle: AnalystAngl
       priceCurrency: true,
       createdAt: true,
       [blindColumn]: true,
+      [critiqueColumn]: true,
     } as Prisma.AnalysisSelect,
-  })) as (Omit<LensRow, "blindJson"> & Record<string, unknown>) | null;
+  })) as (Omit<LensRow, "blindJson" | "critiqueMd"> & Record<string, unknown>) | null;
   if (!row) return null;
   const blind = row[blindColumn];
-  return { ...row, blindJson: typeof blind === "string" ? blind : null } as LensRow;
+  const critique = row[critiqueColumn];
+  return { ...row, blindJson: typeof blind === "string" ? blind : null, critiqueMd: typeof critique === "string" ? critique : null } as LensRow;
 }

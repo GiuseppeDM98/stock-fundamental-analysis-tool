@@ -24,24 +24,16 @@ export function getAiClient(model: AiModelId): Anthropic {
 
 /** Maps the user's "thinking" toggle to the API's thinking config.
  *
- * Claude Sonnet 5.5 rejects `{type: "disabled"}` with a 400. Its way to switch thinking
- * off is `{type: "between_tools"}`, which the API accepts only at effort `high` or below,
- * so at `xhigh`/`max` thinking cannot be turned off and stays adaptive. */
-export function buildThinkingParam(
-  thinking: boolean,
-  model?: AiModelId,
-  effort?: AiEffort
-): Anthropic.ThinkingConfigParam {
+ * `between_tools` is accepted only at effort `high` or below, which since 2026-11-20 is
+ * every request the app sends, so the effort no longer decides anything here. */
+export function buildThinkingParam(thinking: boolean, model?: AiModelId): Anthropic.ThinkingConfigParam {
   if (thinking) return { type: "adaptive" };
-  if (model === "claude-sonnet-5-5") {
-    if (effort === "xhigh" || effort === "max") return { type: "adaptive" };
-    return { type: "between_tools" };
-  }
-  return { type: "disabled" };
+  // Sonnet 5.5 rejects `disabled` with a 400; `between_tools` is its off.
+  return model === "claude-sonnet-5-5" ? { type: "between_tools" } : { type: "disabled" };
 }
 
-/** The `output_config` for the chosen effort. The SDK (>= 0.133) types every level,
- * `xhigh` included, so no cast is needed any more. */
+/** The `output_config` for the chosen effort. The SDK (>= 0.133) types every level, so no
+ * cast is needed. */
 export function buildEffortConfig(effort: AiEffort): Anthropic.OutputConfig {
   return { effort };
 }
@@ -69,15 +61,23 @@ export function usesServerSideFallback(model: string): boolean {
  * Anthropic's infrastructure). DeepSeek's server-side web_search tool call parsing is
  * unreliable through the Anthropic-compat proxy (reproduced in production — see
  * types/ai-settings.ts), so it gets a client-executed custom tool instead (standard
- * function-calling, resolved via lib/ai/tool-loop.ts + lib/ai/web-search-tool.ts). */
-export function buildWebSearchTools(model: AiModelId): Anthropic.ToolUnion[] {
+ * function-calling, resolved via lib/ai/tool-loop.ts + lib/ai/web-search-tool.ts).
+ *
+ * `maxUses` makes the cap real on Claude: `max_uses` counts a whole turn, pause_turn resumes
+ * included, only for calls Claude makes directly. The `_20260209` tool calls from code
+ * execution by default, and those calls are counted per request, so the cap re-armed at
+ * every resume (Anthropic's "Web search tool" docs, § Max uses, read 2026-11-21). On DeepSeek
+ * the option has no effect: the shared loop runs every search, and only its rounds bound them. */
+export function buildWebSearchTools(model: AiModelId, options: { maxUses?: number } = {}): Anthropic.ToolUnion[] {
   const info = AI_MODEL_CATALOG[model];
   if (!info.supportsWebSearch) return [];
-  if (info.provider === "deepseek") {
-    return [CUSTOM_WEB_SEARCH_TOOL as unknown as Anthropic.ToolUnion];
-  }
-  return [{ type: "web_search_20260209" as const, name: "web_search" } as Anthropic.ToolUnion];
+  if (info.provider === "deepseek") return [CUSTOM_WEB_SEARCH_TOOL as unknown as Anthropic.ToolUnion];
+  if (options.maxUses === undefined) return [{ type: "web_search_20260209", name: "web_search" }];
+  return [{ type: "web_search_20260209", name: "web_search", max_uses: options.maxUses, allowed_callers: ["direct"] }];
 }
+
+/** Web searches one lens request may run on Claude. */
+export const LENS_MAX_SEARCHES = 5;
 
 /** Searches per research run on Claude's native tool (`max_uses`): the prompt asks for five
  *  fiscal years of three statements, multiples, estimates and peers. */

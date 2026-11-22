@@ -15,6 +15,7 @@ import {
   buildAnalystSystemPrompt,
   buildAnalystBlindUserPrompt,
   buildAnalystReconcileUserPrompt,
+  buildAnalystFinalUserPrompt,
 } from "@/lib/ai/deep-value-prompts";
 import { buildGroundingPromptContext } from "@/lib/grounding/prompt-format";
 import { ANALYST_ANGLES } from "@/types/analysis";
@@ -81,10 +82,13 @@ describe("Analyst lens prompts on a dataset — golden", () => {
         reportMd: "## 1. Panoramica\nReport di prova fenicottero.",
         language: "Italiano",
         currentDate: CURRENT_DATE,
-        mosPercent: MOS,
         blind: { bull: 12, base: 10, bear: 8 },
         gatesText: GATES_TEXT,
       })
     ).toMatchSnapshot();
+  });
+
+  it("(6) Phase 3 user prompt, the final numbers", () => {
+    expect(buildAnalystFinalUserPrompt({ language: "Italiano", mosPercent: MOS })).toMatchSnapshot();
   });
 });

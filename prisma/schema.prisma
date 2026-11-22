@@ -32,7 +32,7 @@ model User {
   // site (deep-value, verify, advisor, earnings) unless overridden per-request.
   // "claude-opus-4-8" | "claude-sonnet-5" | "claude-sonnet-5-5" | "deepseek-v4-pro" | "deepseek-flash"
   aiModel                 String              @default("claude-opus-4-8")
-  // "low" | "medium" | "high" | "xhigh" | "max"
+  // "low" | "medium" | "high": what the app writes since 2026-11-20 (an older "xhigh" or "max" reads as "high")
   aiEffort                String              @default("high")
   aiThinkingEnabled        Boolean             @default(true)
 }

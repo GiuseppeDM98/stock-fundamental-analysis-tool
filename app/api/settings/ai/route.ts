@@ -5,7 +5,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { aiModelIdSchema } from "@/lib/ai/ai-preferences";
-import { AI_MODEL_CATALOG, normalizeAiModelId } from "@/types/ai-settings";
+import { AI_MODEL_CATALOG, callSiteDefaultEffort, isAiEffort, normalizeAiModelId } from "@/types/ai-settings";
 import type { AiSettings } from "@/types/ai-settings";
 
 const settingsSchema = z
@@ -32,9 +32,14 @@ export async function GET() {
     select: { aiModel: true, aiEffort: true, aiThinkingEnabled: true },
   });
 
+  const model = (user && normalizeAiModelId(user.aiModel)) ?? "claude-opus-4-8";
+  const stored = user?.aiEffort ?? "high";
   const settings: AiSettings = {
-    model: (user && normalizeAiModelId(user.aiModel)) ?? "claude-opus-4-8",
-    effort: (user?.aiEffort as AiSettings["effort"]) ?? "high",
+    model,
+    // Stepped down to what the model offers (2026-11-20, no level above `high`): a stored
+    // `xhigh` reaching the modal as is would have no option in its <select>, and Save would
+    // send it back for a 400.
+    effort: callSiteDefaultEffort(model, isAiEffort(stored) ? stored : "high"),
     thinking: user?.aiThinkingEnabled ?? true,
   };
 

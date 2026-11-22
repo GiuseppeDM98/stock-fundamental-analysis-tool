@@ -10,7 +10,8 @@ const userFindUnique = vi.fn();
 const analysisFindFirst = vi.fn();
 const datasetFindFirst = vi.fn();
 const saveLensBlind = vi.fn();
-const saveLensFinal = vi.fn();
+const saveLensCritique = vi.fn();
+const saveLensResult = vi.fn();
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(async () => ({ user: { id: "u1" } })) }));
@@ -35,7 +36,8 @@ vi.mock("@/lib/ai/tool-loop", async (importOriginal) => ({
 vi.mock("@/lib/analyses-store", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/analyses-store")>()),
   saveLensBlind: (...args: unknown[]) => saveLensBlind(...args),
-  saveLensFinal: (...args: unknown[]) => saveLensFinal(...args),
+  saveLensCritique: (...args: unknown[]) => saveLensCritique(...args),
+  saveLensResult: (...args: unknown[]) => saveLensResult(...args),
 }));
 
 import { POST } from "@/app/api/ai/deep-value/verify/route";
@@ -52,6 +54,7 @@ function post(body: unknown): Request {
 /** One phase of a lens on the saved analysis an1 of ticker AAA. */
 const blindPhase = (body: Record<string, unknown> = {}) => post({ ticker: "AAA", analysisId: "an1", phase: "blind", ...body });
 const reconcilePhase = (body: Record<string, unknown> = {}) => post({ ticker: "AAA", analysisId: "an1", phase: "reconcile", ...body });
+const finalPhase = (body: Record<string, unknown> = {}) => post({ ticker: "AAA", analysisId: "an1", phase: "final", ...body });
 
 /** Every event of an SSE response, in order. */
 async function events(res: Response): Promise<AiRunEvent[]> {
@@ -67,7 +70,14 @@ const FINAL = '```json\n{"method":"DCF","sector":"S","currency":"EUR","bull":{"f
 // The saved base result the gates run on (the result column, read before the fence).
 const BASE_RESULT_JSON = JSON.stringify({ method: "EV/EBITDA", sector: "S", currency: "EUR", bull: { fairValue: 12 }, base: { fairValue: 10 }, bear: { fairValue: 8 } });
 
-type ModelParams = { system: string; messages: Array<{ role: string; content: string }>; output_config: { effort: string } };
+type ModelParams = {
+  system: string;
+  messages: Array<{ role: string; content: string }>;
+  output_config: { effort: string };
+  tools?: unknown[];
+  cache_control?: unknown;
+  max_tokens: number;
+};
 const paramsOf = (call: number) => runStreamMock.mock.calls[call][1] as ModelParams;
 /** The last user message of the n-th model call. */
 const userPromptOf = (call: number) => paramsOf(call).messages.at(-1)!.content;
@@ -122,6 +132,13 @@ function reconcileTurn(chunks: string[], stopReason = "end_turn") {
     return { stopReason, hitIterationCap: false, servedBy: null, text: chunks.join(""), messages: [] };
   });
 }
+/** The model answers Phase 3 with `text`, streaming nothing the route forwards. */
+function finalTurn(text: string, stopReason = "end_turn", hitIterationCap = false) {
+  runStreamMock.mockImplementationOnce(async () => ({ stopReason, hitIterationCap, servedBy: null, text, messages: [] }));
+}
+
+const CRITIQUE_COLUMN = "Critique stored by Phase 2.";
+const LENS_TOOLS = [{ type: "web_search_20260209", name: "web_search", max_uses: 5, allowed_callers: ["direct"] }];
 
 beforeEach(() => {
   runStreamMock.mockReset();
@@ -129,7 +146,8 @@ beforeEach(() => {
   analysisFindFirst.mockReset().mockResolvedValue(analysisRow());
   datasetFindFirst.mockReset().mockResolvedValue(DATASET_ROW);
   saveLensBlind.mockReset().mockResolvedValue(1);
-  saveLensFinal.mockReset().mockResolvedValue(1);
+  saveLensCritique.mockReset().mockResolvedValue(1);
+  saveLensResult.mockReset().mockResolvedValue(1);
   // A queued quote a phase never asked for must not leak into the next test.
   vi.mocked(getQuote).mockReset().mockResolvedValue({ regularMarketPrice: 10, currency: "EUR" } as Awaited<ReturnType<typeof getQuote>>);
 });
@@ -321,38 +339,53 @@ describe("POST /api/ai/deep-value/verify — phase reconcile", () => {
     expect(paramsOf(0).messages).toHaveLength(3);
   });
 
-  it("drops the chatter before the critique marker, and writes the critique without its JSON and the parsed result", async () => {
+  it("drops the chatter before the critique marker, and writes the critique alone, without a JSON the model wrote anyway", async () => {
     reconcileTurn(["Let me re-read the filings. chatter", "<!--critique-->Critique\n", FINAL]);
     const evs = await events(await POST(reconcilePhase()));
     expect(textOf(evs).startsWith("Critique\n")).toBe(true);
     expect(textOf(evs)).not.toContain("chatter");
-    expect(parseDeepValueJson(textOf(evs))?.base?.fairValue).toBe(10);
-    const [id, userId, angle, written] = saveLensFinal.mock.calls[0];
-    expect([id, userId, angle]).toEqual(["an1", "u1", "skeptic"]);
-    expect(written.critiqueMd).toBe("Critique\n");
-    expect(written.result.base.fairValue).toBe(10);
+    expect(saveLensCritique).toHaveBeenCalledWith("an1", "u1", "skeptic", "Critique\n");
+    // The numbers are the next request's: a JSON in the critique is never written as a result.
+    expect(saveLensResult).not.toHaveBeenCalled();
     expect(evs.at(-1)).toEqual({ type: "done" });
   });
 
-  it("a final JSON without bear still reaches saveLensFinal, incomplete, so the store clears the lens's numbers", async () => {
-    const noBear = '```json\n{"method":"DCF","sector":"S","currency":"EUR","bull":{"fairValue":12},"base":{"fairValue":10}}\n```';
-    reconcileTurn(["<!--critique-->Critique\n", noBear]);
+  it("sends exactly the capped search tool, the same as Phase 1 (one prefix for the cache)", async () => {
+    blindTurn(`${BLIND}\nrationale`);
+    await events(await POST(blindPhase()));
+    reconcileTurn(["<!--critique-->Critique\n"]);
     await events(await POST(reconcilePhase()));
-    expect(saveLensFinal).toHaveBeenCalledTimes(1);
-    const written = saveLensFinal.mock.calls[0][3];
-    expect(written.critiqueMd).toBe("Critique\n");
-    expect(written.result.base.fairValue).toBe(10);
-    expect(written.result.bear).toBeUndefined();
+    expect(paramsOf(0).tools).toEqual(LENS_TOOLS);
+    expect(paramsOf(1).tools).toEqual(LENS_TOOLS);
+    expect(paramsOf(1).cache_control).toEqual({ type: "ephemeral" });
   });
 
-  it("closes a JSON fence cut by max_tokens, notes it, and writes no result", async () => {
+  it("a critique with no text is an error to retry, and writes nothing", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    reconcileTurn([]);
+    const last = (await events(await POST(reconcilePhase()))).at(-1);
+    expect(last).toEqual({ type: "error", error: "The critique did not arrive: retry.", retryable: true });
+    expect(saveLensCritique).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("a refused critique with no text is an error not to retry, and writes nothing", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    reconcileTurn([], "refusal");
+    const last = (await events(await POST(reconcilePhase()))).at(-1);
+    expect(last).toMatchObject({ type: "error", retryable: false });
+    expect(saveLensCritique).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("closes a JSON fence cut by max_tokens, notes it, and writes the critique without the broken block", async () => {
     reconcileTurn(['<!--critique-->Critique\n```json\n{"method":"DC'], "max_tokens");
     const text = textOf(await events(await POST(reconcilePhase())));
     expect(text).toContain('{"method":"DC\n```\n');
     expect(text).toContain("Review truncated");
-    const written = saveLensFinal.mock.calls[0][3];
-    expect(written.result).toBeNull();
-    expect(written.critiqueMd).toContain("Review truncated");
+    const written = saveLensCritique.mock.calls[0][3] as string;
+    expect(written).toContain("Review truncated");
+    expect(written).not.toContain('"method"');
   });
 
   it("without a commitment on the row it is one single-phase review, with the gates and the note", async () => {
@@ -364,27 +397,119 @@ describe("POST /api/ai/deep-value/verify — phase reconcile", () => {
     expect(messages[0].content).toContain("--- REPORT UNDER REVIEW ---");
     expect(messages[0].content).toContain("STRUCTURED EXTRACT");
     expect(messages[0].content).toContain("--- DETERMINISTIC GATES ON THE BASE REPORT");
-    const critique = saveLensFinal.mock.calls[0][3].critiqueMd as string;
+    const critique = saveLensCritique.mock.calls[0][3] as string;
     expect(critique).toContain("Phase 1 (the blind valuation");
     expect(critique).toContain("Review truncated");
     expect(evs.at(-1)).toEqual({ type: "done" });
   });
 
   it("ends with an error when the row was deleted during the phase", async () => {
-    reconcileTurn(["<!--critique-->Critique\n", FINAL]);
-    saveLensFinal.mockResolvedValue(0);
+    reconcileTurn(["<!--critique-->Critique\n"]);
+    saveLensCritique.mockResolvedValue(0);
     expect((await events(await POST(reconcilePhase()))).at(-1)).toMatchObject({ type: "error", retryable: false });
   });
 });
 
+describe("POST /api/ai/deep-value/verify — phase final", () => {
+  beforeEach(() => {
+    analysisFindFirst.mockResolvedValue(analysisRow({ reviewMd: CRITIQUE_COLUMN }));
+  });
+
+  it("sends five messages, the fourth the critique as an assistant turn, with no tools, no cache and one round", async () => {
+    finalTurn(FINAL);
+    const evs = await events(await POST(finalPhase()));
+    const params = paramsOf(0);
+    expect(params.messages.map((m) => m.role)).toEqual(["user", "assistant", "user", "assistant", "user"]);
+    expect(params.messages[3].content).toBe(`<!--critique-->\n${CRITIQUE_COLUMN}`);
+    expect(params.messages[4].content).toContain("PHASE 3 — emit the FINAL JSON now");
+    expect(params.messages[4].content).toContain("margin of safety of 20%");
+    expect(params).not.toHaveProperty("tools");
+    expect(params).not.toHaveProperty("cache_control");
+    expect(runStreamMock.mock.calls[0][3]).toBe(1);
+    // Nothing streamed: the panel reloads the row.
+    expect(textOf(evs)).toBe("");
+    expect(evs[0]).toEqual({ type: "stage", stage: "final" });
+    expect(evs.at(-1)).toEqual({ type: "done" });
+  });
+
+  it("writes the numbers with the critique read from the row, which the store puts in its where", async () => {
+    finalTurn(FINAL);
+    await events(await POST(finalPhase()));
+    const [id, userId, angle, critique, result] = saveLensResult.mock.calls[0];
+    expect([id, userId, angle, critique]).toEqual(["an1", "u1", "skeptic", CRITIQUE_COLUMN]);
+    expect(result.base.fairValue).toBe(10);
+    expect(saveLensCritique).not.toHaveBeenCalled();
+  });
+
+  it("after a degraded Phase 1 sends three messages: the single-phase review, the critique, the final prompt", async () => {
+    analysisFindFirst.mockResolvedValue(analysisRow({ reviewBlindJson: null, reviewMd: CRITIQUE_COLUMN }));
+    finalTurn(FINAL);
+    await events(await POST(finalPhase()));
+    expect(paramsOf(0).messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
+    expect(paramsOf(0).messages[0].content).toContain("--- REPORT UNDER REVIEW ---");
+  });
+
+  it("answers 409 on a row with no critique, or an empty one, and calls no model", async () => {
+    for (const reviewMd of [null, ""]) {
+      analysisFindFirst.mockResolvedValue(analysisRow({ reviewMd }));
+      const res = await POST(finalPhase());
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({ error: "run the critique first" });
+    }
+    expect(runStreamMock).not.toHaveBeenCalled();
+  });
+
+  it("a JSON without bear is an error to retry, and writes nothing", async () => {
+    finalTurn('```json\n{"method":"DCF","sector":"S","currency":"EUR","bull":{"fairValue":12},"base":{"fairValue":10}}\n```');
+    expect((await events(await POST(finalPhase()))).at(-1)).toEqual({ type: "error", error: "The final numbers did not arrive: retry.", retryable: true });
+    expect(saveLensResult).not.toHaveBeenCalled();
+  });
+
+  it("a round cap or a max_tokens cut is an error to retry, even with a parseable block", async () => {
+    finalTurn(FINAL, "pause_turn", true);
+    expect((await events(await POST(finalPhase()))).at(-1)).toMatchObject({ type: "error", retryable: true });
+    finalTurn(FINAL, "max_tokens");
+    expect((await events(await POST(finalPhase()))).at(-1)).toMatchObject({ type: "error", retryable: true });
+    expect(saveLensResult).not.toHaveBeenCalled();
+  });
+
+  it("a refusal is an error not to retry", async () => {
+    finalTurn(FINAL, "refusal");
+    expect((await events(await POST(finalPhase()))).at(-1)).toMatchObject({ type: "error", retryable: false });
+    expect(saveLensResult).not.toHaveBeenCalled();
+  });
+
+  it("a write that matches no row (the critique changed meanwhile) is an error not to retry", async () => {
+    finalTurn(FINAL);
+    saveLensResult.mockResolvedValue(0);
+    expect((await events(await POST(finalPhase()))).at(-1)).toEqual({
+      type: "error",
+      error: "This lens was run again elsewhere: reload the page.",
+      retryable: false,
+    });
+  });
+});
+
 describe("POST /api/ai/deep-value/verify — effort, row and gates", () => {
-  it("starts at xhigh with no effort named, without the retired X-AI-Settings header", async () => {
+  it("starts at the user's stored effort with none named, with no floor, without the retired X-AI-Settings header", async () => {
+    userFindUnique.mockResolvedValue({ aiModel: "claude-opus-4-8", aiEffort: "medium", aiThinkingEnabled: true });
     blindTurn(`${BLIND}\nrationale`);
     const res = await POST(blindPhase());
     expect(res.headers.get("Content-Type")).toContain("text/event-stream");
     expect(res.headers.get("X-AI-Settings")).toBeNull();
     await res.text();
-    expect(paramsOf(0).output_config.effort).toBe("xhigh");
+    expect(paramsOf(0).output_config.effort).toBe("medium");
+  });
+
+  it("steps an effort above high down to high, in every phase", async () => {
+    userFindUnique.mockResolvedValue({ aiModel: "claude-opus-4-8", aiEffort: "xhigh", aiThinkingEnabled: true });
+    blindTurn(`${BLIND}\nrationale`);
+    await events(await POST(blindPhase()));
+    analysisFindFirst.mockResolvedValue(analysisRow({ reviewMd: CRITIQUE_COLUMN }));
+    finalTurn(FINAL);
+    await events(await POST(finalPhase()));
+    expect(paramsOf(0).output_config.effort).toBe("high");
+    expect(paramsOf(1).output_config.effort).toBe("high");
   });
 
   it("applies an effort named without a model to the stored model", async () => {
@@ -397,7 +522,7 @@ describe("POST /api/ai/deep-value/verify — effort, row and gates", () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
     blindTurn(`${BLIND}\nrationale`);
     await events(await POST(blindPhase()));
-    expect(info).toHaveBeenCalledWith("[ai-run]", "verify", "skeptic", "blind", expect.stringMatching(/^\d+ms$/), "claude-opus-4-8", "xhigh", "end_turn");
+    expect(info).toHaveBeenCalledWith("[ai-run]", "verify", "skeptic", "blind", expect.stringMatching(/^\d+ms$/), "claude-opus-4-8", "high", "end_turn");
     info.mockRestore();
   });
 

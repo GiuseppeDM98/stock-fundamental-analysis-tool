@@ -129,7 +129,7 @@ export const groundingBlockSchema = z
  *
  * The per-block, total and count caps bound the raw paste injected into the prompt —
  * the same limits the extraction route enforces, so a payload that could not have been
- * extracted cannot be smuggled straight into an Opus xhigh call either. */
+ * extracted cannot be smuggled straight into an Opus call either. */
 export const groundingPayloadSchema = z.object({
   blocks: z
     .array(groundingBlockSchema)

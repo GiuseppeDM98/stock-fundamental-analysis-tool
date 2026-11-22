@@ -237,7 +237,7 @@ describe("POST /api/ai/deep-value — the row written by the server", () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
     streams(["<!--report-->## 1. X"]);
     await events(await POST(run()));
-    expect(info).toHaveBeenCalledWith("[ai-run]", "deep-value", "valuation", expect.stringMatching(/^\d+ms$/), "claude-opus-4-8", "xhigh", "end_turn");
+    expect(info).toHaveBeenCalledWith("[ai-run]", "deep-value", "valuation", expect.stringMatching(/^\d+ms$/), "claude-opus-4-8", "high", "end_turn");
     info.mockRestore();
   });
 });
@@ -268,7 +268,8 @@ describe("POST /api/ai/deep-value — retry from the row", () => {
     expect(store.setRunPrice).toHaveBeenCalledWith(HANDLE, 10, "EUR");
     expect(evs[0]).toMatchObject({ type: "stage", analysisId: "an1" });
     const params = runStreamMock.mock.calls[0][1] as { output_config: { effort: string }; system: string };
-    expect(params.output_config.effort).toBe("xhigh");
+    // The row was saved at xhigh before 2026-11-20: the retry sends what the model accepts now.
+    expect(params.output_config.effort).toBe("high");
     expect(params.system).toContain("Italiano");
     expect(userFindUnique).not.toHaveBeenCalled();
   });
@@ -303,19 +304,20 @@ describe("POST /api/ai/deep-value — retry from the row", () => {
 describe("POST /api/ai/deep-value — effort and resolved settings", () => {
   beforeEach(() => streams(["<!--report-->## 1. X"]));
 
-  it("starts at xhigh when the global default is high and the run names no effort, and records it on the row", async () => {
+  it("starts at the global default when the run names no effort, with no floor, and records it on the row", async () => {
+    userFindUnique.mockResolvedValue({ aiModel: "claude-opus-4-8", aiEffort: "medium", aiThinkingEnabled: true });
     await events(await POST(run()));
-    expect(sentEffort()).toBe("xhigh");
-    expect(store.startAnalysisRun).toHaveBeenCalledWith("u1", expect.objectContaining({ aiModel: "claude-opus-4-8", aiEffort: "xhigh", aiThinking: true }));
+    expect(sentEffort()).toBe("medium");
+    expect(store.startAnalysisRun).toHaveBeenCalledWith("u1", expect.objectContaining({ aiModel: "claude-opus-4-8", aiEffort: "medium", aiThinking: true }));
   });
 
-  it("keeps a global max", async () => {
+  it("steps a stored max down to high", async () => {
     userFindUnique.mockResolvedValue({ aiModel: "claude-opus-4-8", aiEffort: "max", aiThinkingEnabled: true });
     await events(await POST(run()));
-    expect(sentEffort()).toBe("max");
+    expect(sentEffort()).toBe("high");
   });
 
-  it("lands on high for DeepSeek, which has no xhigh", async () => {
+  it("lands on high for DeepSeek", async () => {
     await events(await POST(run({ model: "deepseek-v4-pro" })));
     expect(sentEffort()).toBe("high");
     expect(store.startAnalysisRun.mock.calls[0][1].aiEffort).toBe("high");

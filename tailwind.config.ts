@@ -73,7 +73,16 @@ const config: Config = {
   theme: {
     extend: {
       typography: {
-        DEFAULT: { css: PROSE_GRAY_V3 },
+        DEFAULT: {
+          css: {
+            ...PROSE_GRAY_V3,
+            // The plugin wraps inline code in literal backticks through `::before` / `::after`;
+            // the AI writes gate and field names as inline code, so the report would read
+            // `` `horizon_consistent` `` with the backticks visible. The code styling stays.
+            "code::before": { content: "none" },
+            "code::after": { content: "none" },
+          },
+        },
         // "report" variant — tuned for an equity-research-style Markdown report.
         // Numbered H2 sections (the AI always emits "## N. Title") get a top rule
         // + generous top margin so CSS alone creates the section-divider look,

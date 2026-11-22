@@ -55,8 +55,23 @@
     break-inside: avoid;
   }
 
-  /* Avoid a numbered section heading stranded at the bottom of a page. */
-  .print-report h2 {
+  /* A paragraph or a list item moves whole to the next page instead of splitting (a block
+     taller than a page still splits: the browser has no other choice). */
+  .print-report p,
+  .print-report li,
+  .print-report blockquote {
+    break-inside: avoid;
+  }
+
+  /* Avoid a heading stranded at the bottom of a page. The paragraph that introduces a table or a
+     list («Income statement and cash (dataset):») stays with it too, so when the table moves to the
+     next page the heading and its lead-in move with it instead of being left behind. */
+  .print-report h2,
+  .print-report h3,
+  .print-report h4,
+  .print-report p:has(+ table),
+  .print-report p:has(+ ul),
+  .print-report p:has(+ ol) {
     break-after: avoid;
   }
 

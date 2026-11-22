@@ -8,11 +8,11 @@
 
 - **Analyst Panel — three independent second opinions** — on any saved analysis, run up to three independent AI passes, each through a distinct lens: **Skeptic** (red-teams the numbers and assumptions), **Optimist** (builds the constructive bull case), and **Quality** (stress-tests the moat and long-term durability). Each lens commits to its own Bull/Base/Bear valuation and a written critique, run on demand from the saved-analysis page. Every lens that has run is shown next to the base analysis on the valuation ruler and comparison table, along with a **consensus** — the average across the base analysis and every lens that ran — so you can see at a glance how much (and in which direction) independent reviewers disagree. Results are saved with the analysis, shown in a distinct panel with a **✓ Reviewed** badge on the list card, regenerable anytime, and included in the PDF export. (Replaces the earlier single "Analyst Review" red-team pass — the Skeptic lens is that same review, now joined by two more perspectives.)
 
-- Added **runs that survive a dropped connection**: the server saves each analysis as soon as it finishes, so nothing is lost if the connection drops, and a run that was cut can be retried from the step it reached (analyst lenses run in two short steps). Saved Analyses shows a run still in progress, or one that was interrupted, with its **Retry** button.
+- Added **runs that survive a dropped connection**: the server saves each analysis as soon as it finishes, so nothing is lost if the connection drops, and a run that was cut can be retried from the step it reached (analyst lenses run in three short steps: the blind valuation, the critique, the final numbers; a lens stopped before its numbers shows a **Phase 3 pending** tag on its card). Saved Analyses shows a run still in progress, or one that was interrupted, with its **Retry** button.
 
 - **Margin of Safety & dual fair value** — set a Margin of Safety (0–80%) and the report shows both the intrinsic fair value (what the stock is worth) and the MoS-discounted buy target, for each Bear/Base/Bull scenario. A valuation recap table at the end of every report lists current price vs. fair values with upside/downside.
 
-- **Download reports as PDF** — a **Download PDF** button on both a completed analysis and any saved analysis opens a clean print layout (navigation and buttons hidden, upside/downside and accent colors preserved) — choose "Save as PDF" to export.
+- **Download reports as PDF** — a **Download PDF** button on both a completed analysis and any saved analysis opens a clean print layout (navigation and buttons hidden, upside/downside and accent colors preserved, paragraphs and tables never split across pages) — choose "Save as PDF" to export.
 
 - **AI Portfolio Advisor** — a conversational `/advisor` page with two modes. **Portfolio mode** knows your holdings, weighted average costs, and saved fair values, so you can ask "which of my positions has the most upside left?" **Discovery mode** starts clean and is purpose-built for finding new ideas — ask for quality compounders, undervalued dividend growers, or sector opportunities and get 3–5 concrete tickers with a thesis, ROIC, valuation setup, and key risk each. When the AI names a stock, it appears as a clickable chip that launches a Deep Value analysis. Conversations are saved and listed in a sidebar. Your selected mode is remembered.
 
@@ -52,7 +52,7 @@
 
 - **Installable app (PWA)** — install the app on your device. On Android, Chrome shows an "Install" banner; on iOS, use Share → Add to Home Screen. Once installed it opens in standalone mode with its own icon.
 
-- **Choose your AI model** — a new settings menu (gear icon in the nav bar) lets you pick which AI model powers every analysis: Claude Opus 4.8, Claude Sonnet 5, or the new **DeepSeek V4 Pro** — plus a reasoning-effort level and thinking on/off, as your default across the app. Deep Value, the Advisor, and the Analyst Panel each also show an inline selector so you can override the default for a single run. DeepSeek is a lower-cost alternative; note it's noticeably slower than Claude on a full Deep Value analysis, since it takes many more research steps to gather the same data.
+- **Choose your AI model** — a new settings menu (gear icon in the nav bar) lets you pick which AI model powers every analysis: Claude Opus 4.8, Claude Sonnet 5, or the new **DeepSeek V4 Pro** — plus a reasoning-effort level (Low, Medium or High; Low or High on DeepSeek) and thinking on/off, as your default across the app. Deep Value, the Advisor, and the Analyst Panel each also show an inline selector so you can override the default for a single run. DeepSeek is a lower-cost alternative; note it's noticeably slower than Claude on a full Deep Value analysis, since it takes many more research steps to gather the same data.
 
 - **Earnings countdown in the watchlist digest** — if you've looked up a stock's next-earnings date (via the "Find next earnings (AI)" button on Saved Analyses, Watchlist, or Portfolio), the daily email now shows a countdown for it right on the ticker card: "results today," "N days until the next report," or, if you haven't refreshed it in a while, "N days since the expected date" — a nudge to update it.
 
@@ -64,9 +64,9 @@
 
 - Added **DeepSeek V4.1 Flash** as a selectable AI model — a faster, lower-cost alternative to DeepSeek V4 Pro, available anywhere you can already choose DeepSeek.
 
-- Added a **"Low" reasoning-effort option** for DeepSeek models — previously only High and Max were available, so simpler runs can now trade some depth for speed and cost. Switching a run to DeepSeek turns an effort it doesn't offer into the nearest level below it (Extra High becomes High), never into Max.
+- Added a **"Low" reasoning-effort option** for DeepSeek models, next to High, so simpler runs can trade some depth for speed and cost. Switching a run to DeepSeek turns an effort it doesn't offer into the nearest level below it (Medium becomes Low).
 
-- Added **Claude Sonnet 5.5** as a selectable AI model; its reasoning stays on at the Extra High and Max effort levels. Pasted-data extraction now always runs on it at medium effort, whatever your default model.
+- Added **Claude Sonnet 5.5** as a selectable AI model. Pasted-data extraction now always runs on it at medium effort, whatever your default model.
 
 ## 🐛 Bug Fixes
 
@@ -172,7 +172,7 @@
 
 - **Deep Value reports read like professional research** — clearer section dividers, consistent spacing and colors, and the exact same layout whether streaming live or opened from your saved history. The recap table collapses to stacked cards on narrow screens.
 
-- **Deep Value analyses dig deeper** — they run at Extra High reasoning effort by default, the analyst lenses too, with far more room to work, sourcing up to 5 years of financial data, so reports are more thorough and less likely to be cut short on complex companies.
+- **Deep Value analyses dig deeper** — they run with far more room to work, sourcing up to 5 years of financial data, so reports are more thorough and less likely to be cut short on complex companies.
 
 - **Every analysis is independent of your position** — a Deep Value analysis (and every analyst-panel lens) is never told what you paid or what a previous run estimated, so its fair values can't be unconsciously anchored to your cost basis or nudged to justify holding. Reaching fair value is a checkpoint, not an automatic sell — take the fresh, unbiased numbers to the Advisor, which knows your holdings and can weigh hold / add / exit (including dividend considerations) for you.
 

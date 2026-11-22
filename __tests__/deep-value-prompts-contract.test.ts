@@ -1,7 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildAnalystSystemPrompt, buildDeepValueSystemPrompt } from "@/lib/ai/deep-value-prompts";
+import {
+  buildAnalystFinalUserPrompt,
+  buildAnalystReconcileUserPrompt,
+  buildAnalystSystemPrompt,
+  buildAnalystUserPrompt,
+  buildDeepValueSystemPrompt,
+} from "@/lib/ai/deep-value-prompts";
 import { CRITIQUE_START_MARKER, REPORT_START_MARKER } from "@/lib/report/parse-deep-value-json";
 import { buildGroundingPromptContext } from "@/lib/grounding/prompt-format";
 import { makeExtract, makeFinancialsRow, makeMeta } from "./grounding-test-helpers";
@@ -105,19 +111,26 @@ describe("Deep Value report prompt — research first, report, JSON last", () =>
   });
 });
 
-describe("Analyst lens prompts — Phase 2 critique first, JSON last, no sensitivity", () => {
+describe("Analyst lens prompts — Phase 2 the critique alone, Phase 3 the JSON, no sensitivity", () => {
   const lens = buildAnalystSystemPrompt({ angle: "skeptic", language: "English", currentDate: "October 11, 2026", mosPercent: 20, grounding: GROUNDING });
 
-  it("asks Phase 2 for the critique marker and the final JSON as the very last thing", () => {
-    expect(lens).toContain(`Write your critique first, opening with the exact line \`${CRITIQUE_START_MARKER}\`, then emit the FINAL JSON`);
-    expect(lens).toContain("as the very LAST thing.");
-    expect(lens).toContain('- Phase 2: close the critique with this disclaimer, written in English: "⚠️ This review is for informational purposes only and does not constitute financial advice.", then emit the final JSON block.');
-    expect(lens).toContain(`Do not write anything before the \`${CRITIQUE_START_MARKER}\` line`);
+  it("asks Phase 2 for the critique alone, under the word cap, and Phase 3 for the JSON alone", () => {
+    expect(lens).toContain(`open with the exact line \`${CRITIQUE_START_MARKER}\`, keep it under 700 words`);
+    expect(lens).toContain("Emit NO JSON in this phase.");
+    expect(lens).toContain("**PHASE 3 — a last message asks for your numbers.** Emit the FINAL JSON and nothing else");
+    expect(lens).toContain('"to": <your Phase-3 fairValue>');
+    expect(lens).toContain(
+      `- Phase 2: close the critique with this disclaimer, written in English: "⚠️ This review is for informational purposes only and does not constitute financial advice.". Do not write anything before the \`${CRITIQUE_START_MARKER}\` line, and no JSON block.`
+    );
+    expect(lens).toContain("- Phase 3: the JSON block is your whole answer; nothing before it, nothing after its closing fence.");
+    expect(lens).toContain("(one in Phase 1, one in Phase 3)");
+    expect(lens).not.toContain("as the very LAST thing.");
     expect(lens).not.toContain("MUST be the very FIRST thing");
   });
 
-  it("always describes both phases: there is no single-phase lens prompt (removed 2026-11-09)", () => {
-    expect(lens).toContain("## Your own independent valuation (MANDATORY, TWO PHASES)");
+  it("always describes the three phases: there is no single-phase lens prompt (removed 2026-11-09)", () => {
+    expect(lens).toContain("## Your own independent valuation (MANDATORY, THREE PHASES)");
+    expect(lens).toContain("This review runs across three user messages");
     expect(lens).toContain("**PHASE 1 — this message has NO report.**");
     expect(lens).not.toContain("## Your own independent valuation (MANDATORY)\n");
     expect(lens).not.toContain("\n- Close the critique with");
@@ -132,22 +145,44 @@ describe("Analyst lens prompts — Phase 2 critique first, JSON last, no sensiti
     expect(lens).not.toContain('"dividends"');
   });
 
-  it("keeps Phase 1 JSON-first and moves Phase 2 to critique-first", () => {
+  it("keeps Phase 1 JSON-first and Phase 2 a critique with no JSON", () => {
     const blind = buildAnalystSystemPrompt({ angle: "optimist", mosPercent: 20, currentDate: "October 11, 2026", grounding: GROUNDING });
     expect(blind).toContain("Commit to it from the data and anchors given below plus web search alone, in the JSON block below, followed by a rationale");
-    expect(blind).toContain(`Write your critique first, opening with the exact line \`${CRITIQUE_START_MARKER}\`, then emit the FINAL JSON`);
+    expect(blind).toContain("Emit NO JSON in this phase.");
     expect(blind.split(`"method": "<${METHODS}>"`)).toHaveLength(3);
     expect(blind.split('"units": "<billions')).toHaveLength(3);
   });
 
-  it("scopes the closing rules to Phase 2, with the disclaimer in the critique's language", () => {
+  it("scopes the closing rules per phase, with the disclaimer in the critique's language", () => {
     const blind = buildAnalystSystemPrompt({ angle: "optimist", mosPercent: 20, currentDate: "October 11, 2026", language: "Italiano", grounding: GROUNDING });
     expect(blind).toContain("- Phase 1: the JSON block opens your answer and the rationale follows it; no critique marker, no disclaimer.");
     expect(blind).toContain(
-      `- Phase 2: close the critique with this disclaimer, written in Italiano: "⚠️ This review is for informational purposes only and does not constitute financial advice.", then emit the final JSON block. Do not write anything before the \`${CRITIQUE_START_MARKER}\` line`
+      `- Phase 2: close the critique with this disclaimer, written in Italiano: "⚠️ This review is for informational purposes only and does not constitute financial advice.". Do not write anything before the \`${CRITIQUE_START_MARKER}\` line, and no JSON block.`
     );
     expect(blind).not.toContain(`\n- Do not write anything before the \`${CRITIQUE_START_MARKER}\` line`);
     expect(blind).not.toContain("\n- Close the critique with");
+  });
+
+  it("asks the reconcile message for the critique under the cap, with no JSON and no margin of safety", () => {
+    const reconcile = buildAnalystReconcileUserPrompt({ ticker: "FNCT.MI", reportMd: "# R", language: "English", blind: { bull: 12, base: 10, bear: 8 } });
+    expect(reconcile).toContain("under 700 words");
+    expect(reconcile).toContain("emit no JSON: the final numbers are asked in the next message.");
+    expect(reconcile).not.toContain("FINAL JSON");
+    expect(reconcile).not.toContain("margin of safety");
+  });
+
+  it("asks the degraded single-request review for the critique alone too", () => {
+    const review = buildAnalystUserPrompt({ angle: "skeptic", ticker: "FNCT.MI", reportMd: "# R", language: "English", grounding: GROUNDING });
+    expect(review).toContain("emit no JSON");
+    expect(review).not.toContain("JSON block");
+  });
+
+  it("asks Phase 3 for the JSON alone, with the margin of safety and no tool", () => {
+    const final = buildAnalystFinalUserPrompt({ language: "English", mosPercent: 20 });
+    expect(final).toContain("PHASE 3 — emit the FINAL JSON now, and nothing else");
+    expect(final).toContain("margin of safety of 20% (intrinsic value × 0.80)");
+    expect(final).toContain("No tool is available in this step.");
+    expect(buildAnalystFinalUserPrompt({ language: "English" })).not.toContain("margin of safety");
   });
 
   it("derives the current year from the date in the lens prompt too", () => {

@@ -3,7 +3,7 @@
 // The verifiable preview of a financial dataset — renders what the extraction endpoint
 // transcribed or the research found (the dataset tables, each row with its source) + the
 // deterministic anchors computed from it, BEFORE the user spends a Deep Value run (minutes
-// at xhigh) on possibly-mistranscribed data. A block whose extraction failed can be retried alone.
+// of Opus) on possibly-mistranscribed data. A block whose extraction failed can be retried alone.
 import { useLanguage } from "@/context/language-context";
 import type { Translations } from "@/lib/i18n/translations";
 import type { GroundingExtractResponse } from "@/lib/grounding-client";

@@ -19,6 +19,7 @@ vi.mock("@/components/report/report-body", () => ({
 }));
 
 import DeepValuePanel from "@/components/deep-value-panel";
+import { fetchAiSettings } from "@/lib/ai-settings-client";
 import { makeExtract, makeMeta } from "./grounding-test-helpers";
 import { sseOk, sseRejecting, jsonResponse } from "./sse-test-helpers";
 
@@ -68,6 +69,18 @@ describe("DeepValuePanel — a staged run written by the server", () => {
     expect(screen.getByTestId("report").textContent).toContain("# Report");
     expect(screen.queryByText(/^Save/)).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends the user's default effort once it arrives, with no floor lifting it", async () => {
+    vi.mocked(fetchAiSettings).mockResolvedValueOnce({ model: "claude-opus-4-8", effort: "medium", thinking: true });
+    fetchMock.mockResolvedValueOnce(sseOk([STAGE, { type: "done", analysisId: "an1" }]));
+    render(panel());
+    await waitFor(() => expect(fetchAiSettings).toHaveBeenCalled());
+    await act(async () => {});
+    fireEvent.click(screen.getByText(en.deepAnalysisBtn));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)).toMatchObject({ model: "claude-opus-4-8", effort: "medium" });
   });
 
   it("a stream that ends without done is a cut: Retry waits for 330 s from the start, then sends only the row", async () => {

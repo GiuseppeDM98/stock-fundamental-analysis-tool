@@ -16,6 +16,8 @@
 
 ## 2. Obiettivo e criteri di accettazione
 
+**L'asticella** (owner, 2026-11-22, D-159): il miglior design che l'app possa avere, non una pulizia di quello attuale. Un comp che sembra la versione ordinata di oggi si rifà prima di portarlo all'owner.
+
 | # | Criterio | Prova |
 |---|---|---|
 | A1 | Audit impeccable (`audit`) eseguito su TUTTE le route (hub, analyze, analyses + 3 dettagli seed, stocks ×3, portfolio, watchlist, advisor, login, register) sul dev isolato con il seed, PRIMA di qualunque decisione, con il rapporto salvato in `doc/evoluzioni/08-audit-<data>.md` (tracciato: sopravvive alla sessione) e i rilievi ordinati per pagina. | file presente; conteggio rilievi per pagina. |
@@ -74,7 +76,7 @@ Nessun deploy (solo documenti). Voce in CLAUDE.md § Last Updated (sostituisce l
 
 ## 11. Prompt per implementarla
 
-> Modello: Claude Opus 5.5, effort `xhigh`. Taglia: M (audit di 13 route + direzione + 3 comp + 3 batch di domande). Una sessione, un branch, un commit (solo documenti).
+> Modello: Claude Fable 5.2, effort `high` (owner, 2026-11-22, D-158: la sessione è giudizio, non volume). Taglia: M (audit di 13 route + direzione + 3 comp + 3 batch di domande). Una sessione, un branch, un commit (solo documenti).
 
 ```
 Implementa la spec doc/evoluzioni/08a-redesign-direzione.md.

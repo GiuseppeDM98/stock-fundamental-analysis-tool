@@ -425,6 +425,10 @@ type AngleConfig = {
   valuationFraming: string;
 };
 
+/** Words a lens critique may take: it is a review, and it shares its request with the web
+ *  searches. */
+export const LENS_CRITIQUE_MAX_WORDS = 700;
+
 const ANGLE_CONFIG: Record<AnalystAngle, AngleConfig> = {
   skeptic: {
     persona:
@@ -499,10 +503,12 @@ const ANALYST_BASIS_CHECK = `7. **Basis reconciliation.** Before judging any mul
  * @param mosPercent - Margin of safety to apply to the analyst's own fair values,
  *   so its JSON buy targets are directly comparable to the base analysis's.
  *
- * Always the two-phase contract (commit blind, then reconcile against the report): the
- * SAME system prompt is reused across both turns (the model sees this once; only the user
- * message differs — buildAnalystBlindUserPrompt, then buildAnalystReconcileUserPrompt, or
- * buildAnalystUserPrompt when Phase 1 degraded), so it describes both phases up front. The
+ * Always the three-phase contract (commit blind, critique against the report, then the
+ * final numbers; one request each since 2026-11-20, so each fits Vercel Hobby's 300 s): the
+ * SAME system prompt is reused across the three requests (only the user messages differ —
+ * buildAnalystBlindUserPrompt, then buildAnalystReconcileUserPrompt, or
+ * buildAnalystUserPrompt when Phase 1 degraded, then buildAnalystFinalUserPrompt), so it
+ * describes every phase up front. The
  * single-phase variant behind a `blindFirst` flag was removed on 2026-11-09: no lens runs
  * without a dataset, so nothing called it but the tests.
  */
@@ -534,9 +540,9 @@ export function buildAnalystSystemPrompt({
   // (2026-10-29). The disclaimer is asked in the critique's language: an English literal
   // ended an Italian critique in English (fixed 2026-11-09).
   const disclaimer = `this disclaimer, written in ${language}: "⚠️ This review is for informational purposes only and does not constitute financial advice."`;
-  const critiqueBounds = `Do not write anything before the \`${CRITIQUE_START_MARKER}\` line, and nothing after the JSON block's closing fence.`;
   const closingRules = `- Phase 1: the JSON block opens your answer and the rationale follows it; no critique marker, no disclaimer.
-- Phase 2: close the critique with ${disclaimer}, then emit the final JSON block. ${critiqueBounds}`;
+- Phase 2: close the critique with ${disclaimer}. Do not write anything before the \`${CRITIQUE_START_MARKER}\` line, and no JSON block.
+- Phase 3: the JSON block is your whole answer; nothing before it, nothing after its closing fence.`;
   // Skeptic-only, in both phases (see the hardened persona above). Feeds the kill_price
   // gate (lib/grounding/postcheck.ts).
   const killPriceLine =
@@ -544,8 +550,8 @@ export function buildAnalystSystemPrompt({
       ? `,\n  "killPrice": <the price below which your thesis is dead — REQUIRED; null ONLY if your critique explicitly states you could not construct one>,\n  "killPriceNote": "<ONLY when killPrice is null: one sentence on why no kill price can be given — omit this key otherwise>"`
       : "";
 
-  const valuationSection = `## Your own independent valuation (MANDATORY, TWO PHASES)
-This review runs across two user messages — you will not always have the report yet.
+  const valuationSection = `## Your own independent valuation (MANDATORY, THREE PHASES)
+This review runs across three user messages — you will not always have the report yet.
 
 **PHASE 1 — this message has NO report.** ${cfg.valuationFraming} Commit to it from the data and anchors given below plus web search alone, in the JSON block below, followed by a rationale of AT MOST 200 words. Do not critique anything yet (there is nothing to critique) and do not remark that the report is missing — simply commit.
 
@@ -562,7 +568,9 @@ ${assumptionsCrossCheckJson()}${killPriceLine}
 }
 \`\`\`
 
-**PHASE 2 — a later message brings you the finished report.** Reconcile your Phase-1 commitment against it. For EACH scenario you may revise your Phase-1 number ONLY by citing a specific fact or arithmetic error you did NOT have in Phase 1 — "the report argues X" is NOT a reason on its own. If you have no such fact, restate your Phase-1 number unchanged. Write your critique first, opening with the exact line \`${CRITIQUE_START_MARKER}\`, then emit the FINAL JSON — same shape as Phase 1, plus a mandatory "revisions" array (empty if you revised nothing) — as the very LAST thing.
+**PHASE 2 — a later message brings you the finished report.** Reconcile your Phase-1 commitment against it and write your critique: open with the exact line \`${CRITIQUE_START_MARKER}\`, keep it under ${LENS_CRITIQUE_MAX_WORDS} words, and say for EACH scenario whether your Phase-1 number stands or moves, and why. You may move a number ONLY by citing a specific fact or arithmetic error you did NOT have in Phase 1 — "the report argues X" is NOT a reason on its own. Emit NO JSON in this phase.
+
+**PHASE 3 — a last message asks for your numbers.** Emit the FINAL JSON and nothing else — same shape as Phase 1, plus a mandatory "revisions" array (empty if you revised nothing): every revision must be one your Phase-2 critique argued. No tool is available in this phase.
 
 \`\`\`json
 {
@@ -574,7 +582,7 @@ ${scenarioJsonLine("bull", mosPercent)},
 ${scenarioJsonLine("base", mosPercent)},
 ${scenarioJsonLine("bear", mosPercent)},
 ${assumptionsCrossCheckJson()}${killPriceLine},
-  "revisions": [{ "scenario": "<bull|base|bear>", "from": <your Phase-1 fairValue for this scenario>, "to": <your Phase-2 fairValue>, "reason": "<the specific fact or arithmetic error that justifies the change — required for every entry>" }]
+  "revisions": [{ "scenario": "<bull|base|bear>", "from": <your Phase-1 fairValue for this scenario>, "to": <your Phase-3 fairValue>, "reason": "<the specific fact or arithmetic error that justifies the change — required for every entry>" }]
 }
 \`\`\`
 
@@ -602,7 +610,7 @@ Rules:
 - Write the critique entirely in ${language}, using ONLY that language's writing system — never emit stray characters from another script (e.g. no CJK character dropped into a Western-language sentence). If a foreign-script word slips in, replace it with its ${language} equivalent.
 - Be specific and cite sources for any figure you challenge (e.g. "According to [source]...").
 - Be concise: this is a review, not a second full report. Use short sections and bullet points.
-- The ONLY JSON you emit is the two valuation blocks above (one in Phase 1, one in Phase 2); do NOT restate the whole report.
+- The ONLY JSON you emit is the two valuation blocks above (one in Phase 1, one in Phase 3); do NOT restate the whole report.
 - **Do not escalate prescriptiveness beyond the report you review.** Your output is a second opinion on the VALUATION: commit to your own bull/base/bear and say whether the report's fair value should be revised up or down. Do NOT issue an operational trade instruction more prescriptive than the base report — no "buy at €X", "accumulate below €Y", "sell now" when the report itself only concludes "hold". Judge the number; do not originate a trade call the report did not make.
 ${closingRules}`;
 }
@@ -624,7 +632,6 @@ export function buildAnalystUserPrompt({
   currentDate = "",
   currentPrice,
   currency = "",
-  mosPercent = 0,
   grounding,
   gatesText,
 }: {
@@ -635,12 +642,11 @@ export function buildAnalystUserPrompt({
   currentDate?: string;
   currentPrice?: number;
   currency?: string;
-  mosPercent?: number;
   // Re-read through readAnalysisGrounding by the caller (verify/route.ts: the analysis's
   // dataset, or its legacy groundingJson), never passed in the request body (it would add 100-200KB per lens). `blocks` is deliberately empty
   // even when the saved analysis has raw paste blocks: the lens's job is to judge the
   // JUDGMENT, and the anchors/extract already give it that; the extra line-item detail
-  // would triple the input cost across 3 Opus xhigh passes for no proportional benefit
+  // would triple the input cost across the three lenses for no proportional benefit
   // (deliberate, reversible choice — see doc/guide/valutazione.md § 5).
   grounding: GroundingPromptContext;
   // The deterministic gates on the BASE report (formatGatesForPrompt). Absent (not empty)
@@ -654,13 +660,12 @@ export function buildAnalystUserPrompt({
     currentPrice != null
       ? ` Authoritative current price (live market feed${currentDate ? `, as of ${currentDate}` : ""}): ${currentPrice.toFixed(2)} ${currency}. Treat this as the true current price; do not override it with web-searched quotes.`
       : "";
-  const mosClause = mosPercent > 0
-    ? ` Apply a margin of safety of ${mosPercent}% to your own fair values in the JSON block (buy target = intrinsic value × ${(1 - mosPercent / 100).toFixed(2)}).`
-    : "";
   const groundingSection = `\n\n${formatGroundingForPrompt(grounding)}`;
   const gatesSection = gatesText ? `\n\n${gatesText}` : "";
   const spotCheckUserClause = "spot-check key figures against the dataset, using web search only for newer or qualitative facts";
-  return `Independently review the following Deep Value report on ${ticker}.${dateClause}${priceClause}${mosClause} Scrutinize its numbers and assumptions through your lens, ${spotCheckUserClause}, commit to your own bull/base/bear valuation in the JSON block, and give your verdict in ${language} following the required format.
+  // No margin-of-safety clause since 2026-11-20: this request writes no JSON, and
+  // buildAnalystFinalUserPrompt states the margin when the numbers are asked.
+  return `Independently review the following Deep Value report on ${ticker}.${dateClause}${priceClause} Scrutinize its numbers and assumptions through your lens, ${spotCheckUserClause}. Write your critique, opening with the line \`${CRITIQUE_START_MARKER}\`, in ${language}, under ${LENS_CRITIQUE_MAX_WORDS} words; emit no JSON: the final numbers are asked in the next message.
 
 --- REPORT UNDER REVIEW ---
 ${reportMd}
@@ -718,7 +723,6 @@ export function buildAnalystReconcileUserPrompt({
   reportMd,
   language,
   currentDate = "",
-  mosPercent = 0,
   blind,
   gatesText,
 }: {
@@ -726,7 +730,6 @@ export function buildAnalystReconcileUserPrompt({
   reportMd: string;
   language: string;
   currentDate?: string;
-  mosPercent?: number;
   // The lens's own Phase-1 commitment (buy-target scale, same unit as the JSON `fairValue`
   // fields) — echoed back so it cannot silently drift from it.
   blind: Triple;
@@ -738,13 +741,18 @@ export function buildAnalystReconcileUserPrompt({
   gatesText?: string;
 }): string {
   const dateClause = currentDate ? ` Today's date: ${currentDate}.` : "";
-  const mosClause = mosPercent > 0
-    ? ` Apply a margin of safety of ${mosPercent}% to your fair values in the JSON block (buy target = intrinsic value × ${(1 - mosPercent / 100).toFixed(2)}).`
-    : "";
   const gatesSection = gatesText ? `\n\n${gatesText}` : "";
-  return `PHASE 2 — here is the finished Deep Value report on ${ticker}.${dateClause}${mosClause} Reconcile your Phase-1 commitment against it: your own bull/base/bear buy targets were bull ${blind.bull.toFixed(2)} / base ${blind.base.toFixed(2)} / bear ${blind.bear.toFixed(2)}. You may revise a scenario ONLY by citing a specific fact or arithmetic error you did NOT have in Phase 1 — "the report argues X" is NOT a reason on its own; if you have no such fact, restate your Phase-1 number unchanged. Write your critique first, opening with the line \`${CRITIQUE_START_MARKER}\`, then the FINAL JSON (same shape as Phase 1, plus the mandatory "revisions" array) as the very last thing, in ${language}.${gatesSection}
+  return `PHASE 2 — here is the finished Deep Value report on ${ticker}.${dateClause} Reconcile your Phase-1 commitment against it: your own bull/base/bear buy targets were bull ${blind.bull.toFixed(2)} / base ${blind.base.toFixed(2)} / bear ${blind.bear.toFixed(2)}. You may revise a scenario ONLY by citing a specific fact or arithmetic error you did NOT have in Phase 1 — "the report argues X" is NOT a reason on its own; if you have no such fact, restate your Phase-1 number unchanged. Write your critique, opening with the line \`${CRITIQUE_START_MARKER}\`, in ${language}, under ${LENS_CRITIQUE_MAX_WORDS} words; emit no JSON: the final numbers are asked in the next message.${gatesSection}
 
 --- REPORT UNDER REVIEW ---
 ${reportMd}
 --- END REPORT ---`;
+}
+
+/** Phase 3 of a lens: the final numbers, after the critique the row already holds. */
+export function buildAnalystFinalUserPrompt({ language, mosPercent = 0 }: { language: string; mosPercent?: number }): string {
+  const mosClause = mosPercent > 0
+    ? ` Fair values are buy targets after a margin of safety of ${mosPercent}% (intrinsic value × ${(1 - mosPercent / 100).toFixed(2)}).`
+    : "";
+  return `PHASE 3 — emit the FINAL JSON now, and nothing else: same shape as Phase 1, plus the mandatory "revisions" array.${mosClause} Every scenario your critique did not argue to move keeps its Phase-1 number unchanged; every revision cites the fact your critique gave for it; with no Phase-1 commitment, "revisions" is empty. Free-text fields in ${language}. No tool is available in this step.`;
 }

@@ -125,10 +125,10 @@ describe("The report prompts rescope web search to what the dataset cannot hold"
   });
 });
 
-describe("Analyst prompts: two-phase wording, Skeptic framing, basis check, kill price note", () => {
-  it("names the two JSON blocks, one per phase", () => {
+describe("Analyst prompts: three-phase wording, Skeptic framing, basis check, kill price note", () => {
+  it("names the two JSON blocks, in Phase 1 and Phase 3 (Phase 2 is the critique alone)", () => {
     const sys = buildAnalystSystemPrompt({ angle: "optimist", mosPercent: 20, grounding: LENS_GROUNDING });
-    expect(sys).toContain("The ONLY JSON you emit is the two valuation blocks above (one in Phase 1, one in Phase 2);");
+    expect(sys).toContain("The ONLY JSON you emit is the two valuation blocks above (one in Phase 1, one in Phase 3);");
     expect(sys).not.toContain("The ONLY JSON you emit is the valuation block above;");
   });
 
@@ -165,17 +165,16 @@ describe("Analyst lenses do not tell the model to re-search the dataset's histor
   });
 });
 
-describe("Phase 2 reconcile prompt asks for the critique before the final JSON", () => {
-  it("opens the critique with the marker and closes with the FINAL JSON", () => {
+describe("Phase 2 reconcile prompt asks for the critique alone", () => {
+  it("opens the critique with the marker and leaves the final JSON to the next message", () => {
     const usr = buildAnalystReconcileUserPrompt({
       ticker: "FNCT.MI",
       reportMd: "# R",
       language: "English",
-      mosPercent: 20,
       blind: { bull: 12, base: 10, bear: 8 },
     });
-    expect(usr).toContain(`Write your critique first, opening with the line \`${CRITIQUE_START_MARKER}\`, then the FINAL JSON`);
-    expect(usr).toContain("as the very last thing, in English.");
+    expect(usr).toContain(`Write your critique, opening with the line \`${CRITIQUE_START_MARKER}\`, in English, under 700 words`);
+    expect(usr).toContain("emit no JSON: the final numbers are asked in the next message.");
     expect(usr).not.toContain("and then your critique");
   });
 });

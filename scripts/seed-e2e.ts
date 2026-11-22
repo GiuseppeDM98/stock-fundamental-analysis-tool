@@ -554,11 +554,14 @@ async function seedAnalyses(db: PrismaClient, today: Date): Promise<void> {
       reviewValuationMethod: GROUNDED_REVIEW_FINAL.method,
       reviewBlindJson: JSON.stringify(GROUNDED_REVIEW_BLIND),
       reviewResultJson: JSON.stringify(sanitizeDeepValueResult(GROUNDED_REVIEW_FINAL)),
+      // A lens stopped at its critique: no numbers, no result, so the page offers
+      // "Retry phase 3" and /analyses marks the card "Phase 3 pending".
+      optimistCritiqueMd: `## Bull\n\n${DECOY.groundedOptimistCritique}: backlog supports growth.`,
       currency: "EUR",
       sector: GROUNDED_RESULT_COLUMN.sector,
       reportLanguage: "English",
       aiModel: "claude-opus-4-8",
-      aiEffort: "xhigh",
+      aiEffort: "high",
       aiThinking: true,
       createdAt: new Date("2026-09-15T09:30:00Z"),
     },

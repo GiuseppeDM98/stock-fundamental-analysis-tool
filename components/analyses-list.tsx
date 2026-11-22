@@ -10,7 +10,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { fetchAnalyses, deleteAnalysis } from "@/lib/analyses";
 import { fetchPositions } from "@/lib/portfolio";
-import type { SavedAnalysis, AnalystAngle } from "@/types/analysis";
+import { ANALYST_ANGLES, type SavedAnalysis, type AnalystAngle } from "@/types/analysis";
 import type { Position } from "@/types/portfolio";
 import { useLanguage } from "@/context/language-context";
 import { ValuationRuler, ComparisonTable } from "@/components/report/valuation-ruler";
@@ -24,6 +24,7 @@ import { computeEvolutionChain, type Evolution, type SourceDelta } from "@/lib/r
 import { EarningsBadge } from "@/components/earnings-badge";
 import AnalysisRunStatus from "@/components/analysis-run-status";
 import { isDone } from "@/lib/report/run-status";
+import { lensNextPhase } from "@/lib/report/lens-progress";
 import { isAnalysisStalePreEarnings, isFutureEarnings, formatEarningsDate } from "@/lib/earnings";
 import { fetchEarnings, refreshEarnings } from "@/lib/earnings-client";
 import type { EarningsEstimate } from "@/types/earnings";
@@ -56,6 +57,12 @@ function formatPrice(price: number, currency?: string): string {
 // Groups analyses by ticker, with each group sorted newest-first.
 /** The newest FINISHED save of a group (else its newest row): what a sort or a nudge reads,
  *  so a run still in progress or cut never stands for the ticker (2026-10-27). */
+/** A lens of this analysis stopped at its critique, its final numbers still to run: the
+ *  card says so, since the lens counts in no consensus until then (2026-11-21). */
+function hasLensAtPhase3(a: SavedAnalysis): boolean {
+  return ANALYST_ANGLES.some((angle) => lensNextPhase(a as unknown as Record<string, unknown>, angle) === "final");
+}
+
 function headOf(group: SavedAnalysis[]): SavedAnalysis {
   return group.find(isDone) ?? group[0];
 }
@@ -424,6 +431,12 @@ function TickerGroup({
             {(latest.reviewMd || latest.optimistCritiqueMd || latest.qualityCritiqueMd) && (
               <span className="shrink-0 rounded-sm bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-300">
                 ✓ {t("analystReviewBadge")}
+              </span>
+            )}
+            {/* Not a link: the lens is finished from the detail page. */}
+            {hasLensAtPhase3(latest) && (
+              <span className="shrink-0 rounded-sm bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">
+                {t("lensPhase3Pending")}
               </span>
             )}
           </div>
