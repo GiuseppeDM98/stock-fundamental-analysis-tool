@@ -12,7 +12,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: November 22, 2026 — **Spec 05d implemented** on `feature/effort-cap-three-request-lens` (no DDL; detail in valutazione.md § 2.9, § 3, § 6): the effort stops at `high` on every route (Claude low/medium/high, DeepSeek low/high; a stored `xhigh` or `max` reads `high`), a lens is three requests (blind → critique → numbers, the critique saved on its own, «Retry phase 3» and a «Phase 3 pending» pill on /analyses), at most 5 web searches per lens request on Claude, and the usage lines count searches and fetches. Measured on ENAV.MI at `high`: every lens request under 240 s, research 245 s, Deep Value 338 s (still past 300 s: spec 05e). Collaudo done, the owner's tour closed; from it, two fixes: no backticks around inline code in `prose` blocks, and the PDF keeps paragraphs and a table's lead-in whole (valutazione.md § 1). Next: retire 05d, then implement 05e. Open, by the owner's choice at the end of the series: the first production run and the production checks of 02…05d.
+**Last Updated**: November 22, 2026 — **Spec 05d (effort capped at `high`, a lens in three requests) retired** on `chore/retire-spec-05d` (merged with PR #76, no DDL): no request above `high`, a lens is blind → critique → numbers, at most 5 web searches per lens request on Claude (valutazione.md § 2.9, § 3, § 6). The verification found no behaviour defect: two code comments, four guide lines (the search cap across a `pause_turn` resume is still unproven, DeepSeek unmeasured, the 240 s levers) and the live specs were corrected; no app behaviour changed, so the signals stand. Next: implement spec 05e. Open, by the owner's choice at the end of the series: the first production run and the production checks of 02…05d.
 
 ---
 
@@ -81,7 +81,7 @@ One line each: the page, the question it answers, where its detail lives (`doc/g
 ## Known Issues
 
 Cross-cutting only. A single area's blind spot lives in its guide: the Yahoo quote route (rate limits, no caching) in doc/guide/yahoo.md, the all-or-nothing Deep Value JSON parse in valutazione.md § 7 (gotcha 29), `/portfolio`'s currency assumption in portafoglio.md.
-- **Vercel Hobby: 300 s per function** — every AI call is its own request, persisted by the server and retried from its phase (2026-10-27); a phase past 300 s is still cut: the Deep Value (338 s at `high`, 2026-11-22) and the research when it runs long (245 s that day, 668 s on CE.MI on 2026-11-20); every lens request fits since 05d. Run those two from localhost until specs 05e and 05f. Durations per phase: valutazione.md § 2.9. SETUP.md § Vercel Hobby.
+- **Vercel Hobby: 300 s per function** — every AI call is its own request, persisted by the server and retried from its phase (2026-10-27); a phase past 300 s is still cut: the Deep Value (338 s at `high`, 2026-11-22) and the research when it runs long (245 s that day, 668 s on CE.MI on 2026-11-20); every lens request fits since 2026-11-22 (three requests, under 240 s). Measured from localhost on Claude only: DeepSeek durations are estimates, Vercel is read at the end of the series. Run those two from localhost until specs 05e and 05f. Durations per phase: valutazione.md § 2.9. SETUP.md § Vercel Hobby.
 - **Tailwind 4 browser floor** — Safari 16.4+, Chrome/Edge 111+, Firefox 128+; Tailwind 3's hex palette stays pinned in `app/tailwind-v3-palette.css`. AGENTS.md gotcha #32.
 
 ---
@@ -139,7 +139,7 @@ Things the series deliberately left out, one line each (added by the spec that l
 ---
 
 ## Next Priorities
-The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (one session per spec, in order); its index `00-INDICE.md` holds the series' state, the retirement dates and the owner's decisions. Live: 05d, 05e, 05f (read adversarially on 2026-11-21; 05d is next), then 06, 07a, 07b, 08a, 08b; after 08b, one `/deep-value` realignment pass (D-76).
+The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (one session per spec, in order); its index `00-INDICE.md` holds the series' state, the retirement dates and the owner's decisions. Live: 05e, 05f (read adversarially on 2026-11-21; 05e is next), then 06, 07a, 07b, 08a, 08b; after 08b, one `/deep-value` realignment pass (D-76).
 1. Caching layer for `/api/quote`.
 2. Per-ticker yield-on-cost in the exit signal (needs per-position dividend exposure via snapshots).
 

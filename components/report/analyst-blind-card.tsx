@@ -25,11 +25,12 @@ type Props = {
   // The lens's FINAL buy-target triple: from the live run or, after a reload, from
   // *ResultJson (the *FairValue* columns on a row saved before it) — same MoS-adjusted
   // unit as `blind`.
-  // null while Phase 2 is still streaming (the card renders as soon as the blind
-  // commitment parses, with the final column filling in once turn 2 completes).
+  // null until Phase 3, the final request, has written the numbers (the card renders as
+  // soon as the blind commitment parses; since 2026-11-20 the critique and the numbers are
+  // two requests, so a lens can rest between them with this column empty).
   final: Triple | null;
   // The FINAL JSON's kill-price fields — from the live run or, after a reload, from
-  // *ResultJson; undefined while Phase 2 is still streaming (or on a row saved before it).
+  // *ResultJson; undefined until Phase 3 has written them (or on a row saved before it).
   finalKillPrice?: KillPriceFields;
   // The FINAL JSON's revisions[] — from the live run or, after a reload, from *ResultJson.
   revisions?: Revision[];
