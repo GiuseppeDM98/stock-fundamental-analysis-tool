@@ -100,7 +100,13 @@ sopravviveva (ogni fixture rimetteva la riga che la mascherava) e altri tre buch
 uccisi; il DDL riletto su Turso in sola `SELECT`/`PRAGMA` con `@libsql/client`; `AGENTS.md`, a 601 righe,
 scorporato nel ritiro stesso per decisione dell'owner con `prompts/05_SLIM_AGENTS.md` di claude-config
 (D-122: tre guide di dominio, 499 righe); le etichette di `.claude/commands/deep-value.md` riscritte in loco
-(D-124); la prima run in produzione rinviata a fine serie, D-123).
+(D-124); la prima run in produzione rinviata a fine serie, D-123)
+e quello della 05d (2026-11-22, branch `chore/retire-spec-05d`, `git log --diff-filter=D --
+doc/evoluzioni/05d-effort-high-lenti-in-tre.md`: workflow Opus in sola lettura, 5 lettori + 4 verificatori su 159
+voci, 22 segnalate e 5 smentite; nessun difetto di comportamento né buco di test; due commenti falsi
+riscritti, quattro righe della guida corrette, fra cui un rinvio senza erede — la sonda del tetto attraverso
+`pause_turn`, «non provata» al collaudo, scritta nel collaudo della 05f che la eredita — e il compito
+DeepSeek della § 10 portato sulla riga 15 dell'indice; le leve sopra i 240 s travasate nella guida § 2.9).
 Ogni riferimento nel codice a un documento ritirato si riscrive in loco perché il perché resti in piedi
 da solo, tenendo le date.
 
@@ -189,11 +195,11 @@ CANCELLI: `npm run ci:local` (= `npm run test` → `npm run typecheck` → build
 quest'ordine; il visual (`npm run e2e:visual`) non è un cancello ma va rilanciato prima/dopo se il
 ritiro tocca una pagina. Il build di verifica si fa SEMPRE sull'ambiente isolato (`.env` punta a
 Turso di produzione).
-LIMITI (misurati il 2026-11-21, dopo lo snellimento di `CLAUDE.md`, D-145): `CLAUDE.md` 12.476 caratteri su un tetto di 40.000, nella
+LIMITI (misurati il 2026-11-22, al ritiro della 05d): `CLAUDE.md` 12.778 caratteri su un tetto di 40.000, nella
 misura della regola 3 dell'indice (caratteri Unicode senza CR, mai `wc -c`); è un indice: una spec vi
 scrive una riga per funzione e il dettaglio va nella guida (regola 3). Ogni spec dichiara nel
 § 9 i caratteri aggiunti e tolti, e la voce Last Updated sostituisce la precedente — la catena
-regge solo se ogni spec rispetta il suo saldo, quindi si rimisura a ogni ritiro; `AGENTS.md` 486 righe (dalla 02 il tetto è 600 righe, D-22; scorporato il 2026-11-20, D-122; dal 2026-11-21 tiene l'albero dei file, una riga per gruppo di file: un file nuovo entra nella riga del suo gruppo); le guide in `doc/guide/` hanno un tetto di 400 righe per file (`valutazione.md` 311, `portafoglio.md` 81, `monitor.md` 72, `yahoo.md` 36, `dipendenze.md` 31, `advisor.md` 16, `shell.md` 24, `analisi-salvate.md` 21; D-57: oltre, la
+regge solo se ogni spec rispetta il suo saldo, quindi si rimisura a ogni ritiro; `AGENTS.md` 486 righe (dalla 02 il tetto è 600 righe, D-22; scorporato il 2026-11-20, D-122; dal 2026-11-21 tiene l'albero dei file, una riga per gruppo di file: un file nuovo entra nella riga del suo gruppo); le guide in `doc/guide/` hanno un tetto di 400 righe per file (`valutazione.md` 316, `portafoglio.md` 81, `monitor.md` 72, `yahoo.md` 36, `dipendenze.md` 31, `advisor.md` 16, `shell.md` 24, `analisi-salvate.md` 21; D-57: oltre, la
 spec che sfora spezza per tema); `DESIGN.md` 312 righe e `PRODUCT.md` 55 righe, rigenerati nella 08b
 (DESIGN.md solo dalla skill). Se sfori, NON tagliare in chiusura: dimmelo e proponi lo scorporo come
 sessione a parte.

@@ -1,7 +1,7 @@
 # 05e — Deep Value in quattro richieste, una per ruolo
 
 > **Stato**: scritta il 2026-11-20; riletta in modo adversariale il 2026-11-21: 62 rilievi (49 del suo lettore, 13 trasversali), 10 decisioni (D-141…D-143, D-145, D-146, D-151…D-155).
-> **Branch**: `feature/deep-value-by-role` **Dipende da**: 05d (C-25: `capEffort`, `buildWebSearchTools(model, { maxUses })`, la riga `[tool-loop]` con `searches=`/`fetches=`; effort massimo `high`). **La segue**: 05f.
+> **Branch**: `feature/deep-value-by-role` **Dipende da**: 05d ritirata il 2026-11-22 (C-25: `capEffort`, `buildWebSearchTools(model, { maxUses })`, la riga `[tool-loop]` con `searches=`/`fetches=`; effort massimo `high`). **La segue**: 05f.
 > **Indice**: [00-INDICE.md](00-INDICE.md) — § 3.6 (D-88, D-90, D-91), § 3.14 (D-118, D-119), § 3.16 (D-126…D-130, D-135…D-137, D-139), § 3.17 (D-141…D-143, D-146, D-151…D-155), § 4 (T-36…T-46, T-55…T-63, T-73…T-75), § 6 (C-6, C-18, C-23, C-25, C-26).
 
 Seconda di tre spec sul tema «ogni richiesta AI sotto i 300 s di Vercel Hobby» (D-125). Il Deep Value
@@ -752,7 +752,7 @@ reali si esportano prima di ogni gate (WORKFLOW § 3).
 
 ## 9. La documentazione
 
-- **`doc/guide/valutazione.md`** (righe misurate a inizio sessione: 311 più il saldo della 05d; limite
+- **`doc/guide/valutazione.md`** (righe misurate a inizio sessione: 316 al ritiro della 05d, 2026-11-22; limite
   400): § 1 (contratto di output: numeri prima, report dopo, fence accodato dal server), § 2.1 (route
   per fasi, prompt per ruolo, la frase errata sul fence chiuso su `max_tokens` si toglie), § 2.2
   (pannello: catena, elenco delle fasi, piano di Riprova, la catena che prosegue da sola), § 2.3 (colonne

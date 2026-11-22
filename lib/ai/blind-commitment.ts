@@ -7,7 +7,7 @@
 // rationale after it). The route persists the commitment with its rationale (*BlindJson)
 // and the panel draws the blind card from that.
 //
-// Since 2026-10-27 the two phases are two requests (each under the 300 s a function lives
+// Since 2026-10-27 Phase 1 and Phase 2 are separate requests (each under the 300 s a function lives
 // on Vercel Hobby), so Phase 2 cannot replay Phase 1's transcript: it starts from the same
 // blind user message, then an assistant turn of text only — the commitment and its
 // rationale, what the model itself produced — then the reconcile prompt. The prefix

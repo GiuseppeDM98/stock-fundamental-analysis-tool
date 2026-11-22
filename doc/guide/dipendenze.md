@@ -6,7 +6,7 @@
 > suo branch, con la versione scelta e installata a mano (mai `audit fix --force`, mai il comando
 > suggerito da un avviso), preferendo una release vecchia di almeno qualche giorno.
 
-**Ultimo audit**: 2026-11-20 · npm 11.21.3 (node 24.22.2) · Next.js 15.5.29 · `npm audit`: 7 avvisi
+**Ultimo audit**: 2026-11-22 (ritiro della 05d, invariato dal 2026-11-20) · npm 11.19.1 (11.21.3 il 2026-11-20) (node 24.22.2) · Next.js 15.5.29 · `npm audit`: 7 avvisi
 (vitest ×3, fast-uri, e la catena `prisma` → `@prisma/config` → `effect`), tutti accettati.
 
 **Audit precedente registrato**: 2026-10-11, 0 avvisi, con i quattro `overrides` di `package.json`
