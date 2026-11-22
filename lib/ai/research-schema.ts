@@ -112,6 +112,31 @@ export const researchOutputSchema = z.object({
 export type ResearchOutput = z.infer<typeof researchOutputSchema>;
 export type ResearchSource = ResearchOutput["sources"][number];
 
+// Since 2026-11-22 a research is three requests, each with its own JSON: the statements,
+// then the multiples and peers, then the estimates. researchOutputSchema above stays the
+// shape researchToDataset reads; lib/ai/research-parts.ts builds one per part from these.
+export const statementsPartSchema = z.object({
+  meta: researchOutputMetaSchema,
+  sources: z.array(researchSourceSchema).min(1).max(RESEARCH_MAX_SOURCES),
+  financials: z.array(financialsRowSchema).min(1).max(8),
+});
+/** A part that found nothing is valid: empty lists and a note saying so. */
+export const marketPartSchema = z.object({
+  notes: clippedText(500),
+  sources: z.array(researchSourceSchema).max(RESEARCH_MAX_SOURCES),
+  multiples: z.array(multiplesRowSchema).max(8),
+  peers: z.array(peerSchema).max(6),
+});
+export const estimatesPartSchema = z.object({
+  notes: clippedText(500),
+  sources: z.array(researchSourceSchema).max(RESEARCH_MAX_SOURCES),
+  estimates: z.array(estimateRowSchema).max(3),
+});
+export type StatementsPartOutput = z.infer<typeof statementsPartSchema>;
+export type MarketPartOutput = z.infer<typeof marketPartSchema>;
+export type EstimatesPartOutput = z.infer<typeof estimatesPartSchema>;
+export const RESEARCH_PART_SCHEMAS = { statements: statementsPartSchema, market: marketPartSchema, estimates: estimatesPartSchema } as const;
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return value != null && typeof value === "object" && !Array.isArray(value);
 }

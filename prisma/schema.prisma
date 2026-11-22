@@ -22,6 +22,7 @@ model User {
   advisorSessions         AdvisorSession[]
   earningsEstimates       EarningsEstimate[]
   datasets                FinancialDataset[]
+  researchRuns            ResearchRun[]
   // null = use account email
   watchlistEmail          String?
   // When false the cron skips this user entirely — useful when not actively investing
@@ -162,6 +163,26 @@ model FinancialDataset {
   analyses      Analysis[]
 
   @@index([userId, ticker, createdAt])
+}
+
+// A web research in progress: what each of its three requests collected, until the dataset is
+// saved. Never read as a dataset: a FinancialDataset row exists only for a finished research.
+model ResearchRun {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ticker         String
+  companyName    String
+  exchange       String
+  quoteCurrency  String
+  model          String
+  // One JSON per part (a ResearchPartRecord): null until the part is done or skipped.
+  statementsJson String?
+  marketJson     String?
+  estimatesJson  String?
+  createdAt      DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 // Daily portfolio value snapshot written by the Vercel cron job.

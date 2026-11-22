@@ -19,19 +19,14 @@ import { AI_MODEL_CATALOG, type AiModelId } from "@/types/ai-settings";
 // for Deep Value and silently returned an empty report with no error.
 const DEFAULT_MAX_TOOL_ITERATIONS = 10;
 
-// Cap for the heavy-research routes: the research stage, which builds the web dataset,
-// and the earnings lookup, even though its research is much lighter — a single shared
-// "give DeepSeek plenty of room" knob is simpler than tuning a separate value per route,
-// and 35 rounds only costs anything if the model actually needs them. It was also Deep
-// Value's cap while a report could gather its own figures: those prompts demanded far more
-// one-query-at-a-time rounds than the Advisor's, and the ANALYTICAL_RIGOR_BLOCK / analyst
-// structural checks each added figures to web-verify, so it was raised 25→35 after real
-// DeepSeek runs hit the "too many search rounds" cutoff. Since 2026-11-09 every report and
-// lens has a dataset and runs at GROUNDED_MAX_TOOL_ITERATIONS below. The earnings route
-// hit the same cutoff independently at the old 10-round default (reproduced in production,
-// 2026-08-24) and was moved onto this shared cap rather than getting its own. On Claude it
-// counts the resumes after `pause_turn`: the research stage relies on that, and a Claude
-// research run whose resumes run out answers 502 (2026-10-30).
+// Cap for the earnings lookup — "give DeepSeek plenty of room": 35 rounds only cost anything
+// if the model actually needs them. The route hit the cutoff at the old 10-round default
+// (reproduced in production, 2026-08-24). It was the research stage's cap while the research
+// was one request; since 2026-11-22 each of its three parts runs at its own searches + fetches
+// + 1 (app/api/ai/research). It was also Deep Value's cap while a report could gather its own
+// figures, raised 25→35 after real DeepSeek runs hit the "too many search rounds" cutoff;
+// since 2026-11-09 every report and lens has a dataset and runs at
+// GROUNDED_MAX_TOOL_ITERATIONS below. On Claude it counts the resumes after `pause_turn`.
 export const DEEP_RESEARCH_MAX_TOOL_ITERATIONS = 35;
 
 // Cap for every Deep Value report and analyst lens (all on a dataset since 2026-11-09) —
@@ -130,7 +125,7 @@ interface FetchBudget {
 function fetchBudgetText(total: number): string {
   // Starts with FETCH_FAILED_PREFIX like every fetch that read nothing, so the transcript
   // check (lib/ai/transcript-urls.ts) never counts a refused fetch's URL as seen.
-  return `${FETCH_FAILED_PREFIX}: fetch budget exhausted (${total} per run): use the pages already read and the search summaries.`;
+  return `${FETCH_FAILED_PREFIX}: fetch budget exhausted (${total} in this step): use the pages already read and the search summaries.`;
 }
 
 /** Runs every client-executed `web_search` and `web_fetch` call in `message` and returns the

@@ -50,6 +50,8 @@ export const DECOY = {
   /** The web update's notes on the grounded analysis, and on the cut row. */
   groundedWebUpdate: "aggiornamento-ermellino",
   cutWebUpdate: "aggiornamento-puzzola",
+  /** CAPR: a web dataset whose research skipped the estimates part. */
+  skippedCompany: "Caprimulgo Industries",
 } as const;
 
 // ─── Record ids (fixed, so specs can address rows directly) ────────────────────
@@ -82,6 +84,8 @@ export const IDS = {
   datasetUserB: "e2e_ds_user_b",
   /** A's NSCA web dataset, the one both unfinished NSCA runs name. */
   datasetCut: "e2e_ds_nsca",
+  /** A's CAPR web dataset, two days old: researched with the estimates part skipped. */
+  datasetSkipped: "e2e_ds_capr",
 } as const;
 
 export const TICKERS = {
@@ -92,6 +96,7 @@ export const TICKERS = {
   watchOnly: "OKPI",
   userB: "BQKA",
   cut: "NSCA",
+  skipped: "CAPR",
 } as const;
 
 // ─── Stubbed market data ───────────────────────────────────────────────────────
@@ -105,6 +110,7 @@ export const QUOTE_STUBS: Record<string, { price: number; currency: string; chan
   [TICKERS.watchOnly]: { price: 42, currency: "USD", changePercent: 2.5 },
   [TICKERS.userB]: { price: 20, currency: "USD", changePercent: 0 },
   [TICKERS.cut]: { price: 8, currency: "USD", changePercent: 0.4 },
+  [TICKERS.skipped]: { price: 30, currency: "USD", changePercent: 0 },
 };
 
 /** EUR-based FX rates the stubbed Frankfurter endpoint answers. */

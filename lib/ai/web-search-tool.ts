@@ -97,11 +97,6 @@ export async function executeWebSearch(query: string): Promise<string> {
 
 // ─── web_fetch (research stage only) ──────────────────────────────────────────────────
 
-/** Fetches per research run, on both providers: the `max_uses` of Claude's native
- *  web_fetch (lib/ai/client.ts) and the budget the shared loop applies to the client-executed
- *  one (lib/ai/tool-loop.ts). A fetched annual report is long, so the cap bounds the cost. */
-export const RESEARCH_MAX_FETCHES = 8;
-
 /** A fetched page is cut here, with a closing line saying so: about 15k tokens, the order of
  *  magnitude of the `max_content_tokens: 40000` Claude's native fetch gets. */
 export const DEEPSEEK_FETCH_MAX_CHARS = 60000;
@@ -112,7 +107,7 @@ export const DEEPSEEK_FETCH_MAX_CHARS = 60000;
 // and a search summary is 600-800 characters.
 export const CUSTOM_WEB_FETCH_TOOL = {
   name: "web_fetch",
-  description: `Fetch one web page (HTML or PDF) and return its full text as Markdown. Use it to read a primary document found by web_search: results pages, annual reports, filings. At most ${RESEARCH_MAX_FETCHES} fetches per run.`,
+  description: `Fetch one web page (HTML or PDF) and return its full text as Markdown. Use it to read a primary document found by web_search: results pages, annual reports, filings. Your fetches are limited: the system prompt says how many.`,
   input_schema: {
     type: "object",
     properties: {

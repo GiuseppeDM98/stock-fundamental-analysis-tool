@@ -38,7 +38,10 @@ export type ReconciliationWarning = {
     | "value_ignored_secondary"
     // The research stage computed EBITDA as EBIT + D&A (the company publishes none); detail =
     // the fiscal years.
-    | "ebitda_derived";
+    | "ebitda_derived"
+    // The web research skipped an optional part (the user chose "Continue without");
+    // detail = the part's name.
+    | "research_part_skipped";
   severity: "warn" | "info";
   fiscalYear: number | null;
   // Numbers/years ONLY — t() has no interpolation, so the component composes

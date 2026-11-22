@@ -13,16 +13,28 @@
 //
 // A paste confirmed while a web dataset is on screen is merged with it on the server
 // (POST /api/datasets, origin "merged"): the merged dataset is previewed in its turn.
+//
+// The web research is three requests (useResearchRun): during it the three parts show as
+// rows; a failed part offers Retry, and an optional one also "Continue without" (2026-11-22).
 import { useEffect, useRef, useState } from "react";
 
 import { useLanguage } from "@/context/language-context";
 import { GroundingInput } from "@/components/grounding-input";
 import { DatasetTables } from "@/components/report/dataset-tables";
 import { GroundingPreview, warningLabelKey } from "@/components/report/grounding-preview";
-import { createMergedDataset, fetchLatestDataset, researchDataset } from "@/lib/dataset-client";
+import { RESEARCH_PART_TYPICAL_SECONDS, useResearchRun, type ResearchRunState } from "@/components/use-research-run";
+import { createMergedDataset, fetchLatestDataset } from "@/lib/dataset-client";
 import { checkCurrencyMismatch } from "@/lib/grounding/reconcile";
 import { normalizeTicker } from "@/lib/ticker";
-import { DATASET_REUSE_MAX_AGE_DAYS, type DatasetOrigin, type MergedDatasetResponse, type ResearchResponse, type StoredDataset } from "@/types/dataset";
+import {
+  DATASET_REUSE_MAX_AGE_DAYS,
+  RESEARCH_PARTS,
+  type DatasetOrigin,
+  type MergedDatasetResponse,
+  type ResearchPart,
+  type ResearchResponse,
+  type StoredDataset,
+} from "@/types/dataset";
 import type { GroundedFinancials, GroundingBlock } from "@/types/grounding";
 import type { Translations } from "@/lib/i18n/translations";
 
@@ -42,19 +54,44 @@ type Bundle = ResearchResponse | MergedDatasetResponse;
 // still holds it).
 type PasteRef = { id: string; seed: GroundingBlock[] | undefined };
 
-// `paste` on researching/error: the paste the new web dataset is merged with once the
-// research answers ("Refresh data" on a paste or merged dataset), null for a plain run. On
-// a preview: the paste merged into it, or the one whose merge failed (`mergeError`), so
-// "Refresh data" merges it again.
+// `paste` on research: the paste the new web dataset is merged with once the research
+// answers ("Refresh data" on a paste or merged dataset), null for a plain run; the research's
+// own progress and failure are the hook's state. On a preview: the paste merged into it, or
+// the one whose merge failed (`mergeError`), so "Refresh data" merges it again.
 type Lookup =
   | { status: "idle" }
   | { status: "checking" }
   | { status: "reuse"; stored: StoredDataset }
   // `failed`: the lookup itself failed — said once, then the same choices as when there is none.
   | { status: "empty"; failed: boolean }
-  | { status: "researching"; startedAt: number; paste: PasteRef | null }
-  | { status: "error"; message: string; paste: PasteRef | null }
+  | { status: "research"; paste: PasteRef | null }
   | { status: "preview"; bundle: Bundle; origin: "web" | "merged"; mergeError: string | null; paste: PasteRef | null };
+
+const PART_LABEL: Record<ResearchPart, keyof Translations> = {
+  statements: "researchPartStatements",
+  market: "researchPartMarket",
+  estimates: "researchPartEstimates",
+};
+
+type PartRowState = "waiting" | "running" | "done" | "failed";
+const PART_MARK: Record<PartRowState, string> = { waiting: "○", running: "●", done: "✓", failed: "✕" };
+const PART_TEXT: Record<PartRowState, string> = {
+  waiting: "text-slate-500",
+  running: "text-violet-300",
+  done: "text-emerald-400",
+  failed: "text-amber-300",
+};
+
+function partRowState(state: ResearchRunState, part: ResearchPart): PartRowState {
+  if (state.kind === "done") return "done";
+  if (state.kind === "running") return state.done.includes(part) ? "done" : state.part === part ? "running" : "waiting";
+  if (state.kind === "failed") {
+    const index = RESEARCH_PARTS.indexOf(part);
+    const failedIndex = RESEARCH_PARTS.indexOf(state.part);
+    return index < failedIndex ? "done" : index === failedIndex ? "failed" : "waiting";
+  }
+  return "waiting";
+}
 
 const ORIGIN_LABEL: Record<DatasetOrigin, keyof Translations> = {
   paste: "datasetOriginPaste",
@@ -85,19 +122,38 @@ function pasteOf(stored: StoredDataset): PasteRef | null {
 
 const errorMessage = (err: unknown) => (err instanceof Error ? err.message : "");
 
-function ResearchingCounter({ startedAt }: { startedAt: number }) {
+/** The three parts of a research: done, running (with its seconds), waiting, failed; the
+ *  ones still to run say how long they usually take. */
+function ResearchParts({ state }: { state: ResearchRunState }) {
   const { t } = useLanguage();
+  const startedAt = state.kind === "running" ? state.startedAt : null;
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
+    if (startedAt === null) return;
+    setNow(Date.now());
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, []);
-  const seconds = Math.max(0, Math.floor((now - startedAt) / 1000));
+  }, [startedAt]);
+  const elapsed = startedAt === null ? 0 : Math.max(0, Math.floor((now - startedAt) / 1000));
+  const typical = (part: ResearchPart) =>
+    t("runPhaseTypical").replace("{minutes}", String(Math.max(1, Math.round(RESEARCH_PART_TYPICAL_SECONDS[part] / 60))));
   return (
-    <p className="flex items-center gap-2 text-sm text-slate-200" role="status">
-      <span className="h-3 w-3 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />
-      {t("datasetResearchingState").replace("{s}", String(seconds))}
-    </p>
+    <ol className="space-y-1.5" role="status" data-testid="research-parts">
+      {RESEARCH_PARTS.map((part) => {
+        const rowState = partRowState(state, part);
+        return (
+          <li key={part} data-part={part} data-state={rowState} className={`flex flex-wrap items-baseline gap-x-2 text-sm ${PART_TEXT[rowState]}`}>
+            <span aria-hidden className="w-4 text-center">
+              {PART_MARK[rowState]}
+            </span>
+            <span>{t(PART_LABEL[part])}</span>
+            <span className="font-mono text-xs text-muted">
+              {rowState === "running" ? `${elapsed} s · ${typical(part)}` : rowState === "waiting" ? typical(part) : ""}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -119,6 +175,7 @@ export function DatasetSection({ ticker, quote, value, onChange }: Props) {
   // started for the previous ticker never lands on the new one (its dataset is saved, and
   // offered for reuse when the user comes back to that ticker).
   const tickerRef = useRef(ticker);
+  const research = useResearchRun(ticker);
 
   // A different stock is a different dataset: drop the confirmed one and look again. The
   // abort and the ticker check both keep a slow answer for the previous ticker out.
@@ -155,20 +212,26 @@ export function DatasetSection({ ticker, quote, value, onChange }: Props) {
   }, [ticker]);
 
   async function runResearch(paste: PasteRef | null) {
-    const forTicker = ticker;
     // The confirmed dataset is being replaced: no analysis runs on it in the meantime.
     onChange(null);
     setEditor(null);
     setMergeError(null);
-    setLookup({ status: "researching", startedAt: Date.now(), paste });
-    let web: ResearchResponse;
-    try {
-      web = await researchDataset(forTicker);
-    } catch (err) {
-      if (tickerRef.current === forTicker) setLookup({ status: "error", message: errorMessage(err), paste });
-      return;
-    }
-    if (tickerRef.current !== forTicker) return;
+    setLookup({ status: "research", paste });
+    await finishResearch(research.start(), paste);
+  }
+
+  // Retry and "Continue without" go on with the same run, and the same paste to merge.
+  async function continueResearch(action: () => Promise<ResearchResponse | null>) {
+    if (lookup.status !== "research") return;
+    await finishResearch(action(), lookup.paste);
+  }
+
+  // A research that closed is previewed, merged first with the paste it was refreshed from.
+  // One that did not (a part failed, the ticker changed) stays on the hook's state.
+  async function finishResearch(pending: Promise<ResearchResponse | null>, paste: PasteRef | null) {
+    const forTicker = ticker;
+    const web = await pending;
+    if (!web || tickerRef.current !== forTicker) return;
     if (!paste) {
       setLookup({ status: "preview", bundle: web, origin: "web", mergeError: null, paste: null });
       return;
@@ -214,7 +277,8 @@ export function DatasetSection({ ticker, quote, value, onChange }: Props) {
   const reuseWarnings = stored
     ? [...stored.warnings, ...(quote ? [checkCurrencyMismatch(stored.dataset, quote.currency)].filter((w) => w != null) : [])]
     : [];
-  const researching = lookup.status === "researching";
+  const researching = research.state.kind === "running";
+  const failedPart = lookup.status === "research" && research.state.kind === "failed" ? research.state : null;
 
   const researchButton = (paste: PasteRef | null, label: keyof Translations = "datasetResearchBtn") => (
     <button onClick={() => runResearch(paste)} disabled={researching || merging} className={PRIMARY_BTN}>
@@ -267,17 +331,24 @@ export function DatasetSection({ ticker, quote, value, onChange }: Props) {
             </div>
           )}
 
-          {lookup.status === "researching" && <ResearchingCounter startedAt={lookup.startedAt} />}
+          {editor === null && lookup.status === "research" && research.state.kind !== "idle" && <ResearchParts state={research.state} />}
 
-          {editor === null && lookup.status === "error" && (
+          {editor === null && failedPart && (
             <div className="space-y-3">
               <p className="text-sm text-red-400" role="alert">
-                {t("datasetResearchError")}
-                {lookup.message && ` — ${lookup.message}`}
+                {t("researchPartFailed").replace("{part}", t(PART_LABEL[failedPart.part])).replace("{message}", failedPart.message || t("datasetResearchError"))}
               </p>
               <div className="flex flex-wrap items-center gap-2">
-                {researchButton(lookup.paste, "datasetRetryResearch")}
-                {addPasteButton}
+                <button onClick={() => continueResearch(research.retry)} disabled={researching || merging} className={PRIMARY_BTN}>
+                  {t("datasetRetryResearch")}
+                </button>
+                {failedPart.optional ? (
+                  <button onClick={() => continueResearch(research.skip)} disabled={researching || merging} className={SECONDARY_BTN}>
+                    {t("researchContinueWithout")}
+                  </button>
+                ) : (
+                  addPasteButton
+                )}
               </div>
             </div>
           )}

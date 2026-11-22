@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { groundedFinancialsSchema, groundingBlockSchema } from "@/lib/grounding/schema";
 import { AI_EFFORT_LEVELS, AI_MODEL_IDS } from "@/types/ai-settings";
-import type { ResearchMeta, StoredDataset } from "@/types/dataset";
+import { RESEARCH_PARTS, type ResearchMeta, type StoredDataset } from "@/types/dataset";
 
 export const datasetMetaSchema = z.object({
   ticker: z.string(),
@@ -27,6 +27,7 @@ export const DATASET_WARNING_CODES = [
   "source_unknown_id",
   "value_ignored_secondary",
   "ebitda_derived",
+  "research_part_skipped",
 ] as const;
 
 /** The longest detail a stored warning may carry: a writer slices to it, since a stored
@@ -55,6 +56,18 @@ export const researchMetaSchema = z.object({
   durationMs: z.number().nonnegative(),
   unverifiedSources: z.array(z.string()),
   notes: z.string().nullable(),
+  // Optional on read: a dataset researched in one request (before 2026-11-22) has none.
+  parts: z
+    .array(
+      z.object({
+        part: z.enum(RESEARCH_PARTS),
+        status: z.enum(["done", "skipped"]),
+        searches: z.number(),
+        fetches: z.number(),
+        durationMs: z.number(),
+      })
+    )
+    .optional(),
 }) satisfies z.ZodType<ResearchMeta>;
 
 function parseJson(raw: string): unknown {

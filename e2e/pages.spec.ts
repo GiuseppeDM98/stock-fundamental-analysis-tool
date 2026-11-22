@@ -250,6 +250,19 @@ test("/analyze reuses A's recent web dataset for the ticker, with each row's web
   expect(forbiddenCalls).toEqual([]);
 });
 
+test("/analyze reuses a web dataset whose research skipped the estimates, saying the section was not collected", async ({ page, forbiddenCalls }) => {
+  const row = await queryOne<{ warningsJson: string; researchJson: string }>("SELECT warningsJson, researchJson FROM FinancialDataset WHERE id = ?", [IDS.datasetSkipped]);
+  expect(JSON.parse(row!.warningsJson)).toEqual([{ code: "research_part_skipped", severity: "info", fiscalYear: null, detail: "estimates" }]);
+  expect(JSON.parse(row!.researchJson).parts.map((p: { status: string }) => p.status)).toEqual(["done", "done", "skipped"]);
+
+  await page.goto(`/analyze?ticker=${TICKERS.skipped}`);
+  const section = page.getByTestId("dataset-section");
+  await expect(section.getByText(/^Dataset from .+ \(web\)$/)).toBeVisible();
+  await expect(section.getByText("⚠ Section not collected: the research step was skipped — estimates")).toBeVisible();
+  await expect(section.getByRole("button", { name: "Use this dataset" })).toBeEnabled();
+  expect(forbiddenCalls).toEqual([]);
+});
+
 test("/analyze without a dataset offers the web research and keeps Deep Value disabled", async ({ page, forbiddenCalls }) => {
   expect(await count("SELECT COUNT(*) AS n FROM FinancialDataset WHERE userId = ? AND ticker = ?", [USER_A.id, TICKERS.watchOnly])).toBe(0);
 
