@@ -26,6 +26,7 @@ One file per domain, read before touching that domain; AGENTS.md keeps the stub,
 - `doc/guide/monitor.md` — Vercel cron jobs (route pattern, idempotency, DST-proof schedule, Hobby limits), portfolio snapshots, the watchlist page and its digest (no AI, earnings note, portfolio-aware copy), the next-earnings calendar
 - `doc/guide/yahoo.md` — the yahoo-finance2 adapter: deprecated modules, the time-series call, mixed schema, native-currency quotes, the quote route's blind spots (rate limits, no caching)
 - `doc/guide/shell.md` — what surrounds the features: the Hub, the `/analyze` page, NavBar and language, accounts, the PWA
+- `doc/guide/collaudo.md` — the why and the history behind WORKFLOW.md § 3: the gates on Windows, the e2e suite's guards and visual baselines, the manual run off production, the seed inventory, the throwaway user, real AI runs
 
 ---
 

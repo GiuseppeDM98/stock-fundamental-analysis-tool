@@ -225,35 +225,33 @@ The rules above are the standard. This section is the local translation of oblig
 
 ### Gates — local CI (`npm run ci:local`)
 
-The gates before a session's commit, in this order, with no lint stage (`next lint` is deprecated here; the type-check is the static gate). `scripts/ci-local.sh` runs them fail-fast, and a red stops the closing ritual. Before stage 1 comes the collaudo count, `node ~/.claude/processi-collaudo.mjs`: zero, or the gates do not start.
+The gates before a session's commit, in this order, with no lint stage. `scripts/ci-local.sh` runs them fail-fast, and a red stops the closing ritual. Before stage 1 comes the collaudo count, `node ~/.claude/processi-collaudo.mjs`: zero, or the gates do not start.
 
 1. `npm run test`
 2. `npm run typecheck`
 3. `npm run build`, executed through `e2e/run-isolated.ts` on a freshly seeded `.e2e/e2e.db`, so the build can never reach the Turso database named in `.env`
 4. `npm run e2e` against that production build (`E2E_SERVER=start`, i.e. `next start -p 3200`)
 
-`npm audit` is deliberately not a stage. Visual screenshots are not a stage either.
+Neither `npm audit` nor the visual screenshots is a stage.
 
-After `npm ci` (or on a fresh checkout) run `npx prisma generate` once: stage 2 comes before the build that generates `generated/prisma`, and without it the type-check fails on `lib/db.ts` and on every implicit `any` that follows (2026-10-23).
+After `npm ci` or on a fresh checkout run `npx prisma generate` once, or stage 2 fails. The why, history and measurements behind the rules of this section: `doc/guide/collaudo.md` (here § 1.1).
 
-**On Windows** (2026-10-19, first run of the gate there): the e2e tooling starts `npx`/`npm` through a shell (`e2e/prepare-db.ts`, `e2e/run-isolated.ts` — Node refuses a `.cmd` without one, `spawnSync EINVAL`), and a fresh checkout needs `npx playwright install chromium` once before stage 4. For a manual run from Git Bash (2026-10-28) write `$(pwd -W)` where the commands below say `$PWD`: `$PWD` is a `/c/Users/…` path that libsql cannot open (`ConnectionFailed … 14`, shown by Auth.js as `error=Configuration`). Stopping the background shell does not stop the `next dev` child, which keeps port 3200 until it is stopped by PID (end the tree from the `npx` root: `taskkill /PID <pid> /T /F`); `sqlite3` may be missing, then read the file with `@libsql/client`. Git Bash rewrites an argument that starts with `/` into a Windows path (`/analyses/x` → `C:/Program Files/Git/analyses/x`, 2026-10-29): hand a page to a script as the full URL.
+**On Windows** (collaudo.md § 1.2): `npx playwright install chromium` once before stage 4; from Git Bash `$(pwd -W)` for `$PWD` and a full URL for a page; a leftover `next dev` holds port 3200 until `taskkill /PID <pid> /T /F` on the `npx` root.
 
 ### End-to-end suite (Playwright)
 
-`npm run e2e` does everything itself: it recreates `.e2e/e2e.db` (`prisma migrate deploy` + `scripts/seed-e2e.ts`), starts `next dev -p 3200` on that file, signs in the fixture users through `/login` (storageState in `.e2e/state/`), then runs `e2e/auth.spec.ts`, `e2e/authorization.spec.ts` and `e2e/pages.spec.ts`. One spec: `npx playwright test --project=e2e e2e/pages.spec.ts`.
+`npm run e2e` does everything itself: it recreates and seeds `.e2e/e2e.db` (`prisma migrate deploy` + `scripts/seed-e2e.ts`), starts `next dev -p 3200` on it, signs in the fixture users (storageState in `.e2e/state/`), then runs the `auth`, `authorization` and `pages` specs. One spec: `npx playwright test --project=e2e e2e/pages.spec.ts`.
 
-- **Never production.** Every child process gets `TURSO_DATABASE_URL`/`DATABASE_URL=file:<repo>/.e2e/e2e.db`, `TURSO_AUTH_TOKEN=""`, `NEXTAUTH_URL=http://localhost:3200`, a throwaway auth secret and empty AI/Resend keys (`e2e/support/env.ts`). Any non-`file:` URL aborts the run before a process starts (verified 2026-10-11 with `E2E_DB_URL=libsql://…`).
-- **Never paid or remote calls.** `/api/quote/*` and Frankfurter are stubbed with fixed values, every request leaving localhost is blocked, and any call to `/api/ai/*`, `POST /api/earnings` or `POST /api/watchlist/run` fails the test (`e2e/support/test.ts`).
-- **Assertions pair visible decoy text with DB rows** (`e2e/support/db.ts`), never the look of the page alone. `authorization.spec.ts` is the own-vs-someone-else's pair on analyses, positions and datasets: a foreign id answers 404 and the row is checked unchanged in the DB. Both a wrong-identity run and an injected DB write were shown to turn it red (2026-10-11).
-- **Do not run the suite while another `next dev` / `next build` runs from the same checkout** (they share `.next`). Port 3200 must be free; an existing server is never reused. Do not edit source files while the suite or a manual dev server runs either: `next dev` recompiles mid-test and the test it lands on reads as flaky (2026-10-29).
+- **Never production.** Every child process is forced onto `.e2e/e2e.db` with empty keys (`e2e/support/env.ts`); any non-`file:` URL aborts the run.
+- **Never paid or remote calls.** Quotes and FX are stubbed, off-localhost requests blocked, and an AI, earnings or watchlist-run call fails the test (`e2e/support/test.ts`).
+- **Assertions pair visible decoy text with DB rows** (`e2e/support/db.ts`); `authorization.spec.ts` is the own-vs-someone-else's pair (foreign id → 404, row unchanged).
+- **Never run the suite beside another `next dev` / `next build` of the same checkout** (shared `.next`); port 3200 free; no source edits while it or a manual server runs.
 - **Artifacts** (`.e2e/`, `playwright-report/`, `test-results/`) are gitignored. Open a failure's trace with `npx playwright show-trace test-results/<test>/trace.zip`.
-- **Visual baselines are per session and never committed** (`e2e/**/*-snapshots/` is gitignored). They hold for the UTC day they were generated on, because snapshot and earnings dates are relative to today. Run `npm run e2e:visual:update` before a change and `npm run e2e:visual` after it; the update rewrites every baseline (`--update-snapshots=all`), since Playwright's default mode keeps a file that is still within tolerance and a day-old one survived (2026-10-29). The browser clock is frozen, animations are off, and fonts are the fallback (Google Fonts is blocked). Copy the baselines a before/after comparison needs out of the repo (to the scratchpad) before the update: they are not in git, and the update overwrites the "before" of a page the session changed (2026-11-09).
-
-Sessions are JWT (Auth.js v5 credentials provider, `session: { strategy: "jwt" }`), so there is no session table to clean up.
+- **Visual baselines are per session, gitignored, valid for the UTC day.** Copy the ones a before/after comparison needs to the scratchpad, then `npm run e2e:visual:update` before the change and `npm run e2e:visual` after it.
 
 ### Running the app by hand — NEVER against production data
 
-**`.env` points `TURSO_DATABASE_URL` at the hosted Turso database (`libsql://…`).** A checkout that keeps its variables in `.env.local` instead (the Windows one, 2026-10-29) is in the same position: Next.js reads both. A plain `npm run dev` therefore reads and writes production data. Anything run by hand must override the variables in the shell (variables already present in the environment win over `.env`, for Next.js and for Prisma's `dotenv`). The e2e tooling above already does this; for a manual tour:
+**`.env` (or `.env.local`) points `TURSO_DATABASE_URL` at the hosted Turso database (`libsql://…`)**, so a plain `npm run dev` reads and writes production data. Anything run by hand overrides the variables in the shell, which win over both files. For a manual tour:
 
 ```bash
 npm run seed:e2e   # recreates .e2e/e2e.db with the fixtures below
@@ -261,48 +259,41 @@ DATABASE_URL="file:$PWD/.e2e/e2e.db" TURSO_DATABASE_URL="file:$PWD/.e2e/e2e.db" 
   NEXTAUTH_URL=http://localhost:3200 npx next dev -p 3200
 ```
 
-Quotes are live in this mode, not stubbed. To show a missing provider key, add `ANTHROPIC_API_KEY="" DEEPSEEK_API_KEY=""` to the command: a variable present in the environment wins over `.env.local` even when empty (verified on Windows, 2026-11-09), so an AI route answers 503 without spending. After any schema change restart the dev server: it keeps a stale Prisma client and crashes with `no such column` (AGENTS.md, gotcha #7).
+Quotes are live in this mode. To show a missing provider key, add `ANTHROPIC_API_KEY="" DEEPSEEK_API_KEY=""`: an AI route then answers 503 without spending. After a schema change restart the dev server (AGENTS.md, gotcha #7).
 
 ### Seed and throwaway identities
 
 `scripts/seed-e2e.ts` is idempotent; the e2e run calls it and `npm run seed:e2e` re-runs it by hand. It plants:
 
-- **A** — `e2e-a@example.test`, password `e2e-password-123`. Owns:
-  - a Grounded analysis read from its financial dataset (`/analyses/e2e_an_grounded`, decoy *fenicottero*; dataset `e2e_ds_fnct`, two days old, offered for reuse on `/analyze?ticker=FNCT.MI`) and an older Grounded save that still carries `groundingJson` (`/analyses/e2e_an_grounding_legacy`, *fenicottero-legacy*);
-  - an analysis with all three analyst lenses (`/analyses/e2e_an_panel`, *ornitorinco*) plus an older save of the same ticker;
-  - an old-format analysis with no JSON block (`/analyses/e2e_an_legacy`, *pangolino*);
-  - open and closed positions (some taxed at 26%), 3 watchlist items, 6 portfolio snapshots, one earnings estimate, one advisor session (*tapiro*);
-  - a cut run (`e2e_an_cut`, failed, *Nasica Interrotta*, ticker NSCA with a web dataset and a watchlist item) and a run in progress (`e2e_an_live`), dated on the reference day: the tests that read their age freeze the clock;
-  - a sacrificial analysis and position that `authorization.spec.ts` deletes.
-- **B** — `e2e-b@example.test`, same password. Owns one analysis, one position and one dataset (`e2e_ds_user_b`) (*quokka*).
+- **A** — `e2e-a@example.test`, password `e2e-password-123`: the suite's analyses, positions, watchlist, snapshots and advisor session.
+- **B** — `e2e-b@example.test`, same password: one analysis, one position, one dataset.
 
-Ids, decoys and stub prices live in `e2e/support/fixtures.ts`. **Roles**: the app has none; authorization is per-user data ownership, so the own-vs-someone-else's pair of §2 uses A and B.
+Inventory: collaudo.md § 4; ids, decoys and stub prices: `e2e/support/fixtures.ts`. **Roles**: the app has none; authorization is per-user data ownership, so the own-vs-someone-else's pair of §2 uses A and B.
 
-For a throwaway user created on the fly: `POST /api/auth/register` with `{ "email": "e2e+<tag>@example.test", "password": "<8+ chars>" }` returns 201 while `DISABLE_REGISTRATION` is not `true`. Sign in over HTTP with `GET /api/auth/csrf` (cookie jar), then `POST /api/auth/callback/credentials` with `csrfToken`, `email`, `password`, `json=true` as form data. Send the body with `curl --data-urlencode`: a raw `+` in `e2e+tag@…` is read as a space and the login silently fails (302, no session). A 302 that sets `authjs.session-token` is success, and `GET /api/auth/session` then returns the user (verified 2026-10-11).
+For a throwaway user: `POST /api/auth/register` with `{ "email": "e2e+<tag>@example.test", "password": "<8+ chars>" }` (201 unless `DISABLE_REGISTRATION` is `true`), then `GET /api/auth/csrf` (cookie jar) and `POST /api/auth/callback/credentials` with `csrfToken`, `email`, `password`, `json=true` as form data via `curl --data-urlencode`; success is a 302 that sets `authjs.session-token` (collaudo.md § 4).
 
 ### Inspecting real state
 
 - Isolated database: `sqlite3 .e2e/e2e.db "SELECT …"` (where `sqlite3` is installed) or the read-only helper in `e2e/support/db.ts`. `DATABASE_URL="file:$PWD/.e2e/e2e.db" npx prisma studio` gives a browsable view.
-- Production: `turso db shell stock-analysis` (CLI installed, but it needs `turso auth login` first). Read-only `SELECT`s only, never a write during a collaudo. Check that a throwaway user is **absent** from production when a manual run is the first one after a change to the env handling.
+- Production: `turso db shell stock-analysis`, after `turso auth login` (`! turso auth login` from the agent prompt: the CLI session expires). The Windows checkout has no `turso` CLI (2026-11-22): install it there first. Read-only `SELECT`s only, never a write during a collaudo. Check that a throwaway user is **absent** from production when a manual run is the first one after a change to the env handling.
 
 ### Handing the app to the owner (obligation 5)
 
 The owner's browser cannot reuse the script's `storageState`: run `npm run seed:e2e`, start the server with the command above, give the owner the A account's email and password and the exact URLs, keep the fixtures alive until they have looked, then delete `.e2e/` in phase G.
-The seeded tickers are invented and a manual run's quotes are live, so a page that needs a quote (`/analyze`) shows nothing past the error in the owner's browser (2026-10-29). Open such a page in a headed Playwright window instead: A's `storageState`, the suite's guards (quotes and FX stubbed, paid routes blocked, `serviceWorkers: "block"`), one window per item, closed by you after each outcome. A script that signs in on a freshly started `next dev` waits for `networkidle` before filling the form: a click before hydration submits it as a native GET (`/login?`) and no session is set (2026-11-09).
+A page that needs a quote (`/analyze`) opens in a headed Playwright window with A's `storageState` and the suite's guards, one per item, closed after each outcome (collaudo.md § 5).
 
 ### Real AI runs in a collaudo
 
-- **Budget** (the owner's rule, 2026-10-29): Anthropic cost is not a constraint, so run every real check the collaudo needs; DeepSeek credit is low, so ask before any DeepSeek run. The ticker or paste and the OK for each run still come from the owner. Measured cost: about $4 for a Deep Value run at `xhigh`, $2 for one lens (`doc/guide/valutazione.md` § 2.1); since the cap at `high` (2026-11-22) a Deep Value writes about half the output tokens (24k against 44k); in four requests (2026-11-22) a run costs about $1.20 (Opus about $0.80, the web update on Sonnet 5.5 about $0.40); $0.4-1.3 for a research on Sonnet 5.5 (§ 5.3); the costs go in the commit message.
-- **Seeing what the model got**: the Anthropic SDK reads `ANTHROPIC_BASE_URL`, so a throwaway local proxy started with the dev server logs each call's model, effort, tokens, searches and prompt without a source edit. It never logs headers (the API key travels there), and it is deleted in phase G with the rest of the script.
-- **A driver waits for the phase's end event, not for the button**: the server writes the row before it sends `done` (since 2026-11-20 no client saves a run), so a script reloads only after that event.
-- **A driver calls a long route with `node:http`, not `fetch`**: Node's `fetch` gives up after 300 s without response headers (`HeadersTimeoutError`), and `next dev` logs a `200` at that abort while the route goes on writing; a research past 300 s read as failed while it finished on the server (2026-11-22).
+- **Budget** (the owner's rule, 2026-10-29): Anthropic cost is not a constraint, so run every real check the collaudo needs; DeepSeek credit is low, so ask before any DeepSeek run. The ticker or paste and the OK for each run still come from the owner. The costs go in the commit message; measured ones: collaudo.md § 6.
+- **Seeing what the model got**: a throwaway proxy on `ANTHROPIC_BASE_URL`, deleted in phase G (collaudo.md § 6).
+- **A driver waits for the phase's end event, not for the button**: the server writes the row before it sends `done`, so a script reloads only after that event.
+- **A driver calls a long route with `node:http`, not `fetch`** (`fetch` times out at 300 s, 2026-11-22; collaudo.md § 6).
 - **Export a real run's rows before any gate** (2026-11-20): `npm run e2e` and `ci:local` recreate `.e2e/e2e.db`, so the rows of a real collaudo on it are lost; dump them to the scratchpad first.
 
 ### What is still missing to honour obligations 4 and 5
 
 - **Not covered by the suite**: the AI paths (`/api/ai/*`, the earnings lookup, the analyst panel's Run button), the cron routes and the email digest, the `/analyze` search, the add/close-position and watchlist add/edit modals, sending an advisor chat, the IT language toggle, PDF export. A change in one of these still needs a purpose-written spec or the owner's tour.
 - **Visual judgement** (layout, wording, feedback of an action) stays with the owner: screenshots only prove "unchanged", not "right".
-- **`turso` needs a login before any production read**: the CLI session may have expired, so run `turso auth login` (from the agent prompt as `! turso auth login`) before a read-only check of production.
 
 ### Where things are recorded
 
@@ -313,7 +304,7 @@ The seeded tickers are invented and a manual run's quotes are live, so a page th
   - **Nota** — traps and measurements, each with its date; include post-merge deploy actions (for example the Turso migration to apply by hand) and the user impact for the release notes, or "no perceptible user impact".
   - **Dove va a fine sessione** — `AGENTS.md` if it holds for the whole repo (including any error that cost more than 30 minutes to debug) · `WORKFLOW.md` if it is a session rule · `CLAUDE.md` if it is project state · `Draft Release Temp.md` if it is a user-facing change (GitHub Release format, append only) · `README.md` / `SETUP.md` if it is user or setup documentation · a comment on the right line if it is the *why* of one line (see `COMMENTS.md`).
 
-  Pre-merge ritual, on the session branch and after the owner's OK: write every entry into its destination, delete `SESSION_NOTES.md`, then make the single commit that carries code and docs together. In `CLAUDE.md` the session's "Last Updated" entry replaces the previous one (in English), and any project-state section the session changed is updated in place (a spec of a series declares the balance of the body sections it rewrites in its § 9 — T-22 of `doc/evoluzioni/00-INDICE.md`); the file has a hard limit of 40,000 characters, measured as Unicode characters with CR excluded (`node -e "console.log([...require('fs').readFileSync('CLAUDE.md','utf8').replace(/\r/g,'')].length)"`). `wc -c` counts bytes — about 350 more on an LF checkout, about 600 more on a Windows one, where it counts the CRs too — so it is never the measure against the limit (2026-10-19).
+  Pre-merge ritual, on the session branch and after the owner's OK: write every entry into its destination, delete `SESSION_NOTES.md`, then make the single commit that carries code and docs together. In `CLAUDE.md` the session's "Last Updated" entry replaces the previous one (in English), and any project-state section the session changed is updated in place (a spec of a series declares the balance of the body sections it rewrites in its § 9 — T-22 of `doc/evoluzioni/00-INDICE.md`); the file has a hard limit of 40,000 characters, measured as Unicode characters with CR excluded (`node -e "console.log([...require('fs').readFileSync('CLAUDE.md','utf8').replace(/\r/g,'')].length)"`). Never `wc -c`, which counts bytes (00-INDICE rule 3).
 - **Outcome of a collaudo**: one line in `CLAUDE.md`'s "Last Updated" entry for that session (that it ran, and what was left to the owner's tour); which phases ran and how go in the commit message (§ 2, *Closing a verification*). Every finding that can be asserted by a test is promoted into `__tests__/` before the session ends.
 - **Conventions that already live elsewhere — not duplicated here**: `CLAUDE.md` (project state and hard invariants such as the position-blind Deep Value rule), `AGENTS.md` (implementation patterns and numbered gotchas: read the section of the domain you touch), `COMMENTS.md` and `DEVELOPMENT_GUIDELINES.md` (read both before writing code, every session). Touching a prompt builder in `lib/ai/deep-value-prompts.ts` requires the golden `__tests__/deep-value-prompts-golden.test.ts` to stay green; it is regenerated only when a spec declares it.
 - **Rule 6 here** (the owner's decision, 2026-10-19): the regression fixtures built on a listed company's published accounts — the Iren case in `__tests__/grounding-basis.test.ts`, Iren and Webuild in the `grounding-postcheck`, `-anchors`, `-reconcile` and `-prompt-format` tests — are public data that is not the owner's, so they stay; a figure of the owner's own portfolio, positions or analyses never enters a test.

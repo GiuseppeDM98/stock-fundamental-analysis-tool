@@ -646,8 +646,9 @@ righe delle run reali si esportano prima di ogni gate (WORKFLOW § 3).
   dentro `datasets/`), `use-research-run` (la riga `components/`).
 - **`README.md`** (riga 72: durata e costo della ricerca sulla run reale 1; § Vercel Hobby) e
   **`SETUP.md`** (§ Vercel Hobby), partendo dal testo lasciato dalla 05e: su Claude nessuna fase misurata
-  da localhost passa i 300 s, Vercel non è ancora misurato, DeepSeek può passarli; **`WORKFLOW.md`**
-  (§ 3, riga 298: il costo misurato di una ricerca in tre parti).
+  da localhost passa i 300 s, Vercel non è ancora misurato, DeepSeek può passarli; **`doc/guide/collaudo.md`**
+  (§ 6, voce «Budget»: il costo misurato di una ricerca in tre parti; dal 2026-11-22 non sta più in
+  WORKFLOW.md § 3 → «Real AI runs in a collaudo», che vi rimanda).
 - **`.claude/commands/deep-value.md`**: non si tocca; che il suo passo 1b (righe 41-49) descriva la
   ricerca in una richiesta è già scritto nella riga 13 dell'indice (D-76).
 - **`doc/evoluzioni/00-INDICE.md`**: riga 14c di § 5 → implementata, con le misure; T-11, T-35, C-9,

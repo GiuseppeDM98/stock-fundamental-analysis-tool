@@ -778,8 +778,9 @@ reali si esportano prima di ogni gate (WORKFLOW § 3).
   `web-update-card` (`report/` dei componenti) e `deepValuePhaseWritten` (`run-status.ts`, riga `report/`).
 - **`README.md`** (riga 72: il Deep Value in quattro richieste, con la durata misurata; § Vercel Hobby,
   righe 417 e 419: esce il Deep Value dalla frase delle fasi oltre i 300 s), **`SETUP.md`** (§ Vercel
-  Hobby, righe 196 e 215: la stessa frase), **`WORKFLOW.md`** (§ 3, riga 298: il costo misurato di un
-  Deep Value), partendo dal testo che lascia la 05d.
+  Hobby, righe 196 e 215: la stessa frase), **`doc/guide/collaudo.md`** (§ 6, voce «Budget»: il costo
+  misurato di un Deep Value; dal 2026-11-22 non sta più in WORKFLOW.md § 3 → «Real AI runs in a
+  collaudo», che vi rimanda), partendo dal testo che lascia la 05d.
 - **`.claude/commands/deep-value.md`**: non si tocca; che la sua riga 56 nomini due builder cancellati è
   già scritto nella riga 13 dell'indice (D-76).
 - **`doc/evoluzioni/00-INDICE.md`**: riga 14b di § 5 → implementata, con le misure; C-23, C-18 e C-26
