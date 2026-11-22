@@ -16,7 +16,7 @@
 
 ## 2. Obiettivo e criteri di accettazione
 
-**L'asticella** (owner, 2026-11-22, D-159): il miglior design che l'app possa avere, non una pulizia di quello attuale. Un comp che sembra la versione ordinata di oggi si rifà prima di portarlo all'owner.
+**L'asticella** (owner, 2026-11-22, D-160): il miglior design che l'app possa avere, non una pulizia di quello attuale. Un comp che sembra la versione ordinata di oggi si rifà prima di portarlo all'owner.
 
 | # | Criterio | Prova |
 |---|---|---|
