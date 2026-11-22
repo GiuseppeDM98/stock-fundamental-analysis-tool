@@ -284,7 +284,10 @@ describe("POST /api/ai/research — the next parts", () => {
     expect(params.thinking).toEqual({ type: "adaptive" });
     expect(maxIterations).toBe(12);
     expect(options).toEqual({ fetchBudget: 2 });
-    expect(params.tools.map((t) => t.max_uses)).toEqual([9, 2]);
+    expect(params.tools).toEqual([
+      { type: "web_search_20260209", name: "web_search", max_uses: 9, allowed_callers: ["direct"] },
+      { type: "web_fetch_20260209", name: "web_fetch", max_uses: 2, max_content_tokens: 40000, allowed_callers: ["direct"] },
+    ]);
     expect(params.messages[0].content).toContain("report in USD, in millions, fiscal year end December, latest period FY2025, fiscal years 2023, 2024, 2025");
     expect(params.messages[0].content).not.toContain("150");
   });
@@ -312,6 +315,15 @@ describe("POST /api/ai/research — the next parts", () => {
     expect(res.status).toBe(200);
     expect(json).toMatchObject({ runId: "run1", part: "estimates", next: null });
     expect(runRows).toEqual([]);
+
+    // The estimates run under their own caps, the smallest of the three.
+    const estimates = callOf(2);
+    expect(estimates.maxIterations).toBe(8);
+    expect(estimates.options).toEqual({ fetchBudget: 1 });
+    expect(estimates.params.tools).toEqual([
+      { type: "web_search_20260209", name: "web_search", max_uses: 6, allowed_callers: ["direct"] },
+      { type: "web_fetch_20260209", name: "web_fetch", max_uses: 1, max_content_tokens: 40000, allowed_callers: ["direct"] },
+    ]);
 
     const { data } = datasetCreate.mock.calls[0][0];
     expect(data).toMatchObject({ userId: "u1", ticker: "ORNT", origin: "web", currency: "USD", units: "millions", blocksJson: null });
@@ -456,17 +468,24 @@ describe("/api/ai/research — DeepSeek", () => {
     const res = await POST(post({ ticker: "ORNT", aiSettings: { model: "deepseek-v4-pro" } }));
     expect(res.status).toBe(200);
     await continued("run1", "market", MARKET);
+    await continued("run1", "estimates", ESTIMATES);
     const first = callOf(0);
     expect(first.params.model).toBe("deepseek-v4-pro");
     expect(first.params.output_config).toEqual({ effort: "high" });
     expect(first.params).not.toHaveProperty("cache_control");
+    // On DeepSeek no tool caps the searches: the part's rounds bound them, its fetchBudget the fetches.
+    expect(first.maxIterations).toBe(16);
     expect(first.options).toEqual({ fetchBudget: 5 });
+    expect(callOf(2).maxIterations).toBe(8);
+    expect(callOf(2).options).toEqual({ fetchBudget: 1 });
     expect(first.params.tools.map((t) => t.name)).toEqual(["web_search", "web_fetch"]);
     for (const tool of first.params.tools) expect(tool).not.toHaveProperty("type");
     // The run keeps its model: the next part is DeepSeek too, with its own fetch budget.
     expect(callOf(1).params.model).toBe("deepseek-v4-pro");
+    expect(callOf(1).maxIterations).toBe(12);
     expect(callOf(1).options).toEqual({ fetchBudget: 2 });
-    expect(JSON.parse(runRows[0].statementsJson as string)).toMatchObject({ searches: 1, fetches: 1 });
+    const research = JSON.parse(datasetCreate.mock.calls[0][0].data.researchJson);
+    expect(research.parts[0]).toMatchObject({ part: "statements", searches: 1, fetches: 1 });
   });
 
   it("answers 503 without the DeepSeek key", async () => {

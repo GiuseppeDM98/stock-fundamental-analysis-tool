@@ -433,6 +433,18 @@ describe("DatasetSection — web research", () => {
 describe("DatasetSection — the research in three parts", () => {
   const marketFailed = () => new ResearchPartError("Research returned an invalid dataset", { status: 502, runId: "run1", part: "market", lost: false });
 
+  it("offers no Continue without on failed statements, even with a run to skip on", async () => {
+    fetchLatestMock.mockResolvedValue(null);
+    researchMock.mockRejectedValueOnce(new ResearchPartError("No financial data found", { status: 502, runId: "run1", part: "statements", lost: false }));
+    renderSection("AAA.MI");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Search the web for the data" }));
+    expect(await screen.findByText("Statements failed: No financial data found")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry the research" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add pasted data" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Continue without" })).not.toBeInTheDocument();
+  });
+
   it("offers Retry and Continue without when the multiples fail; Continue without skips them and the run goes on", async () => {
     fetchLatestMock.mockResolvedValue(null);
     researchMock.mockResolvedValue({ runId: "run1", part: "statements", next: "market" });
@@ -450,7 +462,7 @@ describe("DatasetSection — the research in three parts", () => {
     expect(screen.getByRole("button", { name: "Retry the research" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Continue without" }));
-    expect(await screen.findByText(/(web)/)).toBeInTheDocument();
+    expect(await screen.findByText(/\(web\)/)).toBeInTheDocument();
     expect(continueMock.mock.calls).toEqual([
       ["run1", "market"],
       ["run1", "market", true],
