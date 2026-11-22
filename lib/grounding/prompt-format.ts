@@ -59,8 +59,8 @@ const HORIZON_LABEL: Record<ValuationGrid["rows"][number]["horizon"], string> = 
 
 function formatRawBlocks(blocks: GroundingBlock[]): string | null {
   // Empty when the caller deliberately withheld the raw paste — the analyst lenses get
-  // extract + anchors + warnings only, never the raw blocks (cost: 3 Opus
-  // xhigh passes would each pay for the full paste, not just the derived numbers).
+  // extract + anchors + warnings only, never the raw blocks (cost: three Opus lenses
+  // would each pay for the full paste, not just the derived numbers).
   if (blocks.length === 0) return null;
   const sections = blocks.map((b) => {
     const label = KIND_LABEL[b.kind] + (b.kind === "peer_valuation" && b.peerTicker ? ` — ${b.peerTicker}` : "");

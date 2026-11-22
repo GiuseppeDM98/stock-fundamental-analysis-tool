@@ -1,11 +1,12 @@
 "use client";
 
 // One analyst lens's staged run (2026-10-27, after useConsulenteRun in net-worth-tracker):
-// Phase 1 (`blind`) and Phase 2 (`reconcile`) are two requests to /api/ai/deep-value/verify,
-// each under the 300 s a function lives on Vercel Hobby, each written to the row by the
-// server as it ends. This hook chains them and, when one fails or is cut, says which phase
-// to resume from — so a Phase 2 the platform kills is retried alone, without paying Phase 1
-// again.
+// the blind commitment, the critique and the final numbers are three requests to
+// /api/ai/deep-value/verify (three since 2026-11-20, when the critique and the numbers in one
+// request ran past 300 s), each under the 300 s a function lives on Vercel Hobby, each
+// written to the row by the server as it ends. This hook chains them and, when one fails or
+// is cut, says which phase to resume from — so a phase the platform kills is retried alone,
+// without paying the ones before it again.
 //
 // Not an effect: a run spends real money and belongs to the click. Under StrictMode an
 // effect runs twice on mount, and a run started from one would start twice.
@@ -13,16 +14,17 @@ import { useRef, useState } from "react";
 import { useLanguage } from "@/context/language-context";
 import { fetchAnalysis } from "@/lib/analyses";
 import { forEachSseEvent } from "@/lib/sse-reader";
-import { ANALYST_COLUMNS } from "@/lib/report/consensus";
-import type { AiRunEvent, LensPhase } from "@/types/ai-run";
+import { lensNextPhase, lensPhaseWritten } from "@/lib/report/lens-progress";
+import { LENS_PHASES, type AiRunEvent, type LensPhase } from "@/types/ai-run";
 import type { AiSettings } from "@/types/ai-settings";
 import type { AnalystAngle, SavedAnalysis } from "@/types/analysis";
 import type { AnalystResult } from "@/components/report/types";
 
 export type LensRunState =
   | { kind: "idle" }
-  // A Phase 1 on the row with no Phase 2 after it: "Retry phase 2" resumes from there.
-  | { kind: "resumable" }
+  // A lens the server left halfway (a commitment without a critique, or a critique without
+  // its numbers): "Retry phase N" resumes from `from`.
+  | { kind: "resumable"; from: "reconcile" | "final" }
   | { kind: "running"; phase: LensPhase }
   | { kind: "failed"; error: string; retryable: boolean; resumeFrom: LensPhase }
   | { kind: "done" };
@@ -40,10 +42,8 @@ export type LensRunOptions = {
   onRow?: (row: SavedAnalysis) => void;
 };
 
-const text = (row: SavedAnalysis, column: string): string | null => {
-  const value = (row as unknown as Record<string, unknown>)[column];
-  return typeof value === "string" && value ? value : null;
-};
+/** The human number of a phase, as the buttons and the messages name it. */
+export const lensPhaseNumber = (phase: LensPhase): number => LENS_PHASES.indexOf(phase) + 1;
 
 export function useLensRun(
   analysisId: string,
@@ -61,7 +61,7 @@ export function useLensRun(
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
-  const cutMessage = (phase: LensPhase) => t("lensCut").replace("{phase}", phase === "blind" ? "1" : "2");
+  const cutMessage = (phase: LensPhase) => t("lensCut").replace("{phase}", String(lensPhaseNumber(phase)));
   const cut = (phase: LensPhase): PhaseResult => ({ ok: false, error: cutMessage(phase), retryable: true });
 
   /** One phase, start to end. Never throws: every failure is an outcome of THIS phase. */
@@ -78,7 +78,7 @@ export function useLensRun(
           model: aiSettings.model,
           effort: aiSettings.effort,
           thinking: aiSettings.thinking,
-          // The route re-reads the report, the dataset and the commitment from the row.
+          // The route re-reads the report, the dataset, the commitment and the critique from the row.
           analysisId,
           phase,
         }),
@@ -90,7 +90,7 @@ export function useLensRun(
       if (!res.body) return cut(phase);
       await forEachSseEvent<AiRunEvent>(res.body, (event) => {
         if (event.type === "stage") {
-          if (event.stage === "blind" || event.stage === "reconcile") setState({ kind: "running", phase: event.stage });
+          if ((LENS_PHASES as readonly string[]).includes(event.stage)) setState({ kind: "running", phase: event.stage as LensPhase });
         } else if (event.type === "text") {
           optionsRef.current.onText?.(event.text);
         } else if (event.type === "done") {
@@ -126,28 +126,24 @@ export function useLensRun(
     if (inFlight.current) return null;
     inFlight.current = true;
     try {
-      const phases: LensPhase[] = from === "blind" ? ["blind", "reconcile"] : ["reconcile"];
-      for (const phase of phases) {
+      for (const phase of LENS_PHASES.slice(LENS_PHASES.indexOf(from))) {
         setState({ kind: "running", phase });
         const result = await requestPhase(phase);
         if (result.ok) continue;
 
-        // The phase in progress, never `from`: a Phase 2 that fails resumes at Phase 2.
-        let resumeFrom: LensPhase = phase;
-        const row = await readRow();
-        if (row) {
-          const columns = ANALYST_COLUMNS[angle];
-          const critique = text(row, columns.critique);
-          // The server finished the phase the stream lost.
-          if (phase === "reconcile" && critique) {
-            setState({ kind: "done" });
-            return { kind: "done" };
-          }
-          // A commitment with no critique after it: Phase 1 was written (it clears the
-          // critique in the same update), so only Phase 2 is left.
-          if (text(row, columns.blind) && !critique) resumeFrom = "reconcile";
+        // A phase the provider refused as such would fail again: no re-read, no retry.
+        if (!result.retryable) {
+          const failed: LensRunState = { kind: "failed", error: result.error, retryable: false, resumeFrom: phase };
+          setState(failed);
+          return failed;
         }
-        const failed: LensRunState = { kind: "failed", error: result.error, retryable: result.retryable, resumeFrom };
+        // The stream was lost, not necessarily the phase: the server may have written it
+        // before the connection dropped, and then the chain goes on by itself (2026-11-21).
+        // The row is read once, right away: a server still finishing reads as not written.
+        const row = await readRow();
+        if (row && lensPhaseWritten(phase, lensNextPhase(row as unknown as Record<string, unknown>, angle))) continue;
+        // The phase in progress, never `from`: a phase that fails resumes at that phase.
+        const failed: LensRunState = { kind: "failed", error: result.error, retryable: true, resumeFrom: phase };
         setState(failed);
         return failed;
       }

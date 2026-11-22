@@ -31,6 +31,8 @@ export const DECOY = {
   groundedSkepticCritique: "pangolino-review",
   /** The reason of that Skeptic's one revision, read back from reviewResultJson. */
   groundedRevisionReason: "motivo-pangolino-revisione",
+  /** The Optimist's critique on the grounded analysis, its final numbers still to run. */
+  groundedOptimistCritique: "rialzista-lontra-critica",
   optimistCritique: "rialzista-armadillo-critica",
   qualityCritique: "qualita-capibara-critica",
   legacyCompany: "Pangolino Legacy SpA",

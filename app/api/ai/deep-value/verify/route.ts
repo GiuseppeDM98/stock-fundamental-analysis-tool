@@ -5,31 +5,35 @@
 // stress-tests the report against it. The lens only swaps persona/focus in the prompt —
 // path and streaming machinery are identical, so all three analysts reuse this one route.
 //
-// Two requests since 2026-10-27, one per phase, each under the 300 s a function lives on
-// Vercel Hobby, each written by THIS route as it ends (after the staged "Consulente" run of
-// net-worth-tracker):
+// One request per phase, each under the 300 s a function lives on Vercel Hobby, each
+// written by THIS route as it ends (after the staged "Consulente" run of net-worth-tracker;
+// two requests since 2026-10-27, three since 2026-11-20, when a critique and its final JSON
+// in one request ran past 300 s):
 // - `phase: "blind"` — the commitment, from the data alone; nothing streamed but the stage
 //   event; persisted with its rationale in the lens's *BlindJson.
-// - `phase: "reconcile"` — the critique, streamed after its start marker
-//   (lib/ai/stream-gate.ts), then the lens's own closing JSON (same MoS-adjusted unit as the
-//   base analysis, so the base + every analyst average into a consensus); persisted in the
-//   lens's critique, fair-value, method and result columns.
-// A Phase 2 that the platform cuts is retried alone: the commitment it reasons from is on the row.
+// - `phase: "reconcile"` — the critique alone, streamed after its start marker
+//   (lib/ai/stream-gate.ts); persisted in the lens's critique column, numbers cleared.
+// - `phase: "final"` — the lens's own JSON (same MoS-adjusted unit as the base analysis, so
+//   the base + every analyst average into a consensus), no tools, nothing streamed;
+//   persisted in the lens's fair-value, method and result columns.
+// A phase that the platform cuts is retried alone: what it reasons from is on the row.
 import { NextResponse } from "next/server";
+import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { getQuote } from "@/lib/yahoo-client";
 import { ANALYST_ANGLES, type AnalystAngle } from "@/types/analysis";
 import type { GroundedFinancials } from "@/types/grounding";
-import type { LensPhase } from "@/types/ai-run";
+import { LENS_PHASES, type LensPhase } from "@/types/ai-run";
 import { readAnalysisGrounding } from "@/lib/datasets/store";
 import {
   buildAnalystSystemPrompt,
   buildAnalystUserPrompt,
   buildAnalystBlindUserPrompt,
   buildAnalystReconcileUserPrompt,
+  buildAnalystFinalUserPrompt,
 } from "@/lib/ai/deep-value-prompts";
-import { getAiClient, buildThinkingParam, buildEffortConfig, buildWebSearchTools } from "@/lib/ai/client";
+import { getAiClient, buildThinkingParam, buildEffortConfig, buildWebSearchTools, LENS_MAX_SEARCHES } from "@/lib/ai/client";
 import { createStreamGate } from "@/lib/ai/stream-gate";
 import { resolveAiSettings, aiModelIdSchema } from "@/lib/ai/ai-preferences";
 import {
@@ -40,7 +44,7 @@ import {
 } from "@/lib/ai/tool-loop";
 import { fallbackNote } from "@/lib/ai/fallback";
 import { routeErrorStatus, runErrorMessage, isRetryableRunError } from "@/lib/ai/error-status";
-import { AI_EFFORT_LEVELS, deepValueDefaultEffort, type AiSettings } from "@/types/ai-settings";
+import { AI_EFFORT_LEVELS, callSiteDefaultEffort, capEffort, type AiEffort, type AiSettings } from "@/types/ai-settings";
 import { buildGroundingPromptContext, formatGatesForPrompt, type GroundingPromptContext } from "@/lib/grounding/prompt-format";
 import {
   hasFullTriple,
@@ -52,19 +56,25 @@ import {
   CRITIQUE_START_MARKER,
   type ParsedAnalystResult,
 } from "@/lib/report/parse-deep-value-json";
-import { pickBlindCommitment, buildBlindAssistantTurn } from "@/lib/ai/blind-commitment";
+import { pickBlindCommitment, buildBlindAssistantTurn, buildCritiqueAssistantTurn } from "@/lib/ai/blind-commitment";
 import { checkValuationBridges } from "@/lib/grounding/postcheck";
 import { createSseChannel, sseResponse } from "@/lib/ai/sse";
-import { readLensRow, saveLensBlind, saveLensFinal, type LensRow } from "@/lib/analyses-store";
+import { readLensRow, saveLensBlind, saveLensCritique, saveLensResult, type LensRow } from "@/lib/analyses-store";
 import { AnalysisRunGone } from "@/lib/analysis-run-errors";
+import type { AnalystResult } from "@/components/report/types";
 
-const DEFAULT_SETTINGS: AiSettings = { model: "claude-opus-4-8", effort: "xhigh", thinking: true };
+const DEFAULT_SETTINGS: AiSettings = { model: "claude-opus-4-8", effort: "high", thinking: true };
+
+// The highest effort each request of a lens runs at, whatever the run's effort: the lever
+// if a phase measures past 240 s (lowering `final` makes only the final numbers cheaper).
+// `blind` and `reconcile` move together: the effort is part of the cached prefix the
+// critique reads back from the blind request.
+const LENS_PHASE_EFFORT_CEILING: Record<LensPhase, AiEffort> = { blind: "high", reconcile: "high", final: "high" };
 
 // Vercel's builder rejects any maxDuration above what the *currently deployed* plan
 // allows: Hobby with Fluid Compute caps it at 300 (see SETUP.md's maxDuration table), so
 // 800 (the Pro ceiling) fails to build on Hobby. The ceiling holds for ONE phase of a lens
-// (since 2026-10-27 the blind commitment and the critique are two requests). Bump this to
-// 800 only after upgrading to Pro.
+// (one request each). Bump this to 800 only after upgrading to Pro.
 export const maxDuration = 300;
 
 const requestSchema = z.object({
@@ -78,7 +88,7 @@ const requestSchema = z.object({
   // The saved analysis under review: the route re-reads its report, dataset, MoS and saved
   // result from the row (never trusts a client copy, which would also be 100-200KB per lens).
   analysisId: z.string({ error: "analysisId is required" }).min(1, "analysisId is required"),
-  phase: z.enum(["blind", "reconcile"], { error: "phase must be blind or reconcile" }),
+  phase: z.enum(LENS_PHASES, { error: "phase must be blind, reconcile or final" }),
 });
 
 /**
@@ -186,16 +196,20 @@ async function prepareLens(userId: string, body: z.infer<typeof requestSchema>):
   if (row.datasetId == null && row.groundingJson == null) {
     return NextResponse.json({ error: "analysis has no dataset: re-run it with one" }, { status: 400 });
   }
+  // The final numbers answer a critique: without one on the row there is nothing to answer.
+  if (body.phase === "final" && !row.critiqueMd) {
+    return NextResponse.json({ error: "run the critique first" }, { status: 409 });
+  }
 
   // Fetch the authoritative live price so the reviewer treats it as ground truth
   // instead of "correcting" it with stale web-searched quotes (a real failure mode:
   // it once flagged a correct price as overstated using month-old quotes). Best-effort
   // — if the quote fails (rate limit, delisted), the review proceeds without it.
-  // Phase 2 works on the quote Phase 1 stored with its commitment (2026-11-20): the price
-  // is in the system prompt, and a new one would change the prefix the cache serves.
+  // Phases 2 and 3 work on the quote Phase 1 stored with its commitment (2026-11-20): the
+  // price is in the system prompt, and a new one would change the prefix the cache serves.
   let currentPrice: number | undefined;
   let currency = "";
-  const phase1Quote = body.phase === "reconcile" ? parseBlindJson(row.blindJson ?? "")?.phase1Quote : undefined;
+  const phase1Quote = body.phase !== "blind" ? parseBlindJson(row.blindJson ?? "")?.phase1Quote : undefined;
   if (phase1Quote !== undefined) {
     currentPrice = phase1Quote?.price;
     currency = phase1Quote?.currency ?? "";
@@ -228,10 +242,10 @@ async function prepareLens(userId: string, body: z.infer<typeof requestSchema>):
   }
 
   // An override without an effort is not a complete override: resolveAiSettings then
-  // reads the user's stored default, which the Deep Value floor below starts from. An
-  // effort named without a model applies to the stored model (until 2026-10-29 it was
-  // silently dropped, so the run went at the stored effort).
-  let aiSettings = await resolveAiSettings(
+  // reads the user's stored effort (no floor since 2026-11-20: a lens runs at the user's
+  // default, capped at `high`). An effort named without a model applies to the stored model
+  // (until 2026-10-29 it was silently dropped, so the run went at the stored effort).
+  const resolved = await resolveAiSettings(
     userId,
     body.model
       ? { model: body.model, effort: body.effort, thinking: body.thinking ?? DEFAULT_SETTINGS.thinking }
@@ -240,11 +254,10 @@ async function prepareLens(userId: string, body: z.infer<typeof requestSchema>):
         : undefined,
     DEFAULT_SETTINGS
   );
-  // No effort chosen for this run: a lens starts at the same floor as the report it
-  // reviews — the higher of the global default and xhigh (types/ai-settings.ts).
-  if (body.effort == null) {
-    aiSettings = { ...aiSettings, effort: deepValueDefaultEffort(aiSettings.model, aiSettings.effort) };
-  }
+  const aiSettings = {
+    ...resolved,
+    effort: callSiteDefaultEffort(resolved.model, capEffort(resolved.effort, LENS_PHASE_EFFORT_CEILING[body.phase])),
+  };
 
   const mosPercent = row.mosPercent;
   return {
@@ -256,7 +269,7 @@ async function prepareLens(userId: string, body: z.infer<typeof requestSchema>):
     language: body.language,
     isItalian: body.language === "Italiano" || body.language === "Italian",
     aiSettings,
-    // Always blind-first: the system prompt describes both phases, the same in both requests.
+    // Always blind-first: the system prompt describes every phase, the same in each request.
     systemPrompt: buildAnalystSystemPrompt({ angle, language: body.language, currentDate, mosPercent, grounding: groundingContext }),
     blindUserPrompt: buildAnalystBlindUserPrompt({
       ticker: body.ticker,
@@ -287,7 +300,8 @@ async function streamLensPhase(lens: LensContext, controller: ReadableStreamDefa
   // for minutes, and gives the panel its phase label.
   ch.send({ type: "stage", stage: lens.phase });
   try {
-    outcome = lens.phase === "blind" ? await runBlindPhase(lens, ch) : await runReconcilePhase(lens, ch);
+    outcome =
+      lens.phase === "blind" ? await runBlindPhase(lens, ch) : lens.phase === "reconcile" ? await runReconcilePhase(lens, ch) : await runFinalPhase(lens, ch);
   } catch (err) {
     console.error(`[ai-run] verify ${lens.angle} ${lens.phase} failed`, err);
     outcome = "error";
@@ -301,12 +315,19 @@ async function streamLensPhase(lens: LensContext, controller: ReadableStreamDefa
 type Channel = ReturnType<typeof createSseChannel>;
 
 function modelParams(lens: LensContext) {
-  return {
+  const base = {
     model: lens.aiSettings.model,
-    thinking: buildThinkingParam(lens.aiSettings.thinking, lens.aiSettings.model, lens.aiSettings.effort),
+    thinking: buildThinkingParam(lens.aiSettings.thinking, lens.aiSettings.model),
     output_config: buildEffortConfig(lens.aiSettings.effort),
     system: lens.systemPrompt,
-    tools: buildWebSearchTools(lens.aiSettings.model),
+  };
+  // The final numbers need no search, and with no tools the prefix differs from the two
+  // requests before it (tools lead the prefix), so it would never read their cache.
+  if (lens.phase === "final") return base;
+  return {
+    ...base,
+    // One definition for both requests: the tools are part of the prefix the cache serves.
+    tools: buildWebSearchTools(lens.aiSettings.model, { maxUses: LENS_MAX_SEARCHES }),
     // Phase 1 writes the prefix (system + tools + the blind message) to the prompt cache and
     // Phase 2, seconds later, sends the same prefix and reads it back — unlike this app's
     // other AI calls, which never get a second hit inside the cache TTL. A read only happens
@@ -347,51 +368,62 @@ async function runBlindPhase(lens: LensContext, ch: Channel): Promise<string> {
   return turn.stopReason ?? "unknown";
 }
 
-/** Phase 2: the critique, from the commitment stored on the row. */
-async function runReconcilePhase(lens: LensContext, ch: Channel): Promise<string> {
-  const stored = parseBlindJson(lens.row.blindJson ?? "");
-  const blind = hasFullTriple(stored) ? stored : null;
-  const mosPercent = lens.row.mosPercent;
+// The refusal as the run-outcome shape, for its fixed product sentence (lib/ai/error-status.ts).
+const REFUSED = { kind: "failed", reason: "refusal", retryable: false } as const;
 
-  // Three messages (2026-10-27), never Phase 1's transcript: the blind message rebuilt with
-  // the same arguments (so dataset and price stay in view and the cached prefix matches),
-  // the commitment as an assistant turn of text only — what the model itself produced —
-  // and the reconcile prompt, which echoes the blind numbers and states the anti-anchoring
-  // rule. Without a commitment (a degraded Phase 1) it is one single-phase review instead.
-  const messages = blind
-    ? [
-        { role: "user" as const, content: lens.blindUserPrompt },
-        { role: "assistant" as const, content: buildBlindAssistantTurn(blind, stored?.rationale ?? "") },
-        {
-          role: "user" as const,
-          content: buildAnalystReconcileUserPrompt({
-            ticker: lens.row.ticker,
-            reportMd: lens.reportMd,
-            language: lens.language,
-            currentDate: lens.currentDate,
-            mosPercent,
-            blind: { bear: blind.bear.fairValue, base: blind.base.fairValue, bull: blind.bull.fairValue },
-            gatesText: lens.baseGatesText,
-          }),
-        },
-      ]
-    : [
-        {
-          role: "user" as const,
-          content: buildAnalystUserPrompt({
-            angle: lens.angle,
-            ticker: lens.row.ticker,
-            reportMd: lens.reportMd,
-            language: lens.language,
-            currentDate: lens.currentDate,
-            currentPrice: lens.currentPrice,
-            currency: lens.currency,
-            mosPercent,
-            grounding: lens.groundingContext,
-            gatesText: lens.baseGatesText,
-          }),
-        },
-      ];
+/**
+ * The messages of the critique, rebuilt from the row — and the head of the final request's.
+ * Three messages (2026-10-27), never Phase 1's transcript: the blind message rebuilt with the
+ * same arguments (so dataset and price stay in view and the cached prefix matches), the
+ * commitment as an assistant turn of text only — what the model itself produced — and the
+ * reconcile prompt, which echoes the blind numbers and states the anti-anchoring rule.
+ * Without a commitment (a degraded Phase 1) it is one single-phase review instead.
+ */
+function reconcileMessages(lens: LensContext, blind: (AnalystResult & { rationale?: string }) | null): Anthropic.MessageParam[] {
+  if (!blind) {
+    return [
+      {
+        role: "user",
+        content: buildAnalystUserPrompt({
+          angle: lens.angle,
+          ticker: lens.row.ticker,
+          reportMd: lens.reportMd,
+          language: lens.language,
+          currentDate: lens.currentDate,
+          currentPrice: lens.currentPrice,
+          currency: lens.currency,
+          grounding: lens.groundingContext,
+          gatesText: lens.baseGatesText,
+        }),
+      },
+    ];
+  }
+  return [
+    { role: "user", content: lens.blindUserPrompt },
+    { role: "assistant", content: buildBlindAssistantTurn(blind, blind.rationale ?? "") },
+    {
+      role: "user",
+      content: buildAnalystReconcileUserPrompt({
+        ticker: lens.row.ticker,
+        reportMd: lens.reportMd,
+        language: lens.language,
+        currentDate: lens.currentDate,
+        blind: { bear: blind.bear.fairValue, base: blind.base.fairValue, bull: blind.bull.fairValue },
+        gatesText: lens.baseGatesText,
+      }),
+    },
+  ];
+}
+
+/** The commitment stored on the row, or null when Phase 1 degraded. */
+function storedBlind(lens: LensContext) {
+  const stored = parseBlindJson(lens.row.blindJson ?? "");
+  return hasFullTriple(stored) ? stored : null;
+}
+
+/** Phase 2: the critique alone, from the commitment stored on the row. */
+async function runReconcilePhase(lens: LensContext, ch: Channel): Promise<string> {
+  const blind = storedBlind(lens);
 
   // Text before the critique marker is reasoning the model writes between web-search
   // calls: dropped, as in the Deep Value route. `forwarded` is what reached the client —
@@ -408,11 +440,11 @@ async function runReconcilePhase(lens: LensContext, ch: Channel): Promise<string
     getAiClient(lens.aiSettings.model),
     {
       ...modelParams(lens),
-      // 16k was too low: with xhigh adaptive thinking + web search, the reasoning tokens
-      // (which count toward max_tokens) consumed almost the whole budget before the visible
+      // 16k was too low: with adaptive thinking + web search, the reasoning tokens (which
+      // count toward max_tokens) consumed almost the whole budget before the visible
       // critique finished. Ceiling, not target — streaming, so no HTTP-timeout risk.
       max_tokens: 64000,
-      messages,
+      messages: reconcileMessages(lens, blind),
     },
     (text) => forward(gate.push(text)),
     // Reconciliation, not research — far fewer rounds needed than either research cap.
@@ -428,6 +460,19 @@ async function runReconcilePhase(lens: LensContext, ch: Channel): Promise<string
   if (turn.stopReason === "max_tokens" && stripTrailingOpenJsonFence(forwarded) !== forwarded) forward("\n```\n");
 
   const { isItalian } = lens;
+  // No critique, no write (2026-11-21), whatever the stop reason: a route note alone would
+  // pass for a critique, and the final numbers would answer nothing. Checked before any note.
+  if (stripJsonBlock(forwarded).trim() === "") {
+    const refused = turn.stopReason === "refusal";
+    const error = refused
+      ? runErrorMessage(REFUSED, lens.language)
+      : isItalian
+        ? "La critica non è arrivata: riprova."
+        : "The critique did not arrive: retry.";
+    ch.send({ type: "error", error, retryable: !refused });
+    return "no_critique";
+  }
+
   if (!blind) {
     forward(
       `\n\n${
@@ -437,8 +482,8 @@ async function runReconcilePhase(lens: LensContext, ch: Channel): Promise<string
       }`
     );
   }
-  // A lens has no failed outcome on its stop reason: the note says what happened, and a
-  // final JSON that is missing clears the lens's numbers (saveLensFinal).
+  // A critique with text has no failed outcome on its stop reason: the note says what
+  // happened, and the lens goes on to its final numbers.
   if (turn.stopReason === "max_tokens") {
     forward(`\n\n${isItalian ? "_[Revisione troncata: raggiunto il limite di lunghezza. Riavviala per rigenerarla.]_" : "_[Review truncated: length limit reached. Re-run it to regenerate.]_"}`);
   } else if (turn.stopReason === "refusal") {
@@ -448,10 +493,60 @@ async function runReconcilePhase(lens: LensContext, ch: Channel): Promise<string
   }
   if (turn.servedBy) forward(`\n\n${fallbackNote(lens.aiSettings.model, turn.servedBy, isItalian)}`);
 
-  const count = await saveLensFinal(lens.id, lens.userId, lens.angle, { critiqueMd: stripJsonBlock(forwarded), result: parseDeepValueJson(forwarded) });
+  // The strip stays: a model that writes a JSON block anyway does not leave it in the critique.
+  const count = await saveLensCritique(lens.id, lens.userId, lens.angle, stripJsonBlock(forwarded));
   if (count === 0) {
     ch.send({ type: "error", error: runErrorMessage(new AnalysisRunGone(), lens.language), retryable: false });
     return "deleted";
+  }
+  ch.send({ type: "done" });
+  return turn.stopReason ?? "unknown";
+}
+
+/** Phase 3: the final numbers, after the critique the row holds. Nothing reaches the client
+ *  but the stage and the terminal event: the panel reloads the row. */
+async function runFinalPhase(lens: LensContext, ch: Channel): Promise<string> {
+  // prepareLens answered 409 without a critique, so the row has one here.
+  const critiqueMd = lens.row.critiqueMd ?? "";
+  // Five messages after a commitment, three after a degraded Phase 1: there the first one
+  // carries the live quote, which may differ from the critique's — accepted, since this
+  // request has no cache and its prompt does not cite the price.
+  const messages: Anthropic.MessageParam[] = [
+    ...reconcileMessages(lens, storedBlind(lens)),
+    { role: "assistant", content: buildCritiqueAssistantTurn(critiqueMd) },
+    { role: "user", content: buildAnalystFinalUserPrompt({ language: lens.language, mosPercent: lens.row.mosPercent }) },
+  ];
+
+  const turn = await runStreamWithToolLoop(
+    getAiClient(lens.aiSettings.model),
+    // A JSON block with thinking, no search: 16k is a ceiling well above it.
+    { ...modelParams(lens), max_tokens: 16000, messages },
+    () => {},
+    // No tool, so one round: a pause_turn here is an error to retry, not a wait (gotcha 26).
+    1
+  );
+
+  const { isItalian } = lens;
+  if (turn.stopReason === "refusal") {
+    ch.send({ type: "error", error: runErrorMessage(REFUSED, lens.language), retryable: false });
+    return "refusal";
+  }
+  const parsed = turn.stopReason === "max_tokens" || turn.hitIterationCap ? null : parseDeepValueJson(turn.text);
+  if (!hasFullTriple(parsed)) {
+    ch.send({ type: "error", error: isItalian ? "I numeri finali non sono arrivati: riprova." : "The final numbers did not arrive: retry.", retryable: true });
+    return "no_numbers";
+  }
+
+  const count = await saveLensResult(lens.id, lens.userId, lens.angle, critiqueMd, parsed);
+  if (count === 0) {
+    // The critique is no longer the one this request read (a new Phase 1 or another tab's
+    // critique), or the row is gone: numbers never sit next to a critique they don't answer.
+    ch.send({
+      type: "error",
+      error: isItalian ? "Questa lente è stata rilanciata altrove: ricarica la pagina." : "This lens was run again elsewhere: reload the page.",
+      retryable: false,
+    });
+    return "stale";
   }
   ch.send({ type: "done" });
   return turn.stopReason ?? "unknown";

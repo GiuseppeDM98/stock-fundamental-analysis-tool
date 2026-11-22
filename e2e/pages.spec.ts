@@ -140,6 +140,30 @@ test("grounded analysis detail renders the report from its stored result and the
   await expect(page.getByTestId("dataset-table-balance").getByRole("row").nth(1).getByText("—")).toHaveCount(5);
 });
 
+test("a lens stopped at its critique offers phase 3 on the page and a pill on /analyses", async ({ page }) => {
+  const row = await queryOne<{ optimistCritiqueMd: string | null; optimistResultJson: string | null; optimistFairValueBase: number | null }>(
+    "SELECT optimistCritiqueMd, optimistResultJson, optimistFairValueBase FROM Analysis WHERE id = ?",
+    [IDS.analysisGrounded]
+  );
+  expect(row!.optimistCritiqueMd).toContain(DECOY.groundedOptimistCritique);
+  expect(row!.optimistResultJson).toBeNull();
+  expect(row!.optimistFairValueBase).toBeNull();
+
+  await page.goto(`/analyses/${IDS.analysisGrounded}`);
+  await expect(page.getByText(DECOY.groundedOptimistCritique)).toBeVisible();
+  // Only the Optimist is halfway: one resume button, enabled, next to the three Run/Re-run.
+  const resume = page.getByRole("button", { name: "Retry phase 3" });
+  await expect(resume).toHaveCount(1);
+  await expect(resume).toBeEnabled();
+
+  await page.goto("/analyses");
+  const card = page.locator(".card").filter({ hasText: DECOY.groundedCompany });
+  await expect(card.getByText("Phase 3 pending", { exact: true })).toBeVisible();
+  await expect(card.getByText(/Reviewed/)).toBeVisible();
+  // The panel ticker's three lenses are complete (critique and numbers): no pill there.
+  await expect(page.locator(".card").filter({ hasText: DECOY.panelCompany }).getByText("Phase 3 pending")).toHaveCount(0);
+});
+
 /** A saved analysis whose extract the page read: every lens can run, with its model selector
  *  and no hint (only the disabled case was covered until 2026-11-09). */
 async function expectLensesRunnable(page: Page) {

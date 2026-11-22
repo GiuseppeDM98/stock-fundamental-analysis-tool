@@ -58,15 +58,15 @@ export async function resolveAiSettings(
   return clampEffort(merged);
 }
 
-/** A model may be picked with an effort level it doesn't actually support
- * (e.g. a stale stored default from before DeepSeek's catalog restricted it
- * to low/high/max) — clamp DOWN to the nearest supported level, never up. */
+/** A model may be picked with an effort level it doesn't actually support (a stored default
+ * or an old tab from before the catalog stopped at `high`, 2026-11-20) — clamp DOWN to the
+ * nearest supported level, never up. */
 function clampEffort(settings: AiSettings): AiSettings {
   return { ...settings, effort: callSiteDefaultEffort(settings.model, settings.effort) };
 }
 
 /** The research stage on Anthropic, whatever Claude model the user's default names: the
- *  research is a transcription of published figures, so it does not pay Opus at xhigh. */
+ *  research is a transcription of published figures, so it does not pay Opus. */
 export const RESEARCH_AI_SETTINGS: AiSettings = { model: "claude-sonnet-5-5", effort: "high", thinking: true };
 
 /**

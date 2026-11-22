@@ -110,7 +110,7 @@ export async function POST(request: Request) {
       {
         model: aiSettings.model,
         max_tokens: EARNINGS_MAX_TOKENS,
-        thinking: buildThinkingParam(aiSettings.thinking, aiSettings.model, aiSettings.effort),
+        thinking: buildThinkingParam(aiSettings.thinking, aiSettings.model),
         output_config: buildEffortConfig(aiSettings.effort),
         system: buildEarningsSystemPrompt({ currentDate }),
         tools: buildWebSearchTools(aiSettings.model),

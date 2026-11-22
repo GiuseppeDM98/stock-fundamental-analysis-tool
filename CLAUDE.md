@@ -12,7 +12,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: November 21, 2026 — **Specs 05d, 05e and 05f read adversarially; this file slimmed to an index** on `chore/adversarial-read-05d-05e-05f` (documents, plus comments in `.env.example` and in one test: no app code, so the signals of the 05c retirement stand). Three Opus readers and a cross-spec one found 146 findings, each corrected in place in the specs; seventeen owner decisions (the index § 3.17, D-141…D-157), among them: on DeepSeek the cap binds rounds, not searches; no production measure inside these specs; a phase whose answer is lost but whose row is written goes on by itself. This file went from 38,707 characters to about a third: every fact that lived only here moved to its guide first (new: `doc/guide/advisor.md`, `shell.md`, `analisi-salvate.md`), the file tree to AGENTS.md. Spec 05c stays retired and in production on `2329e2d`. Next: implement 05d. Open, by the owner's choice at the end of the series: the first production run and the production checks of 02…05c.
+**Last Updated**: November 22, 2026 — **Spec 05d implemented** on `feature/effort-cap-three-request-lens` (no DDL; detail in valutazione.md § 2.9, § 3, § 6): the effort stops at `high` on every route (Claude low/medium/high, DeepSeek low/high; a stored `xhigh` or `max` reads `high`), a lens is three requests (blind → critique → numbers, the critique saved on its own, «Retry phase 3» and a «Phase 3 pending» pill on /analyses), at most 5 web searches per lens request on Claude, and the usage lines count searches and fetches. Measured on ENAV.MI at `high`: every lens request under 240 s, research 245 s, Deep Value 338 s (still past 300 s: spec 05e). Collaudo done, the owner's tour closed; from it, two fixes: no backticks around inline code in `prose` blocks, and the PDF keeps paragraphs and a table's lead-in whole (valutazione.md § 1). Next: retire 05d, then implement 05e. Open, by the owner's choice at the end of the series: the first production run and the production checks of 02…05d.
 
 ---
 
@@ -22,7 +22,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 - **yahoo-finance2** `3.13.2` + **Zod** `4.6.7`
 - **Prisma** client `7.4.2` (CLI `7.10.0`) + **Turso** (libSQL) via `@prisma/adapter-libsql`
 - **Auth.js** `next-auth@5.0.0-beta.32` + **bcryptjs**
-- **Anthropic SDK** `0.133.0` — **Claude Opus 4.8** (the user's stored default), **Claude Sonnet 5.5** (pinned for the paste extraction and the research stage; route fallback for Advisor and earnings), **DeepSeek V4 Pro** / **V4.1 Flash** (same SDK via DeepSeek's Anthropic-compat endpoint); adaptive thinking and web search on every AI route. Who runs what, efforts and floors: doc/guide/valutazione.md § 6.
+- **Anthropic SDK** `0.133.0` — **Claude Opus 4.8** (the user's stored default), **Claude Sonnet 5.5** (pinned for the paste extraction and the research stage; route fallback for Advisor and earnings), **DeepSeek V4 Pro** / **V4.1 Flash** (same SDK via DeepSeek's Anthropic-compat endpoint); adaptive thinking and web search on every AI route; no effort above `high`, at most 5 searches per lens request. Who runs what, efforts and caps: doc/guide/valutazione.md § 6.
 - **Tailwind** `4.3.3` (`@tailwindcss/postcss`) + typography `0.5.20` + **Framer Motion** `11.18.2` + **Recharts** `2.15.4` + react-markdown + remark-gfm + node-html-parser
 - **Vitest** `4.1.11` + Testing Library `16.3.2` + **Playwright** `1.63.0` (e2e, isolated DB) + `tsx` (seed/e2e scripts). Tests live in `__tests__/` (Vitest) and `e2e/` (Playwright); how to run them: § Development Commands.
 
@@ -81,7 +81,7 @@ One line each: the page, the question it answers, where its detail lives (`doc/g
 ## Known Issues
 
 Cross-cutting only. A single area's blind spot lives in its guide: the Yahoo quote route (rate limits, no caching) in doc/guide/yahoo.md, the all-or-nothing Deep Value JSON parse in valutazione.md § 7 (gotcha 29), `/portfolio`'s currency assumption in portafoglio.md.
-- **Vercel Hobby: 300 s per function** — every AI call is its own request, persisted by the server and retried from its phase (2026-10-27); a phase past 300 s is still cut, and three are (research, Deep Value, one reconcile; measured 2026-11-20): run them from localhost until specs 05d, 05e and 05f. Durations per phase: valutazione.md § 2.9. SETUP.md § Vercel Hobby.
+- **Vercel Hobby: 300 s per function** — every AI call is its own request, persisted by the server and retried from its phase (2026-10-27); a phase past 300 s is still cut: the Deep Value (338 s at `high`, 2026-11-22) and the research when it runs long (245 s that day, 668 s on CE.MI on 2026-11-20); every lens request fits since 05d. Run those two from localhost until specs 05e and 05f. Durations per phase: valutazione.md § 2.9. SETUP.md § Vercel Hobby.
 - **Tailwind 4 browser floor** — Safari 16.4+, Chrome/Edge 111+, Firefox 128+; Tailwind 3's hex palette stays pinned in `app/tailwind-v3-palette.css`. AGENTS.md gotcha #32.
 
 ---
@@ -134,6 +134,7 @@ Things the series deliberately left out, one line each (added by the spec that l
 - No incremental refresh of a web dataset (only the latest fiscal year): a new research run redoes every year (spec 05a, 2026-10-30).
 - No prompt caching of the dataset across a report and its three lenses: their system prompts differ, so the dataset would first have to lead a shared prefix (spec 05b, 2026-11-09).
 - No notification (email) when a run ends after its tab was closed: the status line on /analyses is the only signal (spec 05c, 2026-10-27).
+- No web-search cap on the Deep Value, the Advisor or the earnings lookup (`buildWebSearchTools(model)` without `maxUses`): only a lens request has one, 5 searches, and on DeepSeek the cap binds the loop's rounds, not the searches (spec 05d, 2026-11-22; the Deep Value's comes with 05e).
 
 ---
 

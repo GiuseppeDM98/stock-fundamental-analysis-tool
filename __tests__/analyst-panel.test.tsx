@@ -64,9 +64,21 @@ const skepticRow = (overrides: Record<string, unknown> = {}) => ({
 
 const bodyOf = (fetchMock: ReturnType<typeof vi.fn>, call: number) => JSON.parse((fetchMock.mock.calls[call][1] as RequestInit).body as string);
 
+const retryPhase = (phase: number) => en.lensRetryPhase.replace("{phase}", String(phase));
+const finalDone = () => sseOk([{ type: "stage", stage: "final" }, { type: "done" }]);
+
 function renderPanel(
-  overrides: { initialResult?: string | null; currentPrice?: number | null; initialBlind?: string | null; initialCritique?: string | null; hasDataset?: boolean } = {}
+  overrides: {
+    initialResult?: string | null;
+    currentPrice?: number | null;
+    initialBlind?: string | null;
+    initialCritique?: string | null;
+    // null: a row whose lens has no final numbers yet.
+    initialFinal?: { bull: number; base: number; bear: number } | null;
+    hasDataset?: boolean;
+  } = {}
 ) {
+  const initialFinal = overrides.initialFinal === undefined ? { bull: 98, base: 87, bear: 76 } : overrides.initialFinal;
   return render(
     <AnalystPanel
       analysisId="a1"
@@ -74,7 +86,7 @@ function renderPanel(
       mosPercent={0}
       initialCritiques={{ skeptic: overrides.initialCritique === undefined ? "old critique" : overrides.initialCritique }}
       initialBlind={{ skeptic: overrides.initialBlind === undefined ? OLD_BLIND : overrides.initialBlind }}
-      initialFinal={{ skeptic: { bull: 98, base: 87, bear: 76 } }}
+      initialFinal={initialFinal ? { skeptic: initialFinal } : {}}
       initialResult={{ skeptic: overrides.initialResult ?? null }}
       groundingExtract={null}
       hasDataset={overrides.hasDataset ?? true}
@@ -85,7 +97,7 @@ function renderPanel(
   );
 }
 
-describe("AnalystPanel — a lens in two phases written by the server", () => {
+describe("AnalystPanel — a lens in three phases written by the server", () => {
   const fetchMock = vi.fn();
 
   beforeEach(() => {
@@ -100,7 +112,7 @@ describe("AnalystPanel — a lens in two phases written by the server", () => {
   it("drops the previous card on re-run, shows the new one when Phase 1 ends, and reads the final numbers from the row", async () => {
     const blind = controllableSse();
     const reconcile = controllableSse();
-    fetchMock.mockResolvedValueOnce(blind.response).mockResolvedValueOnce(reconcile.response);
+    fetchMock.mockResolvedValueOnce(blind.response).mockResolvedValueOnce(reconcile.response).mockResolvedValueOnce(finalDone());
     renderPanel();
     expect(screen.getByText("88.22")).toBeInTheDocument();
 
@@ -140,17 +152,19 @@ describe("AnalystPanel — a lens in two phases written by the server", () => {
     expect(screen.getByText(en.analystReviewRerun)).toBeInTheDocument();
   });
 
-  it("sends phase blind then phase reconcile on the row, without the report, at xhigh before the default loads", async () => {
+  it("sends phases blind, reconcile and final on the row, without the report, at high before the default loads", async () => {
     fetchMock
       .mockResolvedValueOnce(sseOk([{ type: "stage", stage: "blind" }, { type: "done", blind: NEW_BLIND, degraded: false }]))
-      .mockResolvedValueOnce(sseOk([{ type: "stage", stage: "reconcile" }, { type: "done" }]));
+      .mockResolvedValueOnce(sseOk([{ type: "stage", stage: "reconcile" }, { type: "done" }]))
+      .mockResolvedValueOnce(finalDone());
     renderPanel();
     fireEvent.click(screen.getByText(en.analystReviewRerun));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
     expect(fetchMock.mock.calls[0][0]).toBe("/api/ai/deep-value/verify");
-    expect(bodyOf(fetchMock, 0)).toMatchObject({ analysisId: "a1", angle: "skeptic", phase: "blind", effort: "xhigh" });
+    expect(bodyOf(fetchMock, 0)).toMatchObject({ analysisId: "a1", angle: "skeptic", phase: "blind", effort: "high" });
     expect(bodyOf(fetchMock, 1)).toMatchObject({ analysisId: "a1", phase: "reconcile" });
+    expect(bodyOf(fetchMock, 2)).toMatchObject({ analysisId: "a1", phase: "final" });
     expect(bodyOf(fetchMock, 0)).not.toHaveProperty("reportMd");
   });
 
@@ -168,7 +182,8 @@ describe("AnalystPanel — a lens in two phases written by the server", () => {
     );
     fetchMock
       .mockResolvedValueOnce(sseOk([{ type: "stage", stage: "blind" }, { type: "done", blind: { ...NEW_BLIND, killPrice: 1.5 }, degraded: false }]))
-      .mockResolvedValueOnce(sseOk([{ type: "stage", stage: "reconcile" }, { type: "text", text: "Critique." }, { type: "done" }]));
+      .mockResolvedValueOnce(sseOk([{ type: "stage", stage: "reconcile" }, { type: "text", text: "Critique." }, { type: "done" }]))
+      .mockResolvedValueOnce(finalDone());
     render(
       <AnalystPanel
         analysisId="a1"
@@ -194,34 +209,74 @@ describe("AnalystPanel — a lens in two phases written by the server", () => {
     expect(screen.getByText(/^✓ Kill price declared — 1\.50/)).toBeInTheDocument();
   });
 
-  it("says the final JSON was incomplete when the row came back without the lens's numbers", async () => {
-    vi.mocked(fetchAnalysis).mockResolvedValue(
-      skepticRow({ reviewResultJson: null, reviewFairValueBull: null, reviewFairValueBase: null, reviewFairValueBear: null }) as never
-    );
-    fetchMock
-      .mockResolvedValueOnce(sseOk([{ type: "stage", stage: "blind" }, { type: "done", blind: NEW_BLIND, degraded: false }]))
-      .mockResolvedValueOnce(sseOk([{ type: "stage", stage: "reconcile" }, { type: "done" }]));
-    renderPanel();
-    fireEvent.click(screen.getByText(en.analystReviewRerun));
+  it("a row with a critique and no numbers opens on Retry phase 3, with the critique on screen", () => {
+    renderPanel({ initialFinal: null });
 
-    expect(await screen.findByText(en.deepValueIncompleteJson)).toBeInTheDocument();
-    // The blind card no longer waits on a final column that will never come.
-    expect(screen.queryAllByText("…")).toHaveLength(0);
+    expect(screen.getByText(retryPhase(3))).toBeInTheDocument();
+    expect(screen.getByTestId("critique").textContent).toBe("old critique");
+    // The final column waits for Phase 3.
+    expect(screen.getAllByText("…")).toHaveLength(3);
+    expect(screen.queryByText(en.analystReviewRerun)).not.toBeInTheDocument();
   });
 
-  it("a commitment on the row with no critique offers Retry phase 2, which sends only reconcile and keeps the card", async () => {
-    fetchMock.mockResolvedValueOnce(sseOk([{ type: "stage", stage: "reconcile" }, { type: "done" }]));
+  it("a row saved before the result column (a critique and its three numbers) is done, with Re-run", () => {
+    renderPanel({ initialResult: null });
+
+    expect(screen.getByText(en.analystReviewRerun)).toBeInTheDocument();
+    expect(screen.queryByText(retryPhase(3))).not.toBeInTheDocument();
+  });
+
+  it("Retry phase 3 from a reloaded row sends only final and keeps the critique and the blind card while it runs", async () => {
+    const final = controllableSse();
+    fetchMock.mockResolvedValueOnce(final.response);
+    renderPanel({ initialFinal: null });
+
+    fireEvent.click(screen.getByText(retryPhase(3)));
+    await act(async () => {
+      final.send({ type: "stage", stage: "final" });
+    });
+    expect(screen.getByText(en.analystPhaseFinal)).toBeInTheDocument();
+    expect(screen.getByText("88.22")).toBeInTheDocument();
+    expect(screen.getByTestId("critique").textContent).toBe("old critique");
+
+    await act(async () => {
+      final.send({ type: "done" });
+      final.close();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(bodyOf(fetchMock, 0).phase).toBe("final");
+    await waitFor(() => expect(screen.getByText("2.50")).toBeInTheDocument());
+  });
+
+  it("a final that fails offers Retry phase 3, which sends only final", async () => {
+    fetchMock.mockResolvedValueOnce(sseOk([{ type: "stage", stage: "final" }, { type: "error", error: "The final numbers did not arrive: retry.", retryable: true }]));
+    vi.mocked(fetchAnalysis).mockResolvedValue(skepticRow({ reviewResultJson: null, reviewFairValueBull: null, reviewFairValueBase: null, reviewFairValueBear: null }) as never);
+    renderPanel({ initialFinal: null });
+
+    fireEvent.click(screen.getByText(retryPhase(3)));
+    expect(await screen.findByText("The final numbers did not arrive: retry.")).toBeInTheDocument();
+
+    fetchMock.mockResolvedValueOnce(finalDone());
+    vi.mocked(fetchAnalysis).mockResolvedValue(skepticRow() as never);
+    fireEvent.click(screen.getByText(retryPhase(3)));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(bodyOf(fetchMock, 1).phase).toBe("final");
+    await waitFor(() => expect(screen.getByText("2.50")).toBeInTheDocument());
+  });
+
+  it("a commitment on the row with no critique offers Retry phase 2, which sends reconcile then final and keeps the card", async () => {
+    fetchMock.mockResolvedValueOnce(sseOk([{ type: "stage", stage: "reconcile" }, { type: "done" }])).mockResolvedValueOnce(finalDone());
     vi.mocked(fetchAnalysis).mockResolvedValue(skepticRow({ reviewBlindJson: OLD_BLIND }) as never);
     renderPanel({ initialCritique: null });
 
     expect(screen.getByText("88.22")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: en.analystRunButton }).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByText(en.lensRetryPhase2));
+    fireEvent.click(screen.getByText(retryPhase(2)));
     // The card stays while Phase 2 runs.
     expect(screen.getByText("88.22")).toBeInTheDocument();
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(bodyOf(fetchMock, 0).phase).toBe("reconcile");
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect([bodyOf(fetchMock, 0).phase, bodyOf(fetchMock, 1).phase]).toEqual(["reconcile", "final"]);
     await waitFor(() => expect(screen.getByText(en.analystReviewRerun)).toBeInTheDocument());
   });
 
@@ -237,11 +292,11 @@ describe("AnalystPanel — a lens in two phases written by the server", () => {
     expect(await screen.findByText(en.lensCut.replace("{phase}", "2"))).toBeInTheDocument();
     expect(screen.getByText("2.60")).toBeInTheDocument();
 
-    fetchMock.mockResolvedValueOnce(sseOk([{ type: "stage", stage: "reconcile" }, { type: "done" }]));
+    fetchMock.mockResolvedValueOnce(sseOk([{ type: "stage", stage: "reconcile" }, { type: "done" }])).mockResolvedValueOnce(finalDone());
     vi.mocked(fetchAnalysis).mockResolvedValue(skepticRow() as never);
-    fireEvent.click(screen.getByText(en.lensRetryPhase2));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
-    expect(bodyOf(fetchMock, 2).phase).toBe("reconcile");
+    fireEvent.click(screen.getByText(retryPhase(2)));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+    expect([bodyOf(fetchMock, 2).phase, bodyOf(fetchMock, 3).phase]).toEqual(["reconcile", "final"]);
     await waitFor(() => expect(screen.getByText("2.50")).toBeInTheDocument());
   });
 
@@ -254,7 +309,7 @@ describe("AnalystPanel — a lens in two phases written by the server", () => {
     fireEvent.click(screen.getByText(en.analystReviewRerun));
 
     expect(await screen.findByText(en.lensCut.replace("{phase}", "2"))).toBeInTheDocument();
-    expect(screen.getByText(en.lensRetryPhase2)).toBeInTheDocument();
+    expect(screen.getByText(retryPhase(2))).toBeInTheDocument();
   });
 
   it("a re-run that fails before Phase 1 brings the persisted blind card and critique back", async () => {

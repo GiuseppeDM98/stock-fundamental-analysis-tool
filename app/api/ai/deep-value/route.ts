@@ -27,7 +27,7 @@ import { resolveAiSettings, aiModelIdSchema } from "@/lib/ai/ai-preferences";
 import { runStreamWithToolLoop, GROUNDED_MAX_TOOL_ITERATIONS } from "@/lib/ai/tool-loop";
 import { fallbackNote } from "@/lib/ai/fallback";
 import { routeErrorStatus, runErrorMessage, isRetryableRunError } from "@/lib/ai/error-status";
-import { AI_EFFORT_LEVELS, deepValueDefaultEffort, isAiEffort, type AiSettings } from "@/types/ai-settings";
+import { AI_EFFORT_LEVELS, isAiEffort, type AiSettings } from "@/types/ai-settings";
 import { buildGroundingPromptContext } from "@/lib/grounding/prompt-format";
 import { getFinancialDataset } from "@/lib/datasets/store";
 import { normalizeTicker } from "@/lib/ticker";
@@ -45,7 +45,7 @@ import { AnalysisRunConflict, AnalysisRunGone, AnalysisRunNotFound } from "@/lib
 import type { QuoteResponse } from "@/types/market";
 import type { StoredDataset } from "@/types/dataset";
 
-const DEFAULT_SETTINGS: AiSettings = { model: "claude-opus-4-8", effort: "xhigh", thinking: true };
+const DEFAULT_SETTINGS: AiSettings = { model: "claude-opus-4-8", effort: "high", thinking: true };
 
 // Vercel's builder rejects any maxDuration above what the *currently deployed* plan
 // allows: Hobby with Fluid Compute caps it at 300 (see SETUP.md's maxDuration table), so
@@ -86,14 +86,13 @@ type PreparedRun = {
   aiSettings: AiSettings;
 };
 
-/** The run's settings for a new run: request override > stored default, the Deep Value
- *  floor when no effort is named (types/ai-settings.ts). */
+/** The run's settings for a new run: request override > stored default. No floor since
+ *  2026-11-20: a valuation runs at the user's default, which the catalog caps at `high`. */
 async function resolveNewRunSettings(userId: string, body: z.infer<typeof newRunSchema>): Promise<AiSettings> {
   // An override without an effort is not a complete override: resolveAiSettings then
-  // reads the user's stored default, which the Deep Value floor below starts from. An
-  // effort named without a model applies to the stored model (until 2026-10-29 it was
-  // silently dropped, so the run went at the stored effort).
-  const aiSettings = await resolveAiSettings(
+  // reads the user's stored effort. An effort named without a model applies to the stored
+  // model (until 2026-10-29 it was silently dropped, so the run went at the stored effort).
+  return resolveAiSettings(
     userId,
     body.model
       ? { model: body.model, effort: body.effort, thinking: body.thinking ?? DEFAULT_SETTINGS.thinking }
@@ -102,15 +101,12 @@ async function resolveNewRunSettings(userId: string, body: z.infer<typeof newRun
         : undefined,
     DEFAULT_SETTINGS
   );
-  // No effort chosen for this run: a valuation starts at the higher of the global
-  // default and xhigh, stepping down to what the model supports.
-  return body.effort == null ? { ...aiSettings, effort: deepValueDefaultEffort(aiSettings.model, aiSettings.effort) } : aiSettings;
 }
 
 /** Whether the thinking the provider receives is on — what the row records as aiThinking
- *  (Sonnet 5.5's "between_tools", its off below xhigh, counts as on). */
+ *  (Sonnet 5.5's "between_tools", its off, counts as on). */
 function thinkingRecorded(settings: AiSettings): boolean {
-  return buildThinkingParam(settings.thinking, settings.model, settings.effort).type !== "disabled";
+  return buildThinkingParam(settings.thinking, settings.model).type !== "disabled";
 }
 
 /** A new run: dataset → quote → settings, then the row is created. Answers a Response for
@@ -259,12 +255,12 @@ async function streamValuation(run: PreparedRun, controller: ReadableStreamDefau
       {
         model: aiSettings.model,
         // Streaming, so a large ceiling can't hit HTTP timeouts (Opus 4.8 allows up
-        // to 128k). 64k gives ample room for xhigh adaptive thinking + the full
+        // to 128k). 64k gives ample room for adaptive thinking + the full
         // 10-section report + the closing JSON block without truncation. max_tokens is
         // a cap, not a target — the model generates only what it needs, so this
         // doesn't raise cost.
         max_tokens: 64000,
-        thinking: buildThinkingParam(aiSettings.thinking, aiSettings.model, aiSettings.effort),
+        thinking: buildThinkingParam(aiSettings.thinking, aiSettings.model),
         output_config: buildEffortConfig(aiSettings.effort),
         system: systemPrompt,
         tools: buildWebSearchTools(aiSettings.model),

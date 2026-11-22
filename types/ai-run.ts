@@ -11,11 +11,13 @@ import type { AnalystResult } from "@/components/report/types";
  *  the column existed read "done" (its default). */
 export type AnalysisRunStatus = "running" | "done" | "failed";
 
-/** One request each: the valuation, and the two phases of an analyst lens. */
-export type AiRunStage = "valuation" | "blind" | "reconcile";
+/** One request each: the valuation, and the three requests of an analyst lens. */
+export type AiRunStage = "valuation" | "blind" | "reconcile" | "final";
 
-/** The two requests of a blind-first lens. */
-export type LensPhase = "blind" | "reconcile";
+/** The three requests of a lens, in order: the blind commitment, the critique against the
+ *  report, the final numbers. */
+export const LENS_PHASES = ["blind", "reconcile", "final"] as const;
+export type LensPhase = (typeof LENS_PHASES)[number];
 
 /**
  * The events of a staged run, one per `data:` line.

@@ -162,7 +162,7 @@ export async function POST(request: Request) {
               // stop_reason "max_tokens". This is a ceiling, not a target — the model
               // still stops at end_turn, so normal replies cost the same.
               max_tokens: 16000,
-              thinking: buildThinkingParam(aiSettings.thinking, aiSettings.model, aiSettings.effort),
+              thinking: buildThinkingParam(aiSettings.thinking, aiSettings.model),
               output_config: buildEffortConfig(aiSettings.effort),
               system: systemPrompt,
               tools: buildWebSearchTools(aiSettings.model),

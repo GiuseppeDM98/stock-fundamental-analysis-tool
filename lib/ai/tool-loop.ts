@@ -42,10 +42,11 @@ export const DEEP_RESEARCH_MAX_TOOL_ITERATIONS = 35;
 // `pause_turn`).
 export const GROUNDED_MAX_TOOL_ITERATIONS = 12;
 
-// Cap for the blind-first analyst lenses' RECONCILE turn — that turn reconciles a
+// Cap for the blind-first analyst lenses' RECONCILE request — it writes the critique of a
 // commitment already made against the finished report, it does not research from scratch,
 // so it needs far fewer rounds than either research cap above. Left at the shared default
-// (10) would double the cost of the loop for no benefit.
+// (10) would double the cost of the loop for no benefit. On Claude the searches have their
+// own cap (`max_uses`, lib/ai/client.ts); on DeepSeek this is the only bound on them.
 export const RECONCILE_MAX_TOOL_ITERATIONS = 4;
 
 type StreamParams = Omit<Anthropic.MessageStreamParams, "messages"> & {
@@ -65,18 +66,35 @@ export function buildPromptCacheParam(model: AiModelId): { cache_control?: { typ
   return AI_MODEL_CATALOG[model].provider === "anthropic" ? { cache_control: { type: "ephemeral" } } : {};
 }
 
-// Logged per round so the extra token cost of the blind-first two-turn flow (roughly
-// 1.9x per lens, since turn 2 replays turn 1's thinking as input) and whether the prompt
-// cache is actually read are measured, not guessed. Shared by both loop variants so the
-// non-streaming earnings lookup is just as observable as the streaming routes.
+/** The client-executed `web_search` / `web_fetch` calls of one round (DeepSeek), the same
+ *  blocks `answerClientToolCalls` answers. Claude's own searches are not here: they run on the
+ *  server and come back counted in `usage.server_tool_use`. */
+function clientToolCalls(message: Anthropic.Message): { searches: number; fetches: number } {
+  let searches = 0;
+  let fetches = 0;
+  for (const block of message.content) {
+    if (block.type !== "tool_use") continue;
+    if (block.name === "web_search") searches++;
+    else if (block.name === "web_fetch") fetches++;
+  }
+  return { searches, fetches };
+}
+
+// Logged per round so the token cost of a lens's requests and whether the prompt cache is
+// actually read are measured, not guessed, and since 2026-11-20 how many searches and
+// fetches the round ran: the measure of every search cap in a real run. Shared by both loop
+// variants so the non-streaming earnings lookup is just as observable as the streaming routes.
 function logRoundUsage(
   round: number,
-  usage: Pick<Anthropic.Usage, "input_tokens" | "output_tokens" | "cache_read_input_tokens" | "cache_creation_input_tokens">
+  usage: Pick<Anthropic.Usage, "input_tokens" | "output_tokens" | "cache_read_input_tokens" | "cache_creation_input_tokens" | "server_tool_use">,
+  clientCalls: { searches: number; fetches: number }
 ): void {
   console.log(
     `[tool-loop] round ${round} usage: input=${usage.input_tokens} output=${usage.output_tokens}` +
       (usage.cache_read_input_tokens != null ? ` cache_read=${usage.cache_read_input_tokens}` : "") +
-      (usage.cache_creation_input_tokens != null ? ` cache_creation=${usage.cache_creation_input_tokens}` : "")
+      (usage.cache_creation_input_tokens != null ? ` cache_creation=${usage.cache_creation_input_tokens}` : "") +
+      ` searches=${usage.server_tool_use?.web_search_requests ?? clientCalls.searches}` +
+      ` fetches=${usage.server_tool_use?.web_fetch_requests ?? clientCalls.fetches}`
   );
 }
 
@@ -208,7 +226,7 @@ export async function runStreamWithToolLoop(
 
     const finalMessage = await stream.finalMessage();
     messages.push(assistantTurn(finalMessage));
-    logRoundUsage(i + 1, finalMessage.usage);
+    logRoundUsage(i + 1, finalMessage.usage, clientToolCalls(finalMessage));
     servedBy = logFallback(i + 1, params.model, finalMessage);
 
     // Claude's server-side web_search interrupts the turn with stop_reason "pause_turn"
@@ -292,7 +310,7 @@ export async function runCreateWithToolLoop(
   for (let i = 0; i < maxIterations; i++) {
     lastMessage = await createMessage(client, { ...params, messages });
     messages.push(assistantTurn(lastMessage));
-    logRoundUsage(i + 1, lastMessage.usage);
+    logRoundUsage(i + 1, lastMessage.usage, clientToolCalls(lastMessage));
     servedBy = logFallback(i + 1, params.model, lastMessage);
 
     // Same resume-on-pause rule as the streaming loop above.

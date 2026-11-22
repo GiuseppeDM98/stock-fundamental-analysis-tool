@@ -28,7 +28,7 @@ import {
 import { toWatchlistMosFraction } from "@/lib/watchlist-mos";
 import { AiSettingsControl } from "@/components/ai-settings-control";
 import { fetchAiSettings } from "@/lib/ai-settings-client";
-import { DEFAULT_AI_SETTINGS, deepValueDefaultEffort, type AiSettings } from "@/types/ai-settings";
+import { DEFAULT_AI_SETTINGS, type AiSettings } from "@/types/ai-settings";
 import type { GroundedFinancials } from "@/types/grounding";
 import { ValuationChecksCard } from "@/components/report/valuation-checks-card";
 import type { DeepValueRunInputs } from "@/lib/report/deep-value-run";
@@ -116,12 +116,9 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
   const [now, setNow] = useState(0);
   const [result, setResult] = useState<ParsedAnalystResult | null>(null);
   const [watchlistStatus, setWatchlistStatus] = useState<WatchlistStatus>("idle");
-  // A valuation starts at the higher of the global default and xhigh — already before
-  // fetchAiSettings answers, and if it fails, so a quick Generate is not a cheaper run.
-  const [aiSettings, setAiSettings] = useState<AiSettings>({
-    ...DEFAULT_AI_SETTINGS,
-    effort: deepValueDefaultEffort(DEFAULT_AI_SETTINGS.model, DEFAULT_AI_SETTINGS.effort),
-  });
+  // The app's default until fetchAiSettings answers (and if it fails); no floor of its own
+  // since 2026-11-20: a valuation runs at the user's default, which the catalog caps at `high`.
+  const [aiSettings, setAiSettings] = useState<AiSettings>(DEFAULT_AI_SETTINGS);
   // Inputs frozen when Generate is pressed — what the checks card and the watchlist describe,
   // so editing the paste, the MoS slider or the quote after a run can't mislabel it.
   const [runInputs, setRunInputs] = useState<DeepValueRunInputs | null>(null);
@@ -131,7 +128,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
   useEffect(() => {
     if (!session) return;
     fetchAiSettings()
-      .then((s) => setAiSettings({ ...s, effort: deepValueDefaultEffort(s.model, s.effort) }))
+      .then(setAiSettings)
       .catch(() => {
         // Keep the initial settings — non-fatal, generation still works.
       });

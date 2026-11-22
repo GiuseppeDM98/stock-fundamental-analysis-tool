@@ -9,8 +9,14 @@ export const AI_MODEL_IDS = [
 ] as const;
 export type AiModelId = (typeof AI_MODEL_IDS)[number];
 
+/** Every effort the API knows. The app sends none above `high` (2026-11-20: a request must
+ *  fit the 300 s a function lives on Vercel Hobby): `xhigh` and `max` stay in the list only
+ *  so a value stored before the cap is recognised and stepped down. */
 export const AI_EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
 export type AiEffort = (typeof AI_EFFORT_LEVELS)[number];
+
+const CLAUDE_EFFORTS = ["low", "medium", "high"] as const satisfies readonly AiEffort[];
+const DEEPSEEK_EFFORTS = ["low", "high"] as const satisfies readonly AiEffort[];
 
 export interface AiSettings {
   model: AiModelId;
@@ -30,19 +36,19 @@ export const AI_MODEL_CATALOG: Record<AiModelId, AiModelInfo> = {
   "claude-opus-4-8": {
     label: "Claude Opus 4.8",
     provider: "anthropic",
-    efforts: AI_EFFORT_LEVELS,
+    efforts: CLAUDE_EFFORTS,
     supportsWebSearch: true,
   },
   "claude-sonnet-5": {
     label: "Claude Sonnet 5",
     provider: "anthropic",
-    efforts: AI_EFFORT_LEVELS,
+    efforts: CLAUDE_EFFORTS,
     supportsWebSearch: true,
   },
   "claude-sonnet-5-5": {
     label: "Claude Sonnet 5.5",
     provider: "anthropic",
-    efforts: AI_EFFORT_LEVELS,
+    efforts: CLAUDE_EFFORTS,
     supportsWebSearch: true,
   },
   "deepseek-v4-pro": {
@@ -50,10 +56,11 @@ export const AI_MODEL_CATALOG: Record<AiModelId, AiModelInfo> = {
     provider: "deepseek",
     // As of the V4-Pro GA update (2026-08-13), DeepSeek maps effort as:
     // low->low, medium->high, high->high, xhigh->high, max->max — "low" is a
-    // genuinely distinct (cheaper/faster) level now, so it's offered; medium/xhigh
-    // are omitted since they're indistinguishable from high. Verified against
-    // https://api-docs.deepseek.com/guides/thinking_mode/ on 2026-08-24.
-    efforts: ["low", "high", "max"],
+    // genuinely distinct (cheaper/faster) level, so it's offered; medium is omitted since
+    // it is indistinguishable from high. Verified against
+    // https://api-docs.deepseek.com/guides/thinking_mode/ on 2026-08-24. `max` is no longer
+    // offered since 2026-11-20: no request of the app runs above `high`.
+    efforts: DEEPSEEK_EFFORTS,
     // DeepSeek's SERVER-SIDE web_search tool call parsing is unreliable through the
     // Anthropic-compat proxy — reproduced in production (Advisor, 2026-07-10): a failed
     // tool-call parse leaked raw internal template syntax ("<｜DSML｜tool_calls>...")
@@ -73,7 +80,7 @@ export const AI_MODEL_CATALOG: Record<AiModelId, AiModelInfo> = {
     provider: "deepseek",
     // Same effort mapping as v4-pro (the thinking_mode page of 2026-10-18 lists both) —
     // see the comment on deepseek-v4-pro above.
-    efforts: ["low", "high", "max"],
+    efforts: DEEPSEEK_EFFORTS,
     // Same client-executed web search as v4-pro — see the comment above.
     supportsWebSearch: true,
   },
@@ -117,11 +124,8 @@ export function callSiteDefaultEffort(model: AiModelId, preferred: AiEffort): Ai
   return supported[0];
 }
 
-/** The Deep Value call sites (the report and the analyst lenses) start at the HIGHER of
- *  the user's global default and xhigh: a valuation is the one task where the deeper pass
- *  is worth its cost, while the global default also drives the Advisor and the earnings
- *  lookup. The user can still lower it per run. */
-export function deepValueDefaultEffort(model: AiModelId, globalEffort: AiEffort): AiEffort {
-  const preferred = AI_EFFORT_LEVELS.indexOf(globalEffort) > AI_EFFORT_LEVELS.indexOf("xhigh") ? globalEffort : "xhigh";
-  return callSiteDefaultEffort(model, preferred);
+/** The lower of a run's effort and a phase's ceiling: how one phase is made cheaper than the
+ *  rest of its run without touching what the user chose. */
+export function capEffort(effort: AiEffort, ceiling: AiEffort): AiEffort {
+  return AI_EFFORT_LEVELS.indexOf(effort) > AI_EFFORT_LEVELS.indexOf(ceiling) ? ceiling : effort;
 }

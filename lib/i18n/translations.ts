@@ -192,7 +192,8 @@ export type Translations = {
   deepValueOpenSaved: string;
   deepValueRelaunch: string;
   lensCut: string;
-  lensRetryPhase2: string;
+  lensRetryPhase: string;
+  lensPhase3Pending: string;
   analysisRunning: string;
   analysisCut: string;
   analysisRetry: string;
@@ -432,6 +433,7 @@ export type Translations = {
   // ─── Blind-first lenses (every lens since 2026-11-09) ─────
   analystPhaseBlind: string;
   analystPhaseReconcile: string;
+  analystPhaseFinal: string;
   analystBlindCardTitle: string;
   analystBlindCardHint: string;
   analystBlindScenario: string;
@@ -857,7 +859,8 @@ const en: Translations = {
   deepValueOpenSaved: "Open the saved report →",
   deepValueRelaunch: "Run a new analysis",
   lensCut: "Phase {phase} was cut before the end. Retry: it restarts from that phase.",
-  lensRetryPhase2: "Retry phase 2",
+  lensRetryPhase: "Retry phase {phase}",
+  lensPhase3Pending: "Phase 3 pending",
   analysisRunning: "Analysis in progress… (started {m} min ago)",
   analysisCut: "Analysis interrupted",
   analysisRetry: "Retry",
@@ -1095,6 +1098,7 @@ const en: Translations = {
   analystRunButton: "Run",
   analystPhaseBlind: "Forming an independent view (report hidden)…",
   analystPhaseReconcile: "Reconciling with the report…",
+  analystPhaseFinal: "Fixing the final numbers…",
   analystBlindCardTitle: "Blind commitment vs. final",
   analystBlindCardHint: "Committed before this lens saw the report — the drift below shows whether it anchored to the conclusion.",
   analystBlindScenario: "Scenario",
@@ -1521,7 +1525,8 @@ const it: Translations = {
   deepValueOpenSaved: "Apri il report salvato →",
   deepValueRelaunch: "Rilancia",
   lensCut: "La fase {phase} si è interrotta prima della fine. Riprova: riparte da quella fase.",
-  lensRetryPhase2: "Riprova (Fase 2)",
+  lensRetryPhase: "Riprova (Fase {phase})",
+  lensPhase3Pending: "Fase 3 da fare",
   analysisRunning: "Analisi in corso… (da {m} min)",
   analysisCut: "Analisi interrotta",
   analysisRetry: "Riprova",
@@ -1759,6 +1764,7 @@ const it: Translations = {
   analystRunButton: "Avvia",
   analystPhaseBlind: "Sta formando una valutazione indipendente (report nascosto)…",
   analystPhaseReconcile: "Sta riconciliando con il report…",
+  analystPhaseFinal: "Sta fissando i numeri finali…",
   analystBlindCardTitle: "Impegno cieco vs. finale",
   analystBlindCardHint: "Impegnato prima che questa lente vedesse il report — lo scarto sotto mostra se si è ancorata alla conclusione.",
   analystBlindScenario: "Scenario",

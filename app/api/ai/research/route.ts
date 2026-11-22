@@ -95,7 +95,7 @@ export async function POST(request: Request) {
         // Streaming, so the ceiling cannot hit an HTTP timeout; thinking and the tool rounds'
         // reasoning count toward it. A cap, not a target.
         max_tokens: 64000,
-        thinking: buildThinkingParam(true, settings.model, settings.effort),
+        thinking: buildThinkingParam(true, settings.model),
         output_config: buildEffortConfig(settings.effort),
         system: buildResearchSystemPrompt({ currentDate }),
         tools: buildResearchTools(settings.model),

@@ -94,10 +94,36 @@ describe("runCreateWithToolLoop", () => {
     const { client } = mockClient([PAUSED, TEXT_ANSWER]);
     await runCreateWithToolLoop(client, PARAMS, 5);
     const usageLines = log.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith("[tool-loop] round"));
+    // No server_tool_use and no client call: both counts read 0.
     expect(usageLines).toEqual([
-      "[tool-loop] round 1 usage: input=10 output=5",
-      "[tool-loop] round 2 usage: input=10 output=5",
+      "[tool-loop] round 1 usage: input=10 output=5 searches=0 fetches=0",
+      "[tool-loop] round 2 usage: input=10 output=5 searches=0 fetches=0",
     ]);
+  });
+
+  it("counts a Claude round's searches and fetches from usage.server_tool_use", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const claudeRound = {
+      ...TEXT_ANSWER,
+      usage: { ...USAGE, server_tool_use: { web_search_requests: 2, web_fetch_requests: 1 } },
+    } as unknown as Anthropic.Message;
+    const { client } = mockClient([claudeRound]);
+    await runCreateWithToolLoop(client, PARAMS, 5);
+    const usageLines = log.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith("[tool-loop] round"));
+    expect(usageLines).toEqual(["[tool-loop] round 1 usage: input=10 output=5 searches=2 fetches=1"]);
+  });
+
+  it("counts a DeepSeek round's client tool_use blocks, which carry no server_tool_use", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const deepseekRound = message("tool_use", [
+      { type: "tool_use", id: "s1", name: "web_search", input: { query: "a" } },
+      { type: "tool_use", id: "s2", name: "web_search", input: { query: "b" } },
+      { type: "tool_use", id: "f1", name: "web_fetch", input: { url: "https://example.test/a" } },
+    ]);
+    const { client } = mockClient([deepseekRound, TEXT_ANSWER]);
+    await runCreateWithToolLoop(client, PARAMS, 5, { fetchBudget: 1 });
+    const usageLines = log.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith("[tool-loop] round"));
+    expect(usageLines[0]).toBe("[tool-loop] round 1 usage: input=10 output=5 searches=2 fetches=1");
   });
 });
 

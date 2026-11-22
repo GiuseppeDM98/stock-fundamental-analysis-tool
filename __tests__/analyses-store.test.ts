@@ -23,7 +23,8 @@ import {
   finishAnalysisRun,
   failAnalysisRun,
   saveLensBlind,
-  saveLensFinal,
+  saveLensCritique,
+  saveLensResult,
   startAnalysisRun,
   readLensRow,
 } from "@/lib/analyses-store";
@@ -182,9 +183,11 @@ describe("lens writes", () => {
     expect(updateMany.mock.calls[0][0].data).toMatchObject({ qualityBlindJson: null, qualityCritiqueMd: null });
   });
 
-  it("saveLensFinal writes null numbers on an incomplete final JSON (never keeps the previous run's)", async () => {
-    await saveLensFinal("an1", "u1", "optimist", { critiqueMd: "Critique.", result: { method: "DCF", sector: "", currency: "EUR", bull: { fairValue: 30 }, base: { fairValue: 20 } } });
-    expect(updateMany.mock.calls[0][0].data).toEqual({
+  it("saveLensCritique writes the critique and clears the five number fields (a new critique makes them stale)", async () => {
+    await saveLensCritique("an1", "u1", "optimist", "Critique.");
+    const { where, data } = updateMany.mock.calls[0][0];
+    expect(where).toEqual({ id: "an1", userId: "u1" });
+    expect(data).toEqual({
       optimistCritiqueMd: "Critique.",
       optimistFairValueBull: null,
       optimistFairValueBase: null,
@@ -194,11 +197,28 @@ describe("lens writes", () => {
     });
   });
 
-  it("readLensRow selects the lens's blind column with the price, its currency, the result and the save date", async () => {
-    findFirst.mockResolvedValue({ runStatus: "done", reviewBlindJson: "{}", priceAtAnalysis: 3.5, priceCurrency: "GBp" });
+  it("saveLensResult writes the numbers only on the row whose critique is still the one read", async () => {
+    updateMany.mockResolvedValueOnce({ count: 1 });
+    const count = await saveLensResult("an1", "u1", "quality", "The critique read.", FULL);
+    const { where, data } = updateMany.mock.calls[0][0];
+    // The critique in the where: numbers never land next to a critique that did not produce them.
+    expect(where).toEqual({ id: "an1", userId: "u1", qualityCritiqueMd: "The critique read." });
+    expect(data).toEqual({
+      qualityFairValueBull: 30,
+      qualityFairValueBase: 20,
+      qualityFairValueBear: 10,
+      qualityValuationMethod: FULL.method.slice(0, 40),
+      qualityResultJson: JSON.stringify(FULL),
+    });
+    expect(count).toBe(1);
+  });
+
+  it("readLensRow selects the lens's blind and critique columns with the price, its currency, the result and the save date", async () => {
+    findFirst.mockResolvedValue({ runStatus: "done", reviewBlindJson: "{}", reviewMd: "Critique.", priceAtAnalysis: 3.5, priceCurrency: "GBp" });
     const lens = await readLensRow("an1", "u1", "skeptic");
     const select = findFirst.mock.calls[0][0].select;
-    expect(select).toMatchObject({ reviewBlindJson: true, priceAtAnalysis: true, priceCurrency: true, resultJson: true, createdAt: true, reportMd: true });
+    expect(select).toMatchObject({ reviewBlindJson: true, reviewMd: true, priceAtAnalysis: true, priceCurrency: true, resultJson: true, createdAt: true, reportMd: true });
     expect(lens?.blindJson).toBe("{}");
+    expect(lens?.critiqueMd).toBe("Critique.");
   });
 });

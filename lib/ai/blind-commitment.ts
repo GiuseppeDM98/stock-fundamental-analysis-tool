@@ -1,5 +1,6 @@
 // A blind-first analyst lens's Phase-1 commitment: picked out of the raw Phase-1 text, and
-// rebuilt as the assistant turn Phase 2 is sent.
+// rebuilt as the assistant turn Phase 2 is sent; and the Phase-2 critique, rebuilt as the
+// assistant turn Phase 3 is sent (2026-11-20: the final numbers are a request of their own).
 //
 // Phase 1 is never streamed to the client: besides the JSON commitment it carries whatever
 // the model wrote around it (reasoning between searches before the block, the short
@@ -15,7 +16,7 @@
 //
 // Pure (no I/O) so the selection rules are unit-testable without a stream.
 import type { DeepValueResult } from "@/components/report/types";
-import { RATIONALE_MAX_CHARS, type Phase1Quote } from "@/lib/report/parse-deep-value-json";
+import { CRITIQUE_START_MARKER, RATIONALE_MAX_CHARS, type Phase1Quote } from "@/lib/report/parse-deep-value-json";
 
 const JSON_FENCE_RE = /```json\n([\s\S]*?)\n```/g;
 
@@ -68,4 +69,10 @@ export function buildBlindAssistantTurn(blind: DeepValueResult & { rationale?: s
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { rationale: _omitted, phase1Quote: _quote, ...json } = blind;
   return "```json\n" + JSON.stringify(json, null, 2) + "\n```\n\n" + rationale;
+}
+
+/** The critique as the assistant turn Phase 3 answers to: the marker the stream gate dropped,
+ *  then the stored text. */
+export function buildCritiqueAssistantTurn(critiqueMd: string): string {
+  return `${CRITIQUE_START_MARKER}\n${critiqueMd}`;
 }

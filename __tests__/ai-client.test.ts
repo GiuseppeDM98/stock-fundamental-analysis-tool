@@ -3,36 +3,48 @@ import { buildEffortConfig, buildResearchTools, buildThinkingParam, buildWebSear
 import { AI_MODEL_CATALOG } from "@/types/ai-settings";
 
 describe("buildThinkingParam", () => {
-  it("returns adaptive thinking whenever thinking is on, for any model and effort", () => {
+  it("returns adaptive thinking whenever thinking is on, for any model", () => {
     expect(buildThinkingParam(true)).toEqual({ type: "adaptive" });
-    expect(buildThinkingParam(true, "claude-sonnet-5-5", "max")).toEqual({ type: "adaptive" });
+    expect(buildThinkingParam(true, "claude-sonnet-5-5")).toEqual({ type: "adaptive" });
   });
 
   it("keeps the explicit disabled config for models that accept it", () => {
-    expect(buildThinkingParam(false, "claude-opus-4-8", "high")).toEqual({ type: "disabled" });
-    expect(buildThinkingParam(false, "claude-sonnet-5", "low")).toEqual({ type: "disabled" });
+    expect(buildThinkingParam(false, "claude-opus-4-8")).toEqual({ type: "disabled" });
+    expect(buildThinkingParam(false, "claude-sonnet-5")).toEqual({ type: "disabled" });
   });
 
   it("uses between_tools on Sonnet 5.5, which rejects disabled with a 400", () => {
-    // effort high or below is the only range where the API accepts between_tools
-    expect(buildThinkingParam(false, "claude-sonnet-5-5", "high")).toEqual({ type: "between_tools" });
-    expect(buildThinkingParam(false, "claude-sonnet-5-5", "low")).toEqual({ type: "between_tools" });
-  });
-
-  it("cannot turn thinking off on Sonnet 5.5 at xhigh or max, so it stays adaptive", () => {
-    expect(buildThinkingParam(false, "claude-sonnet-5-5", "xhigh")).toEqual({ type: "adaptive" });
-    expect(buildThinkingParam(false, "claude-sonnet-5-5", "max")).toEqual({ type: "adaptive" });
+    // The API accepts between_tools only at effort high or below: since 2026-11-20 every request.
+    expect(buildThinkingParam(false, "claude-sonnet-5-5")).toEqual({ type: "between_tools" });
   });
 });
 
 describe("Sonnet 5.5 catalog entry", () => {
-  it("is an Anthropic model with web search and every effort level", () => {
+  it("is an Anthropic model with web search and the efforts up to high", () => {
     const info = AI_MODEL_CATALOG["claude-sonnet-5-5"];
     expect(info.provider).toBe("anthropic");
-    expect(info.efforts).toEqual(["low", "medium", "high", "xhigh", "max"]);
+    expect(info.efforts).toEqual(["low", "medium", "high"]);
     expect(buildWebSearchTools("claude-sonnet-5-5")).toEqual([
       { type: "web_search_20260209", name: "web_search" },
     ]);
+  });
+});
+
+describe("buildWebSearchTools with a search cap", () => {
+  it("makes the cap real on Claude: max_uses with direct calls only, so a pause_turn resume does not re-arm it", () => {
+    expect(buildWebSearchTools("claude-opus-4-8", { maxUses: 5 })).toEqual([
+      { type: "web_search_20260209", name: "web_search", max_uses: 5, allowed_callers: ["direct"] },
+    ]);
+  });
+
+  it("sends neither field without the option", () => {
+    const [tool] = buildWebSearchTools("claude-opus-4-8") as unknown as Record<string, unknown>[];
+    expect(tool).not.toHaveProperty("max_uses");
+    expect(tool).not.toHaveProperty("allowed_callers");
+  });
+
+  it("gives DeepSeek its client tool whatever the cap: only the loop's rounds bound it", () => {
+    expect(buildWebSearchTools("deepseek-v4-pro", { maxUses: 5 })).toEqual(buildWebSearchTools("deepseek-v4-pro"));
   });
 });
 
@@ -47,8 +59,8 @@ describe("DeepSeek web search tool", () => {
 });
 
 describe("buildEffortConfig", () => {
-  it("passes every effort level through as typed, xhigh included", () => {
-    expect(buildEffortConfig("xhigh")).toEqual({ effort: "xhigh" });
+  it("passes the effort level through as typed", () => {
+    expect(buildEffortConfig("high")).toEqual({ effort: "high" });
     expect(buildEffortConfig("low")).toEqual({ effort: "low" });
   });
 });

@@ -4,21 +4,20 @@
 //
 // After an analysis is saved, the user can run up to three independent second-opinion
 // passes over it — a skeptic (red-team), an optimist (bull case) and a quality lens —
-// each from /api/ai/deep-value/verify with its `angle`, in two requests (the blind commitment,
-// then the critique) that the server writes to the row as each ends (components/use-lens-run.ts,
-// since 2026-10-27). Each pass writes a critique and closes it with its own bull/base/bear
-// valuation (the JSON block last).
+// each from /api/ai/deep-value/verify with its `angle`, in three requests (the blind
+// commitment, the critique, then the final numbers) that the server writes to the row as each
+// ends (components/use-lens-run.ts; two requests since 2026-10-27, three since 2026-11-20). Each
+// pass writes a critique and answers it with its own bull/base/bear valuation.
 // The base analysis plus every analyst run are averaged into the consensus shown on the
 // analyses list and watchlist.
 //
-// Each analyst is on-demand (its own button) — never auto-run: each is an Opus xhigh + web
-// search pass that costs real tokens and takes minutes (510 s for the Skeptic on 2026-10-29).
+// Each analyst is on-demand (its own button) — never auto-run: each is three Opus requests with
+// web search that cost real tokens and take minutes (510 s for the Skeptic on 2026-10-29).
 import { useEffect, useMemo, useState, useRef } from "react";
-import { useLensRun, type LensRunState } from "@/components/use-lens-run";
+import { lensPhaseNumber, useLensRun, type LensRunState } from "@/components/use-lens-run";
 import { useLanguage } from "@/context/language-context";
 import { APP_TO_AI_LANGUAGE } from "@/lib/i18n/translations";
 import {
-  parseBlindJson,
   stripJsonBlock,
   stripTrailingOpenJsonFence,
   hasFullTriple,
@@ -29,10 +28,11 @@ import AnalystBlindCard from "@/components/report/analyst-blind-card";
 import AnalystFinalCard from "@/components/report/analyst-final-card";
 import { AiSettingsControl } from "@/components/ai-settings-control";
 import { fetchAiSettings } from "@/lib/ai-settings-client";
-import { DEFAULT_AI_SETTINGS, deepValueDefaultEffort, type AiSettings } from "@/types/ai-settings";
+import { DEFAULT_AI_SETTINGS, type AiSettings } from "@/types/ai-settings";
 import type { AnalystAngle, SavedAnalysis } from "@/types/analysis";
 import type { LensPhase } from "@/types/ai-run";
 import { ANALYST_COLUMNS } from "@/lib/report/consensus";
+import { lensPhaseOf } from "@/lib/report/lens-progress";
 import { ANALYST_ANGLES } from "@/types/analysis";
 import type { AnalystResult } from "@/components/report/types";
 import type { Triple } from "@/lib/report/valuation";
@@ -114,18 +114,15 @@ export default function AnalystPanel({
   priceSource,
 }: PanelProps) {
   const { t } = useLanguage();
-  // A lens starts at the same floor as the report it reviews — the higher of the global
-  // default and xhigh — already before fetchAiSettings answers, and if it fails.
-  const [aiSettings, setAiSettings] = useState<AiSettings>({
-    ...DEFAULT_AI_SETTINGS,
-    effort: deepValueDefaultEffort(DEFAULT_AI_SETTINGS.model, DEFAULT_AI_SETTINGS.effort),
-  });
+  // The app's default until fetchAiSettings answers (and if it fails); no floor of its own
+  // since 2026-11-20: a lens runs at the user's default, which the catalog caps at `high`.
+  const [aiSettings, setAiSettings] = useState<AiSettings>(DEFAULT_AI_SETTINGS);
 
   // Shared across all three lenses (not per-lens) — loaded once from the user's global
   // default, overridable here before running whichever lens the user clicks next.
   useEffect(() => {
     fetchAiSettings()
-      .then((s) => setAiSettings({ ...s, effort: deepValueDefaultEffort(s.model, s.effort) }))
+      .then(setAiSettings)
       .catch(() => {
         // Keep the initial settings — non-fatal, review still works.
       });
@@ -253,12 +250,17 @@ function AnalystSlot({
   const [liveBlind, setLiveBlind] = useState<AnalystResult | null>(null);
   const [liveCritique, setLiveCritique] = useState("");
   const liveBlindRef = useRef<AnalystResult | null>(null);
-  // A run finished here: only then is a missing final JSON news worth a line.
-  const [ranHere, setRanHere] = useState(false);
-
-  // A stored critique → done; a stored commitment with no critique after it → Phase 2 is
-  // left to run (a Phase 1 already paid is not paid again).
-  const initialState: LensRunState = initialCritiqueMd ? { kind: "done" } : parseBlindJson(initialBlindJson ?? "") ? { kind: "resumable" } : { kind: "idle" };
+  // Where the row left the lens: complete → done; a commitment without a critique, or a
+  // critique without its numbers → that request is left to run (a phase already paid is not
+  // paid again); nothing → idle.
+  const initialPhase = lensPhaseOf({
+    critique: initialCritiqueMd,
+    blindJson: initialBlindJson,
+    resultJson: initialResultJson,
+    hasNumbers: initialFinalTriple != null,
+  });
+  const initialState: LensRunState =
+    initialPhase === null ? { kind: "done" } : initialPhase === "blind" ? { kind: "idle" } : { kind: "resumable", from: initialPhase };
   const lens = useLensRun(
     analysisId,
     angle,
@@ -280,7 +282,7 @@ function AnalystSlot({
   const storedBlind = useMemo(() => parseStoredResult(stored.blindJson), [stored.blindJson]);
   const blindResult: AnalystResult | null = hasLiveRun ? liveBlind : storedBlind;
 
-  // The lens's FINAL JSON, from the row: the server writes it when Phase 2 ends, and the
+  // The lens's FINAL JSON, from the row: the server writes it when Phase 3 ends, and the
   // panel re-reads the row then. Only a full triple counts.
   const finalResult: AnalystResult | null = useMemo(
     () => (hasLiveRun ? null : parseStoredResult(stored.resultJson)),
@@ -294,10 +296,9 @@ function AnalystSlot({
     : hasLiveRun
       ? null
       : stored.finalTriple;
-  // A finished lens whose final JSON is missing or lacks a scenario: the critique is shown,
-  // the lens's numbers were cleared by the server — and the slot says so.
+  // A critique without its numbers is not an end state any more (2026-11-20): it is the
+  // resumable "Retry phase 3", and the final column stays empty until Phase 3 writes.
   const critique = hasLiveRun ? liveCritique : (stored.critique ?? "");
-  const finalIncomplete = ranHere && state.kind === "done" && !hasLiveRun && !finalResult && !stored.finalTriple;
 
   const revisions = finalResult?.revisions;
 
@@ -327,17 +328,17 @@ function AnalystSlot({
   async function run(from: LensPhase) {
     // The route answers 400 without a dataset: the buttons are disabled, this is the backstop.
     if (!hasDataset) return;
-    // A Phase 2 alone reasons from the commitment already on the row: keep its card.
-    const seed = from === "reconcile" ? storedBlind : null;
+    // A resumed run reasons from what the row already holds: keep the blind card, and for
+    // the final numbers the critique too, on screen while the request runs (also after a reload).
+    const seed = from === "blind" ? null : storedBlind;
     liveBlindRef.current = seed;
     setLiveBlind(seed);
-    setLiveCritique("");
+    setLiveCritique(from === "final" ? (stored.critique ?? "") : "");
     setHasLiveRun(true);
     const end = await lens.start(from);
     if (end == null) return;
     // Done: the row (re-read by the hook) is the source of every number from here.
     if (end.kind === "done") {
-      setRanHere(true);
       setHasLiveRun(false);
       return;
     }
@@ -360,8 +361,8 @@ function AnalystSlot({
         {(state.kind === "idle" || state.kind === "resumable") && (
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             {state.kind === "resumable" && (
-              <button onClick={() => run("reconcile")} disabled={!hasDataset} title={hasDataset ? undefined : t("analystNeedsDataset")} className={runButton}>
-                {t("lensRetryPhase2")}
+              <button onClick={() => run(state.from)} disabled={!hasDataset} title={hasDataset ? undefined : t("analystNeedsDataset")} className={runButton}>
+                {t("lensRetryPhase").replace("{phase}", String(lensPhaseNumber(state.from)))}
               </button>
             )}
             <button onClick={() => run("blind")} disabled={!hasDataset} title={hasDataset ? undefined : t("analystNeedsDataset")} className={runButton}>
@@ -373,7 +374,7 @@ function AnalystSlot({
         {isRunning && (
           <span className="flex shrink-0 items-center gap-2 text-xs text-violet-300 print:hidden">
             <span className="h-3 w-3 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />
-            {state.phase === "blind" ? t("analystPhaseBlind") : t("analystPhaseReconcile")}
+            {state.phase === "blind" ? t("analystPhaseBlind") : state.phase === "reconcile" ? t("analystPhaseReconcile") : t("analystPhaseFinal")}
           </span>
         )}
 
@@ -394,7 +395,7 @@ function AnalystSlot({
           <p className="text-sm text-red-400">{state.error}</p>
           {state.retryable && (
             <button onClick={() => run(state.resumeFrom)} disabled={!hasDataset} className={runButton}>
-              {state.resumeFrom === "reconcile" ? t("lensRetryPhase2") : t("deepValueRetry")}
+              {state.resumeFrom === "blind" ? t("deepValueRetry") : t("lensRetryPhase").replace("{phase}", String(lensPhaseNumber(state.resumeFrom)))}
             </button>
           )}
           <button onClick={() => run("blind")} disabled={!hasDataset} className={runButton}>
@@ -403,8 +404,8 @@ function AnalystSlot({
         </div>
       )}
 
-      {/* The blind card appears as soon as Phase 1 ends, offsetting the two-phase wait —
-          the final column fills in once Phase 2 is written, or immediately on mount from a
+      {/* The blind card appears as soon as Phase 1 ends, offsetting the wait for the rest —
+          the final column fills in once Phase 3 is written, or immediately on mount from a
           persisted commitment. */}
       {blindResult && (
         <AnalystBlindCard
@@ -414,7 +415,6 @@ function AnalystSlot({
           revisions={revisions}
           gates={blindGates}
           finalKillPriceGate={finalKillPriceGate}
-          finalIncomplete={finalIncomplete}
           priceSource={priceSource}
         />
       )}
@@ -430,13 +430,10 @@ function AnalystSlot({
         />
       )}
 
-      {/* With a blind card the card itself carries this line, in place of its final column. */}
-      {finalIncomplete && !blindResult && <p className="mt-3 text-xs text-warning">{t("deepValueIncompleteJson")}</p>}
-
       {critique && (
         <div className="mt-3">
           {isRunning && <span className="mb-2 inline-block h-3 w-1.5 animate-pulse bg-violet-400 print:hidden" />}
-          {/* The final JSON closes the critique: while streaming its fence is still open. */}
+          {/* A model that writes a JSON block anyway: while streaming its fence is still open. */}
           <ReportBody markdown={stripJsonBlock(isRunning ? stripTrailingOpenJsonFence(critique) : critique)} />
         </div>
       )}

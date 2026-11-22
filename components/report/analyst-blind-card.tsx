@@ -39,9 +39,6 @@ type Props = {
   // The kill_price gate evaluated on the FINAL JSON, shown next to the blind gates so a
   // kill price dropped or changed during reconciliation is visible. Display-only.
   finalKillPriceGate?: Gate;
-  // The run finished but its FINAL JSON lacks a scenario: no final column to fill, so the
-  // card says so in its place instead of waiting forever on "…".
-  finalIncomplete?: boolean;
   // Which price the gates were checked against: "analysis" adds a line saying so.
   priceSource: "live" | "analysis";
 };
@@ -63,7 +60,6 @@ export default function AnalystBlindCard({
   revisions,
   gates,
   finalKillPriceGate,
-  finalIncomplete = false,
   priceSource,
 }: Props) {
   const { t } = useLanguage();
@@ -83,12 +79,8 @@ export default function AnalystBlindCard({
           <tr className="text-slate-400">
             <th className="pb-1 text-left font-normal">{t("analystBlindScenario")}</th>
             <th className="pb-1 text-right font-normal">{t("analystBlindPhase1")}</th>
-            {!finalIncomplete && (
-              <>
-                <th className="pb-1 text-right font-normal">{t("analystBlindFinal")}</th>
-                <th className="pb-1 text-right font-normal">{t("analystBlindDrift")}</th>
-              </>
-            )}
+            <th className="pb-1 text-right font-normal">{t("analystBlindFinal")}</th>
+            <th className="pb-1 text-right font-normal">{t("analystBlindDrift")}</th>
           </tr>
         </thead>
         <tbody>
@@ -105,25 +97,22 @@ export default function AnalystBlindCard({
                 <td data-label={t("analystBlindPhase1")} className="py-1 text-right tabular-nums text-slate-300">
                   {blindValue.toFixed(2)}
                 </td>
-                {!finalIncomplete && (
-                  <>
-                    <td data-label={t("analystBlindFinal")} className="py-1 text-right tabular-nums text-slate-300">
-                      {finalValue != null ? finalValue.toFixed(2) : "…"}
-                    </td>
-                    <td
-                      data-label={t("analystBlindDrift")}
-                      className={`py-1 text-right tabular-nums ${driftIsWide ? "text-amber-300" : "text-slate-500"}`}
-                    >
-                      {drift != null ? `${drift >= 0 ? "+" : ""}${(drift * 100).toFixed(1)}%` : "—"}
-                    </td>
-                  </>
-                )}
+                {/* Empty ("…") until the final numbers are written: a lens left at its
+                    critique offers "Retry phase 3" above the card (2026-11-20). */}
+                <td data-label={t("analystBlindFinal")} className="py-1 text-right tabular-nums text-slate-300">
+                  {finalValue != null ? finalValue.toFixed(2) : "…"}
+                </td>
+                <td
+                  data-label={t("analystBlindDrift")}
+                  className={`py-1 text-right tabular-nums ${driftIsWide ? "text-amber-300" : "text-slate-500"}`}
+                >
+                  {drift != null ? `${drift >= 0 ? "+" : ""}${(drift * 100).toFixed(1)}%` : "—"}
+                </td>
               </tr>
             );
           })}
         </tbody>
       </table>
-      {finalIncomplete && <p className="mt-2 text-[11px] text-warning">{t("deepValueIncompleteJson")}</p>}
 
       {(blindKill != null || finalKill != null) && (
         <p className="mt-2 text-[11px] text-slate-400">

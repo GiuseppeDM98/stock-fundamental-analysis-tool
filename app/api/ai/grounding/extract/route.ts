@@ -2,7 +2,7 @@
 // blocks into structured JSON (Sonnet 5.5, tools: [] — pure transcription, not judgment;
 // the ONLY call site in the whole dataset path with web search off), merges them,
 // and computes the deterministic anchors so the client can render a verifiable preview
-// before spending a Deep Value run (minutes at xhigh) on possibly-mistranscribed data.
+// before spending a Deep Value run (minutes of Opus) on possibly-mistranscribed data.
 //
 // One extraction call PER BLOCK, in parallel (Promise.allSettled) — a failed block
 // raises a `block_extract_failed` warning instead of sinking the whole request; only a
@@ -49,7 +49,7 @@ import { computeDatasetAnchors } from "@/lib/datasets/anchors-bundle";
 import { buildBlockFailureWarnings } from "@/lib/grounding-warnings";
 
 // Extraction is pure transcription, so it is pinned to Sonnet 5.5 at medium effort and
-// deliberately ignores the user's global AI default: an Opus xhigh default would run once
+// deliberately ignores the user's global AI default: an Opus default would run once
 // per pasted block, in parallel, for no gain in transcription accuracy.
 const EXTRACT_AI_SETTINGS: AiSettings = { model: "claude-sonnet-5-5", effort: "medium", thinking: true };
 
@@ -185,7 +185,7 @@ async function extractBlock(
       // output format guarantees the shape, not the length, so the ceiling stays: matched
       // to the Deep Value routes', a cap, not a target.
       max_tokens: 64000,
-      thinking: buildThinkingParam(aiSettings.thinking, aiSettings.model, aiSettings.effort),
+      thinking: buildThinkingParam(aiSettings.thinking, aiSettings.model),
       output_config: { ...buildEffortConfig(aiSettings.effort), format: extractionOutputFormat(block.kind) },
       system: buildGroundingExtractSystemPrompt({ kind: block.kind }),
       tools: [], // pure transcription — see the module doc comment above

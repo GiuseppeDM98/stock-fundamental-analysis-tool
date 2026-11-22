@@ -8,7 +8,7 @@ vi.mock("@/lib/db", () => ({
 import { aiModelIdSchema, researchAiSettings, resolveAiSettings } from "@/lib/ai/ai-preferences";
 import type { AiSettings } from "@/types/ai-settings";
 
-const FALLBACK: AiSettings = { model: "claude-opus-4-8", effort: "xhigh", thinking: true };
+const FALLBACK: AiSettings = { model: "claude-opus-4-8", effort: "high", thinking: true };
 
 describe("resolveAiSettings", () => {
   it("uses a full request override without touching the DB", async () => {
@@ -28,6 +28,26 @@ describe("resolveAiSettings", () => {
     expect(result).toEqual({ model: "claude-sonnet-5", effort: "medium", thinking: false });
   });
 
+  it("steps a stored effort above high down to high (2026-11-20), and keeps one below it", async () => {
+    findUniqueMock.mockResolvedValueOnce({ aiModel: "claude-opus-4-8", aiEffort: "xhigh", aiThinkingEnabled: true });
+    expect((await resolveAiSettings("user-x", undefined, FALLBACK)).effort).toBe("high");
+    findUniqueMock.mockResolvedValueOnce({ aiModel: "deepseek-v4-pro", aiEffort: "max", aiThinkingEnabled: true });
+    expect((await resolveAiSettings("user-y", undefined, FALLBACK)).effort).toBe("high");
+    findUniqueMock.mockResolvedValueOnce({ aiModel: "claude-opus-4-8", aiEffort: "medium", aiThinkingEnabled: true });
+    expect((await resolveAiSettings("user-z", undefined, FALLBACK)).effort).toBe("medium");
+  });
+
+  it("steps a full override above high down to high without reading the DB (an old tab)", async () => {
+    findUniqueMock.mockClear();
+    expect(await resolveAiSettings("u", { model: "claude-opus-4-8", effort: "xhigh", thinking: true }, FALLBACK)).toEqual({
+      model: "claude-opus-4-8",
+      effort: "high",
+      thinking: true,
+    });
+    expect((await resolveAiSettings("u", { model: "deepseek-v4-pro", effort: "max", thinking: true }, FALLBACK)).effort).toBe("high");
+    expect(findUniqueMock).not.toHaveBeenCalled();
+  });
+
   it("falls back to the route default when the user has no row / invalid stored values", async () => {
     findUniqueMock.mockResolvedValueOnce(null);
     const result = await resolveAiSettings("user3", undefined, FALLBACK);
@@ -37,7 +57,7 @@ describe("resolveAiSettings", () => {
   it("clamps an effort level the selected model doesn't support down to the nearest lower one", async () => {
     findUniqueMock.mockResolvedValueOnce({
       aiModel: "deepseek-v4-pro",
-      aiEffort: "xhigh", // not in deepseek's ["low","high","max"] catalog list
+      aiEffort: "xhigh", // not in deepseek's ["low","high"] catalog list
       aiThinkingEnabled: true,
     });
     const result = await resolveAiSettings("user4", undefined, FALLBACK);
@@ -54,7 +74,7 @@ describe("resolveAiSettings", () => {
     });
     const result = await resolveAiSettings("user5", { model: "deepseek-v4-pro" }, FALLBACK);
     expect(result.model).toBe("deepseek-v4-pro");
-    // stored effort "high" is valid for deepseek's catalog (["low","high","max"]) so it survives
+    // stored effort "high" is valid for deepseek's catalog (["low","high"]) so it survives
     expect(result.effort).toBe("high");
   });
 
