@@ -100,11 +100,27 @@ export type DatasetMeta = {
 
 export type FinancialDataset = GroundedFinancials & { datasetMeta: DatasetMeta };
 
+/** The three requests of a web research, in order. */
+export const RESEARCH_PARTS = ["statements", "market", "estimates"] as const;
+export type ResearchPart = (typeof RESEARCH_PARTS)[number];
+
+/** One request of a web research, as ResearchMeta keeps it: a skipped part ran nothing. */
+export type ResearchPartSummary = {
+  part: ResearchPart;
+  status: "done" | "skipped";
+  searches: number;
+  fetches: number;
+  durationMs: number;
+};
+
 /** How a web dataset was researched (FinancialDataset.researchJson): the run's model and
  *  effort, the searches and fetches it made, how long it took, the cited URLs the run never
  *  opened, and the model's own notes (the EBITDA definition used, gaps). `model` is the
  *  resolved one; `servedBy` names the model that answered instead through Sonnet 5.5's
- *  refusal fallback (lib/ai/fallback.ts), null when the resolved model answered itself. */
+ *  refusal fallback (lib/ai/fallback.ts), null when the resolved model answered itself.
+ *  Since 2026-11-22 a research is three requests: searches, fetches and duration are their
+ *  sums, notes the parts' notes joined, and `parts` one line per request (absent on a dataset
+ *  researched in one request before then). */
 export type ResearchMeta = {
   model: AiModelId;
   servedBy: string | null;
@@ -114,6 +130,7 @@ export type ResearchMeta = {
   durationMs: number;
   unverifiedSources: string[];
   notes: string | null;
+  parts?: ResearchPartSummary[];
 };
 
 /** A FinancialDataset row read back and validated (lib/datasets/parse.ts). `research` is null

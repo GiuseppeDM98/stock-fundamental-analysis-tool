@@ -282,6 +282,26 @@ const ORNT_RESEARCH: ResearchMeta = {
   durationMs: 95000,
   unverifiedSources: [ORNT_MULTIPLES_PAGE.url!],
   notes: null,
+  parts: [
+    { part: "statements", status: "done", searches: 3, fetches: 2, durationMs: 50000 },
+    { part: "market", status: "done", searches: 3, fetches: 1, durationMs: 30000 },
+    { part: "estimates", status: "done", searches: 1, fetches: 0, durationMs: 15000 },
+  ],
+};
+
+/** CAPR's research: the estimates part was skipped ("Continue without"), so it ran nothing. */
+const CAPR_RESEARCH: ResearchMeta = {
+  ...ORNT_RESEARCH,
+  searches: 6,
+  fetches: 3,
+  durationMs: 80000,
+  unverifiedSources: [],
+  notes: `${DECOY.skippedCompany}: statements from the annual report.`,
+  parts: [
+    { part: "statements", status: "done", searches: 3, fetches: 2, durationMs: 50000 },
+    { part: "market", status: "done", searches: 3, fetches: 1, durationMs: 30000 },
+    { part: "estimates", status: "skipped", searches: 0, fetches: 0, durationMs: 0 },
+  ],
 };
 
 function orntWebDataset(createdAt: Date): FinancialDataset {
@@ -327,6 +347,12 @@ function orntWebDataset(createdAt: Date): FinancialDataset {
     peers: [],
     datasetMeta: { ticker: TICKERS.panel, createdAt: createdAt.toISOString(), origin: "web", pasteDatasetId: null, webDatasetId: null },
   };
+}
+
+/** The CAPR web dataset: the ORNT one with its own ticker and no estimates (the part was skipped). */
+function caprWebDataset(createdAt: Date): FinancialDataset {
+  const ornt = orntWebDataset(createdAt);
+  return { ...ornt, estimates: [], datasetMeta: { ...ornt.datasetMeta, ticker: TICKERS.skipped } };
 }
 
 /** The NSCA web dataset: a minimal copy of the ORNT one with its own numbers and ticker. */
@@ -447,6 +473,7 @@ async function wipeFixtureUsers(db: PrismaClient): Promise<void> {
   await db.advisorSession.deleteMany(byUser);
   await db.analysis.deleteMany(byUser);
   await db.financialDataset.deleteMany(byUser);
+  await db.researchRun.deleteMany(byUser);
   await db.position.deleteMany(byUser);
   await db.portfolioSnapshot.deleteMany(byUser);
   await db.watchlistItem.deleteMany(byUser);
@@ -504,6 +531,23 @@ async function seedDatasets(db: PrismaClient, today: Date): Promise<void> {
       warningsJson: "[]",
       researchJson: JSON.stringify(ORNT_RESEARCH),
       createdAt: nscaAt,
+    },
+  });
+  const caprAt = daysFrom(today, -2);
+  await db.financialDataset.create({
+    data: {
+      id: IDS.datasetSkipped,
+      userId: USER_A.id,
+      ticker: TICKERS.skipped,
+      origin: "web",
+      currency: "USD",
+      units: "millions",
+      coverageLabel: "FY2025",
+      dataJson: JSON.stringify(caprWebDataset(caprAt)),
+      blocksJson: null,
+      warningsJson: JSON.stringify([{ code: "research_part_skipped", severity: "info", fiscalYear: null, detail: "estimates" }]),
+      researchJson: JSON.stringify(CAPR_RESEARCH),
+      createdAt: caprAt,
     },
   });
   const userBAt = daysFrom(today, -1);

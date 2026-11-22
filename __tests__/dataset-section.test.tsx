@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createElement } from "react";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 import { DatasetSection } from "@/components/dataset-section";
 import { pasteSource } from "@/lib/grounding/merge";
@@ -8,15 +8,29 @@ import { DATASET_REUSE_MAX_AGE_DAYS, emptyRowSources, type DatasetOrigin, type M
 import type { GroundingBlock } from "@/types/grounding";
 import type { GroundingExtractResponse } from "@/lib/grounding-client";
 import { makeBasis, makeExtract, makeFinancialsRow, makeMeta } from "./grounding-test-helpers";
+import { ResearchPartError } from "@/lib/dataset-client";
 
 const fetchLatestMock = vi.fn();
+// The whole research as one answer (a run whose start closed it): what these tests are about
+// is what the section does with the dataset. The chain of parts has its own cases below and
+// in use-research-run.test.tsx.
 const researchMock = vi.fn();
+const continueMock = vi.fn();
+const readStateMock = vi.fn();
 const mergeMock = vi.fn();
 const createPasteMock = vi.fn();
 const extractMock = vi.fn();
-vi.mock("@/lib/dataset-client", () => ({
+vi.mock("@/lib/dataset-client", async (importOriginal) => ({
+  // The real ResearchPartError: the hook tells a lost answer by its class.
+  ...(await importOriginal<typeof import("@/lib/dataset-client")>()),
   fetchLatestDataset: (...args: unknown[]) => fetchLatestMock(...args),
-  researchDataset: (...args: unknown[]) => researchMock(...args),
+  startResearch: async (...args: unknown[]) => {
+    const answer = await researchMock(...args);
+    // A step (it names the next part) passes as is; a bare dataset is a run closed at once.
+    return answer && "next" in answer ? answer : { runId: "run1", part: "statements", next: null, result: answer };
+  },
+  continueResearch: (...args: unknown[]) => continueMock(...args),
+  readResearchState: (...args: unknown[]) => readStateMock(...args),
   createMergedDataset: (...args: unknown[]) => mergeMock(...args),
   createPasteDataset: (...args: unknown[]) => createPasteMock(...args),
 }));
@@ -107,6 +121,8 @@ function renderSection(ticker: string, onChange = vi.fn()) {
 beforeEach(() => {
   fetchLatestMock.mockReset();
   researchMock.mockReset();
+  continueMock.mockReset();
+  readStateMock.mockReset();
   mergeMock.mockReset();
   createPasteMock.mockReset();
   extractMock.mockReset();
@@ -283,7 +299,7 @@ describe("DatasetSection — web research", () => {
     expect(researchMock).not.toHaveBeenCalled();
   });
 
-  it("counts the seconds while the research runs", async () => {
+  it("shows the three parts while the research runs, the running one with its seconds and each with its usual minutes", async () => {
     // Only the interval and the clock are faked: the promise plumbing stays real.
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
     fetchLatestMock.mockResolvedValue(null);
@@ -291,9 +307,13 @@ describe("DatasetSection — web research", () => {
     renderSection("AAA.MI");
 
     fireEvent.click(await screen.findByRole("button", { name: "Search the web for the data" }));
-    expect(screen.getByText("Researching primary sources… 0 s")).toBeInTheDocument();
+    const rows = within(screen.getByTestId("research-parts")).getAllByRole("listitem");
+    expect(rows.map((row) => row.getAttribute("data-state"))).toEqual(["running", "waiting", "waiting"]);
+    expect(rows[0]).toHaveTextContent("Statements0 s · usually ~3 min");
+    expect(rows[1]).toHaveTextContent("Multiples and peersusually ~2 min");
+    expect(rows[2]).toHaveTextContent("Estimatesusually ~1 min");
     act(() => vi.advanceTimersByTime(3_000));
-    expect(screen.getByText("Researching primary sources… 3 s")).toBeInTheDocument();
+    expect(rows[0]).toHaveTextContent("3 s · usually ~3 min");
     expect(screen.queryByRole("button", { name: "Search the web for the data" })).not.toBeInTheDocument();
   });
 
@@ -304,8 +324,10 @@ describe("DatasetSection — web research", () => {
     renderSection("AAA.MI");
 
     fireEvent.click(await screen.findByRole("button", { name: "Search the web for the data" }));
-    expect(await screen.findByText("Research failed — research requires the Anthropic API key")).toBeInTheDocument();
+    expect(await screen.findByText("Statements failed: research requires the Anthropic API key")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add pasted data" })).toBeInTheDocument();
+    // The statements are the dataset: they cannot be skipped.
+    expect(screen.queryByRole("button", { name: "Continue without" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Retry the research" }));
     expect(await screen.findByText(/\(web\)/)).toBeInTheDocument();
@@ -405,6 +427,48 @@ describe("DatasetSection — web research", () => {
     expect(await screen.findByText("Could not check for a recent dataset")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Add pasted data" }));
     expect(screen.getByRole("button", { name: "Prepare data" })).toBeInTheDocument();
+  });
+});
+
+describe("DatasetSection — the research in three parts", () => {
+  const marketFailed = () => new ResearchPartError("Research returned an invalid dataset", { status: 502, runId: "run1", part: "market", lost: false });
+
+  it("offers Retry and Continue without when the multiples fail; Continue without skips them and the run goes on", async () => {
+    fetchLatestMock.mockResolvedValue(null);
+    researchMock.mockResolvedValue({ runId: "run1", part: "statements", next: "market" });
+    continueMock
+      .mockRejectedValueOnce(marketFailed())
+      .mockResolvedValueOnce({ runId: "run1", part: "market", next: "estimates" })
+      .mockResolvedValueOnce({ runId: "run1", part: "estimates", next: null, result: webBundle("AAA.MI") });
+    renderSection("AAA.MI");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Search the web for the data" }));
+    expect(await screen.findByText("Multiples and peers failed: Research returned an invalid dataset")).toBeInTheDocument();
+    expect(continueMock).toHaveBeenLastCalledWith("run1", "market");
+    const rows = within(screen.getByTestId("research-parts")).getAllByRole("listitem");
+    expect(rows.map((row) => row.getAttribute("data-state"))).toEqual(["done", "failed", "waiting"]);
+    expect(screen.getByRole("button", { name: "Retry the research" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue without" }));
+    expect(await screen.findByText(/(web)/)).toBeInTheDocument();
+    expect(continueMock.mock.calls).toEqual([
+      ["run1", "market"],
+      ["run1", "market", true],
+      ["run1", "estimates"],
+    ]);
+  });
+
+  it("Retry on failed multiples asks the multiples again, not the statements", async () => {
+    fetchLatestMock.mockResolvedValue(null);
+    researchMock.mockResolvedValue({ runId: "run1", part: "statements", next: "market" });
+    continueMock.mockRejectedValueOnce(marketFailed()).mockReturnValueOnce(new Promise(() => {}));
+    renderSection("AAA.MI");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Search the web for the data" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Retry the research" }));
+    await waitFor(() => expect(continueMock).toHaveBeenCalledTimes(2));
+    expect(continueMock).toHaveBeenLastCalledWith("run1", "market");
+    expect(researchMock).toHaveBeenCalledTimes(1);
   });
 });
 

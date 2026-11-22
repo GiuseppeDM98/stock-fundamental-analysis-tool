@@ -75,17 +75,20 @@ describe("usesServerSideFallback", () => {
 });
 
 describe("buildResearchTools", () => {
-  it("gives Claude the native web_search and web_fetch tools with their caps, and no code execution", () => {
-    expect(buildResearchTools("claude-sonnet-5-5")).toEqual([
-      { type: "web_search_20260209", name: "web_search", max_uses: 30 },
-      { type: "web_fetch_20260209", name: "web_fetch", max_uses: 8, max_content_tokens: 40000 },
+  it("gives Claude the native tools with the part's caps, both called directly, and no code execution", () => {
+    // Called directly, max_uses counts the whole turn; from code execution it restarted at
+    // every pause_turn resume (16 fetches under a cap of 8).
+    expect(buildResearchTools("claude-sonnet-5-5", { searches: 10, fetches: 5 })).toEqual([
+      { type: "web_search_20260209", name: "web_search", max_uses: 10, allowed_callers: ["direct"] },
+      { type: "web_fetch_20260209", name: "web_fetch", max_uses: 5, max_content_tokens: 40000, allowed_callers: ["direct"] },
     ]);
   });
 
   it("gives DeepSeek the two client-executed tools, named web_search and web_fetch, with no server type", () => {
-    const tools = buildResearchTools("deepseek-v4-pro") as unknown as Record<string, unknown>[];
+    const tools = buildResearchTools("deepseek-v4-pro", { searches: 10, fetches: 5 }) as unknown as Record<string, unknown>[];
     expect(tools.map((t) => t.name)).toEqual(["web_search", "web_fetch"]);
     for (const tool of tools) expect(tool).not.toHaveProperty("type");
-    expect(String(tools[1].description)).toContain("At most 8 fetches per run");
+    // One definition for the three parts: the number lives in each part's system prompt.
+    expect(String(tools[1].description)).toContain("the system prompt says how many");
   });
 });

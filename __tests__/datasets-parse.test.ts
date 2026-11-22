@@ -73,6 +73,24 @@ describe("parseStoredDataset — a web dataset", () => {
     expect(parseStoredDataset(webRow(JSON.stringify(older)))?.research).toEqual({ ...RESEARCH, servedBy: null });
   });
 
+  it("reads a research in three parts with its parts, and one saved before them without", () => {
+    const parts = [
+      { part: "statements", status: "done", searches: 4, fetches: 2, durationMs: 60000 },
+      { part: "market", status: "done", searches: 3, fetches: 1, durationMs: 30000 },
+      { part: "estimates", status: "skipped", searches: 0, fetches: 0, durationMs: 0 },
+    ];
+    expect(parseStoredDataset(webRow(JSON.stringify({ ...RESEARCH, parts })))?.research?.parts).toEqual(parts);
+    expect(parseStoredDataset(webRow(JSON.stringify(RESEARCH)))?.research).not.toHaveProperty("parts");
+  });
+
+  it("reads a skipped research part as a valid stored warning", () => {
+    const parsed = parseStoredDataset({
+      ...webRow(JSON.stringify(RESEARCH)),
+      warningsJson: JSON.stringify([{ code: "research_part_skipped", severity: "info", fiscalYear: null, detail: "estimates" }]),
+    });
+    expect(parsed?.warnings).toEqual([{ code: "research_part_skipped", severity: "info", fiscalYear: null, detail: "estimates" }]);
+  });
+
   it("keeps the row with research null when researchJson is missing or malformed", () => {
     expect(parseStoredDataset(webRow(null))?.research).toBeNull();
     expect(parseStoredDataset(webRow("{not json"))?.research).toBeNull();

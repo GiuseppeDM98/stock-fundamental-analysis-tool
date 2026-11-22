@@ -295,7 +295,7 @@ describe("client-executed web_fetch and its budget", () => {
     const lastTurn = run.sentMessages[2][4].content as { tool_use_id: string; content: string }[];
     expect(lastTurn.map((r) => r.tool_use_id)).toEqual(["f6", "f7", "f8", "f9"]);
     expect(lastTurn[3].content).toBe(
-      "FETCH FAILED: fetch budget exhausted (8 per run): use the pages already read and the search summaries."
+      "FETCH FAILED: fetch budget exhausted (8 in this step): use the pages already read and the search summaries."
     );
     // One at a time: every fetch ends before the next one starts.
     expect(fetchSpans).toHaveLength(8);
@@ -312,7 +312,7 @@ describe("client-executed web_fetch and its budget", () => {
     const lastTurn = (calls[2].params.messages as Anthropic.MessageParam[])[4].content as { tool_use_id: string; content: string }[];
     expect(lastTurn.map((r) => r.tool_use_id)).toEqual(["f6", "f7", "f8", "f9"]);
     expect(lastTurn[2].content).toBe("# page\n\nhttps://ir.example.com/p8");
-    expect(lastTurn[3].content).toMatch(/^FETCH FAILED: fetch budget exhausted \(8 per run\)/);
+    expect(lastTurn[3].content).toMatch(/^FETCH FAILED: fetch budget exhausted \(8 in this step\)/);
   });
 
   it("spends the budget on a failed fetch as on a read one", async () => {
@@ -331,6 +331,6 @@ describe("client-executed web_fetch and its budget", () => {
     const result = await runCreateWithToolLoop(client, PARAMS, 5);
     expect(result.hitIterationCap).toBe(false);
     expect(executeWebFetch).not.toHaveBeenCalled();
-    expect((sentMessages[1][2].content as { content: string }[])[0].content).toMatch(/^FETCH FAILED: fetch budget exhausted \(0 per run\)/);
+    expect((sentMessages[1][2].content as { content: string }[])[0].content).toMatch(/^FETCH FAILED: fetch budget exhausted \(0 in this step\)/);
   });
 });

@@ -201,7 +201,7 @@ The AI routes call the model with a high reasoning effort plus web search. A Dee
 | Pro | 300s | 800s (1800s in beta) |
 | Enterprise | 300s | 800s (1800s in beta) |
 
-**A run that goes past 300s on Hobby is killed** and the report stops mid-stream: streaming doesn't help, since Vercel counts total execution time, not whether the response is still being written. Both `/api/ai/deep-value` and `/api/ai/deep-value/verify` export `maxDuration = 300`, the Hobby ceiling, so the limit is declared in the code rather than left to the platform default. So does the research stage, `/api/ai/research` (one request that answers with JSON at the end of the run): measured at 245-390 s on Claude Sonnet 5.5 and 405-796 s on DeepSeek V4 Pro (2026-10-30), so a Sonnet run fits only sometimes and a DeepSeek one runs from localhost.
+**A run that goes past 300s on Hobby is killed** and the report stops mid-stream: streaming doesn't help, since Vercel counts total execution time, not whether the response is still being written. Both `/api/ai/deep-value` and `/api/ai/deep-value/verify` export `maxDuration = 300`, the Hobby ceiling, so the limit is declared in the code rather than left to the platform default. So does the research stage, `/api/ai/research`, one request per part since 2026-11-22 (statements, market, estimates, each answering with JSON at its end): 12–126 s each on Claude Sonnet 5.5, where it was 245-668 s as one request; on DeepSeek V4 Pro a part can still pass 300 s (405-796 s as one request, 2026-10-30), so a DeepSeek research runs from localhost.
 
 **Fluid compute must be ON** (Project → Settings → Functions): without it the ceiling is 60 s and every phase is cut.
 
@@ -212,7 +212,7 @@ Every AI call is one request ≤ 300 s, persisted by the server and retried from
 
 Upgrading to Pro lifts the ceiling to 800s by raising `maxDuration` to 800 in the three long routes (deep-value, verify, research). A queue+polling architecture, or Vercel Workflows (no duration limit), would remove it on Hobby too, at the cost of a new data model and of live streaming — evaluated and not planned for a personal tool.
 
-**Measured after the split** (2026-11-22, Opus 4.8 `high`, localhost, ENAV.MI): every lens request and every Deep Value request under 240 s (the Deep Value took 338 s as one request); the research, 245-496 s that day, took 668 s on CE.MI on 2026-11-20. Splitting it is the work of the next spec (`doc/evoluzioni/00-INDICE.md` § 5).
+**Measured after the split** (2026-11-22, Opus 4.8 `high`, localhost, ENAV.MI): every lens request and every Deep Value request under 240 s (the Deep Value took 338 s as one request); the research, 245-496 s that day as one request and 668 s on CE.MI on 2026-11-20, is three requests since the same day: CE.MI took 207 s in all, its longest part 126 s. On Claude no phase measured from localhost passes 300 s; Vercel itself is read at the end of the series.
 
 ---
 
