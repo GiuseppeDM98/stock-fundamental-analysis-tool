@@ -609,9 +609,9 @@ righe delle run reali si esportano prima di ogni gate (WORKFLOW § 3).
 
 ## 8. La messa in esercizio
 
-1. **Una spec con DDL per volta** (indice, regola 12): la 05f si promuove a `main` da sola, dopo la 05e
-   in esercizio.
-2. **Turso, prima del deploy**: `turso db shell stock-analysis < prisma/migrations/<ts>_add_research_run/migration.sql`;
+1. **Una sola promozione a fine serie** (indice, regola 12, D-159): la 05f resta su `develop`; la sua
+   migrazione si applica su Turso alla fine della sessione, come la 05e il 2026-11-22.
+2. **Turso, alla fine della sessione**: `turso db shell stock-analysis < prisma/migrations/<ts>_add_research_run/migration.sql`;
    senza il CLI `turso` (Windows), la stessa migrazione da uno script Node con `@libsql/client` e
    `migrate()` (AGENTS.md § Prisma 7 + Turso).
 3. **Controllo di lettura**: `SELECT count(*) FROM ResearchRun`, dal CLI o dallo stesso client, risponde 0.
