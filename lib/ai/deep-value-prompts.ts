@@ -464,6 +464,10 @@ ${formatGroundingForPrompt(grounding)}`;
  * System prompt of the report, the same in both halves (one prefix for the prompt cache): the
  * numbers are fixed, the report explains them in the ten sections, sections 1-5 in the first
  * answer and 6-10 in the second.
+ * Two lines come from the first real runs (2026-11-22): the one saying `fairValue` is already
+ * the buy target (a report titled it "Intrinsic Value" and took the margin of safety off it a
+ * second time), and the one translating the English heading template (an Italian report
+ * copied the English headings).
  */
 export function buildReportSystemPrompt({ language = "English", mosPercent = 0 }: { language?: string; mosPercent?: number }): string {
   return `You are a professional financial analyst writing the report of a valuation that is already made.

@@ -1,7 +1,7 @@
 # 05f — Ricerca del dataset in tre parti
 
 > **Stato**: scritta il 2026-11-20; riletta in modo adversariale il 2026-11-21: 49 rilievi (41 del suo lettore, 8 trasversali), 6 decisioni (D-142, D-143, D-145, D-146, D-156, D-157).
-> **Branch**: `feature/research-in-three-parts` **Dipende da**: 05e (ordine; C-26: la chiave i18n `runPhaseTypical`), 05d ritirata il 2026-11-22 (C-25: la riga `[tool-loop]` con `searches=`/`fetches=`, T-54; `buildThinkingParam(thinking, model)` senza effort).
+> **Branch**: `feature/research-in-three-parts` **Dipende da**: 05e ritirata il 2026-11-22 (ordine; C-26: la chiave i18n `runPhaseTypical`), 05d ritirata il 2026-11-22 (C-25: la riga `[tool-loop]` con `searches=`/`fetches=`, T-54; `buildThinkingParam(thinking, model)` senza effort).
 > **Indice**: [00-INDICE.md](00-INDICE.md) — § 3.14 (D-119), § 3.16 (D-131, D-132, D-134, D-135, D-140), § 3.17 (D-142, D-143, D-146, D-156, D-157), § 4 (T-11, T-35, T-54, T-64…T-70, T-76…T-79), § 6 (C-9, C-10, C-25, C-26, C-27).
 
 Terza di tre spec sul tema «ogni richiesta AI sotto i 300 s di Vercel Hobby» (D-125). La ricerca web del

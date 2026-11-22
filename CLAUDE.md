@@ -12,7 +12,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: November 22, 2026 — **Spec 05e (the Deep Value in four requests) implemented** on `feature/deep-value-by-role` (migration `add_analysis_run_phases`: apply it on Turso before the deploy): web update (Sonnet 5.5, at most 8 searches) → valuation (numbers first, no tools) → report sections 1–5 → 6–10, each request written by the server; the panel lists the phases and Retry resumes from the one reached, within an hour (valutazione.md § 2.9). Collaudo done and closed, the owner's tour included: every Deep Value phase under 240 s (the measures: valutazione.md § 2.9). Open: the Turso migration, then the deploy; the Vercel log check waits for the end of the series. Next: spec 05f.
+**Last Updated**: November 22, 2026 — **Spec 05e (the Deep Value in four requests) retired on 2026-11-22**, branch `chore/retire-spec-05e` (implemented in `f54d7ec`, PR #79): web update → valuation → report sections 1–5 → 6–10, each request written by the server (valutazione.md § 2.9). Migration `add_analysis_run_phases` applied on Turso on 2026-11-22 and re-read at the retirement; `develop` reaches `main` once, at the end of the series. At the retirement no code behaviour changed: the report prompt's two new rules written into valutazione.md § 1.1 and the builder's comment, four guide lines left from the single request corrected. Open until the end of the series: the Vercel log check of the four `[ai-run] deep-value` lines. Next: spec 05f.
 
 ---
 
@@ -135,12 +135,12 @@ Things the series deliberately left out, one line each (added by the spec that l
 - No prompt caching of the dataset across the Deep Value's web update, valuation and report, nor across the report and its three lenses: their system prompts differ, so the dataset would first have to lead a shared prefix; only report2 reads report1's cache (spec 05b, 2026-11-09; spec 05e, 2026-11-22).
 - The web update's notes do not reach the lenses: each lens searches for itself in its blind phase; reopened only by a measure (spec 05e, 2026-11-22).
 - No notification (email) when a run ends after its tab was closed: the status line on /analyses is the only signal (spec 05c, 2026-10-27).
-- No web-search cap on the Deep Value, the Advisor or the earnings lookup (`buildWebSearchTools(model)` without `maxUses`): only a lens request has one, 5 searches, and on DeepSeek the cap binds the loop's rounds, not the searches (spec 05d, 2026-11-22; the Deep Value's comes with 05e).
+- No web-search cap on the Advisor or the earnings lookup (`buildWebSearchTools(model)` without `maxUses`): a lens request has one, 5 searches, and the Deep Value's web update 8; on DeepSeek a cap binds the loop's rounds, not the searches (spec 05d and 05e, 2026-11-22).
 
 ---
 
 ## Next Priorities
-The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (one session per spec, in order); its index `00-INDICE.md` holds the series' state, the retirement dates and the owner's decisions. Live: 05e, 05f (read adversarially on 2026-11-21; 05e is next), then 06, 07a, 07b, 08a, 08b; after 08b, one `/deep-value` realignment pass (D-76).
+The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (one session per spec, in order); its index `00-INDICE.md` holds the series' state, the retirement dates and the owner's decisions. Live: 05f (read adversarially on 2026-11-21; next), then 06, 07a, 07b, 08a, 08b; after 08b, one `/deep-value` realignment pass (D-76).
 1. Caching layer for `/api/quote`.
 2. Per-ticker yield-on-cost in the exit signal (needs per-position dividend exposure via snapshots).
 
