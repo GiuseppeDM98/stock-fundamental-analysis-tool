@@ -13,6 +13,8 @@ import {
   REPORT_START_MARKER,
   CRITIQUE_START_MARKER,
   lastJsonFence,
+  withResultFence,
+  NOTES_START_MARKER,
 } from "@/lib/report/parse-deep-value-json";
 
 const BLIND_COLUMN = JSON.stringify({ method: "DCF", sector: "Utilities", currency: "EUR", bull: { fairValue: 10 }, base: { fairValue: 8 }, bear: { fairValue: 5 }, rationale: "  Net debt dominates.  " });
@@ -301,5 +303,29 @@ describe("sensitivity and dividends — drop, never repair", () => {
     expect(sanitizeDividends({ ...valid, path: [{ ...PATH[0], bear: -1 }, PATH[1], PATH[2]] })).toBeUndefined();
     expect(sanitizeDividends({ ...valid, path: [{ ...PATH[0], year: 2026.5 }, PATH[1], PATH[2]] })).toBeUndefined();
     expect(sanitizeDividends({ ...valid, policy: 3 })).toBeUndefined();
+  });
+});
+
+describe("withResultFence — the valuation's JSON closes the saved report", () => {
+  const RESULT = JSON.stringify({ method: "DCF", sector: "Utilities", currency: "EUR", bull: { fairValue: 12 }, base: { fairValue: 10 }, bear: { fairValue: 7 } });
+
+  it("makes the stored numbers the report's last fence, and strips back to the report", () => {
+    const saved = withResultFence("## 1. Business\nText.\n\n## 10. Verdict\nHold.\n", RESULT);
+    const parsed = parseDeepValueJson(saved);
+    expect(parsed?.bull?.fairValue).toBe(12);
+    expect(parsed?.base?.fairValue).toBe(10);
+    expect(parsed?.bear?.fairValue).toBe(7);
+    expect(stripJsonBlock(saved).trim()).toBe("## 1. Business\nText.\n\n## 10. Verdict\nHold.");
+  });
+
+  it("wins over a fence the model wrote into the report", () => {
+    const saved = withResultFence('## 10. Verdict\n```json\n{"bull":{"fairValue":99},"base":{"fairValue":98},"bear":{"fairValue":97}}\n```\n', RESULT);
+    expect(parseDeepValueJson(saved)?.bull?.fairValue).toBe(12);
+  });
+});
+
+describe("stripJsonBlock — the web notes marker", () => {
+  it("strips the notes start marker", () => {
+    expect(stripJsonBlock(`${NOTES_START_MARKER}\n## Results\nFact.`)).not.toContain(NOTES_START_MARKER);
   });
 });

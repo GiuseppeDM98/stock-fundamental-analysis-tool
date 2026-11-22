@@ -47,6 +47,9 @@ export const DECOY = {
   userBCompany: "Beta Quokka Corp",
   /** The two rows of NSCA whose run has not finished: one cut (failed), one in progress. */
   cutCompany: "Nasica Interrotta SpA",
+  /** The web update's notes on the grounded analysis, and on the cut row. */
+  groundedWebUpdate: "aggiornamento-ermellino",
+  cutWebUpdate: "aggiornamento-puzzola",
 } as const;
 
 // ─── Record ids (fixed, so specs can address rows directly) ────────────────────

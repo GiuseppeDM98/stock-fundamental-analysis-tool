@@ -11,9 +11,10 @@ export class AnalysisRunNotFound extends Error {
 }
 
 /** The row cannot be (re)run now: "run already finished", "run still in progress",
- *  "dataset no longer available". The message is the route's 409 body. */
+ *  "dataset no longer available", or — for a phase a chain asks for — "phase out of order"
+ *  (the row is not waiting at that phase). The message is the route's 409 body. */
 export class AnalysisRunConflict extends Error {
-  constructor(message: "run already finished" | "run still in progress" | "dataset no longer available") {
+  constructor(message: "run already finished" | "run still in progress" | "dataset no longer available" | "phase out of order") {
     super(message);
     this.name = "AnalysisRunConflict";
   }

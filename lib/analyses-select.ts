@@ -59,13 +59,15 @@ export const ANALYSIS_LIST_SELECT = {
   runStatus: true,
   runStartedAt: true,
   runError: true,
+  runPhase: true,
+  updateNotesMd: true,
   priceCurrency: true,
   createdAt: true,
 } as const satisfies Record<keyof SavedAnalysis, true>;
 
 /**
  * The list select without the text blobs (reports, critiques, the lenses' blind and
- * result JSON), for any reader that needs only the numbers (the watchlist digest, for one). The
+ * result JSON, the web update's notes), for any reader that needs only the numbers (the watchlist digest, for one). The
  * excluded fields come back undefined; a reader that needs one fetches it with a query of
  * its own. The base resultJson stays: it is the report's own numbers.
  */
@@ -81,4 +83,5 @@ export const ANALYSIS_SUMMARY_SELECT = {
   reviewResultJson: false,
   optimistResultJson: false,
   qualityResultJson: false,
+  updateNotesMd: false,
 } as const;

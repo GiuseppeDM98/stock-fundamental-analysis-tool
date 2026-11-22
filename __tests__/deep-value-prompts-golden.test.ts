@@ -1,6 +1,8 @@
 // Golden capture-and-diff test of the Deep Value and lens prompts on the single dataset
 // path (every report and lens is built on a financial dataset since 2026-11-09). It pins
 // the whole text the model reads, on one invented dataset (fixtures/dataset-fenicottero.ts).
+// Since 2026-11-22 a Deep Value run is four requests: the web update (7), the valuation
+// (1, 2) and the report in two halves (8).
 //
 // Regenerated only when a spec declares it, with `-u` and the diff read section by section
 // and reported in that session's notes. Any other diff is a regression: a change to a shared
@@ -10,8 +12,13 @@
 // deleted with that path.
 import { describe, it, expect } from "vitest";
 import {
-  buildDeepValueSystemPrompt,
-  buildDeepValueUserPrompt,
+  buildUpdateSystemPrompt,
+  buildUpdateUserPrompt,
+  buildValuationSystemPrompt,
+  buildValuationUserPrompt,
+  buildReportSystemPrompt,
+  buildReportUserPrompt,
+  buildReportContinuationPrompt,
   buildAnalystSystemPrompt,
   buildAnalystBlindUserPrompt,
   buildAnalystReconcileUserPrompt,
@@ -41,26 +48,66 @@ const CONTEXT_WITH_PASTE = buildGroundingPromptContext([PASTE_BLOCK], DATASET_FE
 const GATES_TEXT =
   "--- DETERMINISTIC GATES ON THE BASE REPORT (computed in code — NOT the model's judgment) ---\n✓ scenario_order: bear 8.00 · base 10.00 · bull 12.00\n✗ bear_breaks_price: bear 12.00 · price 11.40\n--- END DETERMINISTIC GATES ---";
 
-describe("Deep Value report prompts on a dataset — golden", () => {
-  it("(1) base report: system and user prompt, no paste block", () => {
-    expect(buildDeepValueSystemPrompt({ language: "Italiano", currentDate: CURRENT_DATE, mosPercent: MOS, grounding: CONTEXT })).toMatchSnapshot();
+// The web update's notes and the valuation's output the later phases read (invented).
+const UPDATE_NOTES =
+  "## 1. After the dataset\nNothing published after FY2025.\n## 3. Cost of capital\nBTP 10Y 3.50% (https://example.com/btp, November 1, 2026)";
+const RESULT_JSON = JSON.stringify({ method: "EV/EBITDA", currency: "EUR", bull: { fairValue: 12 }, base: { fairValue: 10 }, bear: { fairValue: 8 } });
+const MEMO = "EV/EBITDA on the FY2025 EBITDA, anchored to the median of the dataset's multiples.";
+
+describe("Deep Value prompts on a dataset — golden", () => {
+  it("(1) valuation: system and user prompt, no paste block", () => {
+    expect(buildValuationSystemPrompt({ language: "Italiano", currentDate: CURRENT_DATE, mosPercent: MOS, grounding: CONTEXT })).toMatchSnapshot();
     expect(
-      buildDeepValueUserPrompt({ ticker: "FNCT.MI", currentPrice: PRICE, currency: "EUR", language: "Italiano", currentDate: CURRENT_DATE, mosPercent: MOS, grounding: CONTEXT })
+      buildValuationUserPrompt({ ticker: "FNCT.MI", currentPrice: PRICE, currency: "EUR", currentDate: CURRENT_DATE, mosPercent: MOS, grounding: CONTEXT, updateNotes: UPDATE_NOTES })
     ).toMatchSnapshot();
   });
 
-  it("(2) base report: user prompt with the income-statement paste block", () => {
+  it("(2) valuation: user prompt with the income-statement paste block", () => {
     expect(
-      buildDeepValueUserPrompt({
+      buildValuationUserPrompt({
+        ticker: "FNCT.MI",
+        currentPrice: PRICE,
+        currency: "EUR",
+        currentDate: CURRENT_DATE,
+        mosPercent: MOS,
+        grounding: CONTEXT_WITH_PASTE,
+        updateNotes: UPDATE_NOTES,
+      })
+    ).toMatchSnapshot();
+  });
+
+  it("(7) web update: system and user prompt", () => {
+    expect(buildUpdateSystemPrompt({ language: "Italiano", currentDate: CURRENT_DATE })).toMatchSnapshot();
+    expect(
+      buildUpdateUserPrompt({
+        ticker: "FNCT.MI",
+        companyName: "Fenicottero Holding",
+        currency: "EUR",
+        latestPeriodLabel: "FY2025",
+        fiscalYearEnd: "December",
+        reportingCurrency: "EUR",
+        researchNotes: null,
+      })
+    ).toMatchSnapshot();
+  });
+
+  it("(8) report: system prompt, first message and continuation", () => {
+    expect(buildReportSystemPrompt({ language: "Italiano", mosPercent: MOS })).toMatchSnapshot();
+    expect(
+      buildReportUserPrompt({
         ticker: "FNCT.MI",
         currentPrice: PRICE,
         currency: "EUR",
         language: "Italiano",
         currentDate: CURRENT_DATE,
         mosPercent: MOS,
-        grounding: CONTEXT_WITH_PASTE,
+        grounding: CONTEXT,
+        updateNotes: UPDATE_NOTES,
+        resultJson: RESULT_JSON,
+        memo: MEMO,
       })
     ).toMatchSnapshot();
+    expect(buildReportContinuationPrompt({ language: "Italiano" })).toMatchSnapshot();
   });
 });
 

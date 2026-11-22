@@ -1,14 +1,16 @@
 "use client";
 
-// Deep Value Panel — the model picks the valuation method on the user's confirmed dataset
-// and streams the full Markdown report, then its closing JSON block (method + fair values).
+// Deep Value Panel — the model picks the valuation method on the user's confirmed dataset.
+// A run is four requests (2026-11-22): the web update, the valuation, and the report in two
+// halves; components/use-deep-value-run.ts chains them, and this panel shows the four
+// phases, the web notes once the update ends and the report as it streams.
 //
 // A staged run (2026-10-27, after the "Consulente" run of net-worth-tracker): the route
-// creates the Analysis row when the run starts and writes the report when it ends, so this
-// panel never saves anything. It reads Server-Sent Events (stage → text → done | error); a
-// stream that ends with neither done nor error — or a read that rejects, which is how a
-// function the platform kills at 300 s reaches the browser — is a CUT: the panel re-reads
-// the row and offers "Retry" on the same row once the server would accept it.
+// creates the Analysis row when the run starts and writes each phase as it ends, so this
+// panel never saves anything, and once the run ends it reads the numbers and the price from
+// the row the server wrote, never from the stream. A request the platform cuts at 300 s is
+// a CUT: the panel shows the row and what Retry will do (resume from the phase reached
+// within the hour, start over after it), once the server would accept it.
 import { useState, useRef, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -17,6 +19,7 @@ import { useLanguage } from "@/context/language-context";
 import { APP_TO_AI_LANGUAGE } from "@/lib/i18n/translations";
 import ReportBody from "@/components/report/report-body";
 import ReportShell from "@/components/report/report-shell";
+import { WebUpdateCard } from "@/components/report/web-update-card";
 import {
   parseDeepValueJson,
   stripJsonBlock,
@@ -32,10 +35,11 @@ import { DEFAULT_AI_SETTINGS, type AiSettings } from "@/types/ai-settings";
 import type { GroundedFinancials } from "@/types/grounding";
 import { ValuationChecksCard } from "@/components/report/valuation-checks-card";
 import type { DeepValueRunInputs } from "@/lib/report/deep-value-run";
-import { forEachSseEvent } from "@/lib/sse-reader";
 import { canRetry, isDone, RUN_RETRY_AFTER_MS } from "@/lib/report/run-status";
-import type { AiRunEvent } from "@/types/ai-run";
+import { DEEP_VALUE_PHASES, type DeepValuePhase } from "@/types/ai-run";
 import type { SavedAnalysis } from "@/types/analysis";
+import { useDeepValueRun, DEEP_VALUE_PHASE_TYPICAL_SECONDS, type DeepValuePhaseState } from "@/components/use-deep-value-run";
+import { DEEP_VALUE_PHASE_LABEL, retryPlanText } from "@/components/analysis-run-status";
 
 type Props = {
   ticker: string | null;
@@ -54,12 +58,6 @@ type Props = {
   resumeId?: string | null;
 };
 
-type Status = "idle" | "loading" | "streaming" | "done" | "cut" | "error";
-// What the panel knows of a cut row: enough for canRetry and the Retry/Run-again choice.
-type CutRow = { runStatus: string; runStartedAt: string | null; runError: string | null; hasDataset: boolean };
-// The way out of an error: retry the same row, or run a new analysis (its dataset is gone).
-type ErrorAction = "retry" | "relaunch" | null;
-
 /** The valuation a finished row holds: its result column, else its report's last fence. */
 function resultOfRow(row: SavedAnalysis): ParsedAnalystResult | null {
   if (row.resultJson) {
@@ -71,6 +69,15 @@ function resultOfRow(row: SavedAnalysis): ParsedAnalystResult | null {
   }
   return parseDeepValueJson(row.reportMd);
 }
+
+// The mark of each phase state in the list; the running one shows its seconds instead.
+const PHASE_MARK: Record<DeepValuePhaseState, string> = { waiting: "○", running: "●", done: "✓", failed: "✕" };
+const PHASE_TEXT: Record<DeepValuePhaseState, string> = {
+  waiting: "text-slate-500",
+  running: "text-violet-300",
+  done: "text-emerald-400",
+  failed: "text-amber-300",
+};
 type WatchlistStatus = "idle" | "loading" | "saved" | "already" | "error";
 
 const LANGUAGES = [
@@ -104,17 +111,14 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
     userOverrideRef.current = true;
     setAiLanguage(lang);
   }
-  const [report, setReport] = useState<string>("");
-  const [status, setStatus] = useState<Status>("idle");
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  // The row the server writes, from the run's first event (or the ?resume= row).
-  const [analysisId, setAnalysisId] = useState<string | null>(null);
-  const [cutRow, setCutRow] = useState<CutRow | null>(null);
-  const [errorAction, setErrorAction] = useState<ErrorAction>(null);
-  // The instant the retry countdown reads: taken in handlers and ticked by an interval,
-  // never Date.now() in render.
+  const run = useDeepValueRun();
+  // The ?resume= row, shown in its cut state until a click starts something.
+  const [resumeRow, setResumeRow] = useState<SavedAnalysis | null>(null);
+  // The instant the countdown and the phase timer read: ticked by an interval, never
+  // Date.now() in render.
   const [now, setNow] = useState(0);
-  const [result, setResult] = useState<ParsedAnalystResult | null>(null);
+  // When the phase now running started (on this screen), for its elapsed seconds.
+  const [phaseStartMs, setPhaseStartMs] = useState(0);
   const [watchlistStatus, setWatchlistStatus] = useState<WatchlistStatus>("idle");
   // The app's default until fetchAiSettings answers (and if it fails); no floor of its own
   // since 2026-11-20: a valuation runs at the user's default, which the catalog caps at `high`.
@@ -137,44 +141,8 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
   // The analyst panel (skeptic/optimist/quality reviews) runs on the SAVED-analysis detail
   // page, not here — the live panel only produces the base analysis.
 
-  const abortRef = useRef<AbortController | null>(null);
   // One read of the ?resume= row per id: a GET, never a run (a run belongs to the click).
   const resumedRef = useRef<string | null>(null);
-
-  /** Shows a row as the server last wrote it: its report when finished, else the cut state
-   *  with what Retry needs. */
-  function applyRow(row: SavedAnalysis, fallbackStartedAt: string | null) {
-    if (isDone(row)) {
-      setReport(row.reportMd);
-      setResult(resultOfRow(row));
-      setStatus("done");
-      return;
-    }
-    setCutRow({
-      runStatus: row.runStatus ?? "running",
-      runStartedAt: row.runStartedAt ?? fallbackStartedAt,
-      runError: row.runError ?? null,
-      hasDataset: row.datasetId != null,
-    });
-    setNow(Date.now());
-    setStatus("cut");
-  }
-
-  /** Re-reads a row the stream lost. */
-  async function showRow(id: string, fallbackStartedAt: string | null) {
-    let row: SavedAnalysis;
-    try {
-      row = await fetchAnalysis(id);
-    } catch {
-      // The row could not be read (network, deleted): the server still refuses a retry it
-      // cannot accept, so offer it on what the stream said.
-      setCutRow({ runStatus: "running", runStartedAt: fallbackStartedAt, runError: null, hasDataset: true });
-      setNow(Date.now());
-      setStatus("cut");
-      return;
-    }
-    applyRow(row, fallbackStartedAt);
-  }
 
   useEffect(() => {
     if (!resumeId || !session || !ticker || resumedRef.current === resumeId) return;
@@ -183,7 +151,6 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
       .then((row) => {
         // A row of another ticker (the user searched another one meanwhile) is not shown.
         if (row.ticker !== ticker) return;
-        setAnalysisId(row.id);
         setRunInputs({
           ticker: row.ticker,
           companyName: row.companyName,
@@ -194,7 +161,8 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           dataset: null,
           language: row.reportLanguage ?? language,
         });
-        applyRow(row, row.runStartedAt ?? null);
+        setNow(Date.now());
+        setResumeRow(row);
       })
       .catch(() => {
         // Nothing to show: the page stays as a fresh /analyze.
@@ -202,166 +170,68 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resumeId, session, ticker]);
 
-  /** A new run (no argument) or a retry of the row `retryId`, with the inputs on the row. */
-  async function handleGenerate(retryId?: string) {
-    if (!ticker) return;
-    if (!retryId && !dataset) return;
+  // What the screen shows: the run once a click started one, else the ?resume= row.
+  const fromResume = run.state === "idle" && resumeRow != null;
+  const view = fromResume ? (isDone(resumeRow) ? "done" : "cut") : run.state;
+  const row = fromResume ? resumeRow : run.row;
+  const analysisId = run.analysisId ?? resumeRow?.id ?? null;
+  const notes = fromResume ? (resumeRow.updateNotesMd ?? "") : run.notes;
+  const report = fromResume ? resumeRow.reportMd : run.report;
+  const isStreaming = view === "running";
+  const runningPhase = DEEP_VALUE_PHASES.find((p) => run.phases[p] === "running") ?? null;
 
+  // The phase timer restarts with each phase; the interval ticks while a run is in flight,
+  // and while a cut waits for the server to accept a retry (330 s from its request's start).
+  useEffect(() => {
+    if (runningPhase) setPhaseStartMs(Date.now());
+  }, [runningPhase]);
+  const retryReady = view === "cut" && (row == null || canRetry(row, now));
+  useEffect(() => {
+    if (!isStreaming && (view !== "cut" || retryReady)) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [isStreaming, view, retryReady]);
+  const retryInSeconds =
+    row?.runStartedAt != null ? Math.max(0, Math.ceil((new Date(row.runStartedAt).getTime() + RUN_RETRY_AFTER_MS - now) / 1000)) : 0;
+  // What Retry will do, said on its button (resume from a phase, or start over).
+  const retryLabel = row?.runPhase && row.createdAt && now > 0 ? retryPlanText(t, globalLanguage, row, now) : t("deepValueRetry");
+
+  /** A new run: the page's inputs frozen now, the four phases chained from the click. */
+  function handleGenerate() {
+    if (!ticker || !dataset) return;
     if (!session) {
       router.push("/login");
       return;
     }
-
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    // A retry describes the row it re-runs (same MoS, language and dataset), with the
-    // page's latest quote; a new run freezes the page's inputs now.
-    const inputs: DeepValueRunInputs =
-      retryId && runInputs
-        ? { ...runInputs, currentPrice: currentPrice ?? null, currency: currency ?? null }
-        : {
-            ticker,
-            companyName: companyName ?? ticker,
-            mosPercent,
-            currentPrice: currentPrice ?? null,
-            currency: currency ?? null,
-            dataset,
-            language,
-          };
-    setRunInputs(inputs);
-
-    setReport("");
-    setResult(null);
-    setStatus("loading");
-    setErrorMsg(null);
-    setErrorAction(null);
-    setCutRow(null);
+    setRunInputs({ ticker, companyName: companyName ?? ticker, mosPercent, currentPrice: currentPrice ?? null, currency: currency ?? null, dataset, language });
     setWatchlistStatus("idle");
-    if (!retryId) setAnalysisId(null);
-
-    let id: string | null = retryId ?? null;
-    let startedAt: string | null = null;
-    let terminal: "done" | "error" | null = null;
-    let accumulated = "";
-
-    try {
-      const res = await fetch("/api/ai/deep-value", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // A retry sends only the row: every input comes from it, on the server.
-        body: JSON.stringify(
-          retryId
-            ? { analysisId: retryId }
-            : {
-                ticker: inputs.ticker,
-                language: inputs.language,
-                mosPercent: inputs.mosPercent,
-                model: aiSettings.model,
-                effort: aiSettings.effort,
-                thinking: aiSettings.thinking,
-                datasetId: dataset!.id,
-              }
-        ),
-        signal: controller.signal,
-      });
-
-      if (res.status === 401) {
-        router.push("/login");
-        return;
-      }
-
-      if (!res.ok) {
-        const message = ((await res.json().catch(() => ({}))) as { error?: string }).error ?? `Request failed (${res.status})`;
-        if (retryId && res.status === 409 && message === "dataset no longer available") {
-          setErrorMsg(message);
-          setErrorAction("relaunch");
-          setStatus("error");
-          return;
-        }
-        // Finished meanwhile, or still in progress: the row says which.
-        if (retryId && res.status === 409) return showRow(retryId, null);
-        setErrorMsg(res.status === 404 ? t("analysisGone") : message);
-        setErrorAction(retryId && (res.status >= 500 || res.status === 429) ? "retry" : null);
-        setStatus("error");
-        return;
-      }
-
-      if (!res.body) throw new Error("No response stream");
-
-      await forEachSseEvent<AiRunEvent>(res.body, (event) => {
-        if (event.type === "stage") {
-          // The row's id arrives first, so a run cut a second later is already retryable.
-          if (event.analysisId) {
-            id = event.analysisId;
-            setAnalysisId(event.analysisId);
-          }
-          if (event.runStartedAt) startedAt = event.runStartedAt;
-          setStatus("streaming");
-        } else if (event.type === "text") {
-          accumulated += event.text;
-          setReport(accumulated);
-        } else if (event.type === "done") {
-          terminal = "done";
-        } else {
-          terminal = "error";
-          setErrorMsg(event.error);
-          setErrorAction(event.retryable && id ? "retry" : null);
-        }
-      });
-    } catch (err) {
-      // The user's stop (or a new Generate): the server still finishes and writes the row.
-      if ((err as Error).name === "AbortError") {
-        setStatus("idle");
-        return;
-      }
-      // A rejected read is a cut once the row exists; before it, nothing was started.
-      if (!id) {
-        setErrorMsg(err instanceof Error ? err.message : "Something went wrong");
-        setStatus("error");
-        return;
-      }
-    }
-
-    if (terminal === "done") {
-      // The text streamed is what the server stored as the report.
-      setResult(parseDeepValueJson(accumulated));
-      setStatus("done");
-      return;
-    }
-    if (terminal === "error") {
-      setStatus("error");
-      return;
-    }
-    if (!id) {
-      setErrorMsg(t("deepValueCut"));
-      setStatus("error");
-      return;
-    }
-    await showRow(id, startedAt);
+    run.start({
+      ticker,
+      language,
+      mosPercent,
+      datasetId: dataset.id,
+      model: aiSettings.model,
+      effort: aiSettings.effort,
+      thinking: aiSettings.thinking,
+    });
   }
 
-  // A cut run waits until the server would accept a retry (330 s from its start): tick the
-  // countdown each second until then.
-  const retryReady = status === "cut" && cutRow != null && canRetry(cutRow, now);
-  useEffect(() => {
-    if (status !== "cut" || retryReady) return;
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [status, retryReady]);
-  const retryInSeconds =
-    cutRow?.runStartedAt != null ? Math.max(0, Math.ceil((new Date(cutRow.runStartedAt).getTime() + RUN_RETRY_AFTER_MS - now) / 1000)) : 0;
+  /** Retry of the cut row: the server picks the phase; only the id is sent. */
+  function handleRetry() {
+    if (!analysisId) return;
+    if (!session) {
+      router.push("/login");
+      return;
+    }
+    setWatchlistStatus("idle");
+    run.retry(analysisId);
+  }
 
   /** Back to a fresh panel: a new run on the dataset the page has now. */
   function handleRelaunch() {
-    setStatus("idle");
-    setAnalysisId(null);
-    setCutRow(null);
-    setErrorMsg(null);
-    setErrorAction(null);
-    setReport("");
-    setResult(null);
+    setResumeRow(null);
+    run.reset();
   }
 
   async function handleAddToWatchlist() {
@@ -392,16 +262,23 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
     }
   }
 
-  const isStreaming = status === "loading" || status === "streaming";
-  // The JSON block now closes the report, so while streaming its fence is still open: hide
-  // it until it closes. The strip runs in streaming too — a repeated start marker would
-  // otherwise show as text.
-  const markdownContent = status === "done" ? stripJsonBlock(report) : stripJsonBlock(stripTrailingOpenJsonFence(report));
+  // The numbers of a finished run come from the row the server wrote; a run whose row could
+  // not be re-read shows its report and asks for a reload instead of parsing the stream.
+  const result = view === "done" && row ? resultOfRow(row) : null;
+  const rowMissing = view === "done" && row == null;
+  // The price the valuation was run against, as the server stored it with the row.
+  const runPrice = row?.priceAtAnalysis ?? null;
+  const runCurrency = row?.priceCurrency ?? null;
+  const markdownContent = view === "done" ? stripJsonBlock(report) : stripJsonBlock(stripTrailingOpenJsonFence(report));
   const reportDate = new Date().toLocaleDateString(undefined, {
     year: "numeric",
     month: "long",
     day: "numeric",
   });
+  const showPhases = view === "running" || view === "cut" || (view === "error" && analysisId != null);
+  const phaseStates = fromResume && row ? phasesOfResumeRow(row) : run.phases;
+  const elapsed = runningPhase && phaseStartMs > 0 && now >= phaseStartMs ? Math.floor((now - phaseStartMs) / 1000) : 0;
+  const cutHasDataset = row?.datasetId != null || row == null;
 
   return (
     <div className="card space-y-4 print:border-0 print:bg-transparent print:p-0 print:shadow-none">
@@ -430,7 +307,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           <AiSettingsControl value={aiSettings} onChange={setAiSettings} />
 
           <button
-            onClick={() => handleGenerate()}
+            onClick={handleGenerate}
             disabled={!ticker || !dataset || isStreaming}
             title={ticker && !dataset ? t("deepValueNeedsDataset") : undefined}
             className="tap rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed"
@@ -438,7 +315,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
             {isStreaming ? (
               <span className="flex items-center gap-2">
                 <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                {status === "loading" ? t("startingState") : t("analyzingState")}
+                {t("analyzingState")}
               </span>
             ) : (
               t("deepAnalysisBtn")
@@ -448,7 +325,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
       </div>
 
       {/* No dataset yet: the analysis waits for one (the section above). */}
-      {ticker && !dataset && !isStreaming && <p className="text-xs text-muted print:hidden">{t("deepValueNeedsDataset")}</p>}
+      {ticker && !dataset && !isStreaming && view !== "cut" && <p className="text-xs text-muted print:hidden">{t("deepValueNeedsDataset")}</p>}
 
       {/* Auth hint */}
       {!session && ticker && (
@@ -460,16 +337,36 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
         </p>
       )}
 
+      {/* The four phases: done, running (with its seconds), waiting with their usual minutes. */}
+      {showPhases && (
+        <ol className="grid gap-1.5 sm:grid-cols-2 print:hidden" data-testid="deep-value-phases">
+          {DEEP_VALUE_PHASES.map((phase: DeepValuePhase) => {
+            const state = phaseStates[phase];
+            return (
+              <li key={phase} data-phase={phase} data-state={state} className={`flex items-baseline gap-2 text-sm ${PHASE_TEXT[state]}`}>
+                <span aria-hidden className="w-4 text-center">
+                  {PHASE_MARK[state]}
+                </span>
+                <span>{t(DEEP_VALUE_PHASE_LABEL[phase])}</span>
+                <span className="font-mono text-xs text-muted">
+                  {state === "running" ? `${elapsed} s` : state === "waiting" ? t("runPhaseTypical").replace("{minutes}", String(Math.round(DEEP_VALUE_PHASE_TYPICAL_SECONDS[phase] / 60))) : ""}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+
       {/* Error */}
-      {status === "error" && errorMsg && (
+      {view === "error" && run.error && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg bg-red-500/10 px-3 py-2 print:hidden">
-          <p className="text-sm text-red-400">{errorMsg}</p>
-          {errorAction === "retry" && analysisId && (
-            <button onClick={() => handleGenerate(analysisId)} className="tap rounded-lg border border-violet-600 px-4 py-2 text-sm text-violet-200 transition hover:bg-violet-900/30 disabled:cursor-not-allowed disabled:opacity-50">
-              {t("deepValueRetry")}
+          <p className="text-sm text-red-400">{run.error.message}</p>
+          {run.error.retryable && analysisId && (
+            <button onClick={handleRetry} className="tap rounded-lg border border-violet-600 px-4 py-2 text-sm text-violet-200 transition hover:bg-violet-900/30 disabled:cursor-not-allowed disabled:opacity-50">
+              {retryLabel}
             </button>
           )}
-          {errorAction === "relaunch" && (
+          {!run.error.retryable && (
             <button onClick={handleRelaunch} className="tap rounded-lg border border-violet-600 px-4 py-2 text-sm text-violet-200 transition hover:bg-violet-900/30 disabled:cursor-not-allowed disabled:opacity-50">
               {t("deepValueRelaunch")}
             </button>
@@ -477,17 +374,18 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
         </div>
       )}
 
-      {/* Cut: the stream ended without done or error. The row says what the server last
-          wrote; Retry re-runs it, once the server would accept it (330 s from its start). */}
-      {status === "cut" && cutRow && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg bg-amber-500/10 px-3 py-2 print:hidden">
+      {/* Cut: a request ended without done or error. The row says what the server last wrote;
+          Retry resumes it once the server would accept it (330 s from the request's start;
+          at once when no request was in flight). */}
+      {view === "cut" && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg bg-amber-500/10 px-3 py-2 print:hidden" data-testid="deep-value-cut">
           <div className="space-y-1">
             <p className="text-sm text-amber-300">{t("deepValueCut")}</p>
-            {cutRow.runError && <p className="text-xs text-amber-200/80">{cutRow.runError}</p>}
+            {row?.runError && <p className="text-xs text-amber-200/80">{row.runError}</p>}
           </div>
-          {cutRow.hasDataset && analysisId ? (
-            <button onClick={() => handleGenerate(analysisId)} disabled={!retryReady} className="tap rounded-lg border border-violet-600 px-4 py-2 text-sm text-violet-200 transition hover:bg-violet-900/30 disabled:cursor-not-allowed disabled:opacity-50">
-              {retryReady ? t("deepValueRetry") : t("deepValueRetryIn").replace("{s}", String(retryInSeconds))}
+          {cutHasDataset && analysisId ? (
+            <button onClick={handleRetry} disabled={!retryReady} className="tap rounded-lg border border-violet-600 px-4 py-2 text-sm text-violet-200 transition hover:bg-violet-900/30 disabled:cursor-not-allowed disabled:opacity-50">
+              {retryReady ? retryLabel : t("deepValueRetryIn").replace("{s}", String(retryInSeconds))}
             </button>
           ) : (
             <button onClick={handleRelaunch} className="tap rounded-lg border border-violet-600 px-4 py-2 text-sm text-violet-200 transition hover:bg-violet-900/30 disabled:cursor-not-allowed disabled:opacity-50">
@@ -497,9 +395,18 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
         </div>
       )}
 
+      {/* The web update's notes, once that phase has written them. */}
+      {notes && (view !== "running" || runningPhase !== "update") && <WebUpdateCard notesMd={notes} />}
+      {notes && view === "running" && runningPhase === "update" && (
+        <div className="rounded-xl border border-slate-700/60 bg-slate-900/50 p-5">
+          <span className="mb-2 inline-block h-3 w-1.5 animate-pulse bg-violet-400" />
+          <ReportBody markdown={stripJsonBlock(notes)} />
+        </div>
+      )}
+
       {/* Full report shell (masthead + badges + cards + body + recap + disclaimer) —
-          shown once the analysis completes and the JSON block carries all three scenarios. */}
-      {status === "done" && hasFullTriple(result) && ticker && (
+          shown once the run ends and the row's valuation carries all three scenarios. */}
+      {view === "done" && hasFullTriple(result) && ticker && (
         <ReportShell
           ticker={ticker}
           companyName={companyName}
@@ -507,13 +414,13 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
           reportTypeLabel={t("deepValueTitle")}
           markdown={markdownContent}
           result={result}
-          currentPrice={currentPrice}
-          priceCurrency={currency}
+          currentPrice={runPrice ?? undefined}
+          priceCurrency={runCurrency ?? undefined}
           // The MoS the fair values were computed at, not the slider's current value.
-          mosPercent={runInputs?.mosPercent ?? mosPercent}
+          mosPercent={row?.mosPercent ?? runInputs?.mosPercent ?? mosPercent}
           labels={{
             recapTableTitle: t("recapTableTitle"),
-            recapCurrentPrice: t("recapCurrentPrice"),
+            recapCurrentPrice: t("recapPriceAtAnalysis"),
             bearLabel: t("bearLabel"),
             baseLabel: t("baseLabel"),
             bullLabel: t("bullLabel"),
@@ -528,43 +435,41 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
         />
       )}
 
-      {/* Deterministic checks card — every run with a complete block and a price.
-          Recomputes the model's own declared bridge from the extract this run actually used
-          (not the live input, which may have been edited since), before and independently
-          of the saved page. */}
-      {status === "done" && hasFullTriple(result) && runInputs?.currentPrice != null && runInputs.dataset && (
+      {/* Deterministic checks card — every run with a complete block and a stored price.
+          Recomputes the model's own declared bridge from the extract this run used (not the
+          live input, which may have been edited since), at the price the run was valued at. */}
+      {view === "done" && hasFullTriple(result) && runPrice != null && runInputs?.dataset && (
         <ValuationChecksCard
           result={result}
           extract={runInputs.dataset.extract}
-          mosPercent={runInputs.mosPercent}
-          currentPrice={runInputs.currentPrice}
+          mosPercent={row?.mosPercent ?? runInputs.mosPercent}
+          currentPrice={runPrice}
           // An unknown quote currency stays unknown: assuming the report's would compare
           // a price in pence with values in pounds.
-          currency={runInputs.currency ?? ""}
-          priceSource="live"
+          currency={runCurrency ?? ""}
+          priceSource="analysis"
           reportMd={stripJsonBlock(report)}
         />
       )}
 
+      {/* The run ended but its row could not be re-read: the numbers are on the saved page. */}
+      {rowMissing && <p className="text-xs text-warning">{t("deepValueReloadForNumbers")}</p>}
+
       {/* A finished run whose valuation block is missing or incomplete: the report still
           shows (raw, below) and is saved without fair values — say so instead of hiding it. */}
-      {status === "done" && report && !hasFullTriple(result) && (
-        <p className="text-xs text-warning">{t("deepValueIncompleteJson")}</p>
-      )}
+      {view === "done" && row && report && !hasFullTriple(result) && <p className="text-xs text-warning">{t("deepValueIncompleteJson")}</p>}
 
-      {/* Raw streaming report — shown while generating, before the shell above takes over. */}
-      {report && !(status === "done" && hasFullTriple(result)) && (
+      {/* Raw report — shown while generating (and when stopped), before the shell takes over. */}
+      {report && !(view === "done" && hasFullTriple(result)) && (
         <div className="rounded-xl border border-slate-700/60 bg-slate-900/50 p-5">
-          {isStreaming && (
-            <span className="mb-2 inline-block h-3 w-1.5 animate-pulse bg-violet-400" />
-          )}
+          {isStreaming && <span className="mb-2 inline-block h-3 w-1.5 animate-pulse bg-violet-400" />}
           <ReportBody markdown={markdownContent} />
         </div>
       )}
 
-      {/* The server saved the row when the run ended: a link to it, and the PDF export. The
+      {/* The server saved the row as the run ended: a link to it, and the PDF export. The
           analyst panel (skeptic/optimist/quality) runs on that saved page. */}
-      {status === "done" && report && (
+      {view === "done" && report && (
         <div className="flex flex-wrap items-center gap-3 pt-1 print:hidden">
           <button
             onClick={() => window.print()}
@@ -584,7 +489,7 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
       )}
 
       {/* Decision Panel — pipeline routing after analysis completes */}
-      {status === "done" && hasFullTriple(result) && ticker && (
+      {view === "done" && hasFullTriple(result) && ticker && (
         <div className="flex flex-wrap items-center gap-2 border-t border-slate-800/60 pt-4 print:hidden">
           {/* Add to Watchlist */}
           <button
@@ -612,4 +517,12 @@ export default function DeepValuePanel({ ticker, companyName, mosPercent = 0, cu
       )}
     </div>
   );
+}
+
+/** The phases of a ?resume= row: those before its phase done, its phase failed. */
+function phasesOfResumeRow(row: SavedAnalysis): Record<DeepValuePhase, DeepValuePhaseState> {
+  const at = typeof row.runPhase === "string" ? DEEP_VALUE_PHASES.indexOf(row.runPhase as DeepValuePhase) : -1;
+  return Object.fromEntries(
+    DEEP_VALUE_PHASES.map((p, i) => [p, isDone(row) || i < at ? "done" : i === at ? "failed" : "waiting"])
+  ) as Record<DeepValuePhase, DeepValuePhaseState>;
 }

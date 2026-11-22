@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { buildDeepValueSystemPrompt, buildDeepValueUserPrompt, buildAnalystSystemPrompt, buildAnalystUserPrompt, buildAnalystReconcileUserPrompt } from "@/lib/ai/deep-value-prompts";
+import {
+  buildValuationSystemPrompt,
+  buildValuationUserPrompt,
+  buildReportUserPrompt,
+  buildAnalystSystemPrompt,
+  buildAnalystUserPrompt,
+  buildAnalystReconcileUserPrompt,
+} from "@/lib/ai/deep-value-prompts";
 import { CRITIQUE_START_MARKER } from "@/lib/report/parse-deep-value-json";
 import { buildGroundingPromptContext, formatGroundingForPrompt, formatRowSources } from "@/lib/grounding/prompt-format";
 import { pasteSource } from "@/lib/grounding/merge";
@@ -18,14 +25,17 @@ const GROUNDING = buildGroundingPromptContext(BLOCKS, EXTRACT, 10, "EUR");
 // calls buildGroundingPromptContext([], ...) after re-reading the analysis's dataset.
 const LENS_GROUNDING = { ...GROUNDING, blocks: [] };
 
-const SYSTEM = buildDeepValueSystemPrompt({ language: "English", currentDate: "July 12, 2026", mosPercent: 20, grounding: GROUNDING });
+const SYSTEM = buildValuationSystemPrompt({ language: "English", currentDate: "July 12, 2026", mosPercent: 20, grounding: GROUNDING });
+// The web update's notes (invented), as the valuation and the report read them from the row.
+const UPDATE_NOTES = "## 1. After the dataset\nH1 2026 revenue 600 (https://example.com/h1, July 1, 2026)";
+const VALUATION_USER = buildValuationUserPrompt({ ticker: "FNCT.MI", currentPrice: 10, currency: "EUR", currentDate: "July 12, 2026", grounding: GROUNDING, updateNotes: UPDATE_NOTES });
 
 function web(url: string, verified: boolean): DataSource {
   return { kind: "web", url, title: null, asOf: null, blockId: null, verified };
 }
 
 describe("The dataset rules block and the data section", () => {
-  it("buildDeepValueSystemPrompt injects DATASET_RULES_BLOCK between Step 2 and Step 3", () => {
+  it("the valuation system prompt injects DATASET_RULES_BLOCK between Step 2 and Step 3", () => {
     expect(SYSTEM).toContain("## Financial dataset — how to use it (MANDATORY)");
     expect(SYSTEM).toContain("The financial dataset below was transcribed from documents the user pasted and/or researched from primary sources, with a source per row");
     // The rules must land AFTER Step 2 (data gathering) and BEFORE Step 3 (scenarios) —
@@ -64,12 +74,11 @@ describe("The dataset rules block and the data section", () => {
     expect(SYSTEM).toContain("the company's OWN historical distribution as given in the dataset's anchors (median/percentile)");
   });
 
-  it("buildDeepValueUserPrompt appends the formatted dataset section after the base prompt", () => {
-    const usr = buildDeepValueUserPrompt({ ticker: "FNCT.MI", currentPrice: 10, currency: "EUR", language: "English", grounding: GROUNDING });
-    expect(usr).toContain("Analyze FNCT.MI.");
-    expect(usr).toContain("AUTHORITATIVE FINANCIAL DATA");
-    expect(usr).toContain("some pasted table");
-    expect(usr.indexOf("AUTHORITATIVE FINANCIAL DATA")).toBeGreaterThan(usr.indexOf("Analyze FNCT.MI."));
+  it("the valuation user prompt appends the formatted dataset section after the base prompt", () => {
+    expect(VALUATION_USER).toContain("Value FNCT.MI.");
+    expect(VALUATION_USER).toContain("AUTHORITATIVE FINANCIAL DATA");
+    expect(VALUATION_USER).toContain("some pasted table");
+    expect(VALUATION_USER.indexOf("AUTHORITATIVE FINANCIAL DATA")).toBeGreaterThan(VALUATION_USER.indexOf("Value FNCT.MI."));
   });
 });
 
@@ -110,18 +119,35 @@ describe("The dataset reaches the analyst lenses too", () => {
   });
 });
 
-describe("The report prompts rescope web search to what the dataset cannot hold", () => {
-  it("system prompt Step 2 does not say to gather the data via web search", () => {
+describe("The web update's notes replace the valuation's own web search", () => {
+  it("the valuation's Step 2 takes history from the dataset and the rest from WEB UPDATE", () => {
     expect(SYSTEM).not.toContain("Gather financial data via web search");
     expect(SYSTEM).not.toContain("Search for the most recent annual financial data");
     expect(SYSTEM).toContain("## Step 2 — Gather financial data\n");
-    expect(SYSTEM).toContain("Use web search only for what was published after that data's coverage period");
+    expect(SYSTEM).toContain("what was published after its coverage period, the risk-free rate, the beta and the qualitative context are in WEB UPDATE");
   });
 
-  it("user prompt does not say to find the financial data via web search", () => {
-    const usr = buildDeepValueUserPrompt({ ticker: "FNCT.MI", currentPrice: 10, currency: "EUR", language: "English", grounding: GROUNDING });
-    expect(usr).not.toContain("Use web search to find the financial data");
-    expect(usr).toContain("use web search only for what was published after its coverage period");
+  it("the valuation user prompt carries the notes before the dataset, and no web search", () => {
+    expect(VALUATION_USER).not.toContain("Use web search to find the financial data");
+    expect(VALUATION_USER).toContain("the recent facts from WEB UPDATE");
+    expect(VALUATION_USER).toContain(`--- WEB UPDATE (researched July 12, 2026) ---\n${UPDATE_NOTES}\n--- END WEB UPDATE ---`);
+    expect(VALUATION_USER.indexOf("--- WEB UPDATE")).toBeLessThan(VALUATION_USER.indexOf("AUTHORITATIVE FINANCIAL DATA"));
+  });
+
+  it("the report's first message carries the notes and the dataset too", () => {
+    const report = buildReportUserPrompt({
+      ticker: "FNCT.MI",
+      currentPrice: 10,
+      currency: "EUR",
+      language: "English",
+      currentDate: "July 12, 2026",
+      grounding: GROUNDING,
+      updateNotes: UPDATE_NOTES,
+      resultJson: JSON.stringify({ bull: { fairValue: 12 }, base: { fairValue: 10 }, bear: { fairValue: 8 } }),
+      memo: "Median multiple.",
+    });
+    expect(report).toContain(`--- WEB UPDATE (researched July 12, 2026) ---\n${UPDATE_NOTES}\n`);
+    expect(report).toContain("AUTHORITATIVE FINANCIAL DATA");
   });
 });
 

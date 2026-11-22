@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import AnalysisDetailBody from "@/components/analysis-detail-body";
 import { DetailBreadcrumb, DetailFooterActions, DetailRunStatus } from "@/components/analysis-detail-chrome";
 import { isDone } from "@/lib/report/run-status";
+import { isDeepValuePhase } from "@/types/ai-run";
 import { readAnalysisExtract } from "@/lib/datasets/store";
 import type { Triple } from "@/lib/report/valuation";
 import {
@@ -51,6 +52,8 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
             runStartedAt: analysis.runStartedAt?.toISOString() ?? null,
             runError: analysis.runError,
             datasetId: analysis.datasetId,
+            runPhase: isDeepValuePhase(analysis.runPhase) ? analysis.runPhase : null,
+            createdAt: analysis.createdAt.toISOString(),
           }}
         />
         <DetailFooterActions ticker={analysis.ticker} finished={false} />
@@ -117,6 +120,7 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
         priceAtAnalysis={analysis.priceAtAnalysis ?? null}
         priceCurrency={analysis.priceCurrency ?? null}
         groundingExtract={groundingExtract}
+        updateNotesMd={analysis.updateNotesMd ?? null}
         position={position}
         initialCritiques={{
           skeptic: analysis.reviewMd,

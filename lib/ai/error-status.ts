@@ -21,7 +21,7 @@ function isBusy(error: unknown): boolean {
 }
 
 /** A run that ended badly without throwing (lib/ai/run-outcome.ts). */
-type FailedRunEnd = { kind: "failed"; reason: "empty" | "refusal" | "max_tokens" };
+type FailedRunEnd = { kind: "failed"; reason: "empty" | "refusal" | "max_tokens" | "no_valuation" };
 
 function isFailedRunEnd(value: unknown): value is FailedRunEnd {
   return typeof value === "object" && value !== null && (value as { kind?: unknown }).kind === "failed";
@@ -41,12 +41,16 @@ const RUN_ERROR_TEXT = {
     it: "Il modello ha rifiutato questa richiesta. Riprova con un altro modello.",
   },
   truncated: {
-    en: "The answer hit the length limit before its valuation. Retry.",
-    it: "La risposta ha raggiunto il limite di lunghezza prima della valutazione. Riprova.",
+    en: "The answer was cut before its end: retry.",
+    it: "La risposta si è interrotta prima della fine: riprova.",
   },
   empty: {
-    en: "The model returned no report. Retry.",
-    it: "Il modello non ha restituito alcun report. Riprova.",
+    en: "The model returned no answer: retry.",
+    it: "Il modello non ha risposto: riprova.",
+  },
+  no_valuation: {
+    en: "The valuation came back without a complete bull/base/bear: retry.",
+    it: "La valutazione è arrivata senza la terna completa: riprova.",
   },
   gone: {
     en: "This analysis was deleted.",
@@ -63,7 +67,11 @@ const RUN_ERROR_TEXT = {
 } as const;
 
 function runErrorClass(err: unknown): keyof typeof RUN_ERROR_TEXT {
-  if (isFailedRunEnd(err)) return err.reason === "refusal" ? "refusal" : err.reason === "max_tokens" ? "truncated" : "empty";
+  if (isFailedRunEnd(err)) {
+    if (err.reason === "refusal") return "refusal";
+    if (err.reason === "max_tokens") return "truncated";
+    return err.reason === "no_valuation" ? "no_valuation" : "empty";
+  }
   if (err instanceof AnalysisRunGone) return "gone";
   if (err instanceof AnalysisRunConflict && err.message === "dataset no longer available") return "dataset";
   if (isBusy(err)) return "busy";

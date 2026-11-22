@@ -19,8 +19,10 @@ vi.mock("@/lib/db", () => ({
 }));
 
 import {
-  resumeAnalysisRun,
-  finishAnalysisRun,
+  claimRunPhase,
+  finishUpdatePhase,
+  finishValuationPhase,
+  finishReportPart,
   failAnalysisRun,
   saveLensBlind,
   saveLensCritique,
@@ -70,56 +72,131 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-describe("resumeAnalysisRun", () => {
-  it("refuses a done row: run already finished", async () => {
-    findFirst.mockResolvedValue(row({ runStatus: "done" }));
-    await expect(resumeAnalysisRun("u1", "an1")).rejects.toThrow(new AnalysisRunConflict("run already finished"));
-    expect(update).not.toHaveBeenCalled();
-  });
-
-  it("refuses a run started 2 minutes ago: run still in progress", async () => {
-    findFirst.mockResolvedValue(row({ runStatus: "running", runStartedAt: new Date(NOW.getTime() - 2 * MIN) }));
-    await expect(resumeAnalysisRun("u1", "an1")).rejects.toThrow("run still in progress");
-    expect(update).not.toHaveBeenCalled();
-  });
-
-  it("takes over a run started 6 minutes ago: running again, dated now, previous result cleared", async () => {
-    findFirst.mockResolvedValue(row({ runStatus: "running", runStartedAt: new Date(NOW.getTime() - 6 * MIN) }));
-    const resumed = await resumeAnalysisRun("u1", "an1");
-    expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "an1", userId: "u1" } }));
-    expect(update).toHaveBeenCalledWith({
-      where: { id: "an1" },
-      data: {
-        reportMd: "",
-        resultJson: null,
-        fairValueBull: null,
-        fairValueBase: null,
-        fairValueBear: null,
-        valuationMethod: null,
-        currency: null,
-        sector: null,
-        runError: null,
-        runStatus: "running",
-        runStartedAt: NOW,
-        createdAt: NOW,
-      },
+describe("claimRunPhase", () => {
+  // A row between two phases: running, no request in flight, at `runPhase`.
+  function between(phase: string, overrides: Record<string, unknown> = {}) {
+    return row({
+      runStatus: "running",
+      runStartedAt: null,
+      runPhase: phase,
+      createdAt: new Date(NOW.getTime() - 30 * MIN),
+      priceAtAnalysis: 10,
+      priceCurrency: "EUR",
+      reportMd: "## 1. X",
+      updateNotesMd: "Notes.",
+      resultJson: "{}",
+      valuationMemo: "Memo.",
+      ...overrides,
     });
-    expect(resumed).toMatchObject({ id: "an1", userId: "u1", runStartedAt: NOW, datasetId: "ds1", mosPercent: 25, aiEffort: "xhigh" });
+  }
+
+  it("claims with a conditional update on the status and the start it read, even a null start", async () => {
+    findFirst.mockResolvedValue(between("valuation"));
+    const claimed = await claimRunPhase("u1", "an1", "valuation", NOW);
+    expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "an1", userId: "u1" } }));
+    expect(updateMany.mock.calls[0][0].where).toEqual({ id: "an1", userId: "u1", runStatus: "running", runStartedAt: null });
+    expect(updateMany.mock.calls[0][0].data).toMatchObject({ runStatus: "running", runStartedAt: NOW, runError: null });
+    expect(claimed).toMatchObject({ id: "an1", userId: "u1", runStartedAt: NOW, phase: "valuation", restarted: false });
   });
 
-  it("refuses a row whose dataset was deleted", async () => {
-    findFirst.mockResolvedValue(row({ datasetId: null }));
-    await expect(resumeAnalysisRun("u1", "an1")).rejects.toThrow("dataset no longer available");
+  it("puts the start it read in the where on a failed row with a start", async () => {
+    const started = new Date(NOW.getTime() - 10 * MIN);
+    findFirst.mockResolvedValue(between("report1", { runStatus: "failed", runStartedAt: started }));
+    await claimRunPhase("u1", "an1", null, NOW);
+    expect(updateMany.mock.calls[0][0].where).toEqual({ id: "an1", userId: "u1", runStatus: "failed", runStartedAt: started });
   });
 
-  it("reads another user's row as missing", async () => {
-    findFirst.mockResolvedValue(null);
-    await expect(resumeAnalysisRun("u2", "an1")).rejects.toBeInstanceOf(AnalysisRunNotFound);
+  it("refuses a chain to a phase other than the row's", async () => {
+    findFirst.mockResolvedValue(between("valuation"));
+    await expect(claimRunPhase("u1", "an1", "report1", NOW)).rejects.toThrow(new AnalysisRunConflict("phase out of order"));
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses a chain on a failed row at the same phase", async () => {
+    findFirst.mockResolvedValue(between("valuation", { runStatus: "failed" }));
+    await expect(claimRunPhase("u1", "an1", "valuation", NOW)).rejects.toThrow("phase out of order");
+  });
+
+  it("refuses a chain on a row with a request in flight (an old start)", async () => {
+    findFirst.mockResolvedValue(between("valuation", { runStartedAt: new Date(NOW.getTime() - 10 * MIN) }));
+    await expect(claimRunPhase("u1", "an1", "valuation", NOW)).rejects.toThrow("phase out of order");
+  });
+
+  it("refuses any claim while a request started 100 s ago may still be alive", async () => {
+    findFirst.mockResolvedValue(between("valuation", { runStartedAt: new Date(NOW.getTime() - 100 * 1000) }));
+    await expect(claimRunPhase("u1", "an1", null, NOW)).rejects.toThrow("run still in progress");
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it("reads a claim that touched no row as a conflict", async () => {
+    findFirst.mockResolvedValue(between("valuation"));
+    updateMany.mockResolvedValue({ count: 0 });
+    await expect(claimRunPhase("u1", "an1", "valuation", NOW)).rejects.toBeInstanceOf(AnalysisRunConflict);
+  });
+
+  it("refuses a done row, a row without its dataset, and reads another user's row as missing", async () => {
+    findFirst.mockResolvedValueOnce(row({ runStatus: "done" }));
+    await expect(claimRunPhase("u1", "an1", null, NOW)).rejects.toThrow("run already finished");
+    findFirst.mockResolvedValueOnce(between("valuation", { datasetId: null }));
+    await expect(claimRunPhase("u1", "an1", null, NOW)).rejects.toThrow("dataset no longer available");
+    findFirst.mockResolvedValueOnce(null);
+    await expect(claimRunPhase("u2", "an1", null, NOW)).rejects.toBeInstanceOf(AnalysisRunNotFound);
+  });
+
+  it("a Retry at 30 minutes on report1 clears only the report and keeps the date and the price", async () => {
+    const createdAt = new Date(NOW.getTime() - 30 * MIN);
+    findFirst.mockResolvedValue(between("report1", { runStatus: "failed", createdAt }));
+    const claimed = await claimRunPhase("u1", "an1", null, NOW);
+    const { data } = updateMany.mock.calls[0][0];
+    expect(data.reportMd).toBe("");
+    expect(data).not.toHaveProperty("resultJson");
+    expect(data).not.toHaveProperty("priceAtAnalysis");
+    expect(data).not.toHaveProperty("createdAt");
+    expect(data).not.toHaveProperty("runPhase");
+    expect(claimed).toMatchObject({
+      phase: "report1",
+      restarted: false,
+      createdAt,
+      priceAtAnalysis: 10,
+      priceCurrency: "EUR",
+      resultJson: "{}",
+      updateNotesMd: "Notes.",
+      reportMd: "",
+    });
+  });
+
+  it("a Retry at 2 hours clears everything, quote included, back at update, dated now", async () => {
+    findFirst.mockResolvedValue(between("report1", { runStatus: "failed", createdAt: new Date(NOW.getTime() - 120 * MIN) }));
+    const claimed = await claimRunPhase("u1", "an1", null, NOW);
+    expect(updateMany.mock.calls[0][0].data).toMatchObject({
+      updateNotesMd: null,
+      resultJson: null,
+      fairValueBull: null,
+      fairValueBase: null,
+      fairValueBear: null,
+      valuationMemo: null,
+      currency: null,
+      reportMd: "",
+      priceAtAnalysis: null,
+      priceCurrency: null,
+      runPhase: "update",
+      runStatus: "running",
+      runStartedAt: NOW,
+      createdAt: NOW,
+    });
+    expect(claimed).toMatchObject({ phase: "update", restarted: true, createdAt: NOW, priceAtAnalysis: null, updateNotesMd: null, resultJson: null });
+  });
+
+  it("writes the capped effort: a row saved at xhigh runs at high", async () => {
+    findFirst.mockResolvedValue(between("valuation", { aiEffort: "xhigh" }));
+    const claimed = await claimRunPhase("u1", "an1", "valuation", NOW);
+    expect(updateMany.mock.calls[0][0].data.aiEffort).toBe("high");
+    expect(claimed.aiEffort).toBe("high");
   });
 });
 
 describe("startAnalysisRun", () => {
-  it("creates the row running, dated now, with an empty report", async () => {
+  it("creates the row running at the update phase, dated now, with an empty report", async () => {
     const handle = await startAnalysisRun("u1", {
       ticker: "AAA",
       companyName: "Aaa SpA",
@@ -127,38 +204,67 @@ describe("startAnalysisRun", () => {
       mosPercent: 25,
       reportLanguage: "English",
       aiModel: "claude-opus-4-8",
-      aiEffort: "xhigh",
+      aiEffort: "high",
       aiThinking: true,
       priceAtAnalysis: 10,
       priceCurrency: "GBp",
     });
-    expect(create.mock.calls[0][0].data).toMatchObject({ userId: "u1", reportMd: "", runStatus: "running", runStartedAt: NOW, createdAt: NOW, priceCurrency: "GBp" });
+    expect(create.mock.calls[0][0].data).toMatchObject({
+      userId: "u1",
+      reportMd: "",
+      runStatus: "running",
+      runPhase: "update",
+      runStartedAt: NOW,
+      createdAt: NOW,
+      priceCurrency: "GBp",
+    });
     expect(handle).toEqual({ id: "new1", userId: "u1", runStartedAt: NOW });
   });
 });
 
-describe("finishAnalysisRun / failAnalysisRun", () => {
-  it("writes once, scoped to this attempt's start, and marks the row done", async () => {
-    await finishAnalysisRun(HANDLE, { reportMd: "## 1. X", result: FULL });
-    expect(updateMany).toHaveBeenCalledTimes(1);
+describe("phase writes", () => {
+  it("finishUpdatePhase writes the notes and moves to the valuation with no request in flight", async () => {
+    await finishUpdatePhase(HANDLE, "Notes.");
     const { where, data } = updateMany.mock.calls[0][0];
     expect(where).toEqual({ id: "an1", userId: "u1", runStartedAt: HANDLE.runStartedAt });
-    expect(data).toMatchObject({ reportMd: "## 1. X", runStatus: "done", fairValueBase: 20, currency: "EUR", sector: "Utilities" });
+    expect(data).toEqual({ updateNotesMd: "Notes.", runPhase: "valuation", runStartedAt: null });
+  });
+
+  it("finishValuationPhase writes the numbers and the memo and leaves the row running", async () => {
+    await finishValuationPhase(HANDLE, { result: FULL as never, memo: "x".repeat(5000) });
+    const { where, data } = updateMany.mock.calls[0][0];
+    expect(where).toEqual({ id: "an1", userId: "u1", runStartedAt: HANDLE.runStartedAt });
+    expect(data).toMatchObject({ fairValueBull: 30, fairValueBase: 20, fairValueBear: 10, currency: "EUR", sector: "Utilities", runPhase: "report1", runStartedAt: null });
+    expect(data).not.toHaveProperty("runStatus");
     expect(data.valuationMethod).toHaveLength(40);
+    expect(data.valuationMemo).toHaveLength(4000);
     expect(JSON.parse(data.resultJson).base.fairValue).toBe(20);
   });
 
-  it("stores no result and no fair values without a full triple, and drops a currency that is not ISO", async () => {
-    await finishAnalysisRun(HANDLE, { reportMd: "## 1. X", result: { method: "DCF", sector: "", currency: "EUR (euro)", bull: { fairValue: 30 } } });
-    const { data } = updateMany.mock.calls[0][0];
-    expect(data).toMatchObject({ resultJson: null, fairValueBull: null, fairValueBase: null, fairValueBear: null, valuationMethod: null, currency: null, runStatus: "done" });
+  it("finishValuationPhase drops a currency that is not ISO", async () => {
+    await finishValuationPhase(HANDLE, { result: { ...FULL, currency: "EUR (euro)" } as never, memo: "" });
+    expect(updateMany.mock.calls[0][0].data.currency).toBeNull();
+  });
+
+  it("finishReportPart: the first part moves to report2, the last ends the run done with no phase", async () => {
+    await finishReportPart(HANDLE, { reportMd: "## 1. X", last: false });
+    expect(updateMany.mock.calls[0][0].data).toEqual({ reportMd: "## 1. X", runPhase: "report2", runStartedAt: null });
+    await finishReportPart(HANDLE, { reportMd: "## 1. X\n\n## 6. Y", last: true });
+    expect(updateMany.mock.calls[1][0].data).toMatchObject({ reportMd: "## 1. X\n\n## 6. Y", runStatus: "done", runPhase: null });
+  });
+
+  it("failAnalysisRun marks the attempt failed and leaves the report alone", async () => {
+    await failAnalysisRun(HANDLE, "Retry.");
+    const { where, data } = updateMany.mock.calls[0][0];
+    expect(where).toEqual({ id: "an1", userId: "u1", runStartedAt: HANDLE.runStartedAt });
+    expect(data).toEqual({ runStatus: "failed", runError: "Retry." });
   });
 
   it("returns 0 when the attempt was taken over or the row deleted", async () => {
     updateMany.mockResolvedValue({ count: 0 });
-    expect(await finishAnalysisRun(HANDLE, { reportMd: "x", result: null })).toBe(0);
+    expect(await finishUpdatePhase(HANDLE, "x")).toBe(0);
+    expect(await finishReportPart(HANDLE, { reportMd: "x", last: true })).toBe(0);
     expect(await failAnalysisRun(HANDLE, "Retry.")).toBe(0);
-    expect(updateMany.mock.calls[1][0].where.runStartedAt).toBe(HANDLE.runStartedAt);
   });
 });
 

@@ -47,6 +47,8 @@ const EXPECTED_KEYS = [
   "runStatus",
   "runStartedAt",
   "runError",
+  "runPhase",
+  "updateNotesMd",
   "priceCurrency",
   "createdAt",
 ];
@@ -62,6 +64,7 @@ const BLOBS = [
   "reviewResultJson",
   "optimistResultJson",
   "qualityResultJson",
+  "updateNotesMd",
 ];
 
 describe("Analysis selects", () => {

@@ -15,6 +15,7 @@ import ReportShell from "@/components/report/report-shell";
 import ReportBody from "@/components/report/report-body";
 import { ValuationChecksCard } from "@/components/report/valuation-checks-card";
 import { DatasetTables } from "@/components/report/dataset-tables";
+import { WebUpdateCard } from "@/components/report/web-update-card";
 import AnalystPanel from "@/components/analyst-panel";
 import OpenPositionBanner from "@/components/open-position-banner";
 import { sameCurrency } from "@/lib/grounding/currency";
@@ -45,6 +46,8 @@ type Props = {
   // saved before, whose price is then compared with nothing.
   priceCurrency: string | null;
   groundingExtract: GroundedFinancials | null;
+  // The web update's notes of a run in four requests (since 2026-11-22); null before.
+  updateNotesMd?: string | null;
   position: OpenPosition | null;
   initialCritiques: Partial<Record<AnalystAngle, string | null>>;
   initialBlind: Partial<Record<AnalystAngle, string | null>>;
@@ -73,12 +76,17 @@ async function resolvePagePrice(ticker: string, priceAtAnalysis: number | null, 
 }
 
 export default function AnalysisDetailBody(props: Props) {
-  const { ticker, companyName, reportDate, markdown, result, position } = props;
+  const { ticker, companyName, reportDate, markdown, result, position, updateNotesMd } = props;
 
   if (!result) {
     return (
       <>
         {position && <PositionBanner position={position} price={{ status: "none" }} />}
+        {updateNotesMd && (
+          <div className="mb-4">
+            <WebUpdateCard notesMd={updateNotesMd} />
+          </div>
+        )}
         <div className="card">
           <h1 className="mb-1 text-2xl font-bold text-slate-100">{companyName}</h1>
           <p className="mb-4 text-sm text-slate-500">
@@ -103,6 +111,7 @@ function ValuationBody({
   priceAtAnalysis,
   priceCurrency,
   groundingExtract,
+  updateNotesMd,
   position,
   initialCritiques,
   initialBlind,
@@ -127,6 +136,12 @@ function ValuationBody({
   return (
     <>
       {position && <PositionBanner position={position} price={price} />}
+
+      {updateNotesMd && (
+        <div className="mb-4">
+          <WebUpdateCard notesMd={updateNotesMd} />
+        </div>
+      )}
 
       <ReportShell
         ticker={ticker}

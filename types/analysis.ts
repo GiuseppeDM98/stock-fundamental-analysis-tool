@@ -1,4 +1,4 @@
-import type { AnalysisRunStatus } from "@/types/ai-run";
+import type { AnalysisRunStatus, DeepValuePhase } from "@/types/ai-run";
 
 /**
  * The lenses of the analyst panel. After a Deep Value analysis is saved the user can
@@ -84,8 +84,14 @@ export type SavedAnalysis = {
   // finished by the server. Absent reads "done", like the column's default — the readers
   // that weigh a valuation skip every row that is not done (lib/report/run-status.ts).
   runStatus?: AnalysisRunStatus | null;
+  // The start of the request in flight: null between two phases of a staged Deep Value run.
   runStartedAt?: string | null;
   runError?: string | null;
+  // The phase a staged Deep Value run has to run next; null once done and on older rows.
+  runPhase?: DeepValuePhase | null;
+  // The web update's notes, shown above the report. valuationMemo (the valuation's
+  // rationale, read only by the report phase) is deliberately not a field here.
+  updateNotesMd?: string | null;
   // The currency of the quote priceAtAnalysis came from; null on rows saved before it.
   priceCurrency?: string | null;
   createdAt: string; // ISO 8601 string (JSON serialized from Date)

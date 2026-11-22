@@ -195,6 +195,19 @@ export type Translations = {
   lensRetryPhase: string;
   lensPhase3Pending: string;
   analysisRunning: string;
+  // A Deep Value run in four requests (2026-11-22): the phases, their usual duration, the
+  // plan of a Retry, the web update's notes.
+  deepValueReloadForNumbers: string;
+  runPhaseUpdate: string;
+  runPhaseValuation: string;
+  runPhaseReport1: string;
+  runPhaseReport2: string;
+  runPhaseTypical: string;
+  runRetryFrom: string;
+  runRetryRestart: string;
+  runRunningPhase: string;
+  runCutAtPhase: string;
+  webUpdateTitle: string;
   analysisCut: string;
   analysisRetry: string;
   analysisRelaunch: string;
@@ -853,7 +866,7 @@ const en: Translations = {
   deepValueTitle: "Deep Value Analysis",
   deepValueDesc: "Claude picks the valuation method on the dataset above, searching the web only for what is newer",
   deepAnalysisBtn: "Deep Analysis (AI)",
-  deepValueCut: "The run was cut before the end. Retry: it restarts the valuation on the same dataset.",
+  deepValueCut: "The run was cut before the end.",
   deepValueRetry: "Retry",
   deepValueRetryIn: "Retry available in {s} s",
   deepValueOpenSaved: "Open the saved report →",
@@ -862,6 +875,17 @@ const en: Translations = {
   lensRetryPhase: "Retry phase {phase}",
   lensPhase3Pending: "Phase 3 pending",
   analysisRunning: "Analysis in progress… (started {m} min ago)",
+  deepValueReloadForNumbers: "The report is saved. Reload the page to see its numbers.",
+  runPhaseUpdate: "Web update",
+  runPhaseValuation: "Valuation",
+  runPhaseReport1: "Report, sections 1–5",
+  runPhaseReport2: "Report, sections 6–10",
+  runPhaseTypical: "usually ~{minutes} min",
+  runRetryFrom: "Retry from: {phase}",
+  runRetryRestart: "Retry from the start, with a new quote",
+  runRunningPhase: "Running: {phase}",
+  runCutAtPhase: "Interrupted during: {phase}",
+  webUpdateTitle: "Web update",
   analysisCut: "Analysis interrupted",
   analysisRetry: "Retry",
   analysisRelaunch: "Run again",
@@ -1519,7 +1543,7 @@ const it: Translations = {
   deepValueTitle: "Analisi Deep Value",
   deepValueDesc: "Claude sceglie il metodo di valutazione sul dataset qui sopra e cerca sul web solo ciò che è più recente",
   deepAnalysisBtn: "Analisi Profonda (AI)",
-  deepValueCut: "La corsa si è interrotta prima della fine. Riprova: rifà la valutazione sullo stesso dataset.",
+  deepValueCut: "La corsa si è interrotta prima della fine.",
   deepValueRetry: "Riprova",
   deepValueRetryIn: "Riprova disponibile fra {s} s",
   deepValueOpenSaved: "Apri il report salvato →",
@@ -1528,6 +1552,17 @@ const it: Translations = {
   lensRetryPhase: "Riprova (Fase {phase})",
   lensPhase3Pending: "Fase 3 da fare",
   analysisRunning: "Analisi in corso… (da {m} min)",
+  deepValueReloadForNumbers: "Il report è salvato. Ricarica la pagina per vederne i numeri.",
+  runPhaseUpdate: "Aggiornamento dal web",
+  runPhaseValuation: "Valutazione",
+  runPhaseReport1: "Report, sezioni 1-5",
+  runPhaseReport2: "Report, sezioni 6-10",
+  runPhaseTypical: "di solito ~{minutes} min",
+  runRetryFrom: "Riprova da: {phase}",
+  runRetryRestart: "Riprova da capo, con una quotazione nuova",
+  runRunningPhase: "In corso: {phase}",
+  runCutAtPhase: "Interrotta durante: {phase}",
+  webUpdateTitle: "Aggiornamento dal web",
   analysisCut: "Analisi interrotta",
   analysisRetry: "Riprova",
   analysisRelaunch: "Rilancia",
