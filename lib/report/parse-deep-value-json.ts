@@ -67,6 +67,16 @@ const JSON_BLOCK_RE_GLOBAL = /```json\n([\s\S]*?)\n```/g;
 // comment as visible text (no skipHtml), so a stray marker would show on screen.
 export const REPORT_START_MARKER = "<!--report-->";
 export const CRITIQUE_START_MARKER = "<!--critique-->";
+// The web update's notes start after this line (2026-11-22): its searches come first, and
+// whatever the model writes between them is dropped by the route's gate.
+export const NOTES_START_MARKER = "<!--notes-->";
+
+/** The saved report: its two parts, then the valuation's JSON as the last fence — where every
+ *  reader of an older report already looks for it. The numbers are the valuation's, fixed
+ *  before the report was written: a fence the model wrote in the report is never the last. */
+export function withResultFence(reportMd: string, resultJson: string): string {
+  return `${reportMd.trimEnd()}\n\n\`\`\`json\n${JSON.stringify(JSON.parse(resultJson), null, 2)}\n\`\`\`\n`;
+}
 
 // ─── Shape sanitization ────────────────────────────────────────────────────────────
 // The JSON block is untrusted model output: a field can be null, a string, an array or
@@ -337,7 +347,8 @@ export function stripJsonBlock(text: string): string {
   return text
     .replace(/```json\n[\s\S]*?\n```\n?/g, "")
     .replaceAll(REPORT_START_MARKER, "")
-    .replaceAll(CRITIQUE_START_MARKER, "");
+    .replaceAll(CRITIQUE_START_MARKER, "")
+    .replaceAll(NOTES_START_MARKER, "");
 }
 
 /**

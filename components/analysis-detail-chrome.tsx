@@ -52,7 +52,11 @@ export function DetailFooterActions({ ticker, finished = true }: { ticker: strin
  * The detail page of a row whose run has not finished (2026-10-27): the status line in place
  * of the report, with no analyst panel. Delete goes back to the list.
  */
-export function DetailRunStatus({ analysis }: { analysis: Pick<SavedAnalysis, "id" | "ticker" | "runStatus" | "runStartedAt" | "runError" | "datasetId"> }) {
+export function DetailRunStatus({
+  analysis,
+}: {
+  analysis: Pick<SavedAnalysis, "id" | "ticker" | "runStatus" | "runStartedAt" | "runError" | "datasetId" | "runPhase" | "createdAt">;
+}) {
   const { t } = useLanguage();
   const [now, setNow] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);

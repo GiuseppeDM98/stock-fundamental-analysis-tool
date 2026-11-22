@@ -542,6 +542,15 @@ async function seedAnalyses(db: PrismaClient, today: Date): Promise<void> {
       fairValueBear: GROUNDED_RESULT.bear.fairValue,
       valuationMethod: GROUNDED_RESULT.method,
       datasetId: IDS.datasetGrounded,
+      updateNotesMd: [
+        "## Results after the dataset",
+        "",
+        `- Half-year revenue up 10% (${DECOY.groundedWebUpdate}) — [source](https://example.com/half-year)`,
+        "",
+        "## Cost of capital",
+        "",
+        `- Ten-year yield at 4% (${DECOY.groundedWebUpdate}) — [source](https://example.com/yield)`,
+      ].join("\n"),
       reportMd: deepValueReportJsonLast(
         GROUNDED_RESULT,
         `## 1. Overview\n\nGrounded report ${DECOY.groundedReport}: regulated networks with a stable EBITDA path.\n\n## 2. Moat\n\nConcession-based moat.\n\n## 8. Summary\n\nBase case EV/EBITDA 8.0x on FY2025 EBITDA.`
@@ -704,8 +713,9 @@ async function seedAnalyses(db: PrismaClient, today: Date): Promise<void> {
     },
   });
   // Two NSCA runs that have not finished, dated against the visual's fixed clock
-  // (referenceDay() + 12h): one cut 30 minutes before it (failed, retryable from
-  // /analyses), one started 2 minutes before it (in progress, no Retry).
+  // (referenceDay() + 12h): one cut 30 minutes before it in its valuation (failed, within
+  // the hour: Retry resumes from the valuation), one started 2 minutes before it, still in
+  // its web update (in progress, no Retry).
   const reference = new Date(today.getTime() + 12 * 60 * 60 * 1000);
   const cutAt = new Date(reference.getTime() - 30 * 60 * 1000);
   const liveAt = new Date(reference.getTime() - 2 * 60 * 1000);
@@ -718,9 +728,11 @@ async function seedAnalyses(db: PrismaClient, today: Date): Promise<void> {
       mosPercent: 25,
       datasetId: IDS.datasetCut,
       reportMd: "",
+      updateNotesMd: `## Results after the dataset\n\n- Quarter revenue flat (${DECOY.cutWebUpdate}) — [source](https://example.com/quarter)`,
       runStatus: "failed",
+      runPhase: "valuation",
       runError: "The valuation stopped before the end (e2e)",
-      runStartedAt: cutAt,
+      runStartedAt: null,
       createdAt: cutAt,
     },
   });
@@ -734,6 +746,7 @@ async function seedAnalyses(db: PrismaClient, today: Date): Promise<void> {
       datasetId: IDS.datasetCut,
       reportMd: "",
       runStatus: "running",
+      runPhase: "update",
       runStartedAt: liveAt,
       createdAt: liveAt,
     },

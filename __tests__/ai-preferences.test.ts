@@ -5,7 +5,7 @@ vi.mock("@/lib/db", () => ({
   db: { user: { findUnique: (...args: unknown[]) => findUniqueMock(...args) } },
 }));
 
-import { aiModelIdSchema, researchAiSettings, resolveAiSettings } from "@/lib/ai/ai-preferences";
+import { aiModelIdSchema, researchAiSettings, resolveAiSettings, updatePhaseSettings } from "@/lib/ai/ai-preferences";
 import type { AiSettings } from "@/types/ai-settings";
 
 const FALLBACK: AiSettings = { model: "claude-opus-4-8", effort: "high", thinking: true };
@@ -130,5 +130,15 @@ describe("researchAiSettings", () => {
   it("follows a body override naming a DeepSeek model over an Anthropic default", async () => {
     findUniqueMock.mockResolvedValueOnce({ aiModel: "claude-opus-4-8", aiEffort: "high", aiThinkingEnabled: true });
     expect(await researchAiSettings("user10", { model: "deepseek-v4-pro" })).toEqual({ model: "deepseek-v4-pro", effort: "high", thinking: true });
+  });
+});
+
+describe("updatePhaseSettings", () => {
+  it("runs the web update on Sonnet 5.5 at high whatever Claude model runs the valuation", () => {
+    expect(updatePhaseSettings("claude-opus-4-8")).toEqual({ model: "claude-sonnet-5-5", effort: "high", thinking: true });
+  });
+
+  it("keeps a DeepSeek run on its own model, at high", () => {
+    expect(updatePhaseSettings("deepseek-v4-pro")).toEqual({ model: "deepseek-v4-pro", effort: "high", thinking: true });
   });
 });

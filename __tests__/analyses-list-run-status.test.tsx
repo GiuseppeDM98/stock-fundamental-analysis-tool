@@ -162,6 +162,52 @@ describe("AnalysesList — rows whose run has not finished", () => {
     expect(screen.getByText(new RegExp(`0 ${en.analysesCountLabel}`))).toBeInTheDocument();
   });
 
+  const onlyLine = () =>
+    waitFor(() => {
+      const [only] = statusLines();
+      expect(only).toBeDefined();
+      return only;
+    });
+
+  it("a phased run in flight names its phase, counts minutes from the run's start, and offers no Retry", async () => {
+    fetchAnalysesMock.mockResolvedValue([pending({ runPhase: "update", runStartedAt: minutesAgo(1), createdAt: minutesAgo(3) })]);
+    render(<AnalysesList />);
+
+    const line = await onlyLine();
+    expect(within(line).getByText(en.runRunningPhase.replace("{phase}", en.runPhaseUpdate), { exact: false })).toBeInTheDocument();
+    expect(within(line).getByText(en.analysisRunning.replace("{m}", "3"))).toBeInTheDocument();
+    expect(within(line).queryByText(en.runRetryFrom, { exact: false })).not.toBeInTheDocument();
+  });
+
+  it("a phased run cut at the valuation says so, and Retry resumes from there within the hour", async () => {
+    fetchAnalysesMock.mockResolvedValue([pending({ id: "an-cut", runStatus: "failed", runPhase: "valuation", runStartedAt: null, createdAt: minutesAgo(30) })]);
+    render(<AnalysesList />);
+
+    const line = await onlyLine();
+    expect(within(line).getByText(en.runCutAtPhase.replace("{phase}", en.runPhaseValuation), { exact: false })).toBeInTheDocument();
+    const retry = within(line).getByText(en.runRetryFrom.replace("{phase}", en.runPhaseValuation));
+    expect(retry.closest("a")).toHaveAttribute("href", "/analyze?ticker=NSCA&resume=an-cut");
+  });
+
+  it("past the hour, Retry starts over with a new quote", async () => {
+    fetchAnalysesMock.mockResolvedValue([pending({ runStatus: "failed", runPhase: "report1", runStartedAt: null, createdAt: minutesAgo(61) })]);
+    render(<AnalysesList />);
+
+    const line = await onlyLine();
+    expect(within(line).getByText(en.runRetryRestart)).toBeInTheDocument();
+    expect(within(line).queryByText(en.runRetryFrom.replace("{phase}", en.runPhaseReport1))).not.toBeInTheDocument();
+  });
+
+  it("a phased row with no request in flight (the tab closed between phases) shows the plan, not 'Interrupted during'", async () => {
+    // The plan comes from the phase and the run's start, never from runStartedAt.
+    fetchAnalysesMock.mockResolvedValue([pending({ runStatus: "running", runPhase: "report1", runStartedAt: null, createdAt: minutesAgo(10) })]);
+    render(<AnalysesList />);
+
+    const line = await onlyLine();
+    expect(within(line).getByText(en.runRetryFrom.replace("{phase}", en.runPhaseReport1))).toBeInTheDocument();
+    expect(within(line).queryByText(en.runCutAtPhase.replace("{phase}", en.runPhaseReport1), { exact: false })).not.toBeInTheDocument();
+  });
+
   it("finished rows alone render exactly as before: no status line", async () => {
     fetchAnalysesMock.mockResolvedValue([done(), done({ id: "an-older", createdAt: "2026-10-01T00:00:00.000Z" })]);
     render(<AnalysesList />);

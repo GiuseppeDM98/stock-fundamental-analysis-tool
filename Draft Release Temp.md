@@ -8,7 +8,9 @@
 
 - **Analyst Panel — three independent second opinions** — on any saved analysis, run up to three independent AI passes, each through a distinct lens: **Skeptic** (red-teams the numbers and assumptions), **Optimist** (builds the constructive bull case), and **Quality** (stress-tests the moat and long-term durability). Each lens commits to its own Bull/Base/Bear valuation and a written critique, run on demand from the saved-analysis page. Every lens that has run is shown next to the base analysis on the valuation ruler and comparison table, along with a **consensus** — the average across the base analysis and every lens that ran — so you can see at a glance how much (and in which direction) independent reviewers disagree. Results are saved with the analysis, shown in a distinct panel with a **✓ Reviewed** badge on the list card, regenerable anytime, and included in the PDF export. (Replaces the earlier single "Analyst Review" red-team pass — the Skeptic lens is that same review, now joined by two more perspectives.)
 
-- Added **runs that survive a dropped connection**: the server saves each analysis as soon as it finishes, so nothing is lost if the connection drops, and a run that was cut can be retried from the step it reached (analyst lenses run in three short steps: the blind valuation, the critique, the final numbers; a lens stopped before its numbers shows a **Phase 3 pending** tag on its card). Saved Analyses shows a run still in progress, or one that was interrupted, with its **Retry** button.
+- Added **runs that survive a dropped connection**: the server saves each step as soon as it finishes, so nothing is lost if the connection drops, and a cut run offers **"Retry from: Valuation"** (or from whichever step it reached); after an hour it starts again with a fresh price. A Deep Value analysis runs in four visible steps (web update, valuation, report part 1, report part 2) and an analyst lens in three (the blind valuation, the critique, the final numbers; a lens stopped before its numbers shows a **Phase 3 pending** tag). Saved Analyses names the step a run is on, or where it was interrupted, with its **Retry** button.
+
+- Added a **"Web update" card above every new Deep Value report**: what the analysis found online beyond your dataset (results published since, the cost of capital, recent news), each fact with its source. It opens on arrival, folds away with a click, and is always printed in the PDF.
 
 - **Margin of Safety & dual fair value** — set a Margin of Safety (0–80%) and the report shows both the intrinsic fair value (what the stock is worth) and the MoS-discounted buy target, for each Bear/Base/Bull scenario. A valuation recap table at the end of every report lists current price vs. fair values with upside/downside.
 
@@ -131,6 +133,8 @@
 - Fixed **sold lots being counted as holdings**, which inflated share counts and skewed the average cost. The open-position banner on a saved analysis, the position badge on Saved Analyses and the Advisor (its portfolio context and its position count) now count open lots only.
 
 - Fixed **AI reviews and analyses being cut off with a "too many search rounds" notice** when using the DeepSeek model — the research budget was raised and each web search now returns more, so DeepSeek runs complete far more often. (Analyses using Claude were never affected.)
+
+- Fixed **report headings left in English** in a report written in another language: an Italian report now titles every section in Italian, numbers and order unchanged.
 
 - Fixed **an occasional stray non-Latin character** (e.g. a Chinese character) slipping into a report or review written in another language.
 

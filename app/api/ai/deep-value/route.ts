@@ -1,58 +1,46 @@
-// POST /api/ai/deep-value — the AI valuation, on the user's confirmed financial dataset.
-// Claude picks the method, takes the history from the dataset and web-searches only what it
-// cannot hold, then streams the full Markdown report followed by a closing JSON block (fair
-// values, sensitivity, dividend path). Research chatter before the report's start marker
-// never reaches the client (lib/ai/stream-gate.ts).
-// No Yahoo Finance fundamentals call — only a quote for the current price.
+// POST /api/ai/deep-value — the AI valuation, on the user's confirmed financial dataset, in
+// four requests (2026-11-22): the web update (Sonnet 5.5 with web search: what the dataset
+// cannot hold), the valuation (the run's model, no tools: a rationale and the JSON that
+// fixes the numbers), then the report in two halves that explain them (the run's model, no
+// tools). One request did all of it until then and ran past the 300 s a function lives on
+// Vercel Hobby. The runners live in lib/ai/deep-value-phases.ts.
+// No Yahoo Finance fundamentals call — only a quote for the current price, taken once when
+// the run starts: every later phase reads it from the row, so a report never mixes prices.
 //
 // A staged run (2026-10-27, after the "Consulente" run of net-worth-tracker): the Analysis
-// row is created "running" BEFORE the model is called and written by this route when the
-// run ends — never by the client, so a run the platform cuts at 300 s, or a tab closed
-// mid-stream, still leaves a row that says what happened. The response is Server-Sent
-// Events (lib/ai/sse.ts): `stage` first (with the row's id), then `text`, then `done` or
-// `error`; a stream that ends with neither was cut. A body with only `analysisId` retries
-// that row with the inputs stored on it.
+// row is created "running" BEFORE the model is called and each phase is written by this
+// route as it ends — never by the client, so a request the platform cuts at 300 s, or a tab
+// closed mid-stream, still leaves a row that says where the run stands. The response is
+// Server-Sent Events (lib/ai/sse.ts): `stage` first (with the row's id), then `text`, then
+// `done` or `error`; a stream that ends with neither was cut.
+// Three bodies: a new run (runs `update`); `{ analysisId, phase }`, the panel chaining to the
+// next phase; `{ analysisId }`, a Retry, where the row decides between resuming from the
+// phase it reached and starting over (lib/report/run-status.ts, retryPlanOf).
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { getQuote } from "@/lib/yahoo-client";
-import {
-  buildDeepValueSystemPrompt,
-  buildDeepValueUserPrompt,
-} from "@/lib/ai/deep-value-prompts";
-import { getAiClient, buildThinkingParam, buildEffortConfig, buildWebSearchTools } from "@/lib/ai/client";
-import { createStreamGate } from "@/lib/ai/stream-gate";
-import { REPORT_START_MARKER, parseDeepValueJson } from "@/lib/report/parse-deep-value-json";
+import { buildThinkingParam } from "@/lib/ai/client";
 import { resolveAiSettings, aiModelIdSchema } from "@/lib/ai/ai-preferences";
-import { runStreamWithToolLoop, GROUNDED_MAX_TOOL_ITERATIONS } from "@/lib/ai/tool-loop";
-import { fallbackNote } from "@/lib/ai/fallback";
 import { routeErrorStatus, runErrorMessage, isRetryableRunError } from "@/lib/ai/error-status";
 import { AI_EFFORT_LEVELS, isAiEffort, type AiSettings } from "@/types/ai-settings";
+import { DEEP_VALUE_PHASES } from "@/types/ai-run";
 import { buildGroundingPromptContext } from "@/lib/grounding/prompt-format";
 import { getFinancialDataset } from "@/lib/datasets/store";
 import { normalizeTicker } from "@/lib/ticker";
 import { createSseChannel, sseResponse } from "@/lib/ai/sse";
-import { classifyRunEnd } from "@/lib/ai/run-outcome";
-import {
-  startAnalysisRun,
-  resumeAnalysisRun,
-  setRunPrice,
-  finishAnalysisRun,
-  failAnalysisRun,
-  type RunHandle,
-} from "@/lib/analyses-store";
-import { AnalysisRunConflict, AnalysisRunGone, AnalysisRunNotFound } from "@/lib/analysis-run-errors";
-import type { QuoteResponse } from "@/types/market";
-import type { StoredDataset } from "@/types/dataset";
+import { phaseModelSettings, runReportPart, runUpdatePhase, runValuationPhase, type PhaseContext } from "@/lib/ai/deep-value-phases";
+import { claimRunPhase, failAnalysisRun, setRunPrice, startAnalysisRun, type ClaimedPhase } from "@/lib/analyses-store";
+import { AnalysisRunConflict, AnalysisRunNotFound } from "@/lib/analysis-run-errors";
 
 const DEFAULT_SETTINGS: AiSettings = { model: "claude-opus-4-8", effort: "high", thinking: true };
 
 // Vercel's builder rejects any maxDuration above what the *currently deployed* plan
 // allows: Hobby with Fluid Compute caps it at 300 (see SETUP.md's maxDuration table), so
 // 800 (the Pro ceiling) fails to build on Hobby. Since 2026-10-27 the ceiling holds for ONE
-// request — this valuation, with all its search rounds — not for the whole run, whose rows
-// are written by the server as each request ends. Bump this to 800 only after upgrading to
-// Pro. Same value and reason as the verify and research routes.
+// request — one phase of the run — not for the whole run, whose rows are written by the
+// server as each request ends. Bump this to 800 only after upgrading to Pro. Same value and
+// reason as the verify and research routes.
 export const maxDuration = 300;
 
 const newRunSchema = z.object({
@@ -65,26 +53,16 @@ const newRunSchema = z.object({
   // The id of the user's confirmed dataset, required since 2026-11-09 (one path: every
   // report is built on a dataset). The route reads its blocks, extract, stored warnings and
   // research notes, and recomputes stats/grid/marketImplied/warnings itself from the
-  // extract and its own authoritative currentPrice.
+  // extract and the run's authoritative price.
   datasetId: z.string({ error: "datasetId is required" }).min(1, "datasetId is required"),
 });
 
-// A retry carries only the row's id: every input comes from the row, so a retry cannot
-// re-run a saved analysis with another dataset, MoS or model than the one it records.
-const retrySchema = z.object({ analysisId: z.string().min(1) }).strict();
+// A continuation carries only the row's id (and, for a chain, the phase): every input comes
+// from the row, so a retry cannot re-run a saved analysis with another dataset, MoS or model
+// than the one it records.
+const continueSchema = z.object({ analysisId: z.string().min(1), phase: z.enum(DEEP_VALUE_PHASES).optional() }).strict();
 
-const requestSchema = z.union([retrySchema, newRunSchema]);
-
-/** What one attempt runs with, whichever branch prepared it. */
-type PreparedRun = {
-  handle: RunHandle;
-  ticker: string;
-  language: string;
-  mosPercent: number;
-  quote: QuoteResponse;
-  stored: StoredDataset;
-  aiSettings: AiSettings;
-};
+const requestSchema = z.union([continueSchema, newRunSchema]);
 
 /** The run's settings for a new run: request override > stored default. No floor since
  *  2026-11-20: a valuation runs at the user's default, which the catalog caps at `high`. */
@@ -109,9 +87,9 @@ function thinkingRecorded(settings: AiSettings): boolean {
   return buildThinkingParam(settings.thinking, settings.model).type !== "disabled";
 }
 
-/** A new run: dataset → quote → settings, then the row is created. Answers a Response for
- *  every refusal before the row exists. */
-async function prepareNewRun(userId: string, body: z.infer<typeof newRunSchema>): Promise<PreparedRun | Response> {
+/** A new run: dataset → quote → settings, then the row is created at `update`. Answers a
+ *  Response for every refusal before the row exists. */
+async function prepareNewRun(userId: string, body: z.infer<typeof newRunSchema>): Promise<PhaseContext | Response> {
   const stored = await getFinancialDataset(userId, body.datasetId);
   if (!stored) return NextResponse.json({ error: "dataset not found" }, { status: 400 });
   const ticker = normalizeTicker(body.ticker);
@@ -120,7 +98,7 @@ async function prepareNewRun(userId: string, body: z.infer<typeof newRunSchema>)
   }
   const quote = await getQuote(body.ticker);
   const aiSettings = await resolveNewRunSettings(userId, body);
-  const handle = await startAnalysisRun(userId, {
+  const input = {
     ticker,
     companyName: quote.shortName || ticker,
     datasetId: stored.id,
@@ -131,49 +109,89 @@ async function prepareNewRun(userId: string, body: z.infer<typeof newRunSchema>)
     aiThinking: thinkingRecorded(aiSettings),
     priceAtAnalysis: quote.regularMarketPrice > 0 ? quote.regularMarketPrice : null,
     priceCurrency: quote.currency ?? null,
-  });
-  return { handle, ticker, language: body.language, mosPercent: body.mosPercent, quote, stored, aiSettings };
+  };
+  const handle = await startAnalysisRun(userId, input);
+  const claimed: ClaimedPhase = {
+    ...handle,
+    ...input,
+    phase: "update",
+    restarted: false,
+    createdAt: handle.runStartedAt,
+    updateNotesMd: null,
+    resultJson: null,
+    valuationMemo: null,
+    reportMd: "",
+  };
+  return phaseContext(claimed, stored, aiSettings);
 }
 
-/** A retry: the row first (404/409 before any quote or dataset), then the quote and the
- *  dataset the row names. A failure after the takeover marks the row failed. */
-async function prepareRetry(userId: string, analysisId: string): Promise<PreparedRun | Response> {
-  let row: Awaited<ReturnType<typeof resumeAnalysisRun>>;
+/** A chained phase or a Retry: the row first (404/409 before any quote or dataset), then the
+ *  quote when the phase runs without one, then the dataset the row names. A failure after
+ *  the claim marks the row failed. */
+async function prepareContinuation(userId: string, body: z.infer<typeof continueSchema>): Promise<PhaseContext | Response> {
+  let claimed: ClaimedPhase;
   try {
-    row = await resumeAnalysisRun(userId, analysisId);
+    claimed = await claimRunPhase(userId, body.analysisId, body.phase ?? null);
   } catch (err) {
     if (err instanceof AnalysisRunNotFound) return NextResponse.json({ error: err.message }, { status: 404 });
     if (err instanceof AnalysisRunConflict) return NextResponse.json({ error: err.message }, { status: 409 });
     throw err;
   }
-  const handle: RunHandle = { id: row.id, userId, runStartedAt: row.runStartedAt };
-  const language = row.reportLanguage ?? "English";
+  const language = claimed.reportLanguage ?? "English";
 
-  let quote: QuoteResponse;
-  try {
-    quote = await getQuote(row.ticker);
-  } catch (err) {
-    await failAnalysisRun(handle, runErrorMessage(err, language));
-    return NextResponse.json({ error: err instanceof Error ? err.message : "quote failed" }, { status: routeErrorStatus(err) });
+  // A restart (or a resume of the first phase) cleared the price: this run takes a new one,
+  // the price every later phase reads from the row.
+  if (claimed.phase === "update" && claimed.priceAtAnalysis == null) {
+    try {
+      const quote = await getQuote(claimed.ticker);
+      claimed.priceAtAnalysis = quote.regularMarketPrice > 0 ? quote.regularMarketPrice : null;
+      claimed.priceCurrency = quote.currency ?? null;
+      await setRunPrice(claimed, claimed.priceAtAnalysis, claimed.priceCurrency);
+    } catch (err) {
+      await failAnalysisRun(claimed, runErrorMessage(err, language));
+      return NextResponse.json({ error: err instanceof Error ? err.message : "quote failed" }, { status: routeErrorStatus(err) });
+    }
   }
-  // The row describes the attempt that produced it: this attempt's quote, in its currency.
-  await setRunPrice(handle, quote.regularMarketPrice > 0 ? quote.regularMarketPrice : null, quote.currency ?? null);
 
-  const stored = await getFinancialDataset(userId, row.datasetId);
+  const stored = await getFinancialDataset(userId, claimed.datasetId);
   if (!stored) {
-    await failAnalysisRun(handle, runErrorMessage(new AnalysisRunConflict("dataset no longer available"), language));
+    await failAnalysisRun(claimed, runErrorMessage(new AnalysisRunConflict("dataset no longer available"), language));
     return NextResponse.json({ error: "dataset no longer available" }, { status: 409 });
   }
 
-  // The settings recorded on the row, clamped again to what the model supports today.
+  // The settings recorded on the row (its effort already capped by the claim), clamped again
+  // to what the model supports today.
   const aiSettings = await resolveAiSettings(
     userId,
-    row.aiModel && row.aiEffort && isAiEffort(row.aiEffort) && row.aiThinking != null
-      ? { model: row.aiModel, effort: row.aiEffort, thinking: row.aiThinking }
+    claimed.aiModel && claimed.aiEffort && isAiEffort(claimed.aiEffort) && claimed.aiThinking != null
+      ? { model: claimed.aiModel, effort: claimed.aiEffort, thinking: claimed.aiThinking }
       : undefined,
     DEFAULT_SETTINGS
   );
-  return { handle, ticker: row.ticker, language, mosPercent: row.mosPercent, quote, stored, aiSettings };
+  return phaseContext(claimed, stored, aiSettings);
+}
+
+/** The phase's frozen inputs, all from the row: its price (0 without one, as a run that
+ *  started on a non-positive quote), its currency, its date. */
+function phaseContext(claimed: ClaimedPhase, stored: NonNullable<Awaited<ReturnType<typeof getFinancialDataset>>>, aiSettings: AiSettings): PhaseContext {
+  const currentPrice = claimed.priceAtAnalysis ?? 0;
+  const currency = claimed.priceCurrency ?? "USD";
+  // The run's date, not today's: the four requests write one report, dated when it started
+  // (and it keeps the model off its training year).
+  const currentDate = claimed.createdAt.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  return {
+    claimed,
+    stored,
+    // The deterministic anchors recomputed from the stored extract and the run's own price;
+    // the dataset's own warnings join the recomputed ones, and a web dataset's research
+    // notes lead the extract.
+    grounding: buildGroundingPromptContext(stored.blocks, stored.dataset, currentPrice, currency, stored.warnings, stored.research?.notes ?? null),
+    language: claimed.reportLanguage ?? "English",
+    currentDate,
+    currentPrice,
+    currency,
+    aiSettings,
+  };
 }
 
 export async function POST(request: Request) {
@@ -196,134 +214,55 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  let run: PreparedRun;
+  let ctx: PhaseContext;
   try {
-    const prepared = "analysisId" in body ? await prepareRetry(session.user.id, body.analysisId) : await prepareNewRun(session.user.id, body);
+    const prepared = "analysisId" in body ? await prepareContinuation(session.user.id, body) : await prepareNewRun(session.user.id, body);
     if (prepared instanceof Response) return prepared;
-    run = prepared;
+    ctx = prepared;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Analysis failed";
     return NextResponse.json({ error: message }, { status: routeErrorStatus(error) });
   }
 
-  return sseResponse(new ReadableStream<Uint8Array>({ start: (controller) => streamValuation(run, controller) }));
+  return sseResponse(new ReadableStream<Uint8Array>({ start: (controller) => streamPhase(ctx, controller) }));
 }
 
-/** The valuation itself, from the first event to the row's last write. Never throws: every
- *  failure ends as an `error` event and, when the row can still be written, a failed row. */
-async function streamValuation(run: PreparedRun, controller: ReadableStreamDefaultController<Uint8Array>): Promise<void> {
-  const { handle, quote, stored, aiSettings, language, mosPercent } = run;
+/** One phase, from its first event to the row's write. Never throws: every failure ends as
+ *  an `error` event and, when the row can still be written, a failed row. */
+async function streamPhase(ctx: PhaseContext, controller: ReadableStreamDefaultController<Uint8Array>): Promise<void> {
+  const { claimed } = ctx;
   const ch = createSseChannel(controller);
   const startedMs = Date.now();
   let outcome = "error";
-  // The row's id reaches the client first, so a run cut a second later is already retryable.
-  ch.send({ type: "stage", stage: "valuation", analysisId: handle.id, runStartedAt: handle.runStartedAt.toISOString() });
+  // The row's id reaches the client first, so a request cut a second later is retryable.
+  ch.send({ type: "stage", stage: claimed.phase, analysisId: claimed.id, runStartedAt: claimed.runStartedAt.toISOString() });
 
+  // The valuation is always independent/position-blind — no portfolio position or prior
+  // estimate is ever injected into any phase's prompt, so the fair values can't be anchored
+  // to what the user paid or to a previous run. Position-aware hold/exit reasoning happens
+  // separately in the Advisor; estimate evolution is a deterministic diff on /analyses.
   try {
-    const currentPrice = quote.regularMarketPrice;
-    const currency = quote.currency ?? "USD";
-    // Inject the real current date so Claude doesn't assume it's still in its training year.
-    const currentDate = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-
-    // Recompute the deterministic anchors server-side from the stored extract + our own
-    // authoritative currentPrice/currency; the dataset's own warnings (from its extraction
-    // or research run) join the recomputed ones, and a web dataset's research notes lead
-    // the extract.
-    const groundingContext = buildGroundingPromptContext(stored.blocks, stored.dataset, currentPrice, currency, stored.warnings, stored.research?.notes ?? null);
-
-    // The valuation is always independent/position-blind — no portfolio position or
-    // prior estimate is ever injected into the prompt, so the fair values can't be
-    // anchored to what the user paid or to a previous run. Position-aware hold/exit
-    // reasoning happens separately in the Advisor; estimate evolution is shown as a
-    // deterministic diff on /analyses (never fed back into a prompt).
-    const systemPrompt = buildDeepValueSystemPrompt({ language, currentDate, mosPercent, grounding: groundingContext });
-    const userPrompt = buildDeepValueUserPrompt({ ticker: run.ticker, currentPrice, currency, language, currentDate, mosPercent, grounding: groundingContext });
-
-    // Text before the report marker is reasoning the model writes between web search
-    // calls: dropped. `forwarded` is what reached the client — and what the row stores as
-    // the report, so the saved page reads exactly what the user watched stream.
-    const gate = createStreamGate(REPORT_START_MARKER);
-    let forwarded = "";
-    const forward = (text: string) => {
-      if (!text) return;
-      forwarded += text;
-      ch.send({ type: "text", text });
-    };
-
-    const { stopReason, hitIterationCap, servedBy } = await runStreamWithToolLoop(
-      getAiClient(aiSettings.model),
-      {
-        model: aiSettings.model,
-        // Streaming, so a large ceiling can't hit HTTP timeouts (Opus 4.8 allows up
-        // to 128k). 64k gives ample room for adaptive thinking + the full
-        // 10-section report + the closing JSON block without truncation. max_tokens is
-        // a cap, not a target — the model generates only what it needs, so this
-        // doesn't raise cost.
-        max_tokens: 64000,
-        thinking: buildThinkingParam(aiSettings.thinking, aiSettings.model),
-        output_config: buildEffortConfig(aiSettings.effort),
-        system: systemPrompt,
-        tools: buildWebSearchTools(aiSettings.model),
-        messages: [{ role: "user", content: userPrompt }],
-      },
-      (text) => forward(gate.push(text)),
-      // The dataset rescopes (not eliminates) web search to the post-coverage update
-      // and the qualitative material, so the run converges in far fewer rounds than
-      // the 35 a report that gathered its own history needed (until 2026-11-09).
-      GROUNDED_MAX_TOOL_ITERATIONS
-    );
-    outcome = stopReason ?? "unknown";
-
-    // Failsafe: if the model never wrote the report marker (e.g. still researching
-    // when the iteration cap hit, or it opened straight into prose), flush the
-    // buffered text so the run isn't silently swallowed — and say so in the log.
-    const rest = gate.flush();
-    forward(rest);
-    if (!gate.opened()) console.warn("[deep-value] report marker never arrived; flushed", rest.length);
-
-    const end = classifyRunEnd({ text: forwarded, stopReason, hitIterationCap });
-    if (end.kind === "failed") {
-      // The streamed text stays on screen while the tab is open, but a cut or declined
-      // run is not a report: the row keeps an empty report and says why.
-      const message = runErrorMessage(end, language);
-      await failAnalysisRun(handle, message);
-      ch.send({ type: "error", error: message, retryable: end.retryable });
-      return;
-    }
-
-    const isItalian = language === "Italiano" || language === "Italian";
-    if (hitIterationCap) {
-      forward(
-        isItalian
-          ? "\n\n_[Analisi interrotta: troppi cicli di ricerca web. Riprova, magari con un margine di sicurezza diverso.]_"
-          : "\n\n_[Analysis stopped: too many web search rounds. Try again, maybe with a different margin of safety.]_"
-      );
-    }
-    // The server-side refusal fallback (Sonnet 5.5) wrote this report with another
-    // model: say which, so the saved report is not attributed to the requested one.
-    if (servedBy) forward(`\n\n${fallbackNote(aiSettings.model, servedBy, isItalian)}`);
-
-    // The parser reads the LAST fence of everything forwarded (gotcha #13); a cut inside
-    // the closing JSON block can only come from max_tokens, which failed above.
-    const count = await finishAnalysisRun(handle, { reportMd: forwarded, result: parseDeepValueJson(forwarded) });
-    if (count === 0) {
-      outcome = "deleted";
-      ch.send({ type: "error", error: runErrorMessage(new AnalysisRunGone(), language), retryable: false });
-      return;
-    }
-    ch.send({ type: "done", analysisId: handle.id });
+    outcome =
+      claimed.phase === "update"
+        ? await runUpdatePhase(ctx, ch)
+        : claimed.phase === "valuation"
+          ? await runValuationPhase(ctx, ch)
+          : await runReportPart(ctx, ch);
   } catch (err) {
-    console.error("[ai-run] deep-value valuation failed", err);
+    console.error(`[ai-run] deep-value ${claimed.phase} failed`, err);
     outcome = "error";
-    const message = runErrorMessage(err, language);
+    const message = runErrorMessage(err, ctx.language);
     try {
-      await failAnalysisRun(handle, message);
+      await failAnalysisRun(claimed, message);
     } catch (dbErr) {
-      console.error("[ai-run] deep-value valuation: could not mark the row failed", dbErr);
+      console.error(`[ai-run] deep-value ${claimed.phase}: could not mark the row failed`, dbErr);
     }
     ch.send({ type: "error", error: message, retryable: isRetryableRunError(err) });
   } finally {
-    console.info("[ai-run]", "deep-value", "valuation", `${Date.now() - startedMs}ms`, aiSettings.model, aiSettings.effort, outcome);
+    // The update's model and effort are its own (Sonnet 5.5 on Anthropic): this line is the
+    // only place that records them, the row keeps the run's.
+    const settings = phaseModelSettings(claimed.phase, ctx.aiSettings);
+    console.info("[ai-run]", "deep-value", claimed.phase, `${Date.now() - startedMs}ms`, settings.model, settings.effort, outcome);
     ch.close();
   }
 }

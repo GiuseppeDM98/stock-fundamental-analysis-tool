@@ -4,23 +4,29 @@
 // the server, the moment it arrives (after the staged "Consulente" run of
 // net-worth-tracker). The client only reads.
 //
-// Every write that ends a run is an updateMany scoped to the row, its user and — for the
-// valuation — the start time of THIS attempt, and returns how many rows it touched: an
-// attempt that a newer retry took over, or a row deleted during the run, touches none, and
+// Every write that ends a phase is an updateMany scoped to the row, its user and — for the
+// Deep Value — the start time of THIS request, and returns how many rows it touched: a
+// request that a newer one took over, or a row deleted during the run, touches none, and
 // the route ends the phase quietly instead of overwriting (or resurrecting) anything.
+//
+// A Deep Value run is four requests since 2026-11-22 (types/ai-run.ts): each takes the row
+// for its phase with a conditional update (claimRunPhase) and leaves it, written, at the
+// next phase with no request in flight (runStartedAt null).
 //
 // A lens's columns are always named through ANALYST_COLUMNS, never written by hand.
 import "server-only";
 import { db } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 import { ANALYST_COLUMNS } from "@/lib/report/consensus";
-import { canRetry } from "@/lib/report/run-status";
-import { hasFullTriple, type ParsedAnalystResult, type Phase1Quote } from "@/lib/report/parse-deep-value-json";
+import { canRetry, retryPlanOf } from "@/lib/report/run-status";
+import type { Phase1Quote } from "@/lib/report/parse-deep-value-json";
 import { AnalysisRunConflict, AnalysisRunNotFound } from "@/lib/analysis-run-errors";
 import type { AnalystAngle } from "@/types/analysis";
+import type { DeepValuePhase } from "@/types/ai-run";
+import { capEffort, isAiEffort } from "@/types/ai-settings";
 import type { AnalystResult } from "@/components/report/types";
 
-/** One attempt of a valuation: the row, its owner and when this attempt started. */
+/** One request of a valuation: the row, its owner and when this request started. */
 export type RunHandle = { id: string; userId: string; runStartedAt: Date };
 
 export type NewRunInput = {
@@ -48,10 +54,8 @@ export type ResumeInputs = {
   aiThinking: boolean | null;
 };
 
-// The columns of a finished valuation, cleared when an attempt starts over: a retry must
-// never show the previous attempt's numbers next to its own report.
-const CLEARED_RESULT = {
-  reportMd: "",
+// The valuation's columns: what a phase from the valuation on clears when it runs again.
+const CLEARED_VALUATION = {
   resultJson: null,
   fairValueBull: null,
   fairValueBase: null,
@@ -59,10 +63,20 @@ const CLEARED_RESULT = {
   valuationMethod: null,
   currency: null,
   sector: null,
-  runError: null,
+  valuationMemo: null,
 } as const;
 
-/** Creates the row of a new valuation, "running", dated now. */
+// What a phase clears when it runs again: its own output and everything written after it.
+// `update` also drops the quote: the phase that runs without one takes a new one, so a
+// restart whose quote failed never leaves an old price under a new date.
+const CLEARED_FROM: Record<DeepValuePhase, Prisma.AnalysisUpdateManyMutationInput> = {
+  update: { updateNotesMd: null, ...CLEARED_VALUATION, reportMd: "", priceAtAnalysis: null, priceCurrency: null },
+  valuation: { ...CLEARED_VALUATION, reportMd: "" },
+  report1: { reportMd: "" },
+  report2: {},
+};
+
+/** Creates the row of a new valuation, "running" at its first phase, dated now. */
 export async function startAnalysisRun(userId: string, input: NewRunInput): Promise<RunHandle> {
   const now = new Date();
   const row = await db.analysis.create({
@@ -80,6 +94,7 @@ export async function startAnalysisRun(userId: string, input: NewRunInput): Prom
       priceAtAnalysis: input.priceAtAnalysis,
       priceCurrency: input.priceCurrency,
       runStatus: "running",
+      runPhase: "update",
       runStartedAt: now,
       createdAt: now,
     },
@@ -88,42 +103,81 @@ export async function startAnalysisRun(userId: string, input: NewRunInput): Prom
   return { id: row.id, userId, runStartedAt: now };
 }
 
+/** One phase's attempt: the handle its writes are keyed on, and what it runs with. */
+export type ClaimedPhase = RunHandle &
+  ResumeInputs & {
+    phase: DeepValuePhase;
+    restarted: boolean;
+    createdAt: Date;
+    priceAtAnalysis: number | null;
+    priceCurrency: string | null;
+    updateNotesMd: string | null;
+    resultJson: string | null;
+    valuationMemo: string | null;
+    reportMd: string;
+  };
+
+const CLAIM_SELECT = {
+  id: true,
+  ticker: true,
+  companyName: true,
+  datasetId: true,
+  mosPercent: true,
+  reportLanguage: true,
+  aiModel: true,
+  aiEffort: true,
+  aiThinking: true,
+  runStatus: true,
+  runStartedAt: true,
+  runPhase: true,
+  createdAt: true,
+  priceAtAnalysis: true,
+  priceCurrency: true,
+  updateNotesMd: true,
+  resultJson: true,
+  valuationMemo: true,
+  reportMd: true,
+} as const satisfies Prisma.AnalysisSelect;
+
 /**
- * Takes over the user's row for a retry, before any quote or dataset is read.
+ * Takes the user's run for one phase, before any quote or dataset is read.
+ * @param wanted - The phase the panel is chaining to: the row must be running, with no
+ *   request in flight, at that very phase (a failed or cut row is a Retry's, never a
+ *   chain's). null for a Retry, where the row decides: the phase it reached, or the first
+ *   one with everything cleared once the run is older than RUN_RESUME_WINDOW_MS.
  * @throws AnalysisRunNotFound for a row that is missing or another user's;
- *   AnalysisRunConflict when it is done, still running (younger than RUN_RETRY_AFTER_MS) or
- *   has lost its dataset.
- * @returns the new attempt and the row's inputs. The row is "running" again, dated now
- *   (the date of a report is the start of the attempt that produced it), with the previous
- *   attempt's result cleared.
+ *   AnalysisRunConflict when it is done, has a request in flight younger than
+ *   RUN_RETRY_AFTER_MS, has lost its dataset, is not where a chain expects it, or was
+ *   taken meanwhile.
+ * @returns the attempt; on a restart the row's later columns are already cleared and
+ *   `createdAt` is now (the date of a report is the start of the run that produced it).
  */
-export async function resumeAnalysisRun(userId: string, analysisId: string): Promise<RunHandle & ResumeInputs> {
-  const row = await db.analysis.findFirst({
-    where: { id: analysisId, userId },
-    select: {
-      id: true,
-      ticker: true,
-      companyName: true,
-      datasetId: true,
-      mosPercent: true,
-      reportLanguage: true,
-      aiModel: true,
-      aiEffort: true,
-      aiThinking: true,
-      runStatus: true,
-      runStartedAt: true,
-    },
-  });
+export async function claimRunPhase(userId: string, analysisId: string, wanted: DeepValuePhase | null, now: Date = new Date()): Promise<ClaimedPhase> {
+  const row = await db.analysis.findFirst({ where: { id: analysisId, userId }, select: CLAIM_SELECT });
   if (!row) throw new AnalysisRunNotFound();
-  const now = new Date();
   if (row.runStatus !== "running" && row.runStatus !== "failed") throw new AnalysisRunConflict("run already finished");
   if (!canRetry(row, now.getTime())) throw new AnalysisRunConflict("run still in progress");
   if (row.datasetId == null) throw new AnalysisRunConflict("dataset no longer available");
+  if (wanted !== null && (row.runStatus !== "running" || row.runStartedAt != null || row.runPhase !== wanted)) {
+    throw new AnalysisRunConflict("phase out of order");
+  }
 
-  await db.analysis.update({
-    where: { id: row.id },
-    data: { ...CLEARED_RESULT, runStatus: "running", runStartedAt: now, createdAt: now },
+  const plan = wanted === null ? retryPlanOf(row, now.getTime()) : { phase: wanted, restart: false };
+  // A row saved above the cap runs at `high`: the column says the effort that runs.
+  const aiEffort = row.aiEffort != null && isAiEffort(row.aiEffort) ? capEffort(row.aiEffort, "high") : row.aiEffort;
+  const data: Prisma.AnalysisUpdateManyMutationInput = plan.restart
+    ? { ...CLEARED_FROM.update, aiEffort, runStatus: "running", runPhase: "update", runStartedAt: now, createdAt: now, runError: null }
+    : { ...CLEARED_FROM[plan.phase], aiEffort, runStatus: "running", runStartedAt: now, runError: null };
+  // The claim is the conditional update: a second request for the same phase finds the
+  // start it read already replaced, and touches no row.
+  const { count } = await db.analysis.updateMany({
+    where: { id: row.id, userId, runStatus: row.runStatus, runStartedAt: row.runStartedAt },
+    data,
   });
+  if (count === 0) throw new AnalysisRunConflict("run still in progress");
+
+  // The row as it now stands: what the phase cleared reads cleared.
+  const after = { ...row, ...(data as Record<string, unknown>) } as typeof row;
   return {
     id: row.id,
     userId,
@@ -134,8 +188,17 @@ export async function resumeAnalysisRun(userId: string, analysisId: string): Pro
     mosPercent: row.mosPercent,
     reportLanguage: row.reportLanguage,
     aiModel: row.aiModel,
-    aiEffort: row.aiEffort,
+    aiEffort: after.aiEffort,
     aiThinking: row.aiThinking,
+    phase: plan.phase,
+    restarted: plan.restart,
+    createdAt: plan.restart ? now : row.createdAt,
+    priceAtAnalysis: after.priceAtAnalysis,
+    priceCurrency: after.priceCurrency,
+    updateNotesMd: after.updateNotesMd,
+    resultJson: after.resultJson,
+    valuationMemo: after.valuationMemo,
+    reportMd: after.reportMd,
   };
 }
 
@@ -143,45 +206,71 @@ function attemptWhere(handle: RunHandle): Prisma.AnalysisWhereInput {
   return { id: handle.id, userId: handle.userId, runStartedAt: handle.runStartedAt };
 }
 
-/** The quote of a retry's attempt (null, null without one). @returns rows touched. */
+/** The quote of a phase that runs without one (null, null without one). @returns rows touched. */
 export async function setRunPrice(handle: RunHandle, priceAtAnalysis: number | null, priceCurrency: string | null): Promise<number> {
   const { count } = await db.analysis.updateMany({ where: attemptWhere(handle), data: { priceAtAnalysis, priceCurrency } });
   return count;
 }
 
+/** The web update's notes; the run moves to the valuation, with no request in flight.
+ *  @returns rows touched: 0 when the row was deleted or a newer request owns it. */
+export async function finishUpdatePhase(handle: RunHandle, updateNotesMd: string): Promise<number> {
+  const { count } = await db.analysis.updateMany({
+    where: attemptWhere(handle),
+    data: { updateNotesMd, runPhase: "valuation", runStartedAt: null },
+  });
+  return count;
+}
+
+/** A memo longer than this is cut: it travels into both report requests. */
+export const VALUATION_MEMO_MAX_CHARS = 4000;
+
 /**
- * Writes the finished report. The result is the server's own reading of the report's last
- * JSON fence: kept only with a full bull/base/bear triple (half a valuation is no
- * valuation), the method and sector trimmed to their columns, the currency only as a bare
- * ISO 4217 code ("EUR (euro)" would mislabel every figure it travels with).
- * @returns rows touched: 0 when the row was deleted or a newer attempt owns it.
+ * The fixed valuation: the numbers every reader uses once the run is done, and its memo. The
+ * method and sector are trimmed to their columns, the currency kept only as a bare ISO 4217
+ * code ("EUR (euro)" would mislabel every figure it travels with). The row stays running:
+ * every reader skips it until the report is written.
+ * @returns rows touched: 0 when the row was deleted or a newer request owns it.
  */
-export async function finishAnalysisRun(handle: RunHandle, { reportMd, result }: { reportMd: string; result: ParsedAnalystResult | null }): Promise<number> {
-  const full = hasFullTriple(result);
+export async function finishValuationPhase(handle: RunHandle, { result, memo }: { result: AnalystResult; memo: string }): Promise<number> {
   const { count } = await db.analysis.updateMany({
     where: attemptWhere(handle),
     data: {
-      reportMd,
-      resultJson: full ? JSON.stringify(result) : null,
-      fairValueBull: full ? result.bull.fairValue : null,
-      fairValueBase: full ? result.base.fairValue : null,
-      fairValueBear: full ? result.bear.fairValue : null,
-      valuationMethod: full ? result.method.slice(0, 40) : null,
-      currency: result && /^[A-Z]{3}$/.test(result.currency) ? result.currency : null,
-      sector: result?.sector ? result.sector.slice(0, 80) : null,
-      runStatus: "done",
-      runError: null,
+      resultJson: JSON.stringify(result),
+      fairValueBull: result.bull.fairValue,
+      fairValueBase: result.base.fairValue,
+      fairValueBear: result.bear.fairValue,
+      valuationMethod: result.method.slice(0, 40),
+      currency: /^[A-Z]{3}$/.test(result.currency) ? result.currency : null,
+      sector: result.sector ? result.sector.slice(0, 80) : null,
+      valuationMemo: memo.slice(0, VALUATION_MEMO_MAX_CHARS),
+      runPhase: "report1",
+      runStartedAt: null,
     },
   });
   return count;
 }
 
-/** Marks the attempt failed with a product sentence (never the provider's raw message).
- *  The report stays empty: a failed run's text was never a finished report. */
+/** One part of the report. The first is kept on the row for the second to continue; the
+ *  second writes the whole report and ends the run.
+ *  @returns rows touched: 0 when the row was deleted or a newer request owns it. */
+export async function finishReportPart(handle: RunHandle, { reportMd, last }: { reportMd: string; last: boolean }): Promise<number> {
+  const { count } = await db.analysis.updateMany({
+    where: attemptWhere(handle),
+    data: last
+      ? { reportMd, runStatus: "done", runPhase: null, runError: null }
+      : { reportMd, runPhase: "report2", runStartedAt: null },
+  });
+  return count;
+}
+
+/** Marks the attempt failed with a product sentence (never the provider's raw message). What
+ *  the earlier phases wrote stays: a failed second half keeps the first, and a Retry within
+ *  the hour resumes from the phase that failed. */
 export async function failAnalysisRun(handle: RunHandle, message: string): Promise<number> {
   const { count } = await db.analysis.updateMany({
     where: attemptWhere(handle),
-    data: { runStatus: "failed", runError: message.slice(0, 300), reportMd: "" },
+    data: { runStatus: "failed", runError: message.slice(0, 300) },
   });
   return count;
 }

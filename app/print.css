@@ -75,6 +75,18 @@
     break-after: avoid;
   }
 
+  /* The web update's notes print even when the reader closed their box: a closed
+     <details> renders nothing but its summary. Chrome hides the body through
+     ::details-content, which the children rule does not reach; the card also opens itself
+     on beforeprint (components/report/web-update-card.tsx). */
+  details.web-update > :not(summary) {
+    display: block;
+  }
+  details.web-update::details-content {
+    content-visibility: visible;
+    display: block;
+  }
+
   @page {
     margin: 2cm;
   }

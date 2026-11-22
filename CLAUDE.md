@@ -12,7 +12,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: November 22, 2026 — **Spec 05d (effort capped at `high`, a lens in three requests) retired** on `chore/retire-spec-05d` (merged with PR #76, no DDL): no request above `high`, a lens is blind → critique → numbers, at most 5 web searches per lens request on Claude (valutazione.md § 2.9, § 3, § 6). The verification found no behaviour defect: two code comments, four guide lines (the search cap across a `pause_turn` resume is still unproven, DeepSeek unmeasured, the 240 s levers) and the live specs were corrected; no app behaviour changed, so the signals stand. Next: implement spec 05e. Open, by the owner's choice at the end of the series: the first production run and the production checks of 02…05d.
+**Last Updated**: November 22, 2026 — **Spec 05e (the Deep Value in four requests) implemented** on `feature/deep-value-by-role` (migration `add_analysis_run_phases`: apply it on Turso before the deploy): web update (Sonnet 5.5, at most 8 searches) → valuation (numbers first, no tools) → report sections 1–5 → 6–10, each request written by the server; the panel lists the phases and Retry resumes from the one reached, within an hour (valutazione.md § 2.9). Collaudo done and closed, the owner's tour included: every Deep Value phase under 240 s (the measures: valutazione.md § 2.9). Open: the Turso migration, then the deploy; the Vercel log check waits for the end of the series. Next: spec 05f.
 
 ---
 
@@ -81,7 +81,7 @@ One line each: the page, the question it answers, where its detail lives (`doc/g
 ## Known Issues
 
 Cross-cutting only. A single area's blind spot lives in its guide: the Yahoo quote route (rate limits, no caching) in doc/guide/yahoo.md, the all-or-nothing Deep Value JSON parse in valutazione.md § 7 (gotcha 29), `/portfolio`'s currency assumption in portafoglio.md.
-- **Vercel Hobby: 300 s per function** — every AI call is its own request, persisted by the server and retried from its phase (2026-10-27); a phase past 300 s is still cut: the Deep Value (338 s at `high`, 2026-11-22) and the research when it runs long (245 s that day, 668 s on CE.MI on 2026-11-20); every lens request fits since 2026-11-22 (three requests, under 240 s). Measured from localhost on Claude only: DeepSeek durations are estimates, Vercel is read at the end of the series. Run those two from localhost until specs 05e and 05f. Durations per phase: valutazione.md § 2.9. SETUP.md § Vercel Hobby.
+- **Vercel Hobby: 300 s per function** — every AI call is its own request, persisted by the server and retried from its phase (2026-10-27); a phase past 300 s is still cut: the research when it runs long (245–496 s on 2026-11-22, 668 s on CE.MI on 2026-11-20); every lens and Deep Value request fits since 2026-11-22 (three and four requests, under 240 s). Measured from localhost on Claude only: DeepSeek durations are estimates (its web update can pass 300 s), Vercel is read at the end of the series. Run the research from localhost until spec 05f. Durations per phase: valutazione.md § 2.9. SETUP.md § Vercel Hobby.
 - **Tailwind 4 browser floor** — Safari 16.4+, Chrome/Edge 111+, Firefox 128+; Tailwind 3's hex palette stays pinned in `app/tailwind-v3-palette.css`. AGENTS.md gotcha #32.
 
 ---
@@ -132,7 +132,8 @@ Things the series deliberately left out, one line each (added by the spec that l
 - A model selector of its own for the research stage on /analyze (it follows the global default; override only in the route body) (spec 05a, decided 2026-10-18).
 - No serialization of DeepSeek's parallel web searches under the Search API's 5 requests per second: a 429 reaches the model as a tool_result and no log prints it; serialize once one is seen (spec 01, deferred again at spec 05a's retirement, 2026-10-30).
 - No incremental refresh of a web dataset (only the latest fiscal year): a new research run redoes every year (spec 05a, 2026-10-30).
-- No prompt caching of the dataset across a report and its three lenses: their system prompts differ, so the dataset would first have to lead a shared prefix (spec 05b, 2026-11-09).
+- No prompt caching of the dataset across the Deep Value's web update, valuation and report, nor across the report and its three lenses: their system prompts differ, so the dataset would first have to lead a shared prefix; only report2 reads report1's cache (spec 05b, 2026-11-09; spec 05e, 2026-11-22).
+- The web update's notes do not reach the lenses: each lens searches for itself in its blind phase; reopened only by a measure (spec 05e, 2026-11-22).
 - No notification (email) when a run ends after its tab was closed: the status line on /analyses is the only signal (spec 05c, 2026-10-27).
 - No web-search cap on the Deep Value, the Advisor or the earnings lookup (`buildWebSearchTools(model)` without `maxUses`): only a lens request has one, 5 searches, and on DeepSeek the cap binds the loop's rounds, not the searches (spec 05d, 2026-11-22; the Deep Value's comes with 05e).
 

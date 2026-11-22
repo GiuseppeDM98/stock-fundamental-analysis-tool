@@ -92,7 +92,8 @@ test("grounded analysis detail renders the report from its stored result and the
     resultJson: string | null;
     reviewResultJson: string | null;
     reviewBlindJson: string | null;
-  }>("SELECT datasetId, groundingJson, reportMd, resultJson, reviewResultJson, reviewBlindJson FROM Analysis WHERE id = ?", [IDS.analysisGrounded]);
+    updateNotesMd: string | null;
+  }>("SELECT datasetId, groundingJson, reportMd, resultJson, reviewResultJson, reviewBlindJson, updateNotesMd FROM Analysis WHERE id = ?", [IDS.analysisGrounded]);
   expect(row?.datasetId, "seeded grounded row reads its dataset").toBe(IDS.datasetGrounded);
   expect(row!.groundingJson).toBeNull();
   // Current format: a stored result, and a report whose JSON block is the very last thing.
@@ -100,10 +101,15 @@ test("grounded analysis detail renders the report from its stored result and the
   expect(row!.reportMd.trimEnd().endsWith("```")).toBe(true);
   expect(row!.reportMd.lastIndexOf("```json\n")).toBeGreaterThan(row!.reportMd.indexOf("## 1. Overview"));
   expect(row!.reportMd).toContain('"sector": "Utilities"');
+  expect(row!.updateNotesMd).toContain(DECOY.groundedWebUpdate);
 
   await page.goto(`/analyses/${IDS.analysisGrounded}`);
   await expect(page.getByRole("heading", { name: DECOY.groundedCompany })).toBeVisible();
   await expect(page.getByText(DECOY.groundedReport)).toBeVisible();
+  // The web update's notes, in their own box above the report.
+  const webUpdate = page.getByTestId("web-update-card");
+  await expect(webUpdate.getByText("Web update")).toBeVisible();
+  await expect(webUpdate.getByText(DECOY.groundedWebUpdate).first()).toBeVisible();
   // The summary comes from the resultJson column, not from the fence: the sector badge is
   // the column's, which the fence does not carry.
   await expect(page.getByText("Regulated Utilities", { exact: true })).toBeVisible();
@@ -429,15 +435,16 @@ test("/analyses shows NSCA's cut run with Retry and its live run without, above 
 
   const lines = page.getByTestId("analysis-run-status");
   await expect(lines).toHaveCount(2);
-  const cut = lines.filter({ hasText: "Analysis interrupted" });
+  // Each line names its phase: where the cut run stopped, and what Retry will do.
+  const cut = lines.filter({ hasText: "Interrupted during: Valuation" });
   await expect(cut).toContainText("The valuation stopped before the end (e2e)");
   // Not clicked: the retry would start from the click on /analyze, and /api/ai/** is forbidden.
-  await expect(cut.getByRole("link", { name: "Retry" })).toHaveAttribute("href", `/analyze?ticker=${TICKERS.cut}&resume=${IDS.analysisCut}`);
+  await expect(cut.getByRole("link", { name: "Retry from: Valuation" })).toHaveAttribute("href", `/analyze?ticker=${TICKERS.cut}&resume=${IDS.analysisCut}`);
   await expect(cut.getByRole("button", { name: "Delete" })).toBeVisible();
 
-  const live = lines.filter({ hasText: "Analysis in progress… (started 2 min ago)" });
+  const live = lines.filter({ hasText: "Running: Web update" });
   await expect(live).toHaveCount(1);
-  await expect(live.getByRole("link", { name: "Retry" })).toHaveCount(0);
+  await expect(live.getByRole("link", { name: /Retry/ })).toHaveCount(0);
   // A ticker with only unfinished rows has no card.
   await expect(page.locator(".card").filter({ hasText: DECOY.cutCompany })).toHaveCount(0);
 });
@@ -445,7 +452,7 @@ test("/analyses shows NSCA's cut run with Retry and its live run without, above 
 test("the detail page of a cut run shows its status, not a report, and no PDF", async ({ page }) => {
   await fixClock(page);
   await page.goto(`/analyses/${IDS.analysisCut}`);
-  await expect(page.getByTestId("analysis-run-status")).toContainText("Analysis interrupted");
+  await expect(page.getByTestId("analysis-run-status")).toContainText("Interrupted during: Valuation");
   await expect(page.getByRole("button", { name: "Download PDF" })).toHaveCount(0);
   await expect(page.getByText("Analyst Panel")).toHaveCount(0);
 });
@@ -453,8 +460,10 @@ test("the detail page of a cut run shows its status, not a report, and no PDF", 
 test("/analyze?resume= prepares the cut run with Retry and starts nothing", async ({ page, forbiddenCalls }) => {
   await fixClock(page);
   await page.goto(`/analyze?ticker=${TICKERS.cut}&resume=${IDS.analysisCut}`);
-  await expect(page.getByText("The run was cut before the end. Retry: it restarts the valuation on the same dataset.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Retry", exact: true })).toBeEnabled();
+  await expect(page.getByText("The run was cut before the end.", { exact: true })).toBeVisible();
+  // The notes its web update wrote, and a Retry that resumes from the valuation.
+  await expect(page.getByText(DECOY.cutWebUpdate)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry from: Valuation" })).toBeEnabled();
   // The URL params are read once and cleared.
   await expect(page).toHaveURL(/\/analyze$/);
   expect(forbiddenCalls).toEqual([]);

@@ -65,6 +65,13 @@ function clampEffort(settings: AiSettings): AiSettings {
   return { ...settings, effort: callSiteDefaultEffort(settings.model, settings.effort) };
 }
 
+/** The web update of a Deep Value run: Sonnet 5.5 at high on Anthropic whatever model the run
+ *  uses (collecting facts needs no larger model), the run's own model on DeepSeek. */
+export function updatePhaseSettings(runModel: AiModelId): AiSettings {
+  if (AI_MODEL_CATALOG[runModel].provider === "deepseek") return { model: runModel, effort: "high", thinking: true };
+  return { model: "claude-sonnet-5-5", effort: "high", thinking: true };
+}
+
 /** The research stage on Anthropic, whatever Claude model the user's default names: the
  *  research is a transcription of published figures, so it does not pay Opus. */
 export const RESEARCH_AI_SETTINGS: AiSettings = { model: "claude-sonnet-5-5", effort: "high", thinking: true };

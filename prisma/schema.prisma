@@ -119,7 +119,16 @@ model Analysis {
   // 300 s, so the row is created when the valuation starts and finished by the server, never
   // by the client. "running" past RUN_STALE_AFTER_MS without an update means the platform cut it.
   runStatus        String    @default("done")
+  // The start of the request in flight; null between two phases of a staged run (no request
+  // is running then), so a Retry is possible at once. createdAt stays the start of the run.
   runStartedAt     DateTime?
+  // The phase a staged Deep Value run has to run next ("update" | "valuation" | "report1" |
+  // "report2"); null once done, and on rows written before the run had phases.
+  runPhase         String?
+  // The web update's notes (Markdown, a source per fact), shown with the report.
+  updateNotesMd    String?
+  // Why the valuation chose its method and levers: what the report phase explains.
+  valuationMemo    String?
   // The product sentence of a failed run (never the provider's raw message).
   runError         String?
   // The currency of the quote priceAtAnalysis was read from (2026-10-29): an LSE quote in

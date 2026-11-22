@@ -193,7 +193,7 @@ A `PortfolioSnapshot` row is written for each user who has at least one position
 
 ### ⚠️ Vercel Hobby plan: long AI runs stop at 300 seconds
 
-The AI routes call the model with a high reasoning effort plus web search. A Deep Value run (`/api/ai/deep-value`) or an analyst lens (`/api/ai/deep-value/verify`, one request per phase: blind, critique, final numbers) takes minutes, and the Deep Value can still run past the ceiling (per phase, 2026-11-22 at `high`, the highest effort since: Deep Value 338 s, a lens's phases 8-151 s; the guide, § 2.9); the Advisor and the earnings lookup usually fit. On Vercel every API route is a function whose `maxDuration` is capped by the plan (Fluid Compute, Vercel's default — checked against Vercel's docs on 2026-10-20):
+The AI routes call the model with a high reasoning effort plus web search. A Deep Value run (`/api/ai/deep-value`) or an analyst lens (`/api/ai/deep-value/verify`, one request per phase: blind, critique, final numbers) takes minutes, split since 2026-11-22 into requests that fit the ceiling (per phase, at `high`, the highest effort since: the Deep Value's four 44-185 s, a lens's three 8-151 s; the guide, § 2.9); the Advisor and the earnings lookup usually fit. On Vercel every API route is a function whose `maxDuration` is capped by the plan (Fluid Compute, Vercel's default — checked against Vercel's docs on 2026-10-20):
 
 | Plan | Default | Max `maxDuration` |
 |---|---|---|
@@ -212,7 +212,7 @@ Every AI call is one request ≤ 300 s, persisted by the server and retried from
 
 Upgrading to Pro lifts the ceiling to 800s by raising `maxDuration` to 800 in the three long routes (deep-value, verify, research). A queue+polling architecture, or Vercel Workflows (no duration limit), would remove it on Hobby too, at the cost of a new data model and of live streaming — evaluated and not planned for a personal tool.
 
-**Measured after the split** (2026-11-22, Opus 4.8 `high`, localhost, ENAV.MI): every lens request under 240 s; the Deep Value 338 s is still past 300 s, and the research, 245 s that day, took 668 s on CE.MI on 2026-11-20. Splitting those two is the work of the next specs (`doc/evoluzioni/00-INDICE.md` § 5).
+**Measured after the split** (2026-11-22, Opus 4.8 `high`, localhost, ENAV.MI): every lens request and every Deep Value request under 240 s (the Deep Value took 338 s as one request); the research, 245-496 s that day, took 668 s on CE.MI on 2026-11-20. Splitting it is the work of the next spec (`doc/evoluzioni/00-INDICE.md` § 5).
 
 ---
 

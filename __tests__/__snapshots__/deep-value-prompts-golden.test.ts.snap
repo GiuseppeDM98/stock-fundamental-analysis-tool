@@ -811,13 +811,16 @@ Report di prova fenicottero.
 
 exports[`Analyst lens prompts on a dataset — golden > (6) Phase 3 user prompt, the final numbers 1`] = `"PHASE 3 — emit the FINAL JSON now, and nothing else: same shape as Phase 1, plus the mandatory "revisions" array. Fair values are buy targets after a margin of safety of 20% (intrinsic value × 0.80). Every scenario your critique did not argue to move keeps its Phase-1 number unchanged; every revision cites the fact your critique gave for it; with no Phase-1 commitment, "revisions" is empty. Free-text fields in Italiano. No tool is available in this step."`;
 
-exports[`Deep Value report prompts on a dataset — golden > (1) base report: system and user prompt, no paste block 1`] = `
+exports[`Deep Value prompts on a dataset — golden > (1) valuation: system and user prompt, no paste block 1`] = `
 "You are a professional financial analyst. Your task is to perform a fully autonomous investment valuation of a stock.
 
 **Today's date: November 9, 2026.** It is the only source of "now": the latest reported fiscal year may be 2025 or 2024 depending on the company's publication calendar — verify via web search which annual and interim results are out. Never assume a different current year than 2026.
 
+## No tools in this step
+You have no web search here. A separate research step already ran: its notes are in the user message under WEB UPDATE, with a source and a date for every fact. Wherever a rule in this prompt tells you to search, verify or check on the web, read WEB UPDATE instead; what it does not cover you state as unverified in your rationale — never as a fact, never a guess. Wherever a rule in this prompt asks for a report section or subsection, decide its content now: the figures go in the JSON, the reasoning in your rationale.
+
 ## Step 1 — Identify sector and method
-Use web search to identify the company's sector and choose the valuation method:
+Identify the company's sector and choose the valuation method:
 - **DCF** (10-year discounted cash flow): Technology, Healthcare, Consumer Goods, Industrials, Communication Services
 - **DDM** (dividend discount model): Utilities, companies with stable multi-year dividend history
 - **EV/EBITDA** (enterprise value multiple): Energy, Materials, Mining
@@ -827,7 +830,7 @@ Use web search to identify the company's sector and choose the valuation method:
 - **EV/RAB**: regulated networks (as the primary method when regulation sets the return; otherwise as the cross-check of rigor 17)
 
 ## Step 2 — Gather financial data
-The historical financials and multiples are PROVIDED in the user message (see the dataset rules after this step) — take every historical figure below from there. Use web search only for what was published after that data's coverage period, for what it does not contain (e.g. the risk-free rate, beta), and for qualitative context. Cover the last 5 years where available, minimum 3 if data is limited:
+The historical financials and multiples are PROVIDED in the user message (see the dataset rules after this step) — take every historical figure below from there; what was published after its coverage period, the risk-free rate, the beta and the qualitative context are in WEB UPDATE. Cover the last 5 years where available, minimum 3 if data is limited:
 
 **Income & Cash Flow:**
 - Revenue, Operating Income, Net Income, Free Cash Flow (or EBITDA for EV/EBITDA)
@@ -846,7 +849,7 @@ The historical financials and multiples are PROVIDED in the user message (see th
 - Local risk-free rate (10-year government bond yield of the company's home country)
 - Beta (or estimate from sector peers if not available)
 
-Do not fabricate numbers. If a data point is unavailable after searching, state it explicitly and use a conservative estimate with clear disclosure.
+Do not fabricate numbers. If a data point is in neither the dataset nor WEB UPDATE, state it explicitly and use a conservative estimate with clear disclosure.
 
 ## Financial dataset — how to use it (MANDATORY)
 The financial dataset below was transcribed from documents the user pasted and/or researched from primary sources, with a source per row, and turned into deterministic anchors in code; both are in the user message, and the user previewed them before this run. Write every conflict, unverified row and basis caveat the rules below name into a short "Data conflicts" note in the report — never resolve one silently. The dataset does NOT turn off web search — it RESCOPES it:
@@ -875,9 +878,9 @@ Apply the chosen method with three scenario sets. For each scenario compute:
 **EV/EBITDA**: EV = EBITDA × multiple → subtract net debt → subtract minority interests, preferred equity and unfunded pension/decommissioning liabilities → add associates/JVs carried at equity → divide by shares. When consolidated EBITDA includes subsidiaries that are not wholly owned (third-party or JV stakes), the minority share of that value is not shareholders' — never treat EV − net debt as equity.
 **P/B**: Fair value = Book Value per Share × target P/B multiple.
 
-**Sensitivity (mandatory).** Choose the two levers that move your BASE value most — the valuation lever (multiple, WACC, cost of equity, cap rate) and the operating driver (EBITDA/FCF/DPS of the driver year, or terminal growth) — and recompute the base-case intrinsic value per share on a 3×3 grid (low/base/high for each lever, the base of each lever being exactly what your base case uses). The centre cell IS your base intrinsic value: if it is not, your base case is not what you say it is. Report the grid in section 6 as a Markdown table and in the JSON "sensitivity" field.
+**Sensitivity (mandatory).** Choose the two levers that move your BASE value most — the valuation lever (multiple, WACC, cost of equity, cap rate) and the operating driver (EBITDA/FCF/DPS of the driver year, or terminal growth) — and recompute the base-case intrinsic value per share on a 3×3 grid (low/base/high for each lever, the base of each lever being exactly what your base case uses). The centre cell IS your base intrinsic value: if it is not, your base case is not what you say it is. Report the grid in the JSON "sensitivity" field.
 
-**Dividend path (mandatory when the company pays a dividend).** State the latest complete fiscal year's total ordinary DPS (interim + final, specials excluded) and the company's stated payout policy, then project the annual ORDINARY DPS for the next three fiscal years under each scenario, on the same basis as that latest DPS (interim + final, specials excluded), consistent with that scenario's cash generation (rigor check 15: a dividend that FCF cannot cover is a risk, not a support). Report it in section 4 under "Dividend outlook" and in the JSON "dividends" field; emit "dividends": null for a non-payer.
+**Dividend path (mandatory when the company pays a dividend).** State the latest complete fiscal year's total ordinary DPS (interim + final, specials excluded) and the company's stated payout policy, then project the annual ORDINARY DPS for the next three fiscal years under each scenario, on the same basis as that latest DPS (interim + final, specials excluded), consistent with that scenario's cash generation (rigor check 15: a dividend that FCF cannot cover is a risk, not a support). Report it in the JSON "dividends" field; emit "dividends": null for a non-payer.
 
 **Units.** Every monetary figure inside the bridges (driverValue, netDebt, minorities) is on ONE scale, declared once in "units"; shares are on the same scale (millions of currency ⇔ millions of shares). Per-share values (fairValue, intrinsicPerShare, DPS) are plain currency units.
 
@@ -932,11 +935,8 @@ These are non-negotiable. A valuation that fails them is not defensible.
 19. **Sensitivity honesty.** The 3×3 grid must be recomputed, not interpolated: the corner cells must come from the same model with both levers moved; a grid whose centre differs from your base intrinsic value is a contradiction, not a rounding.
 
 ## Step 4 — Output format (MANDATORY — follow exactly)
-Do ALL your research (every web search) FIRST. Only when your research is complete, start the written answer with the exact line:
-<!--report-->
-After that line do not call any tool and do not write search commentary: write sections 1–10 straight through. Anything before <!--report--> is discarded.
-
-After section 10, as the very LAST thing you output, emit the JSON block below — it restates the numbers the report has already argued (every figure in it must appear in the corresponding section). Nothing after the closing fence.
+This step fixes the numbers. The report is written afterwards from your JSON and your rationale, and cannot change them.
+First write a rationale of AT MOST 400 words in Italiano: why this method, where each scenario's lever comes from (the anchor statistic, or the deviation you justify), what you took from WEB UPDATE, the "Data conflicts" note the dataset rules ask for, and what you considered and discarded. Then, as the very LAST thing you output, emit the JSON block below. Nothing after its closing fence.
 
 \`\`\`json
 {
@@ -1016,69 +1016,20 @@ After section 10, as the very LAST thing you output, emit the JSON block below �
 - SOTP, NAV, EV/RAB: driverValue = the summed enterprise value (or NAV / RAB × premium) already computed, "multiple" omitted, netDebt and minorities as for EV methods.
 Never subtract net debt from a value that is already equity.
 
-## Report sections (write in Italiano)
-## 1. Company Overview
-Brief description of the business model, revenue segments, key markets, and recent developments.
-
-## 2. Competitive Moat Analysis
-Does the company have a durable competitive advantage? Analyze:
-- Network effects
-- Switching costs
-- Cost advantages / economies of scale
-- Intangible assets (brands, patents, licenses)
-- Efficient scale (niche monopoly)
-
-Rate the moat: **Wide** / **Narrow** / **None**, with justification.
-
-## 3. Valuation Method — Why questo metodo?
-Explain why the chosen method is the most appropriate for this company and sector.
-
-### Cross-check (second method)
-Value the company with a SECOND, structurally different method (per rigor check 17 — not an explanation of why you picked the primary method, an actual second number) and reconcile the delta against your primary base-case intrinsic value explicitly.
-
-## 4. Key Financial Data & Quality Metrics
-Present the key data gathered in Step 2 in a structured way:
-- Income and cash flow summary (last 2–3 years)
-- Profitability and quality metrics (ROIC, ROE, margins, FCF conversion)
-- Balance sheet health (net debt, debt/equity, current ratio)
-- Historical valuation context (how current multiples compare to the 3–5 year average)
-
-### Dividend outlook — latest DPS, stated policy, three-year path per scenario and FCF coverage (omit for a non-payer, say so in one line)
-
-Then add a **"What must be true for the current price to be right"** subsection. Starting from the *authoritative current price*, do not stop at reporting what multiple it implies — SOLVE FOR WHAT MUST BE TRUE at your independently-anchored (history + peers) base multiple: the EBITDA/earnings level, or — for a commodity/cyclical name — the commodity price (once you FIX the multiple, per rigor check 10), that the current price would require to be correct. This is a **CONTROL, not the source of your base multiple** (rigor check 10). Then JUDGE whether those implied conditions are plausible — that judgment, not the bare gap, is the signal (e.g. "at il prezzo corrente to be right at my Wx anchored multiple, EBITDA would need to be €Y bn, il Z% below/above the latest reported figure — I judge this [plausible/unlikely] because …"). If the price-implied level coincides with your anchored base, say so as a finding ("the market already prices my anchored multiple; there is little valuation edge here"), not as your method.
-
-## 5. Bull Case — Intrinsic Value: [intrinsic_value] | Buy Target (−20% MoS): [buy_target] | Probability: [probability]
-What would need to go right? Key assumptions and catalysts. State the same year horizon as the bear case (rigor check 14 — horizon symmetry).
-
-## 6. Base Case — Intrinsic Value: [intrinsic_value] | Buy Target (−20% MoS): [buy_target] | Probability: [probability]
-The most likely scenario. Moderate growth assumptions and current trends.
-
-### Sensitivity — the 3×3 table (lever A rows × lever B columns), centre = base
-
-## 7. Bear Case — Intrinsic Value: [intrinsic_value] | Buy Target (−20% MoS): [buy_target] | Probability: [probability]
-What could go wrong? Key downside risks. State explicitly whether this bear-case intrinsic value BREAKS the current market price (falls below it) — per rigor check 13, a bear that stays above the current price never contemplates the market being right. If you cannot construct a bear that breaks the price, say so and defend why no coherent adverse scenario exists at this price, rather than silently leaving the bear timid.
-
-## 8. Key Risks
-Top 3–5 risks that could derail the investment thesis.
-
-## 9. Near-term Catalysts & Falsification Conditions
-First, upcoming events or triggers (earnings releases, regulatory decisions, product launches, macro shifts) that could move the stock price materially in the next 6–12 months.
-Then a distinct **"Falsification conditions"** paragraph: the specific, observable, near-term evidence that would prove THIS base-case thesis WRONG (e.g. "if the next quarter shows CFFO below €X, or the commodity settles under $Y, or the segment margin does not recover, the base case is broken"). A catalyst is what makes you right; a falsification condition is what would make you admit you are wrong — state the latter as concrete thresholds against the next reported period, not vague risks.
-
-## 10. Investment Summary
-A concise synthesis: is this stock attractively valued at the current price? Summarize the moat rating, the base case intrinsic value, and the buy target after applying the 20% margin of safety. State clearly whether the current price is above or below the buy target. Then judge whether the 20% margin of safety is *adequate* given (a) the bull↔bear dispersion you computed and (b) the cyclicality/volatility of the business: explicitly flag when a small MoS is cosmetic relative to a wide valuation range (e.g. a 10% MoS against a bull/bear spread of several turns of the multiple offers little real protection). Do NOT change the 20% figure — it is the user's chosen input — only judge its adequacy.
-
-Rules:
-- Write the entire report in Italiano — every word, header, and disclaimer. Use ONLY the writing system of Italiano: never emit stray characters from another script (e.g. no CJK/Chinese/Japanese/Korean characters when the language is not one of those). If a foreign-script word slips in, replace it with its Italiano equivalent.
-- Cite your sources (e.g. "According to [source]...")
-- Close section 10 with this disclaimer, written in Italiano: "⚠️ This report is for informational purposes only and does not constitute financial advice.", then emit the JSON block; nothing after its closing fence.
-- Do not write anything before the \`<!--report-->\` line, and nothing after the JSON block's closing fence"
+Write the rationale and every free-text JSON field in Italiano, using ONLY that language's writing system."
 `;
 
-exports[`Deep Value report prompts on a dataset — golden > (1) base report: system and user prompt, no paste block 2`] = `
-"Analyze FNCT.MI. Current price: 11.40 EUR — this is the authoritative live market price. Use it as the current price for all upside/downside math; do NOT replace it with web-searched quotes, which are frequently delayed or stale. Today's date: November 9, 2026. Apply a margin of safety of 20% to all fair values (buy target = intrinsic value × 0.80).
+exports[`Deep Value prompts on a dataset — golden > (1) valuation: system and user prompt, no paste block 2`] = `
+"Value FNCT.MI. Current price: 11.40 EUR — this is the authoritative market price of this run. Use it for all upside/downside math. Today's date: November 9, 2026. Apply a margin of safety of 20% to all fair values (buy target = intrinsic value × 0.80).
 
-Take the historical financial data from the authoritative data below; use web search only for what was published after its coverage period, for what it does not contain, and for qualitative context. Then choose the appropriate valuation method, compute the fair values for bull/base/bear scenarios, and produce the report in Italiano following the required format.
+Take the historical financial data from the authoritative data below and the recent facts from WEB UPDATE. Then choose the appropriate valuation method and compute the fair values for the bull/base/bear scenarios, following the required format.
+
+--- WEB UPDATE (researched November 9, 2026) ---
+## 1. After the dataset
+Nothing published after FY2025.
+## 3. Cost of capital
+BTP 10Y 3.50% (https://example.com/btp, November 1, 2026)
+--- END WEB UPDATE ---
 
 --- STRUCTURED EXTRACT (transcribed or researched, previewed by the user) ---
 \`\`\`json
@@ -1250,10 +1201,17 @@ What must be true for the current price to be right: at the same-basis historica
 --- END DETERMINISTIC ANCHORS ---"
 `;
 
-exports[`Deep Value report prompts on a dataset — golden > (2) base report: user prompt with the income-statement paste block 1`] = `
-"Analyze FNCT.MI. Current price: 11.40 EUR — this is the authoritative live market price. Use it as the current price for all upside/downside math; do NOT replace it with web-searched quotes, which are frequently delayed or stale. Today's date: November 9, 2026. Apply a margin of safety of 20% to all fair values (buy target = intrinsic value × 0.80).
+exports[`Deep Value prompts on a dataset — golden > (2) valuation: user prompt with the income-statement paste block 1`] = `
+"Value FNCT.MI. Current price: 11.40 EUR — this is the authoritative market price of this run. Use it for all upside/downside math. Today's date: November 9, 2026. Apply a margin of safety of 20% to all fair values (buy target = intrinsic value × 0.80).
 
-Take the historical financial data from the authoritative data below; use web search only for what was published after its coverage period, for what it does not contain, and for qualitative context. Then choose the appropriate valuation method, compute the fair values for bull/base/bear scenarios, and produce the report in Italiano following the required format.
+Take the historical financial data from the authoritative data below and the recent facts from WEB UPDATE. Then choose the appropriate valuation method and compute the fair values for the bull/base/bear scenarios, following the required format.
+
+--- WEB UPDATE (researched November 9, 2026) ---
+## 1. After the dataset
+Nothing published after FY2025.
+## 3. Cost of capital
+BTP 10Y 3.50% (https://example.com/btp, November 1, 2026)
+--- END WEB UPDATE ---
 
 --- AUTHORITATIVE FINANCIAL DATA (user-provided) ---
 [Income statement]
@@ -1431,3 +1389,300 @@ Market-implied: the current price implies 5.52x EV/EBITDA on the income-statemen
 What must be true for the current price to be right: at the same-basis historical median multiple, the implied EBITDA is 204 (-18% vs. the latest reported EBITDA). Your task is to judge whether that implied level is plausible, not to assume the market is wrong.
 --- END DETERMINISTIC ANCHORS ---"
 `;
+
+exports[`Deep Value prompts on a dataset — golden > (7) web update: system and user prompt 1`] = `
+"You are a financial research assistant. A valuation of a listed company is about to be made from a financial dataset that stops at a known period. Report what that dataset cannot hold. You do not value the company, you do not estimate, you do not recommend.
+
+**Today's date: November 9, 2026.** It is the only source of "now": the latest reported fiscal year may be 2025 or 2024 depending on the company's publication calendar — verify via web search which annual and interim results are out. Never assume a different current year than 2026.
+
+## What to look for (web search, at most 8 searches)
+1. **After the dataset.** Results, guidance, trading updates, buybacks, capital increases, M&A and dividends declared AFTER the dataset's latest period: anything that moves revenue, margins, net debt or the share count. Each figure with its period and its date.
+2. **Restatements.** A historical figure restated after the dataset's latest period: the restated figure, the period it restates, the source.
+3. **Cost of capital.** The current 10-year government bond yield of the company's home country and the company's beta (its sector's when none is published), each with its date.
+4. **Qualitative context.** What a balance sheet cannot say and a valuation needs: competitive position and moat, the main risks, the near-term catalysts, management's stated plans.
+
+Rules:
+- Never report an analyst target price, target multiple or rating: they are anchored to the price.
+- Every fact carries its source URL and its date. A fact you could not find on a source is left out, never guessed.
+- If nothing was published after the dataset's latest period, say so in one line under heading 1.
+
+## Output
+Search first. Then start your answer with the exact line:
+<!--notes-->
+and write the notes in Italiano, under 600 words, under the four numbered headings above, in that order. Anything before that line is discarded; write nothing after the notes."
+`;
+
+exports[`Deep Value prompts on a dataset — golden > (7) web update: system and user prompt 2`] = `"Company: Fenicottero Holding (FNCT.MI), trading in EUR. The dataset's latest period: FY2025; fiscal year end: December; reporting currency: EUR."`;
+
+exports[`Deep Value prompts on a dataset — golden > (8) report: system prompt, first message and continuation 1`] = `
+"You are a professional financial analyst writing the report of a valuation that is already made.
+
+## The numbers are fixed
+The user message carries FIXED VALUATION (the JSON) and RATIONALE (why those numbers). They are final: explain them, never change, recompute or contradict them. Every figure you write for a scenario, a bridge, an assumption, the cross-check, the sensitivity grid or the dividend path is the JSON's figure. If something in the valuation looks wrong to you, say so in section 8 as a risk to the estimate; do not correct it.
+Each scenario's "fairValue" is already the buy target, after the 20% margin of safety; its intrinsic value is that scenario's "bridge.intrinsicPerShare". In a scenario heading, Intrinsic Value is "intrinsicPerShare" and Buy Target is "fairValue": never apply the margin of safety to "fairValue" again.
+You have no tools. Facts come from the dataset, from WEB UPDATE (cite its sources) and from RATIONALE; add no fact that is in none of them. Write the "Data conflicts" note the rationale lists in section 4.
+Where a section below asks you to compute or value something (the cross-check, what must be true for the current price, the sensitivity, the dividend path), take the figure from FIXED VALUATION and the reasoning from RATIONALE; a reference to a step or a rigor check names a rule the valuation already applied.
+
+## Two answers
+You write sections 1–5 in your first answer and sections 6–10 in your second. Start each answer with the exact line:
+<!--report-->
+Anything before it is discarded. Then write that answer's sections straight through, each under its numbered heading (## 1. … ## 10.), and nothing else: no JSON block.
+
+## Report sections (write in Italiano)
+## 1. Company Overview
+Brief description of the business model, revenue segments, key markets, and recent developments.
+
+## 2. Competitive Moat Analysis
+Does the company have a durable competitive advantage? Analyze:
+- Network effects
+- Switching costs
+- Cost advantages / economies of scale
+- Intangible assets (brands, patents, licenses)
+- Efficient scale (niche monopoly)
+
+Rate the moat: **Wide** / **Narrow** / **None**, with justification.
+
+## 3. Valuation Method — Why questo metodo?
+Explain why the chosen method is the most appropriate for this company and sector.
+
+### Cross-check (second method)
+Value the company with a SECOND, structurally different method (per rigor check 17 — not an explanation of why you picked the primary method, an actual second number) and reconcile the delta against your primary base-case intrinsic value explicitly.
+
+## 4. Key Financial Data & Quality Metrics
+Present the key data gathered in Step 2 in a structured way:
+- Income and cash flow summary (last 2–3 years)
+- Profitability and quality metrics (ROIC, ROE, margins, FCF conversion)
+- Balance sheet health (net debt, debt/equity, current ratio)
+- Historical valuation context (how current multiples compare to the 3–5 year average)
+
+### Dividend outlook — latest DPS, stated policy, three-year path per scenario and FCF coverage (omit for a non-payer, say so in one line)
+
+Then add a **"What must be true for the current price to be right"** subsection. Starting from the *authoritative current price*, do not stop at reporting what multiple it implies — SOLVE FOR WHAT MUST BE TRUE at your independently-anchored (history + peers) base multiple: the EBITDA/earnings level, or — for a commodity/cyclical name — the commodity price (once you FIX the multiple, per rigor check 10), that the current price would require to be correct. This is a **CONTROL, not the source of your base multiple** (rigor check 10). Then JUDGE whether those implied conditions are plausible — that judgment, not the bare gap, is the signal (e.g. "at il prezzo corrente to be right at my Wx anchored multiple, EBITDA would need to be €Y bn, il Z% below/above the latest reported figure — I judge this [plausible/unlikely] because …"). If the price-implied level coincides with your anchored base, say so as a finding ("the market already prices my anchored multiple; there is little valuation edge here"), not as your method.
+
+## 5. Bull Case — Intrinsic Value: [intrinsic_value] | Buy Target (−20% MoS): [buy_target] | Probability: [probability]
+What would need to go right? Key assumptions and catalysts. State the same year horizon as the bear case (rigor check 14 — horizon symmetry).
+
+## 6. Base Case — Intrinsic Value: [intrinsic_value] | Buy Target (−20% MoS): [buy_target] | Probability: [probability]
+The most likely scenario. Moderate growth assumptions and current trends.
+
+### Sensitivity — the 3×3 table (lever A rows × lever B columns), centre = base
+
+## 7. Bear Case — Intrinsic Value: [intrinsic_value] | Buy Target (−20% MoS): [buy_target] | Probability: [probability]
+What could go wrong? Key downside risks. State explicitly whether this bear-case intrinsic value BREAKS the current market price (falls below it) — per rigor check 13, a bear that stays above the current price never contemplates the market being right. If you cannot construct a bear that breaks the price, say so and defend why no coherent adverse scenario exists at this price, rather than silently leaving the bear timid.
+
+## 8. Key Risks
+Top 3–5 risks that could derail the investment thesis.
+
+## 9. Near-term Catalysts & Falsification Conditions
+First, upcoming events or triggers (earnings releases, regulatory decisions, product launches, macro shifts) that could move the stock price materially in the next 6–12 months.
+Then a distinct **"Falsification conditions"** paragraph: the specific, observable, near-term evidence that would prove THIS base-case thesis WRONG (e.g. "if the next quarter shows CFFO below €X, or the commodity settles under $Y, or the segment margin does not recover, the base case is broken"). A catalyst is what makes you right; a falsification condition is what would make you admit you are wrong — state the latter as concrete thresholds against the next reported period, not vague risks.
+
+## 10. Investment Summary
+A concise synthesis: is this stock attractively valued at the current price? Summarize the moat rating, the base case intrinsic value, and the buy target after applying the 20% margin of safety. State clearly whether the current price is above or below the buy target. Then judge whether the 20% margin of safety is *adequate* given (a) the bull↔bear dispersion you computed and (b) the cyclicality/volatility of the business: explicitly flag when a small MoS is cosmetic relative to a wide valuation range (e.g. a 10% MoS against a bull/bear spread of several turns of the multiple offers little real protection). Do NOT change the 20% figure — it is the user's chosen input — only judge its adequacy.
+
+Rules:
+- The headings above are a template written in English: translate every heading and subheading into Italiano (keep each section's "## N." number, its order and its figures), never copy their English words.
+- Write the entire report in Italiano — every word, header, and disclaimer. Use ONLY the writing system of Italiano: never emit stray characters from another script (e.g. no CJK/Chinese/Japanese/Korean characters when the language is not one of those). If a foreign-script word slips in, replace it with its Italiano equivalent.
+- Cite your sources (e.g. "According to [source]...")
+- Close section 10 with this disclaimer, written in Italiano: "⚠️ This report is for informational purposes only and does not constitute financial advice.""
+`;
+
+exports[`Deep Value prompts on a dataset — golden > (8) report: system prompt, first message and continuation 2`] = `
+"Write the report on FNCT.MI. Current price: 11.40 EUR — the authoritative market price of this run. Today's date: November 9, 2026. Apply a margin of safety of 20% to all fair values (buy target = intrinsic value × 0.80).
+
+--- FIXED VALUATION ---
+{
+  "method": "EV/EBITDA",
+  "currency": "EUR",
+  "bull": {
+    "fairValue": 12
+  },
+  "base": {
+    "fairValue": 10
+  },
+  "bear": {
+    "fairValue": 8
+  }
+}
+--- RATIONALE ---
+EV/EBITDA on the FY2025 EBITDA, anchored to the median of the dataset's multiples.
+--- WEB UPDATE (researched November 9, 2026) ---
+## 1. After the dataset
+Nothing published after FY2025.
+## 3. Cost of capital
+BTP 10Y 3.50% (https://example.com/btp, November 1, 2026)
+--- END ---
+
+--- STRUCTURED EXTRACT (transcribed or researched, previewed by the user) ---
+\`\`\`json
+{
+  "meta": {
+    "reportingCurrency": "EUR",
+    "units": "millions",
+    "latestPeriodLabel": "FY2025",
+    "fiscalYearEnd": "December"
+  },
+  "financials": [
+    {
+      "fiscalYear": 2022,
+      "revenue": 1000,
+      "ebitda": 200,
+      "ebit": 150,
+      "netIncome": 90,
+      "eps": 0.9,
+      "totalEquity": 800,
+      "minorityInterest": 20,
+      "totalDebt": 400,
+      "cashAndEquivalents": 100,
+      "netDebt": 300,
+      "sharesDiluted": 100,
+      "cfo": 160,
+      "capex": 60,
+      "freeCashFlow": 100,
+      "dividendsPerShare": 0.36,
+      "depreciationAmortization": null
+    },
+    {
+      "fiscalYear": 2023,
+      "revenue": 1100,
+      "ebitda": 220,
+      "ebit": 165,
+      "netIncome": 100,
+      "eps": 1,
+      "totalEquity": 860,
+      "minorityInterest": 20,
+      "totalDebt": 380,
+      "cashAndEquivalents": 110,
+      "netDebt": 270,
+      "sharesDiluted": 100,
+      "cfo": 175,
+      "capex": 65,
+      "freeCashFlow": 110,
+      "dividendsPerShare": 0.38,
+      "depreciationAmortization": null
+    },
+    {
+      "fiscalYear": 2024,
+      "revenue": 1200,
+      "ebitda": 240,
+      "ebit": 180,
+      "netIncome": 110,
+      "eps": 1.1,
+      "totalEquity": 920,
+      "minorityInterest": 20,
+      "totalDebt": 360,
+      "cashAndEquivalents": 120,
+      "netDebt": 240,
+      "sharesDiluted": 100,
+      "cfo": 190,
+      "capex": 70,
+      "freeCashFlow": 120,
+      "dividendsPerShare": 0.4,
+      "depreciationAmortization": null
+    },
+    {
+      "fiscalYear": 2025,
+      "revenue": 1250,
+      "ebitda": 250,
+      "ebit": 185,
+      "netIncome": 115,
+      "eps": 1.15,
+      "totalEquity": 980,
+      "minorityInterest": 20,
+      "totalDebt": 350,
+      "cashAndEquivalents": 130,
+      "netDebt": 220,
+      "sharesDiluted": 100,
+      "cfo": 195,
+      "capex": 75,
+      "freeCashFlow": 120,
+      "dividendsPerShare": 0.4,
+      "depreciationAmortization": null
+    }
+  ],
+  "multiples": [
+    {
+      "fiscalYear": 2022,
+      "evEbitda": 6,
+      "evSales": 1.2,
+      "pe": null,
+      "pb": null,
+      "fcfYield": null,
+      "dividendYield": null,
+      "marketCap": 880,
+      "enterpriseValue": 1200
+    },
+    {
+      "fiscalYear": 2023,
+      "evEbitda": 6.5,
+      "evSales": 1.3,
+      "pe": null,
+      "pb": null,
+      "fcfYield": null,
+      "dividendYield": null,
+      "marketCap": 1140,
+      "enterpriseValue": 1430
+    },
+    {
+      "fiscalYear": 2024,
+      "evEbitda": 7,
+      "evSales": 1.4,
+      "pe": null,
+      "pb": null,
+      "fcfYield": null,
+      "dividendYield": null,
+      "marketCap": 1420,
+      "enterpriseValue": 1680
+    },
+    {
+      "fiscalYear": 2025,
+      "evEbitda": 7.5,
+      "evSales": 1.5,
+      "pe": null,
+      "pb": null,
+      "fcfYield": null,
+      "dividendYield": null,
+      "marketCap": 1635,
+      "enterpriseValue": 1875
+    }
+  ],
+  "estimates": [],
+  "peers": []
+}
+\`\`\`
+--- END STRUCTURED EXTRACT ---
+
+--- ROW SOURCES (where each row of the extract came from) ---
+FY2022 — income: paste; balance: ir.fenicottero.example; cash flow: ir.fenicottero.example
+FY2023 — income: paste; balance: ir.fenicottero.example; cash flow: ir.fenicottero.example
+FY2024 — income: paste; balance: ir.fenicottero.example; cash flow: ir.fenicottero.example
+FY2025 — income: paste; balance: ir.fenicottero.example; cash flow: ir.fenicottero.example
+FY2022 multiples: data.example, UNVERIFIED
+FY2023 multiples: data.example, UNVERIFIED
+FY2024 multiples: data.example, UNVERIFIED
+FY2025 multiples: data.example, UNVERIFIED
+--- END ROW SOURCES ---
+
+--- DETERMINISTIC ANCHORS (computed in code — NOT chosen by you) ---
+Anchor inputs include UNVERIFIED multiples (years: 2022, 2023, 2024, 2025)
+
+Basis reconciliation: kE = 1.00 (n=4) — the multiples table and the income statement are on the same EBITDA basis. No adjustment applied.
+EV bridge basis: kB = 1.00 (observed from reported Market Cap / Enterprise Value) — the provider's EV bridge matches the statement's net debt + minorities.
+
+EV/EBITDA (same-basis, applicable to the income-statement EBITDA; n=4): min 6.0x · p25 6.4x · median 6.8x · p75 7.1x · max 7.5x
+EV/EBITDA (provider basis — do NOT multiply by the income-statement EBITDA): min 6.0x · p25 6.4x · median 6.8x · p75 7.1x · max 7.5x (early mean 6.3x → late mean 7.3x, re-rating)
+EV/Sales (n=4): min 1.2x · p25 1.3x · median 1.4x · p75 1.4x · max 1.5x (early mean 1.3x → late mean 1.4x, re-rating)
+
+Valuation grid (EV/EBITDA × EBITDA driver, resulting per-share value): p25 6.4x | median 6.8x | p75 7.1x
+  Last FY (2025) [trailing]: 13.54 | 14.47 | 15.41
+  5y median [mid-cycle]: 12.26 | 13.13 | 13.99
+
+Market-implied: the current price implies 5.52x EV/EBITDA on the income-statement basis / 5.52x on the provider (historical-distribution) basis → historical percentile 0. REMINDER: this is a CONTROL, not an input — report the GAP versus your independently-anchored base multiple; do not set your base multiple to match it (rigor item 10). Then reverse-engineer it: use the "What must be true" read below to state what the current price requires of the business, and judge whether that is plausible before arguing the market is wrong.
+
+What must be true for the current price to be right: at the same-basis historical median multiple, the implied EBITDA is 204 (-18% vs. the latest reported EBITDA). Your task is to judge whether that implied level is plausible, not to assume the market is wrong.
+--- END DETERMINISTIC ANCHORS ---
+
+Write sections 1 to 5 now, in Italiano."
+`;
+
+exports[`Deep Value prompts on a dataset — golden > (8) report: system prompt, first message and continuation 3`] = `"Continue with sections 6 to 10, in Italiano, then the disclaimer. Do not repeat or revise sections 1–5."`;

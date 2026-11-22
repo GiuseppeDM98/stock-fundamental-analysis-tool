@@ -7,20 +7,20 @@
 // kept two contracts alive in every builder.
 // Business logic lives here (not in the API route) per project conventions.
 //
-// Output order (2026-10): research first, then a sentinel line (<!--report--> for the
-// report, <!--critique--> for a lens), then the prose, then the JSON block as the very LAST
-// thing. The numbers then restate what the prose already argued instead of being fixed
-// before it (the old JSON-first order made the report a rationalisation, with no reasoning
-// at all before the numbers when thinking was off), and the report can stream to the
-// client from its first heading. The sentinel is a line, not the `## 1.` heading, so it
-// does not depend on the report language or the section numbering; the routes drop
-// everything before it (lib/ai/stream-gate.ts).
+// Output order. A lens (2026-10): research first, then the <!--critique--> line and the
+// prose; its numbers come in a request of their own. The Deep Value (2026-11-22): the numbers
+// come FIRST, in a request of their own after a written rationale (the reasoning still
+// precedes them, and with thinking off it is the only reasoning), and the report explains
+// them afterwards without changing them. A text phase opens with a sentinel line
+// (<!--notes-->, <!--report-->, <!--critique-->), not a heading, so it does not depend on the
+// language or the section numbering; the routes drop everything before it
+// (lib/ai/stream-gate.ts).
 
 import type { AnalystAngle } from "@/types/analysis";
 import type { GroundingPromptContext } from "@/lib/grounding/prompt-format";
 import { formatGroundingForPrompt } from "@/lib/grounding/prompt-format";
 import type { Triple } from "@/lib/report/valuation";
-import { REPORT_START_MARKER, CRITIQUE_START_MARKER } from "@/lib/report/parse-deep-value-json";
+import { REPORT_START_MARKER, CRITIQUE_START_MARKER, NOTES_START_MARKER } from "@/lib/report/parse-deep-value-json";
 
 // "Analytical rigor" checklist injected into the Deep Value system prompt
 // (between the scenario step and the output step). Each item hardens against a
@@ -175,7 +175,7 @@ function assumptionsCrossCheckJson(): string {
   }`;
 }
 
-// "Now" for both builders. The year is read from the server-formatted date rather than
+// "Now" for every builder that dates its prompt. The year is read from the server-formatted date rather than
 // written into the prompt: a hardcoded year aged the moment the calendar moved on, and
 // the model's own training year is exactly the anchor this clause exists to break.
 function dateClauseFor(currentDate: string): string {
@@ -187,119 +187,21 @@ function dateClauseFor(currentDate: string): string {
   return `\n**Today's date: ${currentDate}.**${recency}\n`;
 }
 
-/**
- * System prompt instructing Claude to:
- * 1. Identify sector via web search
- * 2. Pick the appropriate valuation method
- * 3. Take the historical figures from the dataset, web search for what it cannot hold
- * 4. Compute bull/base/bear fair values, a 3×3 sensitivity and the dividend path
- * 5. Finish the research, then write the full Markdown report after the
- *    <!--report--> line, and emit the JSON block as the very last thing
- *
- * @param language - Report language (e.g. "English", "Italiano")
- * @param currentDate - Today's date string injected from the server (e.g. "May 7, 2026")
- * @param grounding - The dataset context. The system prompt carries only the rules for
- *   using it (DATASET_RULES_BLOCK); the figures go in the user prompt.
- */
-export function buildDeepValueSystemPrompt({
-  language = "English",
-  currentDate = "",
-  mosPercent = 0,
-}: {
-  language?: string;
-  currentDate?: string;
-  mosPercent?: number;
-  // Required, unread here: a system prompt is never built without the dataset its rules
-  // refer to.
-  grounding: GroundingPromptContext;
-}): string {
-  const dateClause = dateClauseFor(currentDate);
-  // Step 2 is rescoped, not "gather via web search": read literally, that wording would
-  // contradict the dataset rules that forbid re-collecting the history already provided.
-  const step2Intro = `## Step 2 — Gather financial data
-The historical financials and multiples are PROVIDED in the user message (see the dataset rules after this step) — take every historical figure below from there. Use web search only for what was published after that data's coverage period, for what it does not contain (e.g. the risk-free rate, beta), and for qualitative context. Cover the last 5 years where available, minimum 3 if data is limited:`;
+// ─── Deep Value: four requests, one role each (2026-11-22) ───────────────────
+// One request did everything and ran 10-13 minutes, past the 300 s a function lives on
+// Vercel Hobby; the numbers came last, so a cut lost them all. Now: the web update (Sonnet,
+// web search only, notes with a source per fact), the valuation (the run's model, no tools:
+// a rationale, then the JSON that fixes the numbers), and the report in two halves that
+// explain the fixed numbers and may not change them (the run's model, no tools).
 
-  return `You are a professional financial analyst. Your task is to perform a fully autonomous investment valuation of a stock.
-${dateClause}
-## Step 1 — Identify sector and method
-Use web search to identify the company's sector and choose the valuation method:
-- **DCF** (10-year discounted cash flow): Technology, Healthcare, Consumer Goods, Industrials, Communication Services
-- **DDM** (dividend discount model): Utilities, companies with stable multi-year dividend history
-- **EV/EBITDA** (enterprise value multiple): Energy, Materials, Mining
-- **P/B** (price-to-book): Banks, Insurance, Financial Services
-- **NAV / SOTP**: REITs, holding companies, conglomerates with separable segments, asset-heavy businesses valued on appraised assets
-- **P/E**: mature, stable-margin businesses where earnings are the cleanest driver (consumer staples, some industrials) — only when EV/EBITDA bridge items are immaterial
-- **EV/RAB**: regulated networks (as the primary method when regulation sets the return; otherwise as the cross-check of rigor 17)
+/** The web update's search cap on Claude: a true cap (`allowed_callers: ["direct"]`), across
+ *  pause_turn resumes. Here, not in lib/ai/client.ts (server-only), because the update's
+ *  prompt prints it. */
+export const UPDATE_MAX_SEARCHES = 8;
 
-${step2Intro}
-
-**Income & Cash Flow:**
-- Revenue, Operating Income, Net Income, Free Cash Flow (or EBITDA for EV/EBITDA)
-- Gross Margin, Operating Margin, FCF Conversion Rate (FCF / Net Income)
-
-**Balance Sheet & Quality:**
-- Net Debt (Total Debt minus Cash), Debt/Equity Ratio, Current Ratio
-- ROIC (Return on Invested Capital), ROE (Return on Equity)
-- Dividends per share and payout ratio (even for non-DDM stocks — relevant context)
-
-**Market & Valuation Context:**
-- Shares outstanding, Current market cap
-- Historical valuation multiples: average P/E and EV/EBITDA over the past 3–5 years (to gauge if current valuation is cheap or expensive vs. history)
-
-**Cost of Capital:**
-- Local risk-free rate (10-year government bond yield of the company's home country)
-- Beta (or estimate from sector peers if not available)
-
-Do not fabricate numbers. If a data point is unavailable after searching, state it explicitly and use a conservative estimate with clear disclosure.
-
-${DATASET_RULES_BLOCK}
-## Step 3 — Compute 3 scenarios (Bull / Base / Bear)
-Apply the chosen method with three scenario sets. For each scenario compute:
-- Intrinsic fair value per share
-- Apply a **margin of safety of ${mosPercent}%**: buy target = intrinsic value × (1 − ${mosPercent}/100)
-- Upside/downside of the **buy target** vs current price (%)
-
-**DCF**: Project 10 years of FCF, apply WACC discount, add Gordon Growth terminal value.
-**DDM**: 2-stage — 10 explicit dividend years + Gordon Growth terminal. Cost of equity via CAPM.
-**EV/EBITDA**: EV = EBITDA × multiple → subtract net debt → subtract minority interests, preferred equity and unfunded pension/decommissioning liabilities → add associates/JVs carried at equity → divide by shares. When consolidated EBITDA includes subsidiaries that are not wholly owned (third-party or JV stakes), the minority share of that value is not shareholders' — never treat EV − net debt as equity.
-**P/B**: Fair value = Book Value per Share × target P/B multiple.
-
-**Sensitivity (mandatory).** Choose the two levers that move your BASE value most — the valuation lever (multiple, WACC, cost of equity, cap rate) and the operating driver (EBITDA/FCF/DPS of the driver year, or terminal growth) — and recompute the base-case intrinsic value per share on a 3×3 grid (low/base/high for each lever, the base of each lever being exactly what your base case uses). The centre cell IS your base intrinsic value: if it is not, your base case is not what you say it is. Report the grid in section 6 as a Markdown table and in the JSON "sensitivity" field.
-
-**Dividend path (mandatory when the company pays a dividend).** State the latest complete fiscal year's total ordinary DPS (interim + final, specials excluded) and the company's stated payout policy, then project the annual ORDINARY DPS for the next three fiscal years under each scenario, on the same basis as that latest DPS (interim + final, specials excluded), consistent with that scenario's cash generation (rigor check 15: a dividend that FCF cannot cover is a risk, not a support). Report it in section 4 under "Dividend outlook" and in the JSON "dividends" field; emit "dividends": null for a non-payer.
-
-**Units.** Every monetary figure inside the bridges (driverValue, netDebt, minorities) is on ONE scale, declared once in "units"; shares are on the same scale (millions of currency ⇔ millions of shares). Per-share values (fairValue, intrinsicPerShare, DPS) are plain currency units.
-
-${ANALYTICAL_RIGOR_BLOCK}
-## Step 4 — Output format (MANDATORY — follow exactly)
-Do ALL your research (every web search) FIRST. Only when your research is complete, start the written answer with the exact line:
-${REPORT_START_MARKER}
-After that line do not call any tool and do not write search commentary: write sections 1–10 straight through. Anything before ${REPORT_START_MARKER} is discarded.
-
-After section 10, as the very LAST thing you output, emit the JSON block below — it restates the numbers the report has already argued (every figure in it must appear in the corresponding section). Nothing after the closing fence.
-
-\`\`\`json
-{
-  "method": "<${METHOD_LIST}>",
-  "sector": "<sector name, max 80 characters>",
-  "currency": "<ISO 4217 code, 3 letters>",
-${UNITS_JSON_LINE}
-${scenarioJsonLine("bull", mosPercent)},
-${scenarioJsonLine("base", mosPercent)},
-${scenarioJsonLine("bear", mosPercent)},
-${assumptionsCrossCheckJson()},
-  "sensitivity": {
-    "leverA": { "name": "<the primary lever, e.g. \\"EV/EBITDA exit multiple\\" or \\"WACC\\">", "values": [<low>, <base>, <high>] },
-    "leverB": { "name": "<the operating driver, e.g. \\"EBITDA 2026e\\" or \\"terminal growth\\">", "values": [<low>, <base>, <high>] },
-    "intrinsicPerShare": [[<a1b1>, <a1b2>, <a1b3>], [<a2b1>, <BASE — must equal base.bridge.intrinsicPerShare>, <a2b3>], [<a3b1>, <a3b2>, <a3b3>]]
-  },
-  "dividends": null | { "policy": "<one sentence>", "lastDps": <total ordinary DPS of the latest complete fiscal year>, "path": [ { "year": <next FY end year>, "bull": <DPS>, "base": <DPS>, "bear": <DPS> }, { "year": <+1> ... }, { "year": <+2> ... } ] } — every "path" DPS is the annual ORDINARY DPS, on the same basis as lastDps (interim + final, specials excluded)
-}
-\`\`\`
-
-${BRIDGE_RULE}
-
-## Report sections (write in ${language})
+/** The ten report sections, the same text the single-request report asked for. */
+export function reportSections(language: string, mosPercent: number): string {
+  return `## Report sections (write in ${language})
 ## 1. Company Overview
 Brief description of the business model, revenue segments, key markets, and recent developments.
 
@@ -349,22 +251,248 @@ First, upcoming events or triggers (earnings releases, regulatory decisions, pro
 Then a distinct **"Falsification conditions"** paragraph: the specific, observable, near-term evidence that would prove THIS base-case thesis WRONG (e.g. "if the next quarter shows CFFO below €X, or the commodity settles under \$Y, or the segment margin does not recover, the base case is broken"). A catalyst is what makes you right; a falsification condition is what would make you admit you are wrong — state the latter as concrete thresholds against the next reported period, not vague risks.
 
 ## 10. Investment Summary
-A concise synthesis: is this stock attractively valued at the current price? Summarize the moat rating, the base case intrinsic value, and the buy target after applying the ${mosPercent}% margin of safety. State clearly whether the current price is above or below the buy target. Then judge whether the ${mosPercent}% margin of safety is *adequate* given (a) the bull↔bear dispersion you computed and (b) the cyclicality/volatility of the business: explicitly flag when a small MoS is cosmetic relative to a wide valuation range (e.g. a 10% MoS against a bull/bear spread of several turns of the multiple offers little real protection). Do NOT change the ${mosPercent}% figure — it is the user's chosen input — only judge its adequacy.
-
-Rules:
-- Write the entire report in ${language} — every word, header, and disclaimer. Use ONLY the writing system of ${language}: never emit stray characters from another script (e.g. no CJK/Chinese/Japanese/Korean characters when the language is not one of those). If a foreign-script word slips in, replace it with its ${language} equivalent.
-- Cite your sources (e.g. "According to [source]...")
-- Close section 10 with this disclaimer, written in ${language}: "⚠️ This report is for informational purposes only and does not constitute financial advice.", then emit the JSON block; nothing after its closing fence.
-- Do not write anything before the \`${REPORT_START_MARKER}\` line, and nothing after the JSON block's closing fence`;
+A concise synthesis: is this stock attractively valued at the current price? Summarize the moat rating, the base case intrinsic value, and the buy target after applying the ${mosPercent}% margin of safety. State clearly whether the current price is above or below the buy target. Then judge whether the ${mosPercent}% margin of safety is *adequate* given (a) the bull↔bear dispersion you computed and (b) the cyclicality/volatility of the business: explicitly flag when a small MoS is cosmetic relative to a wide valuation range (e.g. a 10% MoS against a bull/bear spread of several turns of the multiple offers little real protection). Do NOT change the ${mosPercent}% figure — it is the user's chosen input — only judge its adequacy.`;
 }
 
 /**
- * User message: the ticker, the authoritative price and the dataset section (raw paste,
- * extract, row sources, anchors, warnings).
- *
- * @param currentDate - Today's date string injected from the server (e.g. "May 7, 2026")
+ * System prompt of the web update: what happened after the dataset's latest period, the cost
+ * of capital and the qualitative context, each fact with its source and date. No valuation,
+ * no estimate, never an analyst target.
  */
-export function buildDeepValueUserPrompt({
+export function buildUpdateSystemPrompt({ language, currentDate = "" }: { language: string; currentDate?: string }): string {
+  return `You are a financial research assistant. A valuation of a listed company is about to be made from a financial dataset that stops at a known period. Report what that dataset cannot hold. You do not value the company, you do not estimate, you do not recommend.
+${dateClauseFor(currentDate)}
+## What to look for (web search, at most ${UPDATE_MAX_SEARCHES} searches)
+1. **After the dataset.** Results, guidance, trading updates, buybacks, capital increases, M&A and dividends declared AFTER the dataset's latest period: anything that moves revenue, margins, net debt or the share count. Each figure with its period and its date.
+2. **Restatements.** A historical figure restated after the dataset's latest period: the restated figure, the period it restates, the source.
+3. **Cost of capital.** The current 10-year government bond yield of the company's home country and the company's beta (its sector's when none is published), each with its date.
+4. **Qualitative context.** What a balance sheet cannot say and a valuation needs: competitive position and moat, the main risks, the near-term catalysts, management's stated plans.
+
+Rules:
+- Never report an analyst target price, target multiple or rating: they are anchored to the price.
+- Every fact carries its source URL and its date. A fact you could not find on a source is left out, never guessed.
+- If nothing was published after the dataset's latest period, say so in one line under heading 1.
+
+## Output
+Search first. Then start your answer with the exact line:
+${NOTES_START_MARKER}
+and write the notes in ${language}, under 600 words, under the four numbered headings above, in that order. Anything before that line is discarded; write nothing after the notes.`;
+}
+
+/**
+ * User message of the web update: the company and where its dataset stops. Never the price
+ * (the update is not a valuation) and no figure of the dataset, so the prompt never asks the
+ * model to compare with one: the valuation does that.
+ */
+export function buildUpdateUserPrompt({
+  ticker,
+  companyName,
+  currency,
+  latestPeriodLabel,
+  fiscalYearEnd,
+  reportingCurrency,
+  researchNotes,
+}: {
+  ticker: string;
+  companyName: string;
+  currency: string;
+  latestPeriodLabel: string | null;
+  fiscalYearEnd: string | null;
+  reportingCurrency: string | null;
+  researchNotes: string | null;
+}): string {
+  const notes = researchNotes ? ` Notes of the dataset's own research: ${researchNotes}` : "";
+  return `Company: ${companyName} (${ticker}), trading in ${currency}. The dataset's latest period: ${latestPeriodLabel ?? "not stated"}; fiscal year end: ${fiscalYearEnd ?? "not stated"}; reporting currency: ${reportingCurrency ?? "not stated"}.${notes}`;
+}
+
+/**
+ * System prompt of the valuation: the method, the data, the scenarios and the rigor checks of
+ * the single-request report, without tools, ending in a rationale and the JSON that fixes the
+ * numbers. The rules that speak of web search stay as they are (they are shared with the
+ * lenses): the "No tools in this step" clause sends them to WEB UPDATE.
+ *
+ * @param language - Report language (e.g. "English", "Italiano")
+ * @param currentDate - The run's date (its createdAt), formatted on the server
+ * @param grounding - The dataset context. The system prompt carries only the rules for
+ *   using it (DATASET_RULES_BLOCK); the figures go in the user prompt.
+ */
+export function buildValuationSystemPrompt({
+  language = "English",
+  currentDate = "",
+  mosPercent = 0,
+}: {
+  language?: string;
+  currentDate?: string;
+  mosPercent?: number;
+  // Required, unread here: a system prompt is never built without the dataset its rules
+  // refer to.
+  grounding: GroundingPromptContext;
+}): string {
+  const dateClause = dateClauseFor(currentDate);
+  // Step 2 is rescoped, not "gather via web search": read literally, that wording would
+  // contradict the dataset rules that forbid re-collecting the history already provided.
+  const step2Intro = `## Step 2 — Gather financial data
+The historical financials and multiples are PROVIDED in the user message (see the dataset rules after this step) — take every historical figure below from there; what was published after its coverage period, the risk-free rate, the beta and the qualitative context are in WEB UPDATE. Cover the last 5 years where available, minimum 3 if data is limited:`;
+
+  return `You are a professional financial analyst. Your task is to perform a fully autonomous investment valuation of a stock.
+${dateClause}
+## No tools in this step
+You have no web search here. A separate research step already ran: its notes are in the user message under WEB UPDATE, with a source and a date for every fact. Wherever a rule in this prompt tells you to search, verify or check on the web, read WEB UPDATE instead; what it does not cover you state as unverified in your rationale — never as a fact, never a guess. Wherever a rule in this prompt asks for a report section or subsection, decide its content now: the figures go in the JSON, the reasoning in your rationale.
+
+## Step 1 — Identify sector and method
+Identify the company's sector and choose the valuation method:
+- **DCF** (10-year discounted cash flow): Technology, Healthcare, Consumer Goods, Industrials, Communication Services
+- **DDM** (dividend discount model): Utilities, companies with stable multi-year dividend history
+- **EV/EBITDA** (enterprise value multiple): Energy, Materials, Mining
+- **P/B** (price-to-book): Banks, Insurance, Financial Services
+- **NAV / SOTP**: REITs, holding companies, conglomerates with separable segments, asset-heavy businesses valued on appraised assets
+- **P/E**: mature, stable-margin businesses where earnings are the cleanest driver (consumer staples, some industrials) — only when EV/EBITDA bridge items are immaterial
+- **EV/RAB**: regulated networks (as the primary method when regulation sets the return; otherwise as the cross-check of rigor 17)
+
+${step2Intro}
+
+**Income & Cash Flow:**
+- Revenue, Operating Income, Net Income, Free Cash Flow (or EBITDA for EV/EBITDA)
+- Gross Margin, Operating Margin, FCF Conversion Rate (FCF / Net Income)
+
+**Balance Sheet & Quality:**
+- Net Debt (Total Debt minus Cash), Debt/Equity Ratio, Current Ratio
+- ROIC (Return on Invested Capital), ROE (Return on Equity)
+- Dividends per share and payout ratio (even for non-DDM stocks — relevant context)
+
+**Market & Valuation Context:**
+- Shares outstanding, Current market cap
+- Historical valuation multiples: average P/E and EV/EBITDA over the past 3–5 years (to gauge if current valuation is cheap or expensive vs. history)
+
+**Cost of Capital:**
+- Local risk-free rate (10-year government bond yield of the company's home country)
+- Beta (or estimate from sector peers if not available)
+
+Do not fabricate numbers. If a data point is in neither the dataset nor WEB UPDATE, state it explicitly and use a conservative estimate with clear disclosure.
+
+${DATASET_RULES_BLOCK}
+## Step 3 — Compute 3 scenarios (Bull / Base / Bear)
+Apply the chosen method with three scenario sets. For each scenario compute:
+- Intrinsic fair value per share
+- Apply a **margin of safety of ${mosPercent}%**: buy target = intrinsic value × (1 − ${mosPercent}/100)
+- Upside/downside of the **buy target** vs current price (%)
+
+**DCF**: Project 10 years of FCF, apply WACC discount, add Gordon Growth terminal value.
+**DDM**: 2-stage — 10 explicit dividend years + Gordon Growth terminal. Cost of equity via CAPM.
+**EV/EBITDA**: EV = EBITDA × multiple → subtract net debt → subtract minority interests, preferred equity and unfunded pension/decommissioning liabilities → add associates/JVs carried at equity → divide by shares. When consolidated EBITDA includes subsidiaries that are not wholly owned (third-party or JV stakes), the minority share of that value is not shareholders' — never treat EV − net debt as equity.
+**P/B**: Fair value = Book Value per Share × target P/B multiple.
+
+**Sensitivity (mandatory).** Choose the two levers that move your BASE value most — the valuation lever (multiple, WACC, cost of equity, cap rate) and the operating driver (EBITDA/FCF/DPS of the driver year, or terminal growth) — and recompute the base-case intrinsic value per share on a 3×3 grid (low/base/high for each lever, the base of each lever being exactly what your base case uses). The centre cell IS your base intrinsic value: if it is not, your base case is not what you say it is. Report the grid in the JSON "sensitivity" field.
+
+**Dividend path (mandatory when the company pays a dividend).** State the latest complete fiscal year's total ordinary DPS (interim + final, specials excluded) and the company's stated payout policy, then project the annual ORDINARY DPS for the next three fiscal years under each scenario, on the same basis as that latest DPS (interim + final, specials excluded), consistent with that scenario's cash generation (rigor check 15: a dividend that FCF cannot cover is a risk, not a support). Report it in the JSON "dividends" field; emit "dividends": null for a non-payer.
+
+**Units.** Every monetary figure inside the bridges (driverValue, netDebt, minorities) is on ONE scale, declared once in "units"; shares are on the same scale (millions of currency ⇔ millions of shares). Per-share values (fairValue, intrinsicPerShare, DPS) are plain currency units.
+
+${ANALYTICAL_RIGOR_BLOCK}
+## Step 4 — Output format (MANDATORY — follow exactly)
+This step fixes the numbers. The report is written afterwards from your JSON and your rationale, and cannot change them.
+First write a rationale of AT MOST 400 words in ${language}: why this method, where each scenario's lever comes from (the anchor statistic, or the deviation you justify), what you took from WEB UPDATE, the "Data conflicts" note the dataset rules ask for, and what you considered and discarded. Then, as the very LAST thing you output, emit the JSON block below. Nothing after its closing fence.
+
+\`\`\`json
+{
+  "method": "<${METHOD_LIST}>",
+  "sector": "<sector name, max 80 characters>",
+  "currency": "<ISO 4217 code, 3 letters>",
+${UNITS_JSON_LINE}
+${scenarioJsonLine("bull", mosPercent)},
+${scenarioJsonLine("base", mosPercent)},
+${scenarioJsonLine("bear", mosPercent)},
+${assumptionsCrossCheckJson()},
+  "sensitivity": {
+    "leverA": { "name": "<the primary lever, e.g. \\"EV/EBITDA exit multiple\\" or \\"WACC\\">", "values": [<low>, <base>, <high>] },
+    "leverB": { "name": "<the operating driver, e.g. \\"EBITDA 2026e\\" or \\"terminal growth\\">", "values": [<low>, <base>, <high>] },
+    "intrinsicPerShare": [[<a1b1>, <a1b2>, <a1b3>], [<a2b1>, <BASE — must equal base.bridge.intrinsicPerShare>, <a2b3>], [<a3b1>, <a3b2>, <a3b3>]]
+  },
+  "dividends": null | { "policy": "<one sentence>", "lastDps": <total ordinary DPS of the latest complete fiscal year>, "path": [ { "year": <next FY end year>, "bull": <DPS>, "base": <DPS>, "bear": <DPS> }, { "year": <+1> ... }, { "year": <+2> ... } ] } — every "path" DPS is the annual ORDINARY DPS, on the same basis as lastDps (interim + final, specials excluded)
+}
+\`\`\`
+
+${BRIDGE_RULE}
+
+Write the rationale and every free-text JSON field in ${language}, using ONLY that language's writing system.`;
+}
+
+// The price and MoS clauses of the valuation and report messages: one wording for both.
+function priceClauses(currentDate: string, mosPercent: number): { dateClause: string; mosClause: string } {
+  return {
+    dateClause: currentDate ? ` Today's date: ${currentDate}.` : "",
+    mosClause:
+      mosPercent > 0 ? ` Apply a margin of safety of ${mosPercent}% to all fair values (buy target = intrinsic value × ${(1 - mosPercent / 100).toFixed(2)}).` : "",
+  };
+}
+
+/**
+ * User message of the valuation: the ticker, the run's price (the quote taken when the run
+ * started), the web update's notes and the dataset section (raw paste, extract, row sources,
+ * anchors, warnings).
+ */
+export function buildValuationUserPrompt({
+  ticker,
+  currentPrice,
+  currency,
+  currentDate = "",
+  mosPercent = 0,
+  grounding,
+  updateNotes,
+}: {
+  ticker: string;
+  currentPrice: number;
+  currency: string;
+  currentDate?: string;
+  mosPercent?: number;
+  grounding: GroundingPromptContext;
+  updateNotes: string;
+}): string {
+  const { dateClause, mosClause } = priceClauses(currentDate, mosPercent);
+  return `Value ${ticker}. Current price: ${currentPrice.toFixed(2)} ${currency} — this is the authoritative market price of this run. Use it for all upside/downside math.${dateClause}${mosClause}
+
+Take the historical financial data from the authoritative data below and the recent facts from WEB UPDATE. Then choose the appropriate valuation method and compute the fair values for the bull/base/bear scenarios, following the required format.
+
+--- WEB UPDATE (researched ${currentDate}) ---
+${updateNotes}
+--- END WEB UPDATE ---
+
+${formatGroundingForPrompt(grounding)}`;
+}
+
+/**
+ * System prompt of the report, the same in both halves (one prefix for the prompt cache): the
+ * numbers are fixed, the report explains them in the ten sections, sections 1-5 in the first
+ * answer and 6-10 in the second.
+ */
+export function buildReportSystemPrompt({ language = "English", mosPercent = 0 }: { language?: string; mosPercent?: number }): string {
+  return `You are a professional financial analyst writing the report of a valuation that is already made.
+
+## The numbers are fixed
+The user message carries FIXED VALUATION (the JSON) and RATIONALE (why those numbers). They are final: explain them, never change, recompute or contradict them. Every figure you write for a scenario, a bridge, an assumption, the cross-check, the sensitivity grid or the dividend path is the JSON's figure. If something in the valuation looks wrong to you, say so in section 8 as a risk to the estimate; do not correct it.
+Each scenario's "fairValue" is already the buy target, after the ${mosPercent}% margin of safety; its intrinsic value is that scenario's "bridge.intrinsicPerShare". In a scenario heading, Intrinsic Value is "intrinsicPerShare" and Buy Target is "fairValue": never apply the margin of safety to "fairValue" again.
+You have no tools. Facts come from the dataset, from WEB UPDATE (cite its sources) and from RATIONALE; add no fact that is in none of them. Write the "Data conflicts" note the rationale lists in section 4.
+Where a section below asks you to compute or value something (the cross-check, what must be true for the current price, the sensitivity, the dividend path), take the figure from FIXED VALUATION and the reasoning from RATIONALE; a reference to a step or a rigor check names a rule the valuation already applied.
+
+## Two answers
+You write sections 1–5 in your first answer and sections 6–10 in your second. Start each answer with the exact line:
+${REPORT_START_MARKER}
+Anything before it is discarded. Then write that answer's sections straight through, each under its numbered heading (## 1. … ## 10.), and nothing else: no JSON block.
+
+${reportSections(language, mosPercent)}
+
+Rules:
+- The headings above are a template written in English: translate every heading and subheading into ${language} (keep each section's "## N." number, its order and its figures), never copy their English words.
+- Write the entire report in ${language} — every word, header, and disclaimer. Use ONLY the writing system of ${language}: never emit stray characters from another script (e.g. no CJK/Chinese/Japanese/Korean characters when the language is not one of those). If a foreign-script word slips in, replace it with its ${language} equivalent.
+- Cite your sources (e.g. "According to [source]...")
+- Close section 10 with this disclaimer, written in ${language}: "⚠️ This report is for informational purposes only and does not constitute financial advice."`;
+}
+
+/**
+ * First message of both report halves, byte for byte the same in each (the cached prefix):
+ * the fixed valuation, its rationale, the web notes and the dataset, all read from the row.
+ */
+export function buildReportUserPrompt({
   ticker,
   currentPrice,
   currency,
@@ -372,6 +500,9 @@ export function buildDeepValueUserPrompt({
   currentDate = "",
   mosPercent = 0,
   grounding,
+  updateNotes,
+  resultJson,
+  memo,
 }: {
   ticker: string;
   currentPrice: number;
@@ -379,22 +510,30 @@ export function buildDeepValueUserPrompt({
   language: string;
   currentDate?: string;
   mosPercent?: number;
-  // The dataset section (raw paste + extract + row sources + anchors + warnings), appended
-  // after the base prompt.
   grounding: GroundingPromptContext;
+  updateNotes: string;
+  resultJson: string;
+  memo: string;
 }): string {
-  const dateClause = currentDate ? ` Today's date: ${currentDate}.` : "";
-  const mosClause = mosPercent > 0
-    ? ` Apply a margin of safety of ${mosPercent}% to all fair values (buy target = intrinsic value × ${(1 - mosPercent / 100).toFixed(2)}).`
-    : "";
-  const groundingSection = `\n\n${formatGroundingForPrompt(grounding)}`;
-  // Same rescoping as Step 2 of the system prompt: the historical data is below, so "find
-  // the financial data via web search" would contradict the dataset rules.
-  const dataInstruction =
-    "Take the historical financial data from the authoritative data below; use web search only for what was published after its coverage period, for what it does not contain, and for qualitative context. Then choose";
-  return `Analyze ${ticker}. Current price: ${currentPrice.toFixed(2)} ${currency} — this is the authoritative live market price. Use it as the current price for all upside/downside math; do NOT replace it with web-searched quotes, which are frequently delayed or stale.${dateClause}${mosClause}
+  const { dateClause, mosClause } = priceClauses(currentDate, mosPercent);
+  return `Write the report on ${ticker}. Current price: ${currentPrice.toFixed(2)} ${currency} — the authoritative market price of this run.${dateClause}${mosClause}
 
-${dataInstruction} the appropriate valuation method, compute the fair values for bull/base/bear scenarios, and produce the report in ${language} following the required format.${groundingSection}`;
+--- FIXED VALUATION ---
+${JSON.stringify(JSON.parse(resultJson), null, 2)}
+--- RATIONALE ---
+${memo}
+--- WEB UPDATE (researched ${currentDate}) ---
+${updateNotes}
+--- END ---
+
+${formatGroundingForPrompt(grounding)}
+
+Write sections 1 to 5 now, in ${language}.`;
+}
+
+/** The second half's own message, after the first half as the assistant turn. */
+export function buildReportContinuationPrompt({ language }: { language: string }): string {
+  return `Continue with sections 6 to 10, in ${language}, then the disclaimer. Do not repeat or revise sections 1–5.`;
 }
 
 // ─── Analyst panel prompts (independent second opinions) ─────────────────────
@@ -522,7 +661,7 @@ export function buildAnalystSystemPrompt({
   language?: string;
   currentDate?: string;
   mosPercent?: number;
-  // Required, unread here, as in buildDeepValueSystemPrompt: the lens reads the data
+  // Required, unread here, as in buildValuationSystemPrompt: the lens reads the data
   // (extract + anchors + warnings + research notes) from the user prompt, re-read server-side through
   // readAnalysisGrounding (the analysis's dataset, or its legacy groundingJson).
   grounding: GroundingPromptContext;
