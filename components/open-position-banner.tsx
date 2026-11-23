@@ -67,6 +67,10 @@ export default function OpenPositionBanner({
           {pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
           ({isPositive ? "+" : ""}{returnPct!.toFixed(1)}%)
         </span>
+      ) : currency == null ? (
+        // Lots in different currencies: no price can ever be in "their" currency, so say
+        // that rather than the generic line about the live price (2026-11-23).
+        <span className="text-xs text-slate-500">{t("pnlMixedCurrencies")}</span>
       ) : isPriceLoading ? (
         <span className="text-xs text-slate-600">{t("loadingPnL")}</span>
       ) : (

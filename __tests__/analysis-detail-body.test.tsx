@@ -117,7 +117,9 @@ describe("AnalysisDetailBody — one price for the whole page", () => {
 
     expect(await screen.findByText(/checks against the live price · 150\.00 USD/)).toBeInTheDocument();
     expect(screen.getByText(/30 shares @ 140[.,]00$/)).toBeInTheDocument();
-    expect(screen.getByText("P&L not shown: no live price in the position's currency")).toBeInTheDocument();
+    // The reason named is the mixed lots, not a missing live price: the quote here is live.
+    expect(screen.getByText("P&L not shown: the open lots are in different currencies")).toBeInTheDocument();
+    expect(screen.queryByText("P&L not shown: no live price in the position's currency")).not.toBeInTheDocument();
     expect(screen.queryByText(/\(\+?-?\d+\.\d%\)/)).not.toBeInTheDocument();
   });
 
@@ -184,6 +186,34 @@ describe("AnalysisDetailBody — one price for the whole page", () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Deterministic checks" })).not.toBeInTheDocument();
     await waitFor(() => expect(lastPanelProps()).toMatchObject({ currentPrice: null }));
+  });
+
+  it("with no price the dividend card still shows, after the no-price line and before the tables, without a yield", async () => {
+    globalThis.ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+    stubQuote({ ok: false, status: 503 });
+    const extract = makeExtract({
+      meta: makeMeta({ reportingCurrency: "USD", units: "millions" }),
+      financials: [makeFinancialsRow({ fiscalYear: 2025, revenue: 1000, dividendsPerShare: 2, freeCashFlow: 100, sharesDiluted: 20 })],
+    });
+    renderBody({ priceAtAnalysis: null, groundingExtract: extract });
+
+    const noPrice = await screen.findByText(
+      "Deterministic checks need a price: no live quote and no price saved with this analysis."
+    );
+    const dividends = await screen.findByTestId("dividend-outlook");
+    const tables = screen.getByTestId("dataset-table-income");
+    expect(noPrice.compareDocumentPosition(dividends) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(dividends.compareDocumentPosition(tables) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText("Last DPS")).toBeInTheDocument();
+    // No price, so no yield and no note about a currency that does not exist.
+    expect(screen.queryByText(/Trailing yield$|Forward yield$/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Yield not shown/)).not.toBeInTheDocument();
+    // The cost needs no price: the position's yield on cost stays (USD lots, USD dataset).
+    expect(screen.getByText("Trailing yield on cost")).toBeInTheDocument();
   });
 
   it("lets the lenses run only on the extract the page read: none (an unreadable dataset included) disables them", () => {

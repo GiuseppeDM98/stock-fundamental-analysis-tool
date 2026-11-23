@@ -398,7 +398,7 @@ const raw = payload[0]?.payload as SnapshotChartPoint | undefined;
 
 ### Chart tokens, accessibility, tests
 
-Colours from the `--chart-*` tokens in `app/globals.css` (grid and axis redefined for print in `print.css`); `role="img"` + `aria-label` on the chart's own div ALONE, with an `sr-only` data table as its SIBLING (children of `role="img"` are presentational); `isAnimationActive={false}` on every series; a Vitest render polyfills `ResizeObserver` (jsdom has none) and asserts text, the label and the table, never SVG (width 0). Example: `components/report/dividend-chart.tsx`.
+Colours from the `--chart-*` tokens in `app/globals.css` (grid and axis redefined for print in `print.css`); `role="img"` + `aria-label` on the chart's own div ALONE, with an `sr-only` data table as its SIBLING (children of `role="img"` are presentational); `isAnimationActive={false}` on every series; each Vitest file that renders a chart polyfills `ResizeObserver` itself (jsdom has none, and `vitest.setup.ts` does not) and asserts text, the label and the table, never SVG (width 0). Example: `components/report/dividend-chart.tsx`.
 
 ### Chips inside ReactMarkdown
 

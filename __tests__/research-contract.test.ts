@@ -90,6 +90,10 @@ describe("research prompt ↔ schema contract, per part", () => {
     expect(taskOf("statements")).not.toContain("valuation multiples");
     // The model never does arithmetic: EBITDA = EBIT + D&A is computed on the server.
     expect(SYSTEM).toContain("the server computes EBIT + D&A");
+    // Nor the FCF: capex keeps the page's sign, so the prompt names the absolute value the
+    // server subtracts (researchToDataset); «cfo − capex» on a negative capex reads as a sum.
+    expect(SYSTEM).toContain("the server computes cfo − |capex| from your cfo and capex");
+    expect(SYSTEM).not.toContain("cfo − capex");
     expect(SYSTEM).not.toContain("forward estimates");
   });
 

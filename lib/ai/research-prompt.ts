@@ -132,7 +132,7 @@ ${FISCAL_YEAR_LINE}
 - cash flow: cfo, capex (sign as reported), depreciationAmortization (depreciation of property,
   plant, equipment and right-of-use assets plus amortization of intangibles, as a positive number;
   without impairments when the company reports them on their own line), freeCashFlow (company
-  definition if published, else null — the server computes cfo − capex from your cfo and capex).`,
+  definition if published, else null — the server computes cfo − |capex| from your cfo and capex).`,
     units: `UNITS: declare meta.reportingCurrency (the currency of the FILINGS — it may differ from the trading
 currency) and meta.units once (one of billions, millions, thousands, units); every monetary value
 on that scale, peers included; shares on the SAME scale; per-share values in plain currency;

@@ -12,7 +12,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: November 23, 2026 — **Spec 06 (the dividend outlook) implemented**, branch `feature/dividend-outlook`: on `/analyses/[id]` a dividend card between the checks card and the dataset tables — DPS history, CAGR, payout, cuts, the model's scenario path in a chart with its sources, forward yield and yield on cost (same currency only), FCF coverage through the gate's own `dividendCoverageRatio` (valutazione.md § 5.4). Widened by the owner after two real runs read «unavailable»: the web research now computes a missing FCF as cfo − |capex| (`fcf_derived`) and asks where the diluted shares are (§ 5.3). No migration. Collaudo done: phases A–E automatic, three real runs on localhost (card and gate agree), the owner's tour done and closed. Next: retire spec 06.
+**Last Updated**: November 23, 2026 — **Spec 06 (the dividend outlook) retired**, branch `chore/retire-spec-06` (implemented in `84e586e`, PR #83; no migration): the dividend card on `/analyses/[id]` lives in valutazione.md § 5.4, the research's computed FCF in § 5.3, the owner's decisions of the implementation in the series index. The retirement changed code: the statements' prompt names the FCF the server computes as cfo − |capex|, and the position banner says when the open lots are in different currencies; the signals passed on the code before (ci:local, the real runs, the tour) are to be redone on it after the deploy, the end-of-series promotion. Next: spec 07a (ticker summary and price history), its prerequisites in place.
 
 ---
 
@@ -144,7 +144,7 @@ Things the series deliberately left out, one line each (added by the spec that l
 ---
 
 ## Next Priorities
-The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (one session per spec, in order); its index `00-INDICE.md` holds the series' state, the retirement dates and the owner's decisions. Live: 06 (next), 07a, 07b, 08a, 08b; after 08b, one `/deep-value` realignment pass (D-76).
+The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (one session per spec, in order); its index `00-INDICE.md` holds the series' state, the retirement dates and the owner's decisions. Live: 07a (next), 07b, 08a, 08b; after 08b, one `/deep-value` realignment pass (D-76).
 1. Caching layer for `/api/quote`.
 2. Yield-on-cost in the portfolio exit signal from received dividends (forward YoC now on the analysis page).
 

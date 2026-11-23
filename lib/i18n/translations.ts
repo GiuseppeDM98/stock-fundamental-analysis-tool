@@ -20,6 +20,7 @@ export type Translations = {
   loadingPnL: string;
   // A price↔value comparison dropped because the currencies differ (sameCurrency).
   pnlUnavailable: string;
+  pnlMixedCurrencies: string;
   verdictCurrencyMismatch: string;
   recapCurrencyMismatch: string;
   chartEmptyState: string;
@@ -736,6 +737,7 @@ const en: Translations = {
   openPosition: "Open position:",
   loadingPnL: "Loading P&L…",
   pnlUnavailable: "P&L not shown: no live price in the position's currency",
+  pnlMixedCurrencies: "P&L not shown: the open lots are in different currencies",
   verdictCurrencyMismatch: "No verdict: quote and analysis in different currencies",
   recapCurrencyMismatch: "Distance from the price not shown: the price is in another currency than the report",
   chartEmptyState: "The chart will appear after a few days of use",
@@ -1441,6 +1443,7 @@ const it: Translations = {
   openPosition: "Posizione aperta:",
   loadingPnL: "Caricamento P&L…",
   pnlUnavailable: "P&L non mostrato: nessun prezzo live nella valuta della posizione",
+  pnlMixedCurrencies: "P&L non mostrato: i lotti aperti sono in valute diverse",
   verdictCurrencyMismatch: "Nessun verdetto: quotazione e analisi in valute diverse",
   recapCurrencyMismatch: "Distanza dal prezzo non mostrata: il prezzo è in una valuta diversa dal report",
   chartEmptyState: "Il grafico apparirà dopo qualche giorno di utilizzo",

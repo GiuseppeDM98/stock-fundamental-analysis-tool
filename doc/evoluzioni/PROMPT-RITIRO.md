@@ -122,7 +122,15 @@ classificazione `lost` del client mai provata su una `fetch` vera, un caso che f
 distingueva la mutazione dichiarata), otto mutanti uccisi; una decisione dell'owner più larga del codice
 (D-156) precisata con la data invece di cambiare il codice; tre intervalli di misura copiati in tre posti con tre
 valori diversi, riallineati sulla tabella della guida; l'intestazione `Stato` della spec mai scritta
-dall'implementazione: lo stato era tutto nella riga 14c).
+dall'implementazione: lo stato era tutto nella riga 14c)
+e quello della 06 (2026-11-23, branch `chore/retire-spec-06`, `git log --diff-filter=D --
+doc/evoluzioni/06-dividendi.md`: workflow Opus in sola lettura, 5 lettori + 4 verificatori su 110 voci, 41
+segnalate e 4 smentite; nessun DDL; nessun difetto di calcolo, ma un testo del prompt che descriveva al modello
+un'altra formula del codice (cfo − capex contro cfo − |capex|) e un banner che dava il motivo generico al posto
+di quello vero, corretti per decisione dell'owner con un test ciascuno; un buco di test (la card senza prezzo) e
+una riga del § 6 della spec sbagliata (cinque DPS a zero non sono un taglio), quattro mutanti uccisi; le
+decisioni dell'owner prese all'implementazione, scritte solo in prosa, numerate in un § 3.18 nuovo
+(D-161…D-166); due misure rimaste nel commit e nella guida portate per esteso nella spec che le eredita, la 08b).
 Ogni riferimento nel codice a un documento ritirato si riscrive in loco perché il perché resti in piedi
 da solo, tenendo le date.
 
@@ -211,11 +219,11 @@ CANCELLI: `npm run ci:local` (= `npm run test` → `npm run typecheck` → build
 quest'ordine; il visual (`npm run e2e:visual`) non è un cancello ma va rilanciato prima/dopo se il
 ritiro tocca una pagina. Il build di verifica si fa SEMPRE sull'ambiente isolato (`.env` punta a
 Turso di produzione).
-LIMITI (misurati il 2026-11-22, al ritiro della 05f): `CLAUDE.md` 13.142 caratteri su un tetto di 40.000, nella
+LIMITI (misurati il 2026-11-23, al ritiro della 06): `CLAUDE.md` 13.582 caratteri su un tetto di 40.000, nella
 misura della regola 3 dell'indice (caratteri Unicode senza CR, mai `wc -c`); è un indice: una spec vi
 scrive una riga per funzione e il dettaglio va nella guida (regola 3). Ogni spec dichiara nel
 § 9 i caratteri aggiunti e tolti, e la voce Last Updated sostituisce la precedente — la catena
-regge solo se ogni spec rispetta il suo saldo, quindi si rimisura a ogni ritiro; `AGENTS.md` 487 righe (dalla 02 il tetto è 600 righe, D-22; scorporato il 2026-11-20, D-122; dal 2026-11-21 tiene l'albero dei file, una riga per gruppo di file: un file nuovo entra nella riga del suo gruppo); le guide in `doc/guide/` hanno un tetto di 400 righe per file (`valutazione.md` 335, `portafoglio.md` 81, `monitor.md` 72, `yahoo.md` 36, `dipendenze.md` 31, `advisor.md` 16, `shell.md` 24, `analisi-salvate.md` 21, `collaudo.md` 58; D-57: oltre, la
+regge solo se ogni spec rispetta il suo saldo, quindi si rimisura a ogni ritiro; `AGENTS.md` 487 righe (dalla 02 il tetto è 600 righe, D-22; scorporato il 2026-11-20, D-122; dal 2026-11-21 tiene l'albero dei file, una riga per gruppo di file: un file nuovo entra nella riga del suo gruppo); le guide in `doc/guide/` hanno un tetto di 400 righe per file (`valutazione.md` 346, `portafoglio.md` 81, `monitor.md` 72, `yahoo.md` 36, `dipendenze.md` 31, `advisor.md` 16, `shell.md` 24, `analisi-salvate.md` 21, `collaudo.md` 58; D-57: oltre, la
 spec che sfora spezza per tema); `DESIGN.md` 312 righe e `PRODUCT.md` 55 righe, rigenerati nella 08b
 (DESIGN.md solo dalla skill). Se sfori, NON tagliare in chiusura: dimmelo e proponi lo scorporo come
 sessione a parte.
