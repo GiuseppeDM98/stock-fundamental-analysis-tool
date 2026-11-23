@@ -157,6 +157,19 @@ describe("mergeDatasets", () => {
     expect(warnings).toEqual([{ code: "meta_units_conflict", severity: "warn", fiscalYear: null, detail: "millions vs unknown" }]);
   });
 
+  it("keeps fcf_derived for the years whose cash flow came from the web, ebitda_derived for those whose income did", () => {
+    // The paste has FY2025's income statement only: FY2025's cash flow and all of FY2024 are the web's.
+    const { dataset } = mergeDatasets(paste(), web());
+    const webWarnings = [
+      { code: "ebitda_derived" as const, severity: "info" as const, fiscalYear: null, detail: "2024, 2025" },
+      { code: "fcf_derived" as const, severity: "info" as const, fiscalYear: null, detail: "2024, 2025" },
+    ];
+    expect(secondaryWarningsKept(paste(), dataset, webWarnings).warnings).toEqual([
+      { code: "ebitda_derived", severity: "info", fiscalYear: null, detail: "2024" },
+      { code: "fcf_derived", severity: "info", fiscalYear: null, detail: "2024, 2025" },
+    ]);
+  });
+
   it("carries none of the web's warnings when the merge kept the paste alone", () => {
     // The paste's FY2024 has a balance sheet only: no income statement, so no EBITDA to flag.
     const p = paste();

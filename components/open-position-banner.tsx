@@ -13,7 +13,9 @@ import { useLanguage } from "@/context/language-context";
 type OpenPositionBannerProps = {
   totalShares: number;
   wac: number;
-  currency: string;
+  // null when the open lots are in different currencies: the average cost is then a plain
+  // number, and there is no P&L (no price is in "their" currency).
+  currency: string | null;
   // The live price in `currency`, or null when there is none to compute a P&L on.
   livePrice: number | null;
   // The page is still resolving its price: say so instead of showing no P&L yet.
@@ -36,8 +38,7 @@ export default function OpenPositionBanner({
 
   const formatPrice = (v: number) =>
     new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency,
+      ...(currency ? { style: "currency", currency } : {}),
       minimumFractionDigits: 2,
       maximumFractionDigits: 4,
     }).format(v);

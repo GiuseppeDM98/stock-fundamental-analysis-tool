@@ -101,13 +101,16 @@ const GROUNDED_RESULT: DeepValueResult = {
       [14, 14.9, 15.8],
     ],
   },
+  // The dividend outlook on the detail page: forward yield 0.42 / 11.40 (the stubbed quote)
+  // = 3.7%, on the two EUR lots' average cost 10.7333 = 3.9%; coverage 0.42 × 100 shares over
+  // the mean FCF of 2023–2025 (90, 100, 110) = 0.42, the dividend_coverage gate's ratio.
   dividends: {
     policy: "Pays out about 60% of net income.",
     lastDps: 0.4,
     path: [
-      { year: 2026, bull: 0.44, base: 0.42, bear: 0.4 },
-      { year: 2027, bull: 0.48, base: 0.44, bear: 0.38 },
-      { year: 2028, bull: 0.52, base: 0.46, bear: 0.36 },
+      { year: 2026, bull: 0.44, base: 0.42, bear: 0.38 },
+      { year: 2027, bull: 0.47, base: 0.44, bear: 0.36 },
+      { year: 2028, bull: 0.5, base: 0.46, bear: 0.34 },
     ],
   },
 };
@@ -150,6 +153,8 @@ const GROUNDED_REVIEW_FINAL: AnalystResult = {
 
 const GROUNDED_YEARS = [2021, 2022, 2023, 2024, 2025];
 const GROUNDED_EV_EBITDA = [7.5, 8.0, 7.0, 7.8, 8.2];
+// A growing then flat dividend: 3-year CAGR from 0.38, four steps without a cut.
+const GROUNDED_DPS = [0.36, 0.38, 0.4, 0.4, 0.4];
 
 const GROUNDED_BLOCKS: GroundingBlock[] = [
   { id: "e2e-block-is", kind: "income_statement", text: `Fenicottero income statement (${DECOY.groundedReport})\nFY2021 FY2022 FY2023 FY2024 FY2025` },
@@ -178,7 +183,7 @@ function groundedExtractV1() {
       cfo: ebitda - 30,
       capex: -60,
       freeCashFlow: ebitda - 90,
-      dividendsPerShare: 0.4,
+      dividendsPerShare: GROUNDED_DPS[i],
     };
   });
   const multiples = GROUNDED_YEARS.map((fiscalYear, i) => {
@@ -636,7 +641,12 @@ async function seedAnalyses(db: PrismaClient, today: Date): Promise<void> {
       fairValueBear: GROUNDED_RESULT.bear.fairValue,
       valuationMethod: GROUNDED_RESULT.method,
       groundingJson: JSON.stringify({ blocks: GROUNDED_BLOCKS, extract: groundedExtractV1() }),
-      reportMd: deepValueReportJsonLast(GROUNDED_RESULT, `## 1. Overview\n\nGrounded report ${DECOY.groundingLegacyReport}, saved before datasets.`),
+      // Saved before the JSON carried a dividend path: its dividend card falls back to a
+      // trailing yield on the dataset's last DPS.
+      reportMd: deepValueReportJsonLast(
+        { ...GROUNDED_RESULT, dividends: undefined },
+        `## 1. Overview\n\nGrounded report ${DECOY.groundingLegacyReport}, saved before datasets.`
+      ),
       currency: "EUR",
       sector: GROUNDED_RESULT_COLUMN.sector,
       reportLanguage: "English",

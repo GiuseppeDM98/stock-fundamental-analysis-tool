@@ -3,6 +3,7 @@ import {
   checkValuationBridges,
   checkKillPrice,
   checkReportStructure,
+  dividendCoverageRatio,
   EMPTY_BASIS,
   type BridgeCheckInput,
   type BridgeScenario,
@@ -1290,6 +1291,32 @@ describe("gate: dividend_coverage", () => {
       status: "unavailable",
       detail: "currency mismatch",
     });
+  });
+});
+
+describe("dividendCoverageRatio — the ratio the gate and the dividend outlook share", () => {
+  const rows = (fcf: Array<number | null>, shares: number | null = 100) =>
+    fcf.map((freeCashFlow, i) => makeFinancialsRow({ fiscalYear: 2021 + i, freeCashFlow, sharesDiluted: shares }));
+
+  it("weighs DPS × the latest shares against the mean of the last three reported FCFs, not of every year", () => {
+    // Mean of 100, 120, 110 = 110 (the 500 of 2021 is outside the window): 0.88 × 100 / 110.
+    const coverage = dividendCoverageRatio(0.88, rows([500, 100, 120, null, 110]));
+    expect(coverage).toMatchObject({ meanFcf: 110, shares: 100, years: 3 });
+    expect(coverage!.ratio).toBeCloseTo(0.8, 10);
+  });
+
+  it("takes fewer years when fewer FCFs are reported", () => {
+    expect(dividendCoverageRatio(0.5, rows([null, null, null, 40, 60]))).toEqual({ ratio: 1, meanFcf: 50, shares: 100, years: 2 });
+  });
+
+  it("is Infinity on a mean FCF ≤ 0: nothing to pay the dividend from", () => {
+    expect(dividendCoverageRatio(0.5, rows([-10, -20, -30]))?.ratio).toBe(Infinity);
+  });
+
+  it("is null without shares on the latest row or without any FCF", () => {
+    expect(dividendCoverageRatio(0.5, rows([10, 20, 30], null))).toBeNull();
+    expect(dividendCoverageRatio(0.5, rows([null, null]))).toBeNull();
+    expect(dividendCoverageRatio(0.5, [])).toBeNull();
   });
 });
 

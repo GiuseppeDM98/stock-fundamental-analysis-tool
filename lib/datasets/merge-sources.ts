@@ -188,6 +188,24 @@ function citedSources(dataset: FinancialDataset): DataSource[] {
 }
 
 const INCOME_FIELDS = FINANCIAL_FIELDS.filter((field) => STATEMENT_FIELD_KIND[field] === "income");
+const CASH_FLOW_FIELDS = FINANCIAL_FIELDS.filter((field) => STATEMENT_FIELD_KIND[field] === "cashFlow");
+
+/** The years a derived-figure warning names (researchToDataset writes a comma-separated list)
+ *  that the merged row still owes to the secondary: the primary has no figure of that
+ *  statement that year, and the merged row still carries the figure. */
+function derivedYearsKept(
+  code: "ebitda_derived" | "fcf_derived",
+  primary: FinancialDataset,
+  merged: FinancialDataset,
+  secondaryWarnings: readonly ReconciliationWarning[]
+): number[] {
+  const fields = code === "ebitda_derived" ? INCOME_FIELDS : CASH_FLOW_FIELDS;
+  const primaryYears = new Set(primary.financials.filter((row) => fields.some((field) => row[field] != null)).map((row) => row.fiscalYear));
+  const derivedYears = new Set(secondaryWarnings.filter((w) => w.code === code).flatMap((w) => w.detail.split(",").map((year) => Number(year.trim()))));
+  return merged.financials
+    .filter((row) => derivedYears.has(row.fiscalYear) && !primaryYears.has(row.fiscalYear) && (code === "ebitda_derived" ? row.ebitda : row.freeCashFlow) != null)
+    .map((row) => row.fiscalYear);
+}
 
 /**
  * The secondary's warnings that still describe the merged dataset (2026-10-30: a merged
@@ -195,6 +213,8 @@ const INCOME_FIELDS = FINANCIAL_FIELDS.filter((field) => STATEMENT_FIELD_KIND[fi
  * research never opened, with nothing saying so):
  * - `ebitda_derived`, for the years it names whose income statement came from the secondary
  *   (the primary has no income figure that year) and still carries an EBITDA;
+ * - `fcf_derived`, the same for the years whose cash-flow statement came from the secondary
+ *   and still carries a free cash flow;
  * - `source_unverified`, one per unverified web URL a merged row still cites, recomputed from
  *   the merged rows: a URL whose rows the primary replaced is gone.
  * The secondary's `source_unknown_id` and `value_conflict` are not carried: neither says
@@ -206,13 +226,6 @@ export function secondaryWarningsKept(
   merged: FinancialDataset,
   secondaryWarnings: readonly ReconciliationWarning[]
 ): { warnings: ReconciliationWarning[]; unverifiedUrls: string[] } {
-  const primaryIncomeYears = new Set(primary.financials.filter((row) => INCOME_FIELDS.some((field) => row[field] != null)).map((row) => row.fiscalYear));
-  // An ebitda_derived detail is the comma-separated list of years researchToDataset writes.
-  const derivedYears = new Set(secondaryWarnings.filter((w) => w.code === "ebitda_derived").flatMap((w) => w.detail.split(",").map((year) => Number(year.trim()))));
-  const keptYears = merged.financials
-    .filter((row) => derivedYears.has(row.fiscalYear) && !primaryIncomeYears.has(row.fiscalYear) && row.ebitda != null)
-    .map((row) => row.fiscalYear);
-
   const unverifiedUrls = [...new Set(citedSources(merged).flatMap((source) => (source.kind === "web" && !source.verified && source.url ? [source.url] : [])))];
   const warnings: ReconciliationWarning[] = unverifiedUrls.map((url) => ({
     code: "source_unverified",
@@ -220,7 +233,10 @@ export function secondaryWarningsKept(
     fiscalYear: null,
     detail: url.slice(0, DATASET_WARNING_DETAIL_MAX),
   }));
-  if (keptYears.length > 0) warnings.push({ code: "ebitda_derived", severity: "info", fiscalYear: null, detail: keptYears.join(", ") });
+  for (const code of ["ebitda_derived", "fcf_derived"] as const) {
+    const keptYears = derivedYearsKept(code, primary, merged, secondaryWarnings);
+    if (keptYears.length > 0) warnings.push({ code, severity: "info", fiscalYear: null, detail: keptYears.join(", ") });
+  }
   return { warnings, unverifiedUrls };
 }
 

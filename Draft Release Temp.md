@@ -70,6 +70,8 @@
 
 - Added **Claude Sonnet 5.5** as a selectable AI model. Pasted-data extraction now always runs on it at medium effort, whatever your default model.
 
+- Added a **Dividend outlook** to every saved analysis with a dividend: the dividend per share reported year by year (growth, payout, years without a cut), the three-year Bull/Base/Bear path in a chart with its sources, its free-cash-flow coverage (the same figure as the deterministic check) and the forward yield on today's price and, if you hold the stock, on your average cost. A yield appears only when price and dividend share a currency, and when a company publishes no free cash flow the web research now computes it from operating cash flow and capex, flagged in the dataset, so the coverage can still be checked.
+
 ## 🐛 Bug Fixes
 
 - Fixed **prices compared with values in another currency**: a stock quoted in pence (GBp) against an analysis in pounds (GBP) used to read a hundred times off. The Buy/Watch/Over verdict on Saved Analyses and the Watchlist, the ruler's price dot, the "Under FV" filter, the portfolio's "At Fair Value" alert, a saved report's distance from the price, a position's P&L and the watchlist email now compare only within one currency, with a short note when they can't.
@@ -130,7 +132,7 @@
 
 - Fixed the **Portfolio page showing only an error when the value history could not load** — your positions and summary now appear regardless; only the history chart is affected.
 
-- Fixed **sold lots being counted as holdings**, which inflated share counts and skewed the average cost. The open-position banner on a saved analysis, the position badge on Saved Analyses and the Advisor (its portfolio context and its position count) now count open lots only.
+- Fixed **sold lots being counted as holdings**, which inflated share counts and skewed the average cost: the open-position banner on a saved analysis, the position badge on Saved Analyses and the Advisor (its portfolio context and its position count) now count open lots only. The banner also no longer averages lots of one stock bought in different currencies, so it shows no cost or P&L mixed across them.
 
 - Fixed **AI reviews and analyses being cut off with a "too many search rounds" notice** when using the DeepSeek model — the research budget was raised and each web search now returns more, so DeepSeek runs complete far more often. (Analyses using Claude were never affected.)
 

@@ -27,6 +27,7 @@ export const DATASET_WARNING_CODES = [
   "source_unknown_id",
   "value_ignored_secondary",
   "ebitda_derived",
+  "fcf_derived",
   "research_part_skipped",
 ] as const;
 

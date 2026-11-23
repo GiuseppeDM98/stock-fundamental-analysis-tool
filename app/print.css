@@ -17,6 +17,12 @@
  * utility classes rather than component-level print: variants.
  */
 @media print {
+  /* A chart's grid and axes are drawn for the dark card; on paper they must read on white. */
+  :root {
+    --chart-grid: #cbd5e1; /* slate-300 */
+    --chart-axis: #475569; /* slate-600 */
+  }
+
   .print-report {
     background: #ffffff;
     color: #0f172a; /* slate-900 */

@@ -16,6 +16,7 @@ import ReportBody from "@/components/report/report-body";
 import { ValuationChecksCard } from "@/components/report/valuation-checks-card";
 import { DatasetTables } from "@/components/report/dataset-tables";
 import { WebUpdateCard } from "@/components/report/web-update-card";
+import { DividendOutlook } from "@/components/report/dividend-outlook";
 import AnalystPanel from "@/components/analyst-panel";
 import OpenPositionBanner from "@/components/open-position-banner";
 import { sameCurrency } from "@/lib/grounding/currency";
@@ -29,7 +30,9 @@ type PagePrice =
   | { status: "ready"; value: number; currency: string; source: "live" | "analysis" }
   | { status: "none" };
 
-type OpenPosition = { totalShares: number; weightedAvgCost: number; currency: string };
+// currency null: open lots in different currencies, whose average cost is in none of them, so
+// neither the banner's P&L nor the dividend card's yield on cost is computed on it.
+type OpenPosition = { totalShares: number; weightedAvgCost: number; currency: string | null };
 
 type Props = {
   analysisId: string;
@@ -184,6 +187,20 @@ function ValuationBody({
       )}
       {price.status === "none" && <p className="mt-4 text-sm text-muted print:break-inside-avoid">{t("valuationChecksNoPrice")}</p>}
 
+      {/* The dividend outlook, between the valuation's readings and the raw data below: a
+          dataset with a DPS above 0, or a path (or a non-payer) the model declared. A run
+          that reported only zeros and declared nothing has no card. */}
+      {hasDividendOutlook(result, groundingExtract) && (
+        <div className="mt-4">
+          <DividendOutlook
+            result={result}
+            extract={groundingExtract}
+            price={ready ? { value: ready.value, currency: ready.currency } : null}
+            position={position ? { weightedAvgCost: position.weightedAvgCost, currency: position.currency } : null}
+          />
+        </div>
+      )}
+
       {/* The numbers the analysis was grounded on, each with its source. A sibling of
           the report: `.print-report` gives it the report's light print theme (gotcha #27). */}
       {groundingExtract && (
@@ -212,6 +229,13 @@ function ValuationBody({
       />
     </>
   );
+}
+
+/** Whether the saved page draws the dividend card: a DPS above 0 in the dataset, or a
+ *  dividends field the model declared (null = a non-payer counts; undefined, a report saved
+ *  before the field, does not). A DPS of 0 is a real year, but zeros alone say nothing. */
+export function hasDividendOutlook(result: DeepValueResult, extract: GroundedFinancials | null): boolean {
+  return (extract?.financials ?? []).some((f) => (f.dividendsPerShare ?? 0) > 0) || result.dividends !== undefined;
 }
 
 /** The banner with the page's price: live P&L only on a live quote in the lots' own

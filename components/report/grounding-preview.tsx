@@ -50,6 +50,7 @@ const WARNING_KEY: Partial<Record<ReconciliationWarning["code"], keyof Translati
   source_unknown_id: "warningSourceUnknownId",
   value_ignored_secondary: "warningValueIgnoredSecondary",
   ebitda_derived: "warningEbitdaDerived",
+  fcf_derived: "warningFcfDerived",
   research_part_skipped: "warningResearchPartSkipped",
 };
 

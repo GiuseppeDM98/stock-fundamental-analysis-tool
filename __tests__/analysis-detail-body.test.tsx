@@ -111,6 +111,43 @@ describe("AnalysisDetailBody — one price for the whole page", () => {
     expect(screen.queryByText(/\(\+?-?\d+\.\d%\)/)).not.toBeInTheDocument();
   });
 
+  it("open lots in different currencies (no position currency): the cost as a plain number, no P&L", async () => {
+    stubQuote({ ok: true, status: 200, body: { regularMarketPrice: 150, currency: "USD" } });
+    renderBody({ position: { totalShares: 30, weightedAvgCost: 140, currency: null } });
+
+    expect(await screen.findByText(/checks against the live price · 150\.00 USD/)).toBeInTheDocument();
+    expect(screen.getByText(/30 shares @ 140[.,]00$/)).toBeInTheDocument();
+    expect(screen.getByText("P&L not shown: no live price in the position's currency")).toBeInTheDocument();
+    expect(screen.queryByText(/\(\+?-?\d+\.\d%\)/)).not.toBeInTheDocument();
+  });
+
+  it("the dividend card sits between the checks card and the dataset tables, and only with a dividend", async () => {
+    globalThis.ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+    stubQuote({ ok: true, status: 200, body: { regularMarketPrice: 150, currency: "USD" } });
+    const extract = makeExtract({
+      meta: makeMeta({ reportingCurrency: "USD", units: "millions" }),
+      financials: [makeFinancialsRow({ fiscalYear: 2025, revenue: 1000, dividendsPerShare: 2, freeCashFlow: 100, sharesDiluted: 20 })],
+    });
+    const { unmount } = renderBody({ groundingExtract: extract });
+
+    await screen.findByText(/checks against the live price/);
+    const checks = screen.getByRole("heading", { name: "Deterministic checks" });
+    const dividends = screen.getByTestId("dividend-outlook");
+    const tables = screen.getByTestId("dataset-table-income");
+    expect(checks.compareDocumentPosition(dividends) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(dividends.compareDocumentPosition(tables) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    unmount();
+
+    // Nothing declared and no DPS above 0: no card.
+    renderBody({ groundingExtract: makeExtract({ financials: [makeFinancialsRow({ fiscalYear: 2025, dividendsPerShare: 0 })] }) });
+    await screen.findByText(/checks against the live price/);
+    expect(screen.queryByTestId("dividend-outlook")).not.toBeInTheDocument();
+  });
+
   it("the price at analysis keeps the currency of its quote: GBp under a GBP report is a mismatch, GBP is not", async () => {
     stubQuote({ ok: false, status: 503 });
     const gbp = { result: { ...RESULT, currency: "GBP" }, priceAtAnalysis: 3.5, position: null };
