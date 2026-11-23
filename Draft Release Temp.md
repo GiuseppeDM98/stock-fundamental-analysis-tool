@@ -132,7 +132,7 @@
 
 - Fixed the **Portfolio page showing only an error when the value history could not load** — your positions and summary now appear regardless; only the history chart is affected.
 
-- Fixed **sold lots being counted as holdings**, which inflated share counts and skewed the average cost: the open-position banner on a saved analysis, the position badge on Saved Analyses and the Advisor (its portfolio context and its position count) now count open lots only. The banner also no longer averages lots of one stock bought in different currencies, so it shows no cost or P&L mixed across them.
+- Fixed **sold lots being counted as holdings**, which inflated share counts and skewed the average cost: the open-position banner on a saved analysis, the position badge on Saved Analyses and the Advisor (its portfolio context and its position count) now count open lots only. With lots of one stock bought in different currencies the banner shows no P&L mixed across them, and says so ("the open lots are in different currencies").
 
 - Fixed **AI reviews and analyses being cut off with a "too many search rounds" notice** when using the DeepSeek model — the research budget was raised and each web search now returns more, so DeepSeek runs complete far more often. (Analyses using Claude were never affected.)
 

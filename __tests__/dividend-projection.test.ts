@@ -142,6 +142,9 @@ describe("buildDividendProjection", () => {
   it("every DPS 0 and no path: the stats, no yield", () => {
     const p = buildDividendProjection({ dividends: undefined }, history([0, 0, 0, 0, 0]), 11.4)!;
     expect(p.stats?.lastDps).toBe(0);
+    // A cut is a drop below the year before: five zeros are no cut, and a flat streak.
+    expect(p.stats?.cutYears).toEqual([]);
+    expect(p.stats?.streakYears).toBe(4);
     expect(p.yieldBasis).toBeNull();
     expect(p.yieldOnPrice).toBeNull();
   });
