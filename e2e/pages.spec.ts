@@ -146,6 +146,83 @@ test("grounded analysis detail renders the report from its stored result and the
   await expect(page.getByTestId("dataset-table-balance").getByRole("row").nth(1).getByText("—")).toHaveCount(5);
 });
 
+/** The value under a statistic of the dividend card, by its label. */
+const dividendTile = (page: Page, label: string) =>
+  page.getByTestId("dividend-outlook").locator("dt", { hasText: label }).locator("xpath=following-sibling::dd[1]");
+
+test("the grounded detail shows the dividend outlook: history, forward yield, yield on cost and the gate's coverage", async ({ page }) => {
+  // The inputs, from the database: the dataset's DPS history, the declared path, the open lots.
+  const dataset = await queryOne<{ dataJson: string }>("SELECT dataJson FROM FinancialDataset WHERE id = ?", [IDS.datasetGrounded]);
+  const financials = JSON.parse(dataset!.dataJson).financials as Array<{ dividendsPerShare: number | null }>;
+  expect(financials.map((f) => f.dividendsPerShare)).toEqual([0.36, 0.38, 0.4, 0.4, 0.4]);
+  const analysis = await queryOne<{ resultJson: string }>("SELECT resultJson FROM Analysis WHERE id = ?", [IDS.analysisGrounded]);
+  const forwardBase = JSON.parse(analysis!.resultJson).dividends.path[0].base as number;
+  expect(forwardBase).toBe(0.42);
+  const lots = await queryAll<{ shares: number; purchasePrice: number; currency: string }>(
+    "SELECT shares, purchasePrice, currency FROM Position WHERE userId = ? AND ticker = ? AND closedAt IS NULL",
+    [USER_A.id, TICKERS.grounded]
+  );
+  expect(new Set(lots.map((l) => l.currency))).toEqual(new Set(["EUR"]));
+  const wac = lots.reduce((s, l) => s + l.shares * l.purchasePrice, 0) / lots.reduce((s, l) => s + l.shares, 0);
+
+  await page.goto(`/analyses/${IDS.analysisGrounded}`);
+  const card = page.getByTestId("dividend-outlook");
+  await expect(card.getByRole("heading", { name: "Dividend outlook" })).toBeVisible();
+  await expect(dividendTile(page, "Last DPS")).toHaveText("0.40");
+  await expect(dividendTile(page, "Years without a cut")).toHaveText("4");
+  // The stubbed quote is 11.40 EUR: 0.42 / 11.40 = 3.7%, and on the lots' cost 3.9%.
+  await expect(card.getByText("Forward yield", { exact: true }).locator("..")).toContainText(`Base ${((forwardBase / 11.4) * 100).toFixed(1)}%`);
+  await expect(card.getByText("Forward yield", { exact: true }).locator("..")).toContainText("Base 3.7%");
+  await expect(card.getByText("Forward yield on cost", { exact: true }).locator("..")).toContainText(`Base ${((forwardBase / wac) * 100).toFixed(1)}%`);
+  await expect(card.getByText("Forward yield on cost", { exact: true }).locator("..")).toContainText("Base 3.9%");
+  // The coverage is the dividend_coverage gate's ratio, on the checks card above it.
+  await expect(dividendTile(page, "FCF coverage")).toHaveText("0.42 ✓");
+  await expect(page.getByText(/^✓ Dividend covered by FCF — .*ratio 0\.42$/)).toBeVisible();
+  // The chart: labelled as an image, its data table beside it, every year and no other.
+  await expect(card.getByRole("img", { name: "Dividend per share, history and projected path" })).toBeAttached();
+  await expect(card.locator("table.sr-only tbody tr")).toHaveCount(8);
+  await expect(card.getByTestId("source-legend")).toContainText("📋 paste");
+  // Between the checks card and the dataset's tables.
+  const order = await page.evaluate(() => {
+    const at = (el: Element | null) => (el ? Array.from(document.querySelectorAll("*")).indexOf(el) : -1);
+    return [
+      at(Array.from(document.querySelectorAll("h3")).find((h) => h.textContent === "Deterministic checks") ?? null),
+      at(document.querySelector('[data-testid="dividend-outlook"]')),
+      at(document.querySelector('[data-testid="dataset-table-income"]')),
+    ];
+  });
+  expect(order[0]).toBeGreaterThan(-1);
+  expect(order[1]).toBeGreaterThan(order[0]);
+  expect(order[2]).toBeGreaterThan(order[1]);
+});
+
+test("a report saved before the dividend path gets a trailing yield; one without dividends gets no card", async ({ page }) => {
+  const legacy = await queryOne<{ reportMd: string; resultJson: string | null }>("SELECT reportMd, resultJson FROM Analysis WHERE id = ?", [IDS.analysisGroundingLegacy]);
+  expect(legacy!.resultJson).toBeNull();
+  expect(legacy!.reportMd).not.toContain('"dividends"');
+
+  await page.goto(`/analyses/${IDS.analysisGroundingLegacy}`);
+  const card = page.getByTestId("dividend-outlook");
+  await expect(card.getByRole("heading", { name: "Dividend outlook" })).toBeVisible();
+  // 0.40 / 11.40, once: a trailing DPS has no scenarios.
+  await expect(card.getByText("Trailing yield", { exact: true }).locator("..")).toHaveText("Trailing yield3.5%");
+  await expect(card.getByText("Forward yield", { exact: true })).toHaveCount(0);
+  await expect(dividendTile(page, "FCF coverage")).toHaveText("0.40 (trailing)");
+
+  // The panel ticker: a report without a dividends field, saved without a dataset.
+  const panel = await queryOne<{ datasetId: string | null; groundingJson: string | null; reportMd: string }>(
+    "SELECT datasetId, groundingJson, reportMd FROM Analysis WHERE id = ?",
+    [IDS.analysisPanel]
+  );
+  expect(panel!.datasetId).toBeNull();
+  expect(panel!.groundingJson).toBeNull();
+  expect(panel!.reportMd).not.toContain('"dividends"');
+  await page.goto(`/analyses/${IDS.analysisPanel}`);
+  await expect(page.getByRole("heading", { name: "Deterministic checks", exact: true })).toBeVisible();
+  await expect(page.getByTestId("dividend-outlook")).toHaveCount(0);
+  await expect(page.getByText("Dividend outlook")).toHaveCount(0);
+});
+
 test("a lens stopped at its critique offers phase 3 on the page and a pill on /analyses", async ({ page }) => {
   const row = await queryOne<{ optimistCritiqueMd: string | null; optimistResultJson: string | null; optimistFairValueBase: number | null }>(
     "SELECT optimistCritiqueMd, optimistResultJson, optimistFairValueBase FROM Analysis WHERE id = ?",

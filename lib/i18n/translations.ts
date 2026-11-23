@@ -674,6 +674,7 @@ export type Translations = {
   warningSourceUnknownId: string;
   warningValueIgnoredSecondary: string;
   warningEbitdaDerived: string;
+  warningFcfDerived: string;
   warningResearchPartSkipped: string;
   // The three requests of a web research, shown as rows while it runs.
   researchPartStatements: string;
@@ -692,6 +693,28 @@ export type Translations = {
   reportLanguageAria: string;
   watchlistAddError: string;
   deepValueIncompleteJson: string;
+  dividendOutlookTitle: string;
+  dividendLastDps: string;
+  dividendCagr3y: string;
+  dividendCagr5y: string;
+  dividendPayout: string;
+  dividendCoverage: string;
+  dividendCoverageUnavailable: string;
+  dividendTrailing: string;
+  dividendStreak: string;
+  dividendCuts: string;
+  dividendPolicy: string;
+  dividendYieldForward: string;
+  dividendYieldTrailing: string;
+  dividendYieldOnCost: string;
+  dividendYieldOnCostTrailing: string;
+  dividendYieldCurrencyMismatch: string;
+  dividendYocCurrencyMismatch: string;
+  dividendNonPayer: string;
+  dividendChartAria: string;
+  dividendChartReported: string;
+  dividendChartYear: string;
+  chartSourcesLegend: string;
 };
 
 const en: Translations = {
@@ -1358,6 +1381,7 @@ const en: Translations = {
   warningSourceUnknownId: "Row cites an unknown source id",
   warningValueIgnoredSecondary: "Web value ignored: the pasted statement wins",
   warningEbitdaDerived: "EBITDA computed as EBIT + D&A: the company publishes none",
+  warningFcfDerived: "Free cash flow computed as operating cash flow − capex: the company publishes none",
   warningResearchPartSkipped: "Section not collected: the research step was skipped",
   researchPartStatements: "Statements",
   researchPartMarket: "Multiples and peers",
@@ -1374,6 +1398,28 @@ const en: Translations = {
   reportLanguageAria: "Report language",
   watchlistAddError: "Could not add to watchlist. Try again.",
   deepValueIncompleteJson: "The analysis finished but its valuation block is incomplete: the report is shown, the fair values are not saved.",
+  dividendOutlookTitle: "Dividend outlook",
+  dividendLastDps: "Last DPS",
+  dividendCagr3y: "3-yr DPS CAGR",
+  dividendCagr5y: "5-yr DPS CAGR",
+  dividendPayout: "Payout (EPS)",
+  dividendCoverage: "FCF coverage",
+  dividendCoverageUnavailable: "unavailable",
+  dividendTrailing: "trailing",
+  dividendStreak: "Years without a cut",
+  dividendCuts: "Cuts",
+  dividendPolicy: "Stated policy",
+  dividendYieldForward: "Forward yield",
+  dividendYieldTrailing: "Trailing yield",
+  dividendYieldOnCost: "Forward yield on cost",
+  dividendYieldOnCostTrailing: "Trailing yield on cost",
+  dividendYieldCurrencyMismatch: "Yield not shown: quote and dividend currencies differ",
+  dividendYocCurrencyMismatch: "Yield on cost not shown: position and dividend currencies differ",
+  dividendNonPayer: "No dividend",
+  dividendChartAria: "Dividend per share, history and projected path",
+  dividendChartReported: "Reported DPS",
+  dividendChartYear: "Fiscal year",
+  chartSourcesLegend: "Sources",
 };
 
 const it: Translations = {
@@ -2041,6 +2087,7 @@ const it: Translations = {
   warningSourceUnknownId: "La riga cita una fonte sconosciuta",
   warningValueIgnoredSecondary: "Valore web ignorato: vince il prospetto incollato",
   warningEbitdaDerived: "EBITDA calcolato come EBIT + ammortamenti: la società non lo pubblica",
+  warningFcfDerived: "Free cash flow calcolato come flusso di cassa operativo − capex: la società non lo pubblica",
   warningResearchPartSkipped: "Sezione non raccolta: il passo della ricerca è stato saltato",
   researchPartStatements: "Bilanci",
   researchPartMarket: "Multipli e peer",
@@ -2057,6 +2104,28 @@ const it: Translations = {
   reportLanguageAria: "Lingua del report",
   watchlistAddError: "Impossibile aggiungere alla watchlist. Riprova.",
   deepValueIncompleteJson: "L'analisi è terminata ma il blocco di valutazione è incompleto: il report è visibile, i fair value non vengono salvati.",
+  dividendOutlookTitle: "Dividendi",
+  dividendLastDps: "Ultimo DPS",
+  dividendCagr3y: "CAGR DPS 3 anni",
+  dividendCagr5y: "CAGR DPS 5 anni",
+  dividendPayout: "Payout (su EPS)",
+  dividendCoverage: "Copertura FCF",
+  dividendCoverageUnavailable: "non disponibile",
+  dividendTrailing: "storico",
+  dividendStreak: "Anni senza tagli",
+  dividendCuts: "Tagli",
+  dividendPolicy: "Politica dichiarata",
+  dividendYieldForward: "Yield prospettico",
+  dividendYieldTrailing: "Yield storico",
+  dividendYieldOnCost: "Yield prospettico sul prezzo di carico",
+  dividendYieldOnCostTrailing: "Yield storico sul prezzo di carico",
+  dividendYieldCurrencyMismatch: "Yield non mostrato: valuta della quotazione e del dividendo diverse",
+  dividendYocCurrencyMismatch: "Yield sul carico non mostrato: valuta della posizione e del dividendo diverse",
+  dividendNonPayer: "Nessun dividendo",
+  dividendChartAria: "Dividendo per azione, storico e sentiero previsto",
+  dividendChartReported: "DPS riportato",
+  dividendChartYear: "Esercizio",
+  chartSourcesLegend: "Fonti",
 };
 
 export const translations: Record<Language, Translations> = { en, it };

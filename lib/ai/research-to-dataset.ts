@@ -15,6 +15,10 @@
 //   Coca-Cola states a group EBITDA) is computed here as EBIT + D&A, never by the model, and
 //   named in an `ebitda_derived` warning: the arithmetic is the code's, the inputs are the
 //   reported ones, so the EV/EBITDA reads work on a dataset whose company reports EBIT only.
+// - Free cash flow the company does not publish (2026-11-23, the dividend outlook's real runs:
+//   ENEL states cfo and capex, no FCF) is computed the same way, as cfo − |capex| (capex is
+//   stored "sign as reported"), and named in an `fcf_derived` warning; the dividend coverage
+//   and the net-debt trajectory read it.
 import type {
   FiscalYearFinancials,
   FiscalYearMultiples,
@@ -202,8 +206,23 @@ function deriveMissingEbitda(rows: FiscalYearFinancials[]): ReconciliationWarnin
 }
 
 /**
+ * Fills free cash flow as cfo − |capex| on every row whose FCF is missing and whose cfo and
+ * capex are both reported. Both are cash-flow fields, so the row's source does not change.
+ * Returns the warning naming the years, or none.
+ */
+function deriveMissingFcf(rows: FiscalYearFinancials[]): ReconciliationWarning[] {
+  const years: number[] = [];
+  for (const row of rows) {
+    if (row.freeCashFlow != null || row.cfo == null || row.capex == null) continue;
+    row.freeCashFlow = roundSum(row.cfo, -Math.abs(row.capex));
+    years.push(row.fiscalYear);
+  }
+  return years.length === 0 ? [] : [{ code: "fcf_derived", severity: "info", fiscalYear: null, detail: years.join(", ") }];
+}
+
+/**
  * The extract of a research answer, the cited URLs the run never opened and the warnings of
- * the conversion (`source_unverified`, `source_unknown_id`, `value_conflict`, `ebitda_derived`). The model's
+ * the conversion (`source_unverified`, `source_unknown_id`, `value_conflict`, `ebitda_derived`, `fcf_derived`). The model's
  * `meta.notes` is not part of the extract: the route stores it in ResearchMeta.
  * @param seenUrls The normalized URLs of the run's transcript (collectSeenUrls).
  */
@@ -215,7 +234,7 @@ export function researchToDataset(
   const fused: ReconciliationWarning[] = [];
 
   const financials = toFinancialsRows(output.financials.map(positiveDepreciation), resolver, fused);
-  const derived = deriveMissingEbitda(financials);
+  const derived = [...deriveMissingEbitda(financials), ...deriveMissingFcf(financials)];
   const multiples = toSourcedRows<(typeof MULTIPLE_FIELDS)[number], FiscalYearMultiples>(output.multiples as MultiplesRowOut[], MULTIPLE_FIELDS, resolver, fused);
   const estimates = toSourcedRows<(typeof ESTIMATE_FIELDS)[number], ForwardEstimate>(output.estimates as EstimateRowOut[], ESTIMATE_FIELDS, resolver, fused);
 

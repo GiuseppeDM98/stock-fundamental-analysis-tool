@@ -142,5 +142,27 @@ describe("researchToDataset", () => {
     expect(extract.financials[3].sources.mixed.income).toBe(true);
     expect(extract.financials[2].sources.mixed.income).toBe(false);
   });
+
+  it("computes a missing free cash flow as cfo − |capex|, whatever capex's sign, and names the years", () => {
+    const { extract, warnings } = researchToDataset(
+      output({
+        financials: [
+          { fiscalYear: 2025, revenue: 1080, cfo: 140, capex: -60.2, sourceIds: { income: "ar", balance: null, cashFlow: "ar" } },
+          { fiscalYear: 2024, revenue: 1000, cfo: 130, capex: 50, sourceIds: { income: "ar", balance: null, cashFlow: "ar" } },
+          // A published FCF is kept as published; without capex nothing is computed.
+          { fiscalYear: 2023, revenue: 950, cfo: 120, capex: -40, freeCashFlow: 75, sourceIds: { income: "ar", balance: null, cashFlow: "ar" } },
+          { fiscalYear: 2022, revenue: 900, cfo: 110, sourceIds: { income: "ar", balance: null, cashFlow: "ar" } },
+        ],
+      }),
+      SEEN
+    );
+    expect(extract.financials.map((r) => [r.fiscalYear, r.freeCashFlow])).toEqual([
+      [2022, null],
+      [2023, 75],
+      [2024, 80],
+      [2025, 79.8],
+    ]);
+    expect(warnings).toContainEqual({ code: "fcf_derived", severity: "info", fiscalYear: null, detail: "2024, 2025" });
+  });
 });
 

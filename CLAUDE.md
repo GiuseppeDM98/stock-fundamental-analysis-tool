@@ -12,7 +12,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: November 22, 2026 — **Spec 05f (the web research in three parts) retired**, branch `chore/retire-spec-05f` (implemented in `805a2a8`, PR #81): `ResearchRun` re-read on Turso, read-only (0 rows, its columns, index and cascade). The verification found no behaviour defect; four test gaps closed (the estimates' caps and rounds in the route, the client's `lost` classification, failed statements with a run); D-156 refined by the owner: a run closed by the request in flight when the ticker changes keeps its dataset, offered on return (valutazione.md § 5.3); guide, README and index realigned on the measures. Only tests and documents changed, no app code. Open until the end of the series: the Vercel log check of the `[ai-run]` and `[research]` lines. Next: spec 06 (dividends).
+**Last Updated**: November 23, 2026 — **Spec 06 (the dividend outlook) implemented**, branch `feature/dividend-outlook`: on `/analyses/[id]` a dividend card between the checks card and the dataset tables — DPS history, CAGR, payout, cuts, the model's scenario path in a chart with its sources, forward yield and yield on cost (same currency only), FCF coverage through the gate's own `dividendCoverageRatio` (valutazione.md § 5.4). Widened by the owner after two real runs read «unavailable»: the web research now computes a missing FCF as cfo − |capex| (`fcf_derived`) and asks where the diluted shares are (§ 5.3). No migration. Collaudo done: phases A–E automatic, three real runs on localhost (card and gate agree), the owner's tour done and closed. Next: retire spec 06.
 
 ---
 
@@ -53,6 +53,7 @@ One line each: the page, the question it answers, where its detail lives (`doc/g
 | **Financial dataset** (web research or paste) | Which sourced figures does the valuation stand on? | valutazione.md § 5, § 5.2, § 5.3 |
 | **Deep Value Analysis** (AI-autonomous) | What is the stock worth (bull/base/bear), by which method, and at what price is it a buy? | valutazione.md § 1, § 2, § 4 |
 | **Analyst panel** (Skeptic, Optimist, Quality) | Does the valuation hold against three independent, blind-first second opinions? | valutazione.md § 3 |
+| **Dividend outlook** (`/analyses/[id]`) | What has it paid, what will it pay per scenario, is it covered by FCF, what does it yield on the price and on my cost? | valutazione.md § 5.4 |
 | **Deterministic checks** (17 gates) | Does the model's own arithmetic hold, recomputed in code? | valutazione.md § 5.1 |
 | **Staged runs** | What happens to a run that takes minutes, or is cut at 300 s? | valutazione.md § 2.9 |
 | **Saved analyses** (`/analyses`, `/analyses/[id]`) | What did I conclude on each ticker, how did the estimate move, is the price in the buy zone? | analisi-salvate.md; valutazione.md § 2.4, § 2.7 |
@@ -135,6 +136,8 @@ Things the series deliberately left out, one line each (added by the spec that l
 - No prompt caching of the dataset across the Deep Value's web update, valuation and report, nor across the report and its three lenses: their system prompts differ, so the dataset would first have to lead a shared prefix; only report2 reads report1's cache (spec 05b, 2026-11-09; spec 05e, 2026-11-22).
 - The web update's notes do not reach the lenses: each lens searches for itself in its blind phase; reopened only by a measure (spec 05e, 2026-11-22).
 - No resume of a web research after its tab was closed: its `ResearchRun` is dropped after 24 hours, and a new research starts from the statements (spec 05f, 2026-11-22).
+- No Borsa Italiana dividend history (ex-dates, payment dates) by ISIN: the dividend card reads the dataset's DPS and the model's path; only the cron reads «paid today» (spec 06, 2026-11-23).
+- No dividend card on the live Deep Value panel of /analyze: only on the saved detail page (spec 06, 2026-11-23).
 - No notification (email) when a run ends after its tab was closed: the status line on /analyses is the only signal (spec 05c, 2026-10-27).
 - No web-search cap on the Advisor or the earnings lookup (`buildWebSearchTools(model)` without `maxUses`): a lens request has one, 5 searches, and the Deep Value's web update 8; on DeepSeek a cap binds the loop's rounds, not the searches (spec 05d and 05e, 2026-11-22).
 
@@ -143,7 +146,7 @@ Things the series deliberately left out, one line each (added by the spec that l
 ## Next Priorities
 The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (one session per spec, in order); its index `00-INDICE.md` holds the series' state, the retirement dates and the owner's decisions. Live: 06 (next), 07a, 07b, 08a, 08b; after 08b, one `/deep-value` realignment pass (D-76).
 1. Caching layer for `/api/quote`.
-2. Per-ticker yield-on-cost in the exit signal (needs per-position dividend exposure via snapshots).
+2. Yield-on-cost in the portfolio exit signal from received dividends (forward YoC now on the analysis page).
 
 ---
 

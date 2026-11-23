@@ -27,6 +27,10 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
 }
 
 /* `font-display` / `font-body`. Not inline: the `prose-report` variant in tailwind.config.ts
@@ -129,6 +133,16 @@
   --success: #22c55e;
   --warning: #f59e0b;
   --danger: #ef4444;
+
+  /* Chart tokens: aliases of the colours above, no new colour (#1e2d47 is the grid the
+     portfolio chart already draws). 1 = reported history (recessive), 2/3/4 = the bull,
+     base and bear scenario paths. The redesign replaces them with a palette of its own. */
+  --chart-1: var(--muted);
+  --chart-2: var(--success);
+  --chart-3: var(--accent);
+  --chart-4: var(--danger);
+  --chart-grid: #1e2d47;
+  --chart-axis: var(--muted);
 }
 
 /* In the base layer so utilities on <body> (`bg-bg`) still take precedence, as in Tailwind 3. */

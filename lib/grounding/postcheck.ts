@@ -657,10 +657,33 @@ function checkSensitivityCenter(result: ParsedAnalystResult, base: Scenario | un
   return { code: "sensitivity_center", status: "pass", detail };
 }
 
-/** The first year of the BASE dividend path, times the latest diluted share count, against
- *  the mean of the last three REPORTED free cash flows (years without FCF are skipped before
- *  the window is taken, as in reconcile.ts's dividend_not_covered). A non-payer passes
- *  before anything else: paying nothing needs no data to be covered. */
+/**
+ * DPS × the latest diluted share count over the mean of the last three REPORTED free cash
+ * flows (years without FCF are skipped before the window is taken, as in reconcile.ts's
+ * dividend_not_covered). Shared by the dividend_coverage gate and the dividend outlook
+ * (lib/dividends/projection.ts), so the card can never disagree with the gate.
+ * @param financials ascending by fiscal year; the last row gives the share count.
+ * @returns null without shares on the last row or without any FCF; a mean FCF ≤ 0 gives
+ *   `ratio: Infinity` (nothing to pay from). `years` is how many FCFs the mean took.
+ */
+export function dividendCoverageRatio(
+  dps: number,
+  financials: FiscalYearFinancials[]
+): { ratio: number; meanFcf: number; shares: number; years: number } | null {
+  const latest = financials[financials.length - 1];
+  const fcfs = financials
+    .map((f) => f.freeCashFlow)
+    .filter((v): v is number => v != null)
+    .slice(-DIVIDEND_FCF_LOOKBACK_YEARS);
+  if (!latest?.sharesDiluted || fcfs.length === 0) return null;
+  const meanFcf = fcfs.reduce((sum, v) => sum + v, 0) / fcfs.length;
+  const shares = latest.sharesDiluted;
+  if (meanFcf <= 0) return { ratio: Infinity, meanFcf, shares, years: fcfs.length };
+  return { ratio: (dps * shares) / meanFcf, meanFcf, shares, years: fcfs.length };
+}
+
+/** The first year of the BASE dividend path, through dividendCoverageRatio. A non-payer
+ *  passes before anything else: paying nothing needs no data to be covered. */
 function checkDividendCoverage(result: ParsedAnalystResult, dataset: GroundedFinancials | null): Gate {
   if (result.dividends === null) return { code: "dividend_coverage", status: "pass", detail: "no dividend" };
   if (!dataset) return unavailableNoDataset("dividend_coverage");
@@ -668,22 +691,17 @@ function checkDividendCoverage(result: ParsedAnalystResult, dataset: GroundedFin
     return { code: "dividend_coverage", status: "unavailable", detail: CURRENCY_MISMATCH };
   }
   const path = result.dividends?.path;
-  const latest = dataset.financials[dataset.financials.length - 1];
-  const fcfs = dataset.financials
-    .map((f) => f.freeCashFlow)
-    .filter((v): v is number => v != null)
-    .slice(-DIVIDEND_FCF_LOOKBACK_YEARS);
-  if (!path || !latest?.sharesDiluted || fcfs.length === 0) {
+  const coverage = path ? dividendCoverageRatio(path[0].base, dataset.financials) : null;
+  if (!path || !coverage) {
     return { code: "dividend_coverage", status: "unavailable", detail: "dividend path, FCF or shares missing" };
   }
-  const meanFcf = fcfs.reduce((sum, v) => sum + v, 0) / fcfs.length;
+  const { ratio, meanFcf, shares, years } = coverage;
   if (meanFcf <= 0) return { code: "dividend_coverage", status: "fail", detail: `mean FCF ${meanFcf.toFixed(0)} ≤ 0` };
-  const total = path[0].base * latest.sharesDiluted;
-  const ratio = total / meanFcf;
+  const total = path[0].base * shares;
   return {
     code: "dividend_coverage",
     status: ratio <= 1 ? "pass" : "fail",
-    detail: `DPS ${path[0].base.toFixed(2)} × shares ${latest.sharesDiluted.toFixed(0)} = ${total.toFixed(0)} · mean FCF(${fcfs.length}y) ${meanFcf.toFixed(0)} · ratio ${ratio.toFixed(2)}`,
+    detail: `DPS ${path[0].base.toFixed(2)} × shares ${shares.toFixed(0)} = ${total.toFixed(0)} · mean FCF(${years}y) ${meanFcf.toFixed(0)} · ratio ${ratio.toFixed(2)}`,
   };
 }
 

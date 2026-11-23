@@ -6,6 +6,7 @@ import { DetailBreadcrumb, DetailFooterActions, DetailRunStatus } from "@/compon
 import { isDone } from "@/lib/report/run-status";
 import { isDeepValuePhase } from "@/types/ai-run";
 import { readAnalysisExtract } from "@/lib/datasets/store";
+import { aggregateOpenLots } from "@/lib/portfolio-math";
 import type { Triple } from "@/lib/report/valuation";
 import {
   hasFullTriple,
@@ -67,15 +68,13 @@ export default async function AnalysisDetailPage({ params }: PageProps) {
     // overstate the shares and skew the weighted-average cost the banner shows.
     where: { ticker: analysis.ticker, userId: session.user.id, closedAt: null },
   });
-  const totalShares = positions.reduce((s, p) => s + p.shares, 0);
-  const position =
-    totalShares > 0
-      ? {
-          totalShares,
-          weightedAvgCost: positions.reduce((s, p) => s + p.purchasePrice * p.shares, 0) / totalShares,
-          currency: positions[0].currency,
-        }
-      : null;
+  // Lots in different currencies have no average cost in any of them: currency null, so the
+  // banner shows no P&L and the dividend card no yield on cost (until 2026-11-23 the first
+  // lot's currency was taken for all of them).
+  const lots = aggregateOpenLots(positions);
+  const position = lots
+    ? { ...lots, currency: positions.every((p) => p.currency === positions[0].currency) ? positions[0].currency : null }
+    : null;
 
   const formattedDate = new Date(analysis.createdAt).toLocaleDateString(undefined, {
     year: "numeric",

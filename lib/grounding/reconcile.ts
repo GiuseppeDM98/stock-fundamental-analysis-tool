@@ -39,6 +39,9 @@ export type ReconciliationWarning = {
     // The research stage computed EBITDA as EBIT + D&A (the company publishes none); detail =
     // the fiscal years.
     | "ebitda_derived"
+    // The research stage computed free cash flow as cfo − |capex| (the company publishes
+    // none); detail = the fiscal years.
+    | "fcf_derived"
     // The web research skipped an optional part (the user chose "Continue without");
     // detail = the part's name.
     | "research_part_skipped";
