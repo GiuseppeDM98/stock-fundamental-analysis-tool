@@ -8,6 +8,8 @@
 // collapsible history of older saves for the same ticker.
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import type { Route } from "next";
 import { fetchAnalyses, deleteAnalysis } from "@/lib/analyses";
 import { fetchPositions } from "@/lib/portfolio";
 import { ANALYST_ANGLES, type SavedAnalysis, type AnalystAngle } from "@/types/analysis";
@@ -415,13 +417,23 @@ function TickerGroup({
     <div className="card">
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
+        {/* The ticker links to the stock's page, and a link cannot sit inside the toggle
+            button (nested interactive elements): it is a sibling laid over the spot the
+            ticker holds in the header, where an unseen copy keeps the row's layout. */}
+        <div className="relative min-w-0 flex-1">
+        <Link
+          href={`/stocks/${encodeURIComponent(ticker)}` as Route}
+          className="absolute left-0 top-0 z-10 font-mono text-base font-bold text-accent hover:text-sky-300"
+        >
+          {ticker}
+        </Link>
         <button
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
-          className="min-w-0 flex-1 text-left"
+          className="block w-full text-left"
         >
           <div className="flex flex-wrap items-center gap-2">
-            <span className="shrink-0 font-mono text-base font-bold text-accent">{ticker}</span>
+            <span aria-hidden className="invisible shrink-0 font-mono text-base font-bold">{ticker}</span>
             <span className="truncate text-sm text-slate-400">{latest.companyName}</span>
             {latest.valuationMethod && (
               <span className="shrink-0 rounded-sm bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-medium text-slate-400">
@@ -475,6 +487,7 @@ function TickerGroup({
             </p>
           )}
         </button>
+        </div>
 
         <button
           onClick={() => setExpanded((v) => !v)}

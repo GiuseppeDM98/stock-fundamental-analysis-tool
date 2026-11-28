@@ -170,8 +170,15 @@ function fvRow(label: string, bear: number, base: number, bull: number, currency
     </tr>`;
 }
 
+/** The app's page for a ticker, on the same base URL the cron reads quotes from. */
+function stockPageUrl(ticker: string): string {
+  const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
+  return `${baseUrl}/stocks/${encodeURIComponent(ticker)}`;
+}
+
 // A single ticker card: header + price/target line + optional under-target note + a
-// valuation table (analysis, reviewer, consensus when present) + the buy target + footer.
+// valuation table (analysis, reviewer, consensus when present) + the buy target + footer
+// + the link to the ticker's page in the app.
 function buildCard(item: DigestItem): string {
   const hasConsensus =
     item.consensusBear !== null && item.consensusBase !== null && item.consensusBull !== null;
@@ -260,28 +267,23 @@ function buildCard(item: DigestItem): string {
           <td style="text-align:right;vertical-align:middle;padding-top:10px;font-size:11px;color:${C.faint};white-space:nowrap;">${item.method} · ${formatDate(item.analysisDate)}</td>
         </tr>
       </table>
+
+      <div style="margin-top:10px;font-size:12px;">
+        <a href="${stockPageUrl(item.ticker)}" style="color:${C.accent};text-decoration:none;font-weight:600;">Apri la pagina del titolo →</a>
+      </div>
     </div>`;
 }
 
 /**
- * Sends the watchlist digest email for one user via Resend (weekdays only, see
- * app/api/cron/watchlist-analysis).
- * Each ticker is a card: live price + distance to the base buy target (with an under-target
- * note when applicable), an open-position line when held, a next/last-earnings note when the
- * user has fetched one, a bear/base/bull table for the analysis, each analyst-panel lens and
- * their consensus (when present), the MoS-adjusted buy target, and the source analysis date.
- * Native currency is used per ticker — no forced EUR conversion.
+ * The digest's HTML, without sending it: a function of the items (and of NEXTAUTH_URL,
+ * for the links) alone, so a test or a preview renders the email with no mail provider
+ * behind it.
  */
-export async function sendWatchlistDigest(params: {
-  to: string;
-  runDate: string;
-  items: DigestItem[];
-}): Promise<void> {
-  const { to, runDate, items } = params;
-
+export function renderWatchlistDigestHtml(params: { runDate: string; items: DigestItem[] }): string {
+  const { runDate, items } = params;
   const cards = items.map(buildCard).join("");
 
-  const html = `
+  return `
     <div style="background:${C.bg};color:${C.text};font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;max-width:640px;margin:0 auto;padding:32px 24px;">
       <h1 style="color:${C.accent};font-size:20px;margin:0 0 4px;letter-spacing:-0.01em;">Watchlist — aggiornamento giornaliero</h1>
       <p style="color:${C.muted};font-size:13px;margin:0 0 24px;">${runDate}</p>
@@ -294,11 +296,29 @@ export async function sendWatchlistDigest(params: {
         Non costituisce consulenza finanziaria.
       </p>
     </div>`;
+}
+
+/**
+ * Sends the watchlist digest email for one user via Resend (weekdays only, see
+ * app/api/cron/watchlist-analysis).
+ * Each ticker is a card: live price + distance to the base buy target (with an under-target
+ * note when applicable), an open-position line when held, a next/last-earnings note when the
+ * user has fetched one, a bear/base/bull table for the analysis, each analyst-panel lens and
+ * their consensus (when present), the MoS-adjusted buy target, the source analysis date, and
+ * a link to the ticker's page in the app.
+ * Native currency is used per ticker — no forced EUR conversion.
+ */
+export async function sendWatchlistDigest(params: {
+  to: string;
+  runDate: string;
+  items: DigestItem[];
+}): Promise<void> {
+  const { to, runDate, items } = params;
 
   await getResend().emails.send({
     from: process.env.RESEND_FROM_EMAIL ?? "watchlist@resend.dev",
     to,
     subject: `Watchlist — ${items.length} ${items.length === 1 ? "titolo" : "titoli"} (${runDate})`,
-    html,
+    html: renderWatchlistDigestHtml({ runDate, items }),
   });
 }

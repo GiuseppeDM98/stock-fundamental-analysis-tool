@@ -4,30 +4,39 @@
  * Read-only: nothing here mutates data, and every AI action button is left unclicked.
  */
 import type { Page } from "@playwright/test";
-import { test, expect } from "./support/test";
+import { test, expect, HISTORY_STUB_POINTS } from "./support/test";
 import { count, queryAll, queryOne } from "./support/db";
-import { DECOY, IDS, TICKERS, USER_A, referenceDay } from "./support/fixtures";
+import { DECOY, IDS, QUOTE_STUBS, TICKERS, USER_A, referenceDay } from "./support/fixtures";
+
+/** The link to a ticker's page, as every surface writes it. */
+const stockHref = (ticker: string) => `a[href="/stocks/${encodeURIComponent(ticker)}"]`;
 
 /** The clock the seed dated the unfinished NSCA runs against (the visual's, too). */
 const fixClock = (page: Page) => page.clock.setFixedTime(new Date(referenceDay().getTime() + 12 * 60 * 60 * 1000));
 
-test("hub shows A's recent analyses, last snapshot P&L and watchlist count from the database", async ({ page }) => {
+test("hub shows A's recently analysed tickers, last snapshot P&L and watchlist count from the database", async ({ page }) => {
   await fixClock(page);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Pick up where you left off" })).toBeVisible();
 
-  // The three newest FINISHED analyses in the DB are exactly the three linked rows: the two
-  // NSCA runs are newer, and neither takes a slot.
-  const recent = await queryAll<{ id: string; ticker: string }>(
-    "SELECT id, ticker FROM Analysis WHERE userId = ? AND runStatus = 'done' ORDER BY createdAt DESC LIMIT 3",
+  // One row per ticker, the three most recently analysed among the FINISHED rows: NSCA's two
+  // runs are newer than all of them, and it takes no slot. Each links to the ticker's page.
+  const recent = await queryAll<{ ticker: string }>(
+    "SELECT ticker FROM Analysis WHERE userId = ? AND runStatus = 'done' GROUP BY ticker ORDER BY MAX(createdAt) DESC LIMIT 3",
     [USER_A.id]
   );
   expect(recent.length).toBe(3);
-  for (const a of recent) {
-    await expect(page.locator(`a[href="/analyses/${a.id}"]`)).toHaveText(a.ticker);
+  const strip = page.locator(".card").filter({ hasText: "Recent analyses" });
+  await expect(strip.locator('a[href^="/stocks/"]')).toHaveCount(3);
+  for (const { ticker } of recent) {
+    await expect(strip.locator(stockHref(ticker))).toContainText(ticker);
   }
-  await expect(page.locator(`a[href="/analyses/${IDS.analysisCut}"]`)).toHaveCount(0);
-  await expect(page.locator(`a[href="/analyses/${IDS.analysisLive}"]`)).toHaveCount(0);
+  await expect(strip.locator(stockHref(TICKERS.cut))).toHaveCount(0);
+  // The rows no longer link a single report.
+  await expect(strip.locator('a[href^="/analyses/"]')).toHaveCount(0);
+  // The panel ticker is quoted at its consensus fair value (150 on a buy target of 112.5):
+  // the same WATCH the /analyses card gives it.
+  await expect(strip.locator(stockHref(TICKERS.panel))).toContainText("WATCH");
 
   const last = await queryOne<{ totalEur: number; costEur: number }>(
     "SELECT totalEur, costEur FROM PortfolioSnapshot WHERE userId = ? ORDER BY takenAt DESC LIMIT 1",
@@ -60,6 +69,20 @@ test("analyses list groups by ticker, counts match the DB, and a group expands",
   const card = page.locator(".card").filter({ hasText: DECOY.panelCompany });
   await expect(card).toHaveCount(1);
   await expect(card.getByText("✓ Reviewed")).toBeVisible();
+
+  // The ticker links to the stock's page from OUTSIDE the header toggle: it can be clicked
+  // (nothing covers it), and a click on it follows the link without expanding the card. The
+  // navigation itself is held back here: the page it leads to is not built yet.
+  const tickerLink = card.locator(stockHref(TICKERS.panel));
+  await expect(tickerLink).toHaveText(TICKERS.panel);
+  await tickerLink.click({ trial: true });
+  await tickerLink.evaluate((el: HTMLElement) => {
+    el.addEventListener("click", (e) => e.preventDefault(), { capture: true, once: true });
+    el.click();
+  });
+  await expect(card.getByRole("button", { name: "Expand" })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Collapse" })).toHaveCount(0);
+
   await card.getByRole("button", { name: "Expand" }).click();
 
   // The position badge counts only the open lot, never the sold one next to it.
@@ -407,6 +430,8 @@ test("analysis with all three lenses shows every stored critique", async ({ page
   expect(row?.reviewMd).toContain(DECOY.skepticCritique);
 
   await page.goto(`/analyses/${IDS.analysisPanel}`);
+  // Breadcrumb: Saved Analyses / the ticker, linked to its page / Report.
+  await expect(page.locator(stockHref(TICKERS.panel))).toHaveText(TICKERS.panel);
   for (const decoy of [DECOY.skepticCritique, DECOY.optimistCritique, DECOY.qualityCritique]) {
     await expect(page.getByText(decoy)).toBeVisible();
   }
@@ -464,10 +489,16 @@ test("portfolio shows open positions, the closed-positions archive and the histo
 
   await expect(page.getByText(`${openTickers} tickers, ${openLots} purchases`)).toBeVisible();
   await expect(page.getByText(DECOY.groundedCompany).first()).toBeVisible();
+  // The ticker links to the stock's page in the aggregated view (one card per ticker)…
+  await expect(page.locator(stockHref(TICKERS.panel))).toHaveCount(1);
+  await expect(page.locator(stockHref(TICKERS.grounded))).toHaveCount(1);
 
   // Per-purchase view shows each lot's notes.
   await page.getByRole("button", { name: "Per Purchase" }).click();
   await expect(page.getByText(DECOY.positionNote)).toBeVisible();
+  // …and in the per-purchase one, once per open lot (the grounded ticker has two).
+  await expect(page.locator(stockHref(TICKERS.panel))).toHaveCount(1);
+  await expect(page.locator(stockHref(TICKERS.grounded))).toHaveCount(2);
 
   // Closed positions archive, collapsed by default.
   const archiveToggle = page.getByRole("button", { name: `▼ Closed Positions (${closed})` });
@@ -507,6 +538,12 @@ test("watchlist lists A's items and shows notes when expanded", async ({ page })
   expect(items.length).toBe(4);
   for (const item of items) {
     await expect(page.getByText(item.companyName, { exact: true })).toBeVisible();
+  }
+
+  // Every watched ticker links to its page, an item with no analysis included.
+  const watched = await queryAll<{ ticker: string }>("SELECT ticker FROM WatchlistItem WHERE userId = ?", [USER_A.id]);
+  for (const { ticker } of watched) {
+    await expect(page.locator(stockHref(ticker))).toHaveText(ticker);
   }
 
   const card = page.locator(".card").filter({ hasText: DECOY.groundedCompany });
@@ -567,4 +604,31 @@ test("advisor loads A's saved session and its messages without calling the AI", 
   await expect(page.getByRole("button", { name: new RegExp(DECOY.advisorTitle) }).first()).toBeVisible();
   // The most recent session auto-loads: its stored assistant reply is on screen.
   await expect(page.getByText(DECOY.advisorReply)).toBeVisible();
+});
+
+test("the suite's price-history stub answers a browser request with a deterministic weekday series", async ({ page }) => {
+  await page.goto("/");
+  // Asked from the page: the stubs route the browser's requests, so Yahoo is never reached.
+  const read = (path: string) =>
+    page.evaluate(async (url) => {
+      const res = await fetch(url);
+      return { status: res.status, body: await res.json() };
+    }, path);
+
+  const oneYear = await read(`/api/history/${TICKERS.panel}?range=1y`);
+  expect(oneYear.status).toBe(200);
+  expect(oneYear.body.ticker).toBe(TICKERS.panel);
+  expect(oneYear.body.currency).toBe(QUOTE_STUBS[TICKERS.panel].currency);
+  const points = oneYear.body.points as { date: string; close: number }[];
+  expect(points).toHaveLength(HISTORY_STUB_POINTS);
+  expect(points[0].close).toBe(QUOTE_STUBS[TICKERS.panel].price);
+  // Oldest first, no weekend day, the last one not after the reference day.
+  expect(points.every((p, i) => i === 0 || p.date > points[i - 1].date)).toBe(true);
+  expect(points.every((p) => ![0, 6].includes(new Date(`${p.date}T00:00:00Z`).getUTCDay()))).toBe(true);
+  expect(points[points.length - 1].date <= referenceDay().toISOString().slice(0, 10)).toBe(true);
+
+  const fiveYears = await read(`/api/history/${TICKERS.panel}?range=5y`);
+  expect(fiveYears.body.points).toEqual(points);
+
+  expect((await read("/api/history/NOSTUB")).status).toBe(400);
 });

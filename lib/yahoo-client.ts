@@ -1,7 +1,8 @@
 import YahooFinance from "yahoo-finance2";
 
 import { BalanceSheetEntry, FundamentalsResponse } from "@/types/fundamentals";
-import { QuoteResponse, Region } from "@/types/market";
+import { PriceHistory, PriceHistoryRange, QuoteResponse, Region } from "@/types/market";
+import { normalizeTicker } from "@/lib/ticker";
 
 // Suppress Yahoo Finance survey notices to keep logs clean
 const yahooFinance = new YahooFinance({
@@ -152,6 +153,39 @@ export async function getQuote(ticker: string): Promise<QuoteResponse> {
       marketCap: Number.isFinite(quote.marketCap as number) ? Number(quote.marketCap) : null,
       sharesOutstanding: Number.isFinite(quote.sharesOutstanding as number) ? Number(quote.sharesOutstanding) : null,
       fetchedAt: new Date().toISOString()
+    };
+  } catch (error) {
+    throw normalizeYahooError(error);
+  }
+}
+
+const PRICE_HISTORY_DAYS: Record<PriceHistoryRange, number> = { "1y": 365, "5y": 1825 };
+
+/**
+ * Fetch the daily closes of a ticker over the last year or five.
+ *
+ * Days Yahoo returns without a close (a halt, a holiday row) are dropped, so every point
+ * is a price. The series is in the quote's own currency, like getQuote (a missing one
+ * reads USD, the same fallback).
+ *
+ * @param ticker - Stock ticker symbol, normalized here
+ * @param range - "1y" or "5y", counted back from now
+ * @returns The series, oldest day first
+ * @throws User-friendly error if ticker not found or rate limit hit
+ */
+export async function getPriceHistory(ticker: string, range: PriceHistoryRange): Promise<PriceHistory> {
+  const symbol = normalizeTicker(ticker);
+  try {
+    const period1 = new Date(Date.now() - PRICE_HISTORY_DAYS[range] * 24 * 60 * 60 * 1000);
+    const result = await withRetry(() => yahooFinance.chart(symbol, { period1, interval: "1d" }));
+
+    return {
+      ticker: symbol,
+      currency: String(result.meta.currency ?? "USD"),
+      range,
+      points: result.quotes.flatMap((q) =>
+        q.close != null ? [{ date: q.date.toISOString().slice(0, 10), close: q.close }] : []
+      ),
     };
   } catch (error) {
     throw normalizeYahooError(error);

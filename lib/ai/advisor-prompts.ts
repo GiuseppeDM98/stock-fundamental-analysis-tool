@@ -1,26 +1,16 @@
 // Prompt builders for the AI Portfolio Advisor chat feature.
-// The advisor receives a snapshot of the user's portfolio and saved analyses
-// as context, enabling cross-portfolio reasoning and stock discovery.
+// The advisor receives a snapshot of the user's portfolio and one deterministic summary
+// line per ticker (lib/stocks/ticker-summary.ts) as context, enabling cross-portfolio
+// reasoning and stock discovery.
+import { formatTickerSummaryForPrompt, type TickerSummary } from "@/lib/stocks/ticker-summary";
 
-// Only the fields actually used in the prompt — avoids a full Position/SavedAnalysis import.
+// Only the fields actually used in the prompt — avoids a full Position import.
 type PositionSnippet = {
   ticker: string;
   companyName: string;
   shares: number;
   purchasePrice: number;
   currency: string;
-};
-
-type AnalysisSnippet = {
-  ticker: string;
-  companyName: string;
-  fairValueBull?: number | null;
-  fairValueBase?: number | null;
-  fairValueBear?: number | null;
-  valuationMethod?: string | null;
-  priceAtAnalysis?: number | null;
-  mosPercent?: number | null;
-  createdAt: string;
 };
 
 // A live, authoritative market price for one ticker, fetched server-side just
@@ -35,7 +25,10 @@ type LivePrice = {
 
 export type AdvisorContext = {
   positions: PositionSnippet[];
-  analyses: AnalysisSnippet[];
+  // One per ticker the user analysed or holds, already computed in code: the model reads
+  // a verdict here, it never derives one from raw fair values (2026-11-28; before, it got
+  // every saved analysis with base columns only, and no lens, consensus or watchlist target).
+  summaries: TickerSummary[];
   livePrices: LivePrice[];
   currentDate: string;
   language: string;
@@ -47,8 +40,8 @@ export type AdvisorContext = {
 // the authoritative LIVE PRICES block, and forbid presenting any unverified
 // cause/event as fact.
 const GROUNDING_RULES_BLOCK = `GROUNDING RULES (mandatory):
-- The LIVE PRICES block (when present) is the single source of truth for the current price of an owned ticker. Never state a current/last price from memory or from a web-searched quote that conflicts with it.
-- "price at analysis" values in the analysis history are HISTORICAL — the price when the analysis was saved. Never quote them as the current price.
+- The LIVE PRICES block (when present) is the single source of truth for the current price of every ticker it lists. Never state a current/last price from memory or from a web-searched quote that conflicts with it.
+- Fair values, buy targets and consensus figures in TICKER SUMMARIES are point-in-time estimates dated by their "saved" date; only the "price" there is current.
 - Before attributing a price move to a cause, or citing any recent event, news, guidance, or earnings release, verify it via web search and give the date. If you cannot verify it, state that the driver is UNCONFIRMED — do not invent a plausible-sounding narrative.
 - Separate verified facts (cite the date/source) from your own inference. Never present speculation or a "market reconstruction" as established fact.
 - When the user asks about adding to, holding, or exiting a position, first read the current price from LIVE PRICES and search for material recent news before advising.`;
@@ -71,39 +64,8 @@ function formatPosition(p: PositionSnippet): string {
   return `- ${ticker} (${name}): ${shares} shares @ ${price} ${currency}`;
 }
 
-/** Summarise one saved analysis into a compact line for the system prompt. */
-function formatAnalysis(a: AnalysisSnippet): string {
-  const parts: string[] = [`- ${a.ticker} (${a.companyName})`];
-  if (a.valuationMethod) parts.push(`[${a.valuationMethod}]`);
-  if (a.fairValueBear != null && a.fairValueBase != null && a.fairValueBull != null) {
-    const mos = a.mosPercent ?? 0;
-    if (mos > 0) {
-      // Stored values are MoS-adjusted buy targets: intrinsic = stored / (1 - mos/100).
-      // Expose both so the AI correctly distinguishes fair value from entry target.
-      const divisor = 1 - mos / 100;
-      const intrinsicBear = (a.fairValueBear / divisor).toFixed(2);
-      const intrinsicBase = (a.fairValueBase / divisor).toFixed(2);
-      const intrinsicBull = (a.fairValueBull / divisor).toFixed(2);
-      parts.push(`Intrinsic Bear ${intrinsicBear} / Base ${intrinsicBase} / Bull ${intrinsicBull}`);
-      parts.push(`Buy Target (-${mos}%) Bear ${a.fairValueBear.toFixed(2)} / Base ${a.fairValueBase.toFixed(2)} / Bull ${a.fairValueBull.toFixed(2)}`);
-    } else {
-      parts.push(`Fair Value Bear ${a.fairValueBear.toFixed(2)} / Base ${a.fairValueBase.toFixed(2)} / Bull ${a.fairValueBull.toFixed(2)}`);
-    }
-  }
-  if (a.priceAtAnalysis != null) {
-    parts.push(`price at analysis: ${a.priceAtAnalysis.toFixed(2)}`);
-  }
-  const date = new Date(a.createdAt).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-  parts.push(`(saved ${date})`);
-  return parts.join(" · ");
-}
-
 export function buildAdvisorSystemPrompt(ctx: AdvisorContext): string {
-  const { positions, analyses, livePrices, currentDate, language } = ctx;
+  const { positions, summaries, livePrices, currentDate, language } = ctx;
 
   const portfolioSection =
     positions.length > 0
@@ -115,23 +77,15 @@ export function buildAdvisorSystemPrompt(ctx: AdvisorContext): string {
       ? livePrices.map(formatLivePrice).join("\n")
       : "  (no live prices available — verify current prices via web search)";
 
-  // Deduplicate analyses by ticker: keep only the most recent per ticker.
-  const latestByTicker = new Map<string, AnalysisSnippet>();
-  for (const a of analyses) {
-    const existing = latestByTicker.get(a.ticker);
-    if (!existing || new Date(a.createdAt) > new Date(existing.createdAt)) {
-      latestByTicker.set(a.ticker, a);
-    }
-  }
-  const analysesSection =
-    latestByTicker.size > 0
-      ? [...latestByTicker.values()].map(formatAnalysis).join("\n")
+  const summariesSection =
+    summaries.length > 0
+      ? summaries.map(formatTickerSummaryForPrompt).join("\n")
       : "  (no saved analyses yet)";
 
   return `You are a value investing advisor assistant. Today is ${currentDate}.
 Respond in ${language}.
 
-You have full context of the user's investment portfolio and their previously saved AI-generated deep value analyses. Use this data to give personalised, insightful answers.
+You have full context of the user's investment portfolio and a summary of their saved AI-generated deep value analyses, one line per ticker. Use this data to give personalised, insightful answers.
 
 USER'S PORTFOLIO (${positions.length} position${positions.length !== 1 ? "s" : ""}):
 ${portfolioSection}
@@ -139,8 +93,9 @@ ${portfolioSection}
 LIVE PRICES (authoritative — current market, as of ${currentDate}):
 ${livePricesSection}
 
-PREVIOUSLY SAVED DEEP VALUE ANALYSES (most recent per ticker):
-${analysesSection}
+TICKER SUMMARIES (deterministic, from saved analyses):
+${summariesSection}
+How to read a line: every figure is computed in code from the user's latest saved analysis with values and the live price — quote it as given, do not recompute it. "verdict" is BUY (price at or below the buy target), WATCH (between the buy target and fair value) or OVER (above fair value), measured on the consensus of the analyst lenses when any ran, else on the analysis alone. "signal low" means the verdict sits inside the model's own bull-bear range: treat it as no clear call. "watchlist target" is the user's own entry price for that ticker. A line without a verdict has no comparable live price.
 
 ${GROUNDING_RULES_BLOCK}
 
@@ -148,7 +103,7 @@ RULES:
 1. When you recommend a specific stock ticker to investigate further, always wrap it in double square brackets, e.g. [[ENI.MI]] or [[AAPL]]. This lets the user launch a Deep Value analysis with one click. Only wrap actual tickers — not company names.
 2. You have access to web search. Use it to find current financial data, recent news, or stock ideas when needed.
 3. Be concise and specific. Use the portfolio and analysis data above to give personalised answers — don't give generic investing advice.
-4. Fair values in the analysis history are point-in-time estimates. Acknowledge if they are old (> 3 months).
+4. Fair values in the ticker summaries are point-in-time estimates. Acknowledge if they are old (> 3 months).
 5. For Italian stocks, tickers end in .MI (e.g. ENI.MI, ENEL.MI, UCG.MI). For US stocks, use plain tickers (AAPL, MSFT).
 6. Before recommending any ticker, verify via web search that it is CURRENTLY listed and actively traded as of ${currentDate}. Never suggest a company that has been delisted, acquired, taken private, merged away, or had trading suspended — your training data may still list it as active when it is not. If a candidate turns out to be no longer publicly tradable, drop it and pick another.`;
 }

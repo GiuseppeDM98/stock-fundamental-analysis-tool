@@ -25,6 +25,7 @@ yahooFinance.quoteSummary(ticker, { modules: ["summaryDetail", "defaultKeyStatis
 - **EBIT field name**: Uppercase `EBIT` in fundamentalsTimeSeries, fallback to `operatingIncome`
 - **TTM margin vs historical**: prefer 5yr average over TTM for cyclical companies
 - **`assetProfile` null for non-US tickers**: always guard with `assetProfile?.sector ?? null`
+- **Price history is `yahooFinance.chart(symbol, { period1, interval: "1d" })`** (`getPriceHistory`, 2026-11-28): `quotes` carries one row per trading day, some with a null `close` (dropped), `meta.currency` the currency; never pass `validateResult: false` (AGENTS.md gotcha #19). Closes come as floats (`12.340000152587891`): round at display. Cached for an hour by `lib/price-history.ts` (valutazione.md § 2.10).
 - **`yahooFinance.quote()` returns undefined**: always null-check — `if (!quote) throw new Error(...)`
 - **Quote prices are in the stock's native currency**: ENI.MI price is in EUR, AAPL in USD, an LSE line often in GBp (pence). Don't assume USD, and weigh a quote against a saved value only through `sameCurrency` (`comparablePrice`, `lib/report/latest-analysis.ts`): `GBp` is not `GBP`, and there is no conversion. `Intl.NumberFormat` does read `GBp` as `GBP`, so a pence quote formatted as currency shows `£7,000.00` (2026-10-29, not fixed).
 

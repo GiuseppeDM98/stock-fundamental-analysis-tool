@@ -10,6 +10,8 @@ vi.mock("@/lib/db", () => ({
   db: {
     position: { findMany: (...args: unknown[]) => positionFindMany(...args) },
     analysis: { findMany: (...args: unknown[]) => analysisFindMany(...args) },
+    watchlistItem: { findMany: vi.fn(async () => []) },
+    earningsEstimate: { findMany: vi.fn(async () => []) },
     user: { findUnique: vi.fn(async () => null) },
   },
 }));

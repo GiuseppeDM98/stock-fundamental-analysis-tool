@@ -26,3 +26,16 @@ export type QuoteResponse = {
   sharesOutstanding: number | null;   // Null if not reported (required for DCF)
   fetchedAt: string;                  // ISO 8601 timestamp
 };
+
+export type PriceHistoryRange = "1y" | "5y";
+
+/**
+ * Daily closes of a ticker over a range, oldest first, in the quote's own currency
+ * (never converted). `date` is the trading day as YYYY-MM-DD (UTC).
+ */
+export type PriceHistory = {
+  ticker: string;
+  currency: string;
+  range: PriceHistoryRange;
+  points: { date: string; close: number }[];
+};

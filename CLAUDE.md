@@ -12,7 +12,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: November 23, 2026 — **Spec 06 (the dividend outlook) retired**, branch `chore/retire-spec-06` (implemented in `84e586e`, PR #83; no migration): the dividend card on `/analyses/[id]` lives in valutazione.md § 5.4, the research's computed FCF in § 5.3, the owner's decisions of the implementation in the series index. The retirement changed code: the statements' prompt names the FCF the server computes as cfo − |capex|, and the position banner says when the open lots are in different currencies; the signals passed on the code before (ci:local, the real runs, the tour) are to be redone on it after the deploy, the end-of-series promotion. Next: spec 07a (ticker summary and price history), its prerequisites in place.
+**Last Updated**: November 28, 2026 — **Spec 07a implemented** (the per-ticker summary), branch `feature/ticker-summary`, no migration: the Advisor's prompt reads one deterministic summary line per ticker (latest valuation, consensus, verdict, signal, watchlist target) and quotes every analysed ticker, `GET /api/history/[ticker]` serves daily closes behind a one-hour cache, the Hub lists the recent tickers with their verdict, and the ticker links to `/stocks/<ticker>` from `/analyses`, the watchlist, the portfolio, the detail breadcrumb and the digest. Documented in valutazione.md § 2.10, advisor.md, shell.md. Collaudo and tour done; the real Advisor run passed on the isolated database. Open: the links answer 404 until spec 07b builds the page, so 07a reaches `main` only with it; no page reads the price history yet. Next: spec 07b (the stock page), then the retirement of 07a.
 
 ---
 
@@ -33,7 +33,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 Next.js App Router with client-side interactivity and server-side API routes. Pipeline: **Discover (Advisor) → Decide (Deep Value) → Monitor (Watchlist/Portfolio)**.
 
 - **Frontend**: Hub home (`/`) + `/analyze` (Deep Value) + auth (`/login`, `/register`) + `/analyses` (+ `/[id]`) + `/portfolio` + `/advisor` + `/watchlist`
-- **API**: route handlers in `app/api/`; the list with methods: AGENTS.md § API Route Pattern. `/api/quote/[ticker]` is the only Yahoo data route.
+- **API**: route handlers in `app/api/`; the list with methods: AGENTS.md § API Route Pattern. `/api/quote/[ticker]` and `/api/history/[ticker]` are the only Yahoo data routes.
 - **Business logic**: pure TS in `lib/`, never in components or routes
 - **DB**: SQLite via Prisma 7 + Turso — `User`, `Analysis`, `FinancialDataset`, `ResearchRun`, `Position`, `PortfolioSnapshot`, `WatchlistItem`, `EarningsEstimate`, `AdvisorSession`, `AdvisorMessage` (migrations: AGENTS.md § Prisma 7 + Turso)
 - **Auth**: Auth.js v5 credentials provider, JWT sessions (no DB session table)
@@ -94,7 +94,7 @@ The tree, one line per group of files: AGENTS.md § Directory Structure. Each gu
 ```
 types/           # shared types
 lib/             # business logic: ai/ (prompts, client, tool loop), report/ (verdict, consensus, evolution, run status),
-                 #   grounding/ + datasets/ (the dataset and the gates), i18n/
+                 #   grounding/ + datasets/ (the dataset and the gates), stocks/ (the per-ticker summary), cache/, i18n/
 components/      # client components; report/ = the shared report rendering
 app/             # pages + api/ route handlers; manifest.ts, icon.tsx, print.css
 context/language-context.tsx  public/sw.js  public/icons/
@@ -138,14 +138,15 @@ Things the series deliberately left out, one line each (added by the spec that l
 - No resume of a web research after its tab was closed: its `ResearchRun` is dropped after 24 hours, and a new research starts from the statements (spec 05f, 2026-11-22).
 - No Borsa Italiana dividend history (ex-dates, payment dates) by ISIN: the dividend card reads the dataset's DPS and the model's path; only the cron reads «paid today» (spec 06, 2026-11-23).
 - No dividend card on the live Deep Value panel of /analyze: only on the saved detail page (spec 06, 2026-11-23).
+- No page at `/stocks/[ticker]`: every ticker link answers 404 until spec 07b, and no page reads `/api/history` yet (spec 07a, 2026-11-28).
 - No notification (email) when a run ends after its tab was closed: the status line on /analyses is the only signal (spec 05c, 2026-10-27).
 - No web-search cap on the Advisor or the earnings lookup (`buildWebSearchTools(model)` without `maxUses`): a lens request has one, 5 searches, and the Deep Value's web update 8; on DeepSeek a cap binds the loop's rounds, not the searches (spec 05d and 05e, 2026-11-22).
 
 ---
 
 ## Next Priorities
-The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (one session per spec, in order); its index `00-INDICE.md` holds the series' state, the retirement dates and the owner's decisions. Live: 07a (next), 07b, 08a, 08b; after 08b, one `/deep-value` realignment pass (D-76).
-1. Caching layer for `/api/quote`.
+The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (one session per spec, in order); its index `00-INDICE.md` holds the series' state, the retirement dates and the owner's decisions. Live: 07a (implemented, to retire), 07b (next), 08a, 08b; after 08b, one `/deep-value` realignment pass (D-76).
+1. Caching layer for `/api/quote` (`createTtlMap`, `lib/cache/ttl-map.ts`, is ready).
 2. Yield-on-cost in the portfolio exit signal from received dividends (forward YoC now on the analysis page).
 
 ---

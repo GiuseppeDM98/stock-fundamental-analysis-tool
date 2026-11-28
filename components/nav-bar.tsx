@@ -35,6 +35,16 @@ const NAV_LINKS = [
   { href: "/analyses", key: "navSavedAnalyses" },
 ] as const;
 
+/**
+ * Whether a nav link is the current section. «Saved Analyses» also owns the pages under
+ * it — a report (`/analyses/<id>`) and a stock's page (`/stocks/<ticker>`), which has no
+ * link of its own — so the reader always sees where they are. Every other link matches
+ * its own path only.
+ */
+export function isNavActive(pathname: string, href: string): boolean {
+  return pathname === href || (href === "/analyses" && (pathname.startsWith("/analyses/") || pathname.startsWith("/stocks/")));
+}
+
 export default function NavBar() {
   const { data: session, status } = useSession();
   const pathname = usePathname();
@@ -88,14 +98,14 @@ export default function NavBar() {
   }, [menuOpen]);
 
   function navLinkClass(href: string) {
-    const isActive = pathname === href;
+    const isActive = isNavActive(pathname, href);
     return isActive
       ? "font-medium text-slate-100"
       : "text-muted transition hover:text-slate-100";
   }
 
   function drawerLinkClass(href: string) {
-    const isActive = pathname === href;
+    const isActive = isNavActive(pathname, href);
     // Base py-2.5 height even on fine pointers (e.g. a narrowed desktop window);
     // .tap only lifts the floor to 44px on touch.
     return `tap flex items-center rounded-lg px-3 py-2.5 text-base transition ${

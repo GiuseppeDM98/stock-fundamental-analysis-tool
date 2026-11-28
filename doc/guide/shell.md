@@ -4,7 +4,7 @@ Read this before touching what surrounds the features: `app/page.tsx` + `compone
 
 ## Hub (`/`)
 
-Adaptive landing framing Discover→Decide→Monitor: 3 pipeline cards + "Start with the Advisor" CTA + quick ticker box → `/analyze?ticker=` (full `window.location` nav — Router-Cache gotcha #15). `app/page.tsx` calls `auth()` **without redirect** (renders logged-out too). Logged-in recent-activity strip: last 3 finished analyses (`isDone`), portfolio P&L, watchlist count — fetched once via a `ranRef` guard (avoids the `useSession` re-render loop), each degrades to empty on failure. The Portfolio P&L figure is the **last `PortfolioSnapshot`** (cron), not a live price — labeled "as of &lt;date&gt;" so it doesn't read as disagreeing with the live P&L shown on `/portfolio` itself. `components/hub-client.tsx`.
+Adaptive landing framing Discover→Decide→Monitor: 3 pipeline cards + "Start with the Advisor" CTA + quick ticker box → `/analyze?ticker=` (full `window.location` nav — Router-Cache gotcha #15). `app/page.tsx` calls `auth()` **without redirect** (renders logged-out too). Logged-in recent-activity strip: the 3 most recently analysed tickers (one row per ticker among the finished analyses, `isDone`; each links to `/stocks/<ticker>` and carries the verdict of `buildTickerSummary` on a best-effort live quote, no badge without one: valutazione.md § 2.10), portfolio P&L, watchlist count — fetched once via a `ranRef` guard (avoids the `useSession` re-render loop), each degrades to empty on failure. The Portfolio P&L figure is the **last `PortfolioSnapshot`** (cron), not a live price — labeled "as of &lt;date&gt;" so it doesn't read as disagreeing with the live P&L shown on `/portfolio` itself. `components/hub-client.tsx`.
 
 ## Deep Dive — the `/analyze` page
 
@@ -12,7 +12,7 @@ Single path: ticker search → `GET /api/quote` (price header + reference price)
 
 ## NavBar and language
 
-- Auth-aware NavBar (active route highlighted; order = pipeline: Advisor, Deep Value, Watchlist, Portfolio, Saved analyses), the gear icon opening `<AiPreferencesModal>` (valutazione.md § 6.2); below `lg` the links are a portaled drawer (AGENTS.md › Drawers). P&L/perf as pill badges (`bg-emerald-500/15` / `bg-red-500/15`). Input focus rings.
+- Auth-aware NavBar (active route highlighted by `isNavActive`: an exact match, except «Saved analyses», which also owns `/analyses/*` and `/stocks/*`, in the bar and in the drawer; order = pipeline: Advisor, Deep Value, Watchlist, Portfolio, Saved analyses), the gear icon opening `<AiPreferencesModal>` (valutazione.md § 6.2); below `lg` the links are a portaled drawer (AGENTS.md › Drawers). P&L/perf as pill badges (`bg-emerald-500/15` / `bg-red-500/15`). Input focus rings.
 - **Language toggle (EN/IT)** in NavBar (`sfa:language`) — AGENTS.md § Internationalisation. LocalStorage keys: AGENTS.md › LocalStorage Keys.
 
 ## Accounts

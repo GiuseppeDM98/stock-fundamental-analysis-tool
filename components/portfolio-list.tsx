@@ -5,6 +5,8 @@
 // Summary bar converts all positions to EUR via frankfurter.app (free, no key needed).
 import { useState, useEffect, useRef } from "react";
 import ReactDOM from "react-dom";
+import Link from "next/link";
+import type { Route } from "next";
 import {
   fetchPositions,
   createPosition,
@@ -223,12 +225,12 @@ function AggregatedPositionRow({
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <a
-              href={`/analyze?ticker=${encodeURIComponent(agg.ticker)}`}
+            <Link
+              href={`/stocks/${encodeURIComponent(agg.ticker)}` as Route}
               className="font-mono text-sm font-bold text-accent hover:text-sky-300"
             >
               {agg.ticker}
-            </a>
+            </Link>
             <span className="text-xs text-muted">{agg.companyName}</span>
             <span className="rounded-sm bg-slate-700/60 px-1.5 py-0.5 text-[11px] text-slate-400">
               {agg.currency}
@@ -1341,12 +1343,12 @@ export default function PortfolioList() {
                 <div className="flex-1 min-w-0">
                   {/* Header: ticker, company, currency badge, date */}
                   <div className="flex items-center gap-2 flex-wrap">
-                    <a
-                      href={`/analyze?ticker=${encodeURIComponent(pos.ticker)}`}
+                    <Link
+                      href={`/stocks/${encodeURIComponent(pos.ticker)}` as Route}
                       className="font-mono text-sm font-bold text-accent hover:text-sky-300"
                     >
                       {pos.ticker}
-                    </a>
+                    </Link>
                     <span className="text-xs text-muted">{pos.companyName}</span>
                     <span className="rounded-sm bg-slate-700/60 px-1.5 py-0.5 text-[11px] text-slate-400">
                       {pos.currency}
