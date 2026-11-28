@@ -12,7 +12,7 @@ Current project state and context for AI assistants. Implementation patterns & g
 
 **Version**: `1.0.0` · **Status**: Active Development
 
-**Last Updated**: November 28, 2026 — **Spec 07a implemented** (the per-ticker summary), branch `feature/ticker-summary`, no migration: the Advisor's prompt reads one deterministic summary line per ticker (latest valuation, consensus, verdict, signal, watchlist target) and quotes every analysed ticker, `GET /api/history/[ticker]` serves daily closes behind a one-hour cache, the Hub lists the recent tickers with their verdict, and the ticker links to `/stocks/<ticker>` from `/analyses`, the watchlist, the portfolio, the detail breadcrumb and the digest. Documented in valutazione.md § 2.10, advisor.md, shell.md. Collaudo and tour done; the real Advisor run passed on the isolated database. Open: the links answer 404 until spec 07b builds the page, so 07a reaches `main` only with it; no page reads the price history yet. Next: spec 07b (the stock page), then the retirement of 07a.
+**Last Updated**: November 28, 2026 — **Spec 07a retired** (the per-ticker summary), branch `chore/retire-spec-07a`; implemented in `a19fb6c` (PR #85), no migration: the Advisor's prompt reads one deterministic summary line per ticker and quotes every analysed ticker, `GET /api/history/[ticker]` serves daily closes behind a one-hour cache, the Hub lists the recent tickers with their verdict, and the ticker links to `/stocks/<ticker>`. Documented in valutazione.md § 2.10, advisor.md, shell.md, yahoo.md. **Code changed at the retirement**: the digest email escapes what the user typed and takes an optional `now`, and two concurrent requests for the same price history share one Yahoo call; six test gaps closed. The collaudo and the tour were on the code before: redo them after the deploy. The real Advisor run was redone on the isolated database. Open: the links answer 404 until spec 07b builds the page; no page reads the price history yet. Next: spec 07b (the stock page).
 
 ---
 
@@ -145,7 +145,7 @@ Things the series deliberately left out, one line each (added by the spec that l
 ---
 
 ## Next Priorities
-The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (one session per spec, in order); its index `00-INDICE.md` holds the series' state, the retirement dates and the owner's decisions. Live: 07a (implemented, to retire), 07b (next), 08a, 08b; after 08b, one `/deep-value` realignment pass (D-76).
+The roadmap is the «Evoluzioni» spec series in `doc/evoluzioni/` (one session per spec, in order); its index `00-INDICE.md` holds the series' state, the retirement dates and the owner's decisions. Live: 07b (next), 08a, 08b; after 08b, one `/deep-value` realignment pass (D-76).
 1. Caching layer for `/api/quote` (`createTtlMap`, `lib/cache/ttl-map.ts`, is ready).
 2. Yield-on-cost in the portfolio exit signal from received dividends (forward YoC now on the analysis page).
 

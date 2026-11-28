@@ -1,6 +1,6 @@
 # Yahoo Finance — quote, modules, validation
 
-Read this before touching the Yahoo adapter and its callers: `lib/yahoo-client.ts` (`getQuote`, `extractRawNumber`, `mapFundamentalsFromTimeSeries`), `app/api/quote/[ticker]`, `lib/report/latest-analysis.ts` (`sameCurrency`, `comparablePrice`) and the code that formats a quote as currency. AGENTS.md keeps a stub of the section and this guide the detail; the block moved here from AGENTS.md on 2026-11-20, to keep that file under its 600-line ceiling.
+Read this before touching the Yahoo adapter and its callers: `lib/yahoo-client.ts` (`getQuote`, `getPriceHistory`, `extractRawNumber`, `mapFundamentalsFromTimeSeries`), `app/api/quote/[ticker]`, `app/api/history/[ticker]` with its cache `lib/price-history.ts`, `lib/report/latest-analysis.ts` (`sameCurrency`, `comparablePrice`) and the code that formats a quote as currency. AGENTS.md keeps a stub of the section and this guide the detail; the block moved here from AGENTS.md on 2026-11-20, to keep that file under its 600-line ceiling.
 
 ## Yahoo Finance Integration
 
@@ -31,7 +31,7 @@ yahooFinance.quoteSummary(ticker, { modules: ["summaryDetail", "defaultKeyStatis
 
 ### Blind spots of the quote route
 
-Moved here from CLAUDE.md § Known Issues on 2026-11-21, when that file became an index. `/api/quote/[ticker]` is the only Yahoo data route: it answers 503 on a rate limit and 400 on any other failure.
+Moved here from CLAUDE.md § Known Issues on 2026-11-21, when that file became an index. `/api/quote/[ticker]` and `/api/history/[ticker]` are the only Yahoo data routes: both answer 503 on a rate limit and 400 on any other failure. The two points below are the quote route's; the history has its hour of cache (valutazione.md § 2.10).
 
 - **Yahoo rate limits** — 429 on rapid searches; retry w/ backoff (2 retries).
-- **No caching** — every search hits Yahoo. A caching layer for `/api/quote` is CLAUDE.md § Next Priorities (1).
+- **No caching on `/api/quote`** — every search hits Yahoo. A caching layer for it is CLAUDE.md § Next Priorities (1).

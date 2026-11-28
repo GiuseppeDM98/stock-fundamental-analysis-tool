@@ -92,6 +92,17 @@ describe("POST /api/ai/advisor — per-ticker summaries", () => {
     expect(lines.find((l) => l.startsWith("- SEEN ["))).toContain("verdict WATCH (analysis)");
   });
 
+  it("should weigh a ticker on the quote asked for it, even when Yahoo answers with another symbol", async () => {
+    getQuoteMock.mockImplementation(async (ticker: string) => quote(`${ticker}.X`, 85));
+
+    const prompt = await systemPromptOf();
+    const held = summaryLines(prompt).find((l) => l.startsWith("- HELD ["))!;
+
+    expect(held).toContain("price 85.00 USD");
+    expect(held).toContain("verdict WATCH (analysis)");
+    expect(prompt).not.toContain("HELD.X");
+  });
+
   it("should leave the verdict out for a ticker whose quote failed, and keep the other", async () => {
     getQuoteMock.mockImplementation(async (ticker: string) => {
       if (ticker === "SEEN") throw new Error("Yahoo Finance rate limit reached.");
@@ -146,8 +157,10 @@ describe("POST /api/ai/advisor — per-ticker summaries", () => {
   it("should read nothing from the database in discovery mode", async () => {
     await systemPromptOf({ mode: "discovery" });
 
+    expect(positionFindMany).not.toHaveBeenCalled();
     expect(analysisFindMany).not.toHaveBeenCalled();
     expect(watchlistFindMany).not.toHaveBeenCalled();
+    expect(earningsFindMany).not.toHaveBeenCalled();
     expect(getQuoteMock).not.toHaveBeenCalled();
   });
 });

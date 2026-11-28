@@ -331,7 +331,7 @@ The e2e tooling forces its own SQLite file (`.e2e/e2e.db`), stubs market data an
 
 ### GET /api/quote/[ticker]
 
-Fetch the current market quote. It is the only route that calls Yahoo Finance; it answers 503 on a Yahoo rate limit and 400 on any other failure.
+Fetch the current market quote. With `GET /api/history/[ticker]?range=1y|5y` (daily closes, cached for an hour) it is one of the two routes that call Yahoo Finance; both answer 503 on a Yahoo rate limit and 400 on any other failure.
 
 **Response:**
 ```json

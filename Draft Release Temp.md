@@ -76,6 +76,8 @@
 
 ## 🐛 Bug Fixes
 
+- Fixed the **watchlist digest email breaking on special characters**: a company name containing «&» or «<» could break that stock's card. Names, tickers and methods now show exactly as typed.
+
 - Fixed **prices compared with values in another currency**: a stock quoted in pence (GBp) against an analysis in pounds (GBP) used to read a hundred times off. The Buy/Watch/Over verdict on Saved Analyses and the Watchlist, the ruler's price dot, the "Under FV" filter, the portfolio's "At Fair Value" alert, a saved report's distance from the price, a position's P&L and the watchlist email now compare only within one currency, with a short note when they can't.
 
 - Fixed **Add to Watchlist on a finished Deep Value analysis** failing whenever a Margin of Safety was set. It now saves the stock with your MoS, and says so if an add ever fails.

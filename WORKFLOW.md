@@ -212,7 +212,7 @@ tour it keeps only the outcome, done and closed or what is left open.
 
 ## 3. What this means in THIS repo
 
-The rules above are the standard. This section is the local translation of obligations 4 and 5 — it changes from repo to repo and is the only part to rewrite when the tooling changes.
+The rules above are the standard. This section is the local translation of obligations 4 and 5: the only part to rewrite when the tooling changes.
 
 ### Commands (read from `package.json`)
 
