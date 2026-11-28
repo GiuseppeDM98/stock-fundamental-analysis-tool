@@ -74,6 +74,34 @@ describe("GET /api/history/[ticker]", () => {
     expect(retried.status).toBe(200);
   });
 
+  it("should spend one Yahoo call on two requests for the same series that arrive together", async () => {
+    let answer!: (h: PriceHistory) => void;
+    getPriceHistoryMock.mockImplementationOnce(() => new Promise<PriceHistory>((resolve) => (answer = resolve)));
+
+    const both = Promise.all([get("FFF"), get("fff")]);
+    await vi.waitFor(() => expect(getPriceHistoryMock).toHaveBeenCalled());
+    answer(history("FFF", "1y"));
+    const [first, second] = await both;
+
+    expect(getPriceHistoryMock).toHaveBeenCalledTimes(1);
+    expect(await second.json()).toEqual(await first.json());
+  });
+
+  it("should give a failure to the requests already waiting, and call Yahoo again for the next", async () => {
+    let fail!: (e: Error) => void;
+    getPriceHistoryMock.mockImplementationOnce(() => new Promise<PriceHistory>((_, reject) => (fail = reject)));
+
+    const both = Promise.all([get("GGG"), get("GGG")]);
+    await vi.waitFor(() => expect(getPriceHistoryMock).toHaveBeenCalled());
+    fail(new Error("Yahoo Finance rate limit reached. Retry in 30-60 seconds."));
+    const [first, second] = await both;
+    const next = await get("GGG");
+
+    expect([first.status, second.status]).toEqual([503, 503]);
+    expect(next.status).toBe(200);
+    expect(getPriceHistoryMock).toHaveBeenCalledTimes(2);
+  });
+
   it("should answer 400 on an unknown ticker", async () => {
     getPriceHistoryMock.mockRejectedValueOnce(new Error("Ticker not found or unavailable on Yahoo Finance."));
 

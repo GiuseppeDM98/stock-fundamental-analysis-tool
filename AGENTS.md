@@ -417,12 +417,12 @@ When a route has two operating modes and one of them doesn't need DB data, branc
 if (body.mode === "discovery") {
   systemPrompt = buildDiscoverySystemPrompt({ currentDate, language: body.language });
 } else {
-  const [positions, analyses] = await Promise.all([...db queries...]);
+  const [positions, analysisRows, watchlistItems, earningsEstimates] = await Promise.all([...db queries...]);
   systemPrompt = buildAdvisorSystemPrompt({ positions, summaries, livePrices, currentDate, language: body.language });
 }
 ```
 
-This matters for latency (two Turso round-trips skipped) and for prompt correctness — never inject portfolio context into a prompt that shouldn't have it.
+This matters for latency (every Turso query and Yahoo quote of the portfolio context skipped) and for prompt correctness — never inject portfolio context into a prompt that shouldn't have it.
 
 ### `t` prop type when passing down from `useLanguage()`
 

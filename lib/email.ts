@@ -81,6 +81,18 @@ const C = {
   rose: "#f43f5e",
 };
 
+// The digest is HTML built by hand, and a ticker, a company name or a method is text the
+// user typed (a ticker is only trimmed and upper-cased, a name only length-checked): every
+// such value passes here before it enters the markup, or a "<" or an "&" breaks the card.
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function formatPrice(value: number, currency: string): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -96,13 +108,13 @@ function formatDate(iso: string): string {
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-// Whole calendar days between today and `dateIso` — positive = future, negative = past.
-// Compares at day granularity (both sides zeroed to midnight) so "today" reads as 0
-// regardless of the time-of-day the cron happens to run at.
-function daysUntil(dateIso: string): number {
+// Whole calendar days between `now` and `dateIso` — positive = future, negative = past.
+// Compares at day granularity (both sides zeroed to midnight, in the process's time zone)
+// so "today" reads as 0 regardless of the time-of-day the cron happens to run at.
+function daysUntil(dateIso: string, now: Date): number {
   const target = new Date(dateIso);
   target.setHours(0, 0, 0, 0);
-  const today = new Date();
+  const today = new Date(now);
   today.setHours(0, 0, 0, 0);
   return Math.round((target.getTime() - today.getTime()) / MS_PER_DAY);
 }
@@ -111,9 +123,9 @@ function daysUntil(dateIso: string): number {
 // ticker. Three cases: today, N days from now (future, still the "next" report), or N
 // days ago (the stored date has already passed — a nudge to refresh, since the AI never
 // persists a past date, only a future one that later became stale).
-function earningsNote(item: DigestItem): string {
+function earningsNote(item: DigestItem, now: Date): string {
   if (!item.nextEarningsDate) return "";
-  const days = daysUntil(item.nextEarningsDate);
+  const days = daysUntil(item.nextEarningsDate, now);
   const approx = item.earningsConfidence !== "confirmed" ? "~" : "";
   let text: string;
   if (days === 0) {
@@ -144,7 +156,7 @@ function statusBadge(status: DigestItem["status"]): string {
 // Analisi/Consenso rows in the valuation table below.
 function priceVsTargetCell(item: DigestItem): string {
   if (item.currencyMismatch) {
-    return `<span style="color:${C.muted};">quotazione in ${item.priceCurrency ?? "?"}, analisi in ${item.currency}: nessun confronto</span>`;
+    return `<span style="color:${C.muted};">quotazione in ${escapeHtml(item.priceCurrency ?? "?")}, analisi in ${escapeHtml(item.currency)}: nessun confronto</span>`;
   }
   if (item.currentPrice === null || item.upside === null) return `<span style="color:${C.muted};">—</span>`;
   const dist = ((item.currentPrice - item.adjustedBase) / item.adjustedBase) * 100;
@@ -179,7 +191,7 @@ function stockPageUrl(ticker: string): string {
 // A single ticker card: header + price/target line + optional under-target note + a
 // valuation table (analysis, reviewer, consensus when present) + the buy target + footer
 // + the link to the ticker's page in the app.
-function buildCard(item: DigestItem): string {
+function buildCard(item: DigestItem, now: Date): string {
   const hasConsensus =
     item.consensusBear !== null && item.consensusBase !== null && item.consensusBull !== null;
 
@@ -224,8 +236,8 @@ function buildCard(item: DigestItem): string {
       <table role="presentation" width="100%" style="border-collapse:collapse;">
         <tr>
           <td style="text-align:left;vertical-align:middle;">
-            <span style="color:${C.accent};font-weight:700;font-size:15px;">${item.ticker}</span>
-            <span style="color:${C.muted};font-size:12px;">&nbsp; ${item.companyName}</span>
+            <span style="color:${C.accent};font-weight:700;font-size:15px;">${escapeHtml(item.ticker)}</span>
+            <span style="color:${C.muted};font-size:12px;">&nbsp; ${escapeHtml(item.companyName)}</span>
           </td>
           <td style="text-align:right;vertical-align:middle;white-space:nowrap;">${statusBadge(item.status)}</td>
         </tr>
@@ -238,7 +250,7 @@ function buildCard(item: DigestItem): string {
 
       ${positionLine}
 
-      ${earningsNote(item)}
+      ${earningsNote(item, now)}
 
       ${underNote}
 
@@ -264,7 +276,7 @@ function buildCard(item: DigestItem): string {
             Buy target (${hasConsensus ? "consenso" : "analisi"} base −${(item.mosPercent * 100).toFixed(0)}%):
             <span style="color:${C.accent};font-weight:700;">${formatPrice(item.adjustedBase, item.currency)}</span>
           </td>
-          <td style="text-align:right;vertical-align:middle;padding-top:10px;font-size:11px;color:${C.faint};white-space:nowrap;">${item.method} · ${formatDate(item.analysisDate)}</td>
+          <td style="text-align:right;vertical-align:middle;padding-top:10px;font-size:11px;color:${C.faint};white-space:nowrap;">${escapeHtml(item.method)} · ${formatDate(item.analysisDate)}</td>
         </tr>
       </table>
 
@@ -275,18 +287,19 @@ function buildCard(item: DigestItem): string {
 }
 
 /**
- * The digest's HTML, without sending it: a function of the items (and of NEXTAUTH_URL,
- * for the links) alone, so a test or a preview renders the email with no mail provider
- * behind it.
+ * The digest's HTML, without sending it, so a test or a preview renders the email with no
+ * mail provider behind it. It reads the items, NEXTAUTH_URL (the links) and `now` (the
+ * earnings countdown): pass `now` for a render that does not depend on the day it runs.
+ * Dates are formatted in the process's time zone.
  */
-export function renderWatchlistDigestHtml(params: { runDate: string; items: DigestItem[] }): string {
-  const { runDate, items } = params;
-  const cards = items.map(buildCard).join("");
+export function renderWatchlistDigestHtml(params: { runDate: string; items: DigestItem[]; now?: Date }): string {
+  const { runDate, items, now = new Date() } = params;
+  const cards = items.map((item) => buildCard(item, now)).join("");
 
   return `
     <div style="background:${C.bg};color:${C.text};font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;max-width:640px;margin:0 auto;padding:32px 24px;">
       <h1 style="color:${C.accent};font-size:20px;margin:0 0 4px;letter-spacing:-0.01em;">Watchlist — aggiornamento giornaliero</h1>
-      <p style="color:${C.muted};font-size:13px;margin:0 0 24px;">${runDate}</p>
+      <p style="color:${C.muted};font-size:13px;margin:0 0 24px;">${escapeHtml(runDate)}</p>
 
       ${cards}
 
