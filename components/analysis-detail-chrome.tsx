@@ -5,6 +5,7 @@
 // so they live here and read the app language like every other surface.
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import type { Route } from "next";
 import { useLanguage } from "@/context/language-context";
 import DownloadPdfButton from "@/components/download-pdf-button";
 import AnalysisRunStatus from "@/components/analysis-run-status";
@@ -19,7 +20,12 @@ export function DetailBreadcrumb({ ticker }: { ticker: string }) {
         {t("navSavedAnalyses")}
       </Link>
       <span>/</span>
-      <span className="font-mono text-sky-400">{ticker}</span>
+      {/* The cast goes once the /stocks/[ticker] route exists (typedRoutes). */}
+      <Link href={`/stocks/${encodeURIComponent(ticker)}` as Route} className="font-mono text-sky-400 hover:text-sky-300">
+        {ticker}
+      </Link>
+      <span>/</span>
+      <span>{t("breadcrumbReport")}</span>
     </div>
   );
 }

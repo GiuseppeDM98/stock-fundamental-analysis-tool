@@ -16,13 +16,13 @@
 
 - **Download reports as PDF** — a **Download PDF** button on both a completed analysis and any saved analysis opens a clean print layout (navigation and buttons hidden, upside/downside and accent colors preserved, paragraphs and tables never split across pages) — choose "Save as PDF" to export.
 
-- **AI Portfolio Advisor** — a conversational `/advisor` page with two modes. **Portfolio mode** knows your holdings, weighted average costs, and saved fair values, so you can ask "which of my positions has the most upside left?" **Discovery mode** starts clean and is purpose-built for finding new ideas — ask for quality compounders, undervalued dividend growers, or sector opportunities and get 3–5 concrete tickers with a thesis, ROIC, valuation setup, and key risk each. When the AI names a stock, it appears as a clickable chip that launches a Deep Value analysis. Conversations are saved and listed in a sidebar. Your selected mode is remembered.
+- **AI Portfolio Advisor** — a conversational `/advisor` page with two modes. **Portfolio mode** knows your holdings, weighted average costs, and a summary the app computes for every stock you hold or analysed (latest valuation, analyst consensus, Buy/Watch/Over verdict on the live price, signal strength, your watchlist target), so you can ask "which of my positions has the most upside left?" **Discovery mode** starts clean and is purpose-built for finding new ideas — ask for quality compounders, undervalued dividend growers, or sector opportunities and get 3–5 concrete tickers with a thesis, ROIC, valuation setup, and key risk each. When the AI names a stock, it appears as a clickable chip that launches a Deep Value analysis. Conversations are saved and listed in a sidebar. Your selected mode is remembered.
 
 - **See how your estimate evolved** — when you have more than one saved analysis for a ticker, the saved-analyses card shows an evolution panel tracing the % change at **every step across your full save history** (not just the latest vs. the previous one). Each step is a dated block with rows clearly labeled **Analysis** and **Consensus**, under a caption naming the metric (base fair value). It's a plain, exact calculation from your saved numbers — so you can watch the thesis strengthen or weaken over time at a glance.
 
 - **Weak-signal indicator on valuations** — when a stock's Bull–Bear range is so wide that the gap between price and fair value falls inside the model's own uncertainty, a muted **"weak signal"** tag appears next to the Buy/Watch/Over verdict on Saved Analyses and the Watchlist. It's an honest heads-up that the verdict is low-confidence (common for volatile, commodity-driven names), computed purely from your saved Bull/Base/Bear values — and it stays quiet on high-conviction, tight-range stocks.
 
-- **Adaptive Hub home** — the home page frames the full pipeline (Discover → Decide → Monitor) with a card per stage, a "Start with the Advisor" call-to-action, and a quick ticker box that jumps straight into an analysis. When logged in it surfaces a recent-activity strip: latest analyses, portfolio P&L, and watchlist count.
+- **Adaptive Hub home** — the home page frames the full pipeline (Discover → Decide → Monitor) with a card per stage, a "Start with the Advisor" call-to-action, and a quick ticker box that jumps straight into an analysis. When logged in it surfaces a recent-activity strip: your three most recently analysed stocks, each with its Buy/Watch/Over verdict, portfolio P&L, and watchlist count.
 
 - **Portfolio Tracker** — track real purchases with live P&L at `/portfolio`. Supports EUR, USD, GBP, CHF, JPY, CAD, AUD, SEK, NOK, DKK with automatic FX conversion to EUR (via [Frankfurter API](https://api.frankfurter.app)). Positions for the same ticker are grouped into a single Weighted Average Cost (DCA) row with an expandable per-purchase breakdown, toggleable to a flat per-purchase view.
 
@@ -71,6 +71,8 @@
 - Added **Claude Sonnet 5.5** as a selectable AI model. Pasted-data extraction now always runs on it at medium effort, whatever your default model.
 
 - Added a **Dividend outlook** to every saved analysis with a dividend: the dividend per share reported year by year (growth, payout, years without a cut), the three-year Bull/Base/Bear path in a chart with its sources, its free-cash-flow coverage (the same figure as the deterministic check) and the forward yield on today's price and, if you hold the stock, on your average cost. A yield appears only when price and dividend share a currency, and when a company publishes no free cash flow the web research now computes it from operating cash flow and capex, flagged in the dataset, so the coverage can still be checked.
+
+- Added **ticker links**: the ticker on Saved Analyses, the watchlist, the portfolio, the home page and in the email digest now links to that stock's own page.
 
 ## 🐛 Bug Fixes
 

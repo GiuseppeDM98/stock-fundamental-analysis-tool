@@ -41,4 +41,41 @@ describe("HubClient — recent analyses", () => {
     expect(screen.queryByText("LIVE")).not.toBeInTheDocument();
     expect(screen.queryByText("CUTT")).not.toBeInTheDocument();
   });
+
+  it("shows one row per ticker, linked to the stock's page, with the verdict of its newest valued analysis", async () => {
+    // Round, invented figures: buy target 80 at MoS 20% is a fair value of 100.
+    const valued = { fairValueBear: 60, fairValueBase: 80, fairValueBull: 100, mosPercent: 20, currency: "USD" };
+    fetchAnalysesMock.mockResolvedValue([
+      { ...analysis("a1", "AAA"), ...valued },
+      { ...analysis("a1-older", "AAA"), ...valued, createdAt: "2026-09-01T00:00:00.000Z" },
+      analysis("b1", "BBB"),
+      { ...analysis("c1", "CCC"), ...valued },
+      { ...analysis("d1", "DDD"), ...valued },
+    ]);
+    // AAA quoted under its buy target, CCC in another currency than its analysis; the
+    // watchlist call and BBB's quote get the empty answer.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => ({
+        ok: true,
+        json: async () =>
+          url.endsWith("/api/quote/AAA")
+            ? { regularMarketPrice: 70, currency: "USD" }
+            : url.endsWith("/api/quote/CCC")
+              ? { regularMarketPrice: 70, currency: "GBp" }
+              : { items: [] },
+      }))
+    );
+    render(<HubClient isAuthed />);
+
+    // Two saves of AAA are one row: the third slot goes to CCC, and DDD is the fourth ticker.
+    const aaa = await screen.findByRole("link", { name: /AAA/ });
+    expect(aaa).toHaveAttribute("href", "/stocks/AAA");
+    await waitFor(() => expect(aaa).toHaveTextContent("BUY"));
+    expect(screen.getAllByText("AAA")).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "BBB" })).toHaveAttribute("href", "/stocks/BBB");
+    // No verdict on a quote in another currency: the ticker alone.
+    expect(screen.getByRole("link", { name: "CCC" })).toHaveAttribute("href", "/stocks/CCC");
+    expect(screen.queryByText("DDD")).not.toBeInTheDocument();
+  });
 });

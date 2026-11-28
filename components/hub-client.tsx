@@ -2,15 +2,32 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import type { Route } from "next";
 
 import { useLanguage } from "@/context/language-context";
 import { fetchAnalyses } from "@/lib/analyses";
 import { isDone } from "@/lib/report/run-status";
+import { VERDICT_BADGE, type Verdict } from "@/lib/report/verdict";
+import { buildTickerSummary } from "@/lib/stocks/ticker-summary";
 import { fetchSnapshots } from "@/lib/portfolio";
 import { formatCurrency } from "@/lib/format";
 import type { Translations } from "@/lib/i18n/translations";
 import type { SavedAnalysis } from "@/types/analysis";
 import type { SnapshotPoint } from "@/types/portfolio";
+
+// How many tickers the recent strip shows.
+const RECENT_TICKERS = 3;
+
+type TickerQuote = { price: number; currency: string | null };
+
+/** The finished analyses of the most recently analysed tickers, grouped per ticker (each
+ *  group newest first, like the input). A run in progress or cut is not an analysis to
+ *  show, so the filter comes before the count (2026-10-27). */
+function recentTickerGroups(analysesNewestFirst: SavedAnalysis[]): [string, SavedAnalysis[]][] {
+  const groups = new Map<string, SavedAnalysis[]>();
+  for (const a of analysesNewestFirst.filter(isDone)) groups.set(a.ticker, [...(groups.get(a.ticker) ?? []), a]);
+  return [...groups].slice(0, RECENT_TICKERS);
+}
 
 const STEP_CARD_CLASS = "card group flex flex-col gap-1 transition hover:border-sky-500/40";
 
@@ -19,7 +36,7 @@ const STEP_CARD_CLASS = "card group flex flex-col gap-1 transition hover:border-
  *
  * Renders for everyone with NO login wall: logged-out visitors see the three-stage
  * pipeline, a primary "start with the advisor" CTA, and a quick ticker box. When
- * logged in, a recent-activity strip (last analyses, portfolio P&L, watchlist count)
+ * logged in, a recent-activity strip (last analysed tickers, portfolio P&L, watchlist count)
  * lets the user resume. The deep-dive lives at `/analyze`.
  *
  * @param isAuthed - whether a session exists (resolved server-side, passed as a primitive
@@ -105,13 +122,30 @@ function RecentActivity({ t }: { t: (key: keyof Translations) => string }) {
   const [analyses, setAnalyses] = useState<SavedAnalysis[] | null>(null);
   const [snapshots, setSnapshots] = useState<SnapshotPoint[] | null>(null);
   const [watchCount, setWatchCount] = useState<number | null>(null);
+  const [quotes, setQuotes] = useState<Record<string, TickerQuote>>({});
   // Fetch once on mount (gated by isAuthed at the call site) — avoids the useSession re-render loop.
   const ranRef = useRef(false);
 
   useEffect(() => {
     if (ranRef.current) return;
     ranRef.current = true;
-    fetchAnalyses().then(setAnalyses).catch(() => setAnalyses([]));
+    fetchAnalyses()
+      .then((rows) => {
+        setAnalyses(rows);
+        // A live quote per recent ticker, for its verdict. Best-effort: a quote that fails
+        // (Yahoo's rate limit) leaves the ticker without a badge, never an error.
+        for (const [ticker] of recentTickerGroups(rows)) {
+          fetch(`/api/quote/${encodeURIComponent(ticker)}`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((d) => {
+              if (typeof d?.regularMarketPrice !== "number") return;
+              const quote = { price: d.regularMarketPrice, currency: typeof d.currency === "string" ? d.currency : null };
+              setQuotes((prev) => ({ ...prev, [ticker]: quote }));
+            })
+            .catch(() => {});
+        }
+      })
+      .catch(() => setAnalyses([]));
     fetchSnapshots().then(setSnapshots).catch(() => setSnapshots([]));
     fetch("/api/watchlist")
       .then((r) => (r.ok ? r.json() : { items: [] }))
@@ -119,9 +153,23 @@ function RecentActivity({ t }: { t: (key: keyof Translations) => string }) {
       .catch(() => setWatchCount(0));
   }, []);
 
-  // fetchAnalyses returns newest-first, every row: a run still in progress or cut is not an
-  // analysis to show here, so the filter comes before the three (2026-10-27).
-  const recent = (analyses ?? []).filter(isDone).slice(0, 3);
+  // One row per ticker, not per save (2026-11-28: three saves of one ticker used to fill the
+  // strip with the same name), with the verdict every list shows for it.
+  const recent = recentTickerGroups(analyses ?? []).map(([ticker, group]) => ({
+    ticker,
+    verdict: buildTickerSummary({
+      ticker,
+      analyses: group,
+      price: quotes[ticker]?.price ?? null,
+      currency: quotes[ticker]?.currency ?? null,
+      positions: [],
+      positionCurrency: null,
+      watchlistItem: null,
+      earnings: null,
+      dividendsReceivedEur: null,
+    }).verdict,
+  }));
+  const verdictLabel = (v: Verdict) => (v === "buy" ? t("verdictBuy") : v === "watch" ? t("verdictWatch") : t("verdictOver"));
   const last = snapshots && snapshots.length > 0 ? snapshots[snapshots.length - 1] : null;
   const pnl = last ? last.totalEur - last.costEur : null;
   const pnlPct = last && last.costEur > 0 && pnl != null ? (pnl / last.costEur) * 100 : null;
@@ -138,13 +186,19 @@ function RecentActivity({ t }: { t: (key: keyof Translations) => string }) {
           </div>
           {recent.length > 0 ? (
             <ul className="mt-2 space-y-1">
-              {recent.map((a) => (
-                <li key={a.id}>
+              {recent.map(({ ticker, verdict }) => (
+                <li key={ticker}>
+                  {/* The cast goes once the /stocks/[ticker] route exists (typedRoutes). */}
                   <Link
-                    href={`/analyses/${a.id}`}
+                    href={`/stocks/${encodeURIComponent(ticker)}` as Route}
                     className="flex items-center justify-between text-xs text-slate-300 transition hover:text-slate-100"
                   >
-                    <span className="font-mono">{a.ticker}</span>
+                    <span className="font-mono">{ticker}</span>
+                    {verdict && (
+                      <span className={`rounded-sm px-1.5 py-0.5 text-[10px] font-semibold ${VERDICT_BADGE[verdict]}`}>
+                        {verdictLabel(verdict)}
+                      </span>
+                    )}
                   </Link>
                 </li>
               ))}

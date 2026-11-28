@@ -1,6 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { extractRawNumber, mapFundamentalsFromTimeSeries } from "../lib/yahoo-client";
+// The adapter builds its client at module load: the class is replaced before the import.
+const chartMock = vi.hoisted(() => vi.fn());
+vi.mock("yahoo-finance2", () => ({
+  default: class {
+    chart = chartMock;
+  },
+}));
+
+import { extractRawNumber, getPriceHistory, mapFundamentalsFromTimeSeries } from "../lib/yahoo-client";
 
 describe("yahoo mapper", () => {
   it("extractRawNumber handles both numeric and {raw} shapes", () => {
@@ -100,4 +108,41 @@ describe("yahoo mapper", () => {
     expect(mapped.annual.length).toBe(1);
     expect(mapped.annual[0].year).toBe(2024);
   });
+});
+
+describe("getPriceHistory", () => {
+  it("maps the daily quotes, drops the days without a close and reads the currency from meta", async () => {
+    chartMock.mockResolvedValue({
+      meta: { currency: "EUR" },
+      quotes: [
+        { date: new Date("2026-01-02T08:00:00Z"), close: 10 },
+        { date: new Date("2026-01-05T08:00:00Z"), close: null },
+        { date: new Date("2026-01-06T08:00:00Z"), close: 12 },
+      ],
+    });
+
+    const history = await getPriceHistory(" test.mi ", "1y");
+
+    expect(history).toEqual({
+      ticker: "TEST.MI",
+      currency: "EUR",
+      range: "1y",
+      points: [
+        { date: "2026-01-02", close: 10 },
+        { date: "2026-01-06", close: 12 },
+      ],
+    });
+    const [symbol, options] = chartMock.mock.calls[0];
+    expect(symbol).toBe("TEST.MI");
+    expect(options.interval).toBe("1d");
+    // One year back, give or take the test's own milliseconds.
+    expect(Date.now() - options.period1.getTime()).toBeGreaterThanOrEqual(365 * 86_400_000);
+    expect(Date.now() - options.period1.getTime()).toBeLessThan(366 * 86_400_000);
+  });
+
+  it("turns a rate limit into the message the routes answer 503 on", async () => {
+    chartMock.mockRejectedValue(new Error("HTTP 429 Too Many Requests"));
+
+    await expect(getPriceHistory("TEST", "5y")).rejects.toThrow(/rate limit/);
+  }, 10_000);
 });

@@ -91,10 +91,21 @@ describe("AnalysesList — open lots and verdict basis", () => {
 
   it("counts only the open lot in the position badge", async () => {
     render(<AnalysesList />);
-    // The badge lives in the card's expanded body: open it from the ticker header.
-    fireEvent.click(await screen.findByText("ORNT"));
+    // The badge lives in the card's expanded body: open it from the header's toggle.
+    fireEvent.click(await screen.findByRole("button", { name: "Expand" }));
     expect(await screen.findByText(/Position: 20 shares @/)).toBeInTheDocument();
     expect(screen.queryByText(/Position: 25 shares/)).not.toBeInTheDocument();
+  });
+
+  it("links the ticker to the stock's page from outside the toggle", async () => {
+    render(<AnalysesList />);
+    const link = await screen.findByRole("link", { name: "ORNT" });
+
+    expect(link).toHaveAttribute("href", "/stocks/ORNT");
+    // Inside the toggle button it would be a nested interactive element, and a click on
+    // the ticker would expand the card instead of only following the link (the browser
+    // suite clicks it for real).
+    expect(link.closest("button")).toBeNull();
   });
 
   it("measures the ruler against the consensus basis", async () => {
@@ -124,7 +135,7 @@ describe("AnalysesList — the verdict weighs only a quote in the analysis's cur
     expect(screen.queryByText(/OVER FV|BUY|WATCH/)).not.toBeInTheDocument();
     expect((await screen.findByTestId("ruler")).dataset.price).toBe("");
 
-    fireEvent.click(screen.getByText("ORNT"));
+    fireEvent.click(screen.getByRole("button", { name: "Expand" }));
     expect(await screen.findByText("No verdict: quote and analysis in different currencies (GBp · GBP)")).toBeInTheDocument();
     expect(screen.getByText("P&L not shown: no live price in the position's currency")).toBeInTheDocument();
   });

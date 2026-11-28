@@ -1,6 +1,7 @@
 // POST /api/ai/advisor — streaming AI portfolio advisor chat.
-// Fetches the user's positions and saved analyses, injects them as context
-// into the system prompt, then streams a Claude response.
+// Fetches the user's positions and saved analyses, sums each ticker up in code
+// (lib/stocks/ticker-summary.ts), injects the summaries as context into the system
+// prompt, then streams a Claude response.
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
@@ -12,7 +13,12 @@ import { resolveAiSettings, aiModelIdSchema } from "@/lib/ai/ai-preferences";
 import { runStreamWithToolLoop } from "@/lib/ai/tool-loop";
 import { fallbackNote } from "@/lib/ai/fallback";
 import { routeErrorStatus } from "@/lib/ai/error-status";
+import { ANALYSIS_SUMMARY_SELECT } from "@/lib/analyses-select";
+import { latestAnalysisWithValues } from "@/lib/report/latest-analysis";
+import { buildTickerSummary } from "@/lib/stocks/ticker-summary";
 import { AI_EFFORT_LEVELS, type AiSettings } from "@/types/ai-settings";
+import type { SavedAnalysis } from "@/types/analysis";
+import type { EarningsConfidence } from "@/types/earnings";
 
 const DEFAULT_SETTINGS: AiSettings = { model: "claude-sonnet-5-5", effort: "high", thinking: true };
 
@@ -63,12 +69,13 @@ export async function POST(request: Request) {
     if (body.mode === "discovery") {
       systemPrompt = buildDiscoverySystemPrompt({ currentDate, language: body.language });
     } else {
+      const userId = session.user.id;
       // Fetch portfolio context in parallel — only fields needed for the prompt.
       // Open lots only (2026-10-28): a sold lot sent as "held" made the Advisor reason about
       // shares the user no longer owns; realized history is not hold/add/exit context.
-      const [positions, analyses] = await Promise.all([
+      const [positions, analysisRows, watchlistItems, earningsEstimates] = await Promise.all([
         db.position.findMany({
-          where: { userId: session.user.id, closedAt: null },
+          where: { userId, closedAt: null },
           orderBy: { purchasedAt: "desc" },
           select: {
             ticker: true,
@@ -81,47 +88,91 @@ export async function POST(request: Request) {
         }),
         db.analysis.findMany({
           // Finished analyses only: a run in progress or cut has no valuation (2026-10-27).
-          where: { userId: session.user.id, runStatus: "done" },
+          where: { userId, runStatus: "done" },
           orderBy: { createdAt: "desc" },
-          // Exclude full reportMd — context prompt only needs fair values.
-          select: {
-            ticker: true,
-            companyName: true,
-            fairValueBull: true,
-            fairValueBase: true,
-            fairValueBear: true,
-            valuationMethod: true,
-            priceAtAnalysis: true,
-            mosPercent: true,
-            createdAt: true,
-          },
+          // The numbers without the text blobs: the prompt gets one computed line per
+          // ticker, never a report or a critique.
+          select: ANALYSIS_SUMMARY_SELECT,
+        }),
+        // One query each for the whole user, not one per ticker.
+        db.watchlistItem.findMany({ where: { userId }, select: { ticker: true, mosPercent: true } }),
+        db.earningsEstimate.findMany({
+          where: { userId },
+          select: { ticker: true, nextEarningsDate: true, confidence: true, fetchedAt: true },
         }),
       ]);
 
-      // Fetch authoritative live prices for the owned tickers and inject them as
-      // ground truth. Without this the model has no current price in context (only
-      // the historical priceAtAnalysis + purchase price) and fills the gap from a
-      // stale web quote or memory — the real failure that reported a price of 2.28
-      // for a stock actually trading at 2.16. Mirrors the /verify route's approach.
-      // Best-effort: Yahoo can 429 (known issue), so a failed quote for one ticker
-      // must not abort the reply — allSettled keeps the others.
-      const uniqueTickers = [...new Set(positions.map((p) => p.ticker))];
-      const quoteResults = await Promise.allSettled(uniqueTickers.map((t) => getQuote(t)));
-      const livePrices = quoteResults.flatMap((r) =>
+      // Group by ticker, newest first as the query returned them. Dates go to ISO strings,
+      // the shape SavedAnalysis has over the wire and the pure helpers read.
+      const analysesByTicker = new Map<string, SavedAnalysis[]>();
+      for (const row of analysisRows) {
+        const analysis = {
+          ...row,
+          createdAt: row.createdAt.toISOString(),
+          runStartedAt: row.runStartedAt ? row.runStartedAt.toISOString() : null,
+        } as unknown as SavedAnalysis;
+        analysesByTicker.set(row.ticker, [...(analysesByTicker.get(row.ticker) ?? []), analysis]);
+      }
+      const lotsByTicker = new Map<string, typeof positions>();
+      for (const p of positions) lotsByTicker.set(p.ticker, [...(lotsByTicker.get(p.ticker) ?? []), p]);
+      const watchlistByTicker = new Map(watchlistItems.map((w) => [w.ticker, w]));
+      const earningsByTicker = new Map(earningsEstimates.map((e) => [e.ticker, e]));
+
+      // Fetch authoritative live prices and inject them as ground truth. Without this the
+      // model has no current price in context (only the purchase price) and fills the gap
+      // from a stale web quote or memory — the real failure that reported a price of 2.28
+      // for a stock actually trading at 2.16. Quoted: every open position, and every ticker
+      // whose analysis carries values, since a verdict needs a price (until 2026-11-28 only
+      // the owned ones, so an analysed-only ticker had fair values and nothing to weigh
+      // them against). Best-effort: Yahoo can 429 (known issue), so a failed quote for one
+      // ticker must not abort the reply — allSettled keeps the others.
+      const valuedTickers = [...analysesByTicker].filter(([, group]) => latestAnalysisWithValues(group) != null).map(([t]) => t);
+      const quotedTickers = [...new Set([...positions.map((p) => p.ticker), ...valuedTickers])];
+      const quoteResults = await Promise.allSettled(quotedTickers.map((t) => getQuote(t)));
+      // Keyed by the ticker ASKED, not the symbol Yahoo answers with: the summaries look
+      // the quote up by the ticker the rows are saved under.
+      const livePrices = quoteResults.flatMap((r, i) =>
         r.status === "fulfilled"
           ? [{
-              ticker: r.value.ticker,
+              ticker: quotedTickers[i],
               price: r.value.regularMarketPrice,
               currency: r.value.currency,
               changePercent: r.value.regularMarketChangePercent,
             }]
           : [],
       );
+      const quoteByTicker = new Map(livePrices.map((lp) => [lp.ticker, lp]));
+
+      // One summary per ticker the user analysed, then per ticker held with no analysis
+      // (it reads "no valuation": the Advisor still knows the holding has none).
+      const summaryTickers = [...new Set([...analysesByTicker.keys(), ...lotsByTicker.keys()])];
+      const summaries = summaryTickers.map((ticker) => {
+        const lots = lotsByTicker.get(ticker) ?? [];
+        const earnings = earningsByTicker.get(ticker);
+        return buildTickerSummary({
+          ticker,
+          analyses: analysesByTicker.get(ticker) ?? [],
+          price: quoteByTicker.get(ticker)?.price ?? null,
+          currency: quoteByTicker.get(ticker)?.currency ?? null,
+          positions: lots,
+          // One currency for the holding, or none when the lots mix currencies (no P&L then).
+          positionCurrency: lots.length > 0 && lots.every((l) => l.currency === lots[0].currency) ? lots[0].currency : null,
+          watchlistItem: watchlistByTicker.get(ticker) ?? null,
+          earnings: earnings
+            ? {
+                nextEarningsDate: earnings.nextEarningsDate ? earnings.nextEarningsDate.toISOString() : null,
+                confidence: earnings.confidence as EarningsConfidence,
+                fetchedAt: earnings.fetchedAt.toISOString(),
+              }
+            : null,
+          // Dividends are not hold/add/exit context the prompt carries yet.
+          dividendsReceivedEur: null,
+        });
+      });
 
       systemPrompt = buildAdvisorSystemPrompt({
         positions,
-        // Serialise Date → ISO string to match AnalysisSnippet.createdAt: string
-        analyses: analyses.map((a) => ({ ...a, createdAt: a.createdAt.toISOString() })),
+        summaries,
         livePrices,
         currentDate,
         language: body.language,

@@ -249,10 +249,10 @@ After `npm ci` or on a fresh checkout run `npx prisma generate` once, or stage 2
 
 `npm run e2e` does it all: it recreates and seeds `.e2e/e2e.db`, starts `next dev -p 3200` on it, signs in the fixture users (storageState in `.e2e/state/`) and runs the specs. One spec: `npx playwright test --project=e2e e2e/pages.spec.ts`.
 
-Browser tests: workers 1 (one SQLite file, mutated in file order) · isolation one SQLite file per run · whole run 24 s on 2026-11-27 (42 tests)
+Browser tests: workers 1 (one SQLite file, mutated in file order) · isolation one SQLite file per run · whole run 22 s on 2026-11-28 (43 tests)
 
 - **Never production.** Every child process is forced onto `.e2e/e2e.db` with empty keys (`e2e/support/env.ts`); any non-`file:` URL aborts the run.
-- **Never paid or remote calls.** Quotes and FX are stubbed, off-localhost requests blocked, and an AI, earnings or watchlist-run call fails the test (`e2e/support/test.ts`).
+- **Never paid or remote calls.** Quotes, the price history and FX are stubbed, off-localhost requests blocked, and an AI, earnings or watchlist-run call fails the test (`e2e/support/test.ts`).
 - **Assertions pair visible decoy text with DB rows** (`e2e/support/db.ts`); `authorization.spec.ts` is the own-vs-someone-else's pair (foreign id → 404, row unchanged).
 - **Never run the suite beside another `next dev` / `next build` of the same checkout** (shared `.next`); port 3200 free; no source edits while it or a manual server runs.
 - **Artifacts** (`.e2e/`, `playwright-report/`, `test-results/`) are gitignored; a failure's trace: `npx playwright show-trace test-results/<test>/trace.zip`.
